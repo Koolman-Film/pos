@@ -1950,13 +1950,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 }
 ```
 
-- [ ] **Step 3: Header test + commit**
+- [ ] **Step 3: Replace the default root route with a redirect to `/dashboard`**
+
+Task 1's scaffold left the default create-next-app `app/page.tsx` in place. Replace it so the root `/` sends users into the app (the proxy already redirects unauthenticated users to `/login`, so an authenticated user hitting `/` should land on the dashboard, not the Next starter page):
+
+```tsx
+// app/page.tsx
+import { redirect } from 'next/navigation';
+
+export default function RootPage() {
+  redirect('/dashboard');
+}
+```
+
+- [ ] **Step 4: Header test + commit**
 
 Write `tests/unit/components/layout/Header.test.tsx` asserting the user's name and role label render, and a logout control is present. Run it, confirm PASS, then:
 
 ```bash
-git add components/layout app/\(app\)/layout.tsx tests/unit/components/layout
-git commit -m "feat(layout): authenticated shell with permission-gated sidebar"
+git add components/layout app/\(app\)/layout.tsx app/page.tsx tests/unit/components/layout
+git commit -m "feat(layout): authenticated shell with permission-gated sidebar + root redirect"
 ```
 
 ---
