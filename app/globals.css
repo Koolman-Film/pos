@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+:root {
+  --primary: #7A2333; --primary-hover: #611B28; --primary-soft: #F3E3E6;
+  --revenue: #2563EB; --revenue-soft: #E4ECFC;
+  --ink: #2A211D; --ink-soft: #8B7F76; --ink-faint: #B5AAA1;
+  --paper: #FAF7F3; --surface: #FFFFFF; --sidebar: #211A18;
+  --line: #EBE3DA; --line-strong: #DCD2C6;
+  --shadow-sm: 0 1px 2px rgba(42,33,29,.05), 0 1px 1px rgba(42,33,29,.03);
+  --shadow-md: 0 8px 24px rgba(42,33,29,.08), 0 2px 6px rgba(42,33,29,.04);
+  --shadow-red: 0 10px 24px rgba(122,35,51,.22);
+}
+html[data-theme="dark"] {
+  --primary: #B23A48; --primary-hover: #C94A58; --primary-soft: #3A2228;
+  --revenue: #6C9BF5; --revenue-soft: #1E2A44;
+  --ink: #F0E9E4; --ink-soft: #B7ADA4; --ink-faint: #7C7168;
+  --paper: #171310; --surface: #221C18; --sidebar: #0F0C0A;
+  --line: #362E28; --line-strong: #453B33;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35), 0 1px 1px rgba(0,0,0,.25);
+  --shadow-md: 0 8px 24px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3);
+  --shadow-red: 0 10px 24px rgba(178,58,72,.32);
+}
+* { box-sizing: border-box; }
+body { font-family:'Plus Jakarta Sans','Noto Sans Thai',-apple-system,sans-serif; background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; transition:background .2s ease, color .2s ease; }
+::placeholder { color:var(--ink-faint); }
+
+@layer components {
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow-sm); transition:box-shadow .2s ease, transform .2s ease, border-color .2s ease; }
+  .card-hover:hover { box-shadow:var(--shadow-md); border-color:var(--line-strong); transform:translateY(-1px); }
+  .btn-primary { background:var(--primary); color:#fff; box-shadow:var(--shadow-red); transition:background .15s ease, transform .1s ease; }
+  .btn-primary:hover { background:var(--primary-hover); }
+  .btn-primary:active { transform:scale(0.97); }
+  .btn-outline { background:var(--surface); color:var(--ink); border:1.5px solid var(--line-strong); transition:all .15s ease; }
+  .btn-outline:hover { background:var(--paper); border-color:var(--primary); }
+  .pill-active { background:var(--primary); color:#fff; box-shadow:var(--shadow-red); }
+  .pill-inactive { background:var(--surface); color:var(--ink-soft); border:1px solid var(--line); }
+  .pill-inactive:hover { border-color:var(--line-strong); }
+  .field { background:var(--surface); border:1.5px solid var(--line); border-radius:11px; transition:all .15s ease; }
+  .field:focus { border-color:var(--primary) !important; box-shadow:0 0 0 4px var(--primary-soft); outline:none; }
+  .icon-tile { width:38px; height:38px; border-radius:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .status-bar { width:5px; border-radius:6px 0 0 6px; }
+  .nav-item { transition: background .15s ease, color .15s ease; }
+  .row-action { opacity:0; transform:translateX(-4px); transition:opacity .15s ease, transform .15s ease; }
+  .group:hover .row-action { opacity:1; transform:translateX(0); }
+  .fade-page { animation: fadeUp .28s ease; }
+}
+
+@keyframes fadeUp { from { opacity:0; transform:translateY(6px);} to { opacity:1; transform:translateY(0);} }
+.scrollbar-thin::-webkit-scrollbar { width:6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background:rgba(255,255,255,.15); border-radius:8px; }
+.print-area { display:none; }
+@media print {
+  @page { size: A4; margin: 2cm 1cm; }
+  @page offsite-page { size: A4; margin: 1cm 1cm 2cm 1cm; }
+  .print-area.offsite-form { page: offsite-page; }
+  body, html { background:#fff !important; margin:0; }
+  .app-shell { display:none !important; }
+  .print-area { display:block !important; width:auto; background:#fff; }
+  .print-area, .print-area * { color:#211A18 !important; opacity:1 !important; }
+  .print-area table { width:100%; border-collapse:collapse; font-size:12px; }
+  .print-area th, .print-area td { border:1px solid #ccc; padding:6px 8px; text-align:left; }
+  .print-area table.compact-table { font-size:9px; }
+  .print-area table.compact-table th, .print-area table.compact-table td { padding:1.5px 4px; line-height:1.2; }
+  .print-area th { background:#f2f2f2 !important; }
+}
