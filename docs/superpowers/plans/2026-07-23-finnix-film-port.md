@@ -1,6 +1,8 @@
 # Finnix Film Port Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **⚠ READ THE EXECUTION SCHEDULE FIRST: `2026-07-23-finnix-film-port-EXECUTION.md`.** Do **not** execute Tasks 1→22 in literal numeric order. That companion file batches them into 6 concurrent waves and collapses six `supabase db reset` runs into two. This file remains the source of truth for *what* each task does (steps, SQL, code, tests); the schedule file overrides *order and batching* only. Where they disagree on sequencing, the schedule wins.
 
 **Goal:** Port `reference/v0.4/finnix-film.html` (single-file React/Babel/Tailwind-CDN prototype, no backend) into a production Next.js (App Router) + Supabase (Postgres/Auth/RLS) app, deployable on Vercel, with unchanged business functionality and equal-or-better visuals.
 
