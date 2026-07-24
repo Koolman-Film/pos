@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { resolveSessionContext } from '@/lib/auth/resolveSessionContext';
 import { createClient } from '@/lib/supabase/server';
 
@@ -12,9 +13,10 @@ import { login } from './actions';
  * + password auth, so the prototype's "ยังไม่มีรหัสผ่านจริง — เป็นระบบทดลอง"
  * footnote is dropped (it would now be false).
  *
- * The prototype's theme toggle is intentionally NOT reproduced here: nothing
- * bootstraps `data-theme` on `<html>` yet, so a toggle would have no persisted
- * theme to toggle. It belongs with the app-shell theme wiring (Task 12).
+ * The fixed top-right theme toggle is the prototype's (finnix-film.html:4300),
+ * restored now that Task 12 bootstraps `data-theme` on `<html>`. It sits on the
+ * login screen deliberately: this is the first page an unauthenticated user
+ * sees, so it is where a dark-mode preference gets set on a new device.
  */
 
 /** `?error=` codes produced by `actions.ts` and `lib/auth/session.ts`. */
@@ -49,6 +51,8 @@ export default async function LoginPage({
       className="min-h-screen flex items-center justify-center px-4"
       style={{ background: 'var(--paper)' }}
     >
+      <ThemeToggle variant="floating" />
+
       <form action={login} className="card p-7 w-full" style={{ maxWidth: 380 }}>
         <div className="flex items-center gap-2.5 mb-1">
           <div className="icon-tile" style={{ background: 'var(--primary)' }}>
