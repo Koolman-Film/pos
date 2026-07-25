@@ -158,11 +158,24 @@ Task 13 rendered the permission-gated bento but omitted the prototype's pending-
 ### C6 — `fmt` / `fmtThaiDate` require full-ICU Node
 The Buddhist-era assertion (`15 ก.ค. 2569`) and comma grouping depend on a full-ICU runtime. If these fail in Task 21/CI, fix the Node build — do not weaken the assertions.
 
+### C14 — `/stock` 500'd for the whole of Wave 4 (server→client function prop) — FIXED
+`app/(app)/stock/page.tsx` passed `canDo={session.canDo}` to `StockModule`, a Client Component. React cannot serialise a closure across that boundary, so **every request to `/stock` failed**. The unit test never saw it: it renders `StockModule` directly, where a function prop is legal. Fixed by passing a serialisable `caps` map (the pattern `WholesaleDetail` already used), keeping `canDo` as an optional function for tests, and denying when neither is supplied.
+
+Swept the other pages for the same shape: `Sidebar` (`hasNav`) and `Dashboard` (`hasDashboardWidget`, `canDo`) also receive session functions but are **Server** Components, so those are correct. Guarded going forward by `tests/e2e/routes-smoke.spec.ts`, which loads every route and fails on a >=400, an uncaught error, or a missing content marker. **Any future module that takes a capability check must take `caps`, not a function, if a page renders it.**
+
+### C15 — `typeof document !== 'undefined'` is not a mount gate — FIXED
+`WholesaleList` and `AccountingModule` gated their print portals on `typeof document`, which is `false` during SSR but `true` on the first client render — so hydration finds a `.print-area` the server never sent, and React logs a mismatch. Use `useIsMounted()` (`lib/hooks/useIsMounted.ts`), whose server snapshot is `false`, so the first client render agrees with the server. The same hook replaced the four `useState(false)` + `useEffect(setMounted)` pairs that `react-hooks/set-state-in-effect` rejects.
+
+### C16 — test fixtures leaked into the seeded database — FIXED
+The RLS suite cleaned up in `beforeEach`/`beforeAll` only. That keeps each file idempotent but leaves its rows behind after the run: two fake tickets, a tagged petty-cash row, a test SKU, a commission rule, an expense, and three fake sales users. They are real rows, so **the app counted them** — the dashboard showed 11 jobs against a 5-ticket seed and a 14,450 petty-cash balance against a seeded 9,450. Every RLS file now also removes its fixtures in `afterAll`. Same rule for e2e: the permissions spec restores the flipped capability in `afterEach`, and the price-approval spec restores its own precondition in `beforeEach` because approval is one-way in the UI by design.
+
 ---
 
 ## Wave 5 — serial finish
 
 Task 20 (staging seed) → Task 21 (full suite + Playwright e2e, including the print-isolation e2e that verifies the Task 1 / Task 12 `.app-shell` + portal split) → **Task 22 (deployment checkpoint — STOP for explicit human confirmation; creates real billed cloud resources, per the plan's Global Constraints).**
+
+**Status: Tasks 1-21 COMPLETE.** Integration gate closed (C11 fixed in Wave 4; C12 and C13 closed after it, along with C14-C16 found during Task 21). Task 20 verified against a real `db reset`; Task 21's suites all run green together. Task 22 is **not started and remains gated** — see `docs/DEPLOYMENT.md`, which is the executable runbook for it, written but deliberately unexecuted.
 
 ---
 
