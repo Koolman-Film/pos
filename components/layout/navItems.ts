@@ -27,7 +27,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'wholesale', label: 'ขายส่ง', icon: 'fa-truck-fast', href: '/wholesale' },
   { id: 'stock', label: 'สต็อกสินค้า', icon: 'fa-boxes-stacked', href: '/stock' },
   { id: 'commission', label: 'ค่าคอมมิชชั่น', icon: 'fa-percent', href: '/commission' },
-  { id: 'accounting', label: 'บัญชี/ค่าใช้จ่าย', icon: 'fa-file-invoice-dollar', href: '/accounting' },
+  {
+    id: 'accounting',
+    label: 'บัญชี/ค่าใช้จ่าย',
+    icon: 'fa-file-invoice-dollar',
+    href: '/accounting',
+  },
   { id: 'permissions', label: 'จัดการสิทธิ์', icon: 'fa-user-shield', href: '/permissions' },
 ];
 
@@ -41,7 +46,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
  */
 export function resolveActiveNavId(
   items: readonly NavItem[],
-  pathname: string
+  pathname: string,
 ): string | undefined {
   let best: NavItem | undefined;
   for (const item of items) {

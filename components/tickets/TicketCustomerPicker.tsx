@@ -77,7 +77,11 @@ export function TicketCustomerPicker({
           ))}
         </select>
         {matched && (
-          <button onClick={startEdit} className="btn-outline px-3 py-2 rounded-lg text-xs" aria-label="แก้ไขข้อมูลลูกค้า">
+          <button
+            onClick={startEdit}
+            className="btn-outline px-3 py-2 rounded-lg text-xs"
+            aria-label="แก้ไขข้อมูลลูกค้า"
+          >
             <i className="fa-solid fa-pen"></i>
           </button>
         )}
@@ -85,7 +89,10 @@ export function TicketCustomerPicker({
     );
 
   return (
-    <div className="rounded-2xl p-4" style={{ border: '1px solid var(--line)', background: 'var(--paper)' }}>
+    <div
+      className="rounded-2xl p-4"
+      style={{ border: '1px solid var(--line)', background: 'var(--paper)' }}
+    >
       <p className="text-xs font-semibold mb-3" style={{ color: 'var(--primary)' }}>
         {mode === 'new' ? 'เพิ่มลูกค้าใหม่เข้าทะเบียน' : 'แก้ไขข้อมูลลูกค้า'}
       </p>
@@ -104,7 +111,10 @@ export function TicketCustomerPicker({
         />
       </div>
       <div className="flex gap-2">
-        <button onClick={() => setMode('select')} className="btn-outline flex-1 rounded-lg py-2 text-xs font-medium">
+        <button
+          onClick={() => setMode('select')}
+          className="btn-outline flex-1 rounded-lg py-2 text-xs font-medium"
+        >
           ยกเลิก
         </button>
         <button

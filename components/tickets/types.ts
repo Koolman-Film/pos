@@ -75,7 +75,12 @@ export type TicketListRow = {
   status: string;
   // discountType is narrowed to the two non-null variants so the row is
   // structurally assignable to lib/domain's `TicketForTotals`.
-  items: { category?: string; soldPrice: number; discountType?: 'percent' | 'amount'; discountValue?: number }[];
+  items: {
+    category?: string;
+    soldPrice: number;
+    discountType?: 'percent' | 'amount';
+    discountValue?: number;
+  }[];
   payments: { amount: number }[];
   dropOffDateObj?: Date | null;
   pickupDateObj?: Date | null;
@@ -98,10 +103,22 @@ export type StockRow = {
 
 export type CarModel = { model: string; brand: string; carType: string };
 export type PriceMatrixRow = { carType: string; product: string; price: number };
-export type FilmPriceRow = { category: string; product: string; position: string; carType: string; price: number };
+export type FilmPriceRow = {
+  category: string;
+  product: string;
+  position: string;
+  carType: string;
+  price: number;
+};
 export type RetailCustomer = { id: number; name: string; phone: string };
 export type CorporateBuyer = { name: string; address: string; taxId: string };
-export type ShopInfo = { companyName?: string; address?: string; phone?: string; taxId?: string; paymentChannels?: string[] };
+export type ShopInfo = {
+  companyName?: string;
+  address?: string;
+  phone?: string;
+  taxId?: string;
+  paymentChannels?: string[];
+};
 
 // The full bag of admin-managed option lists + lookups a TicketDetail needs.
 // Every `*` list is a value list persisted in `option_lists`; the `set*`
@@ -156,10 +173,30 @@ export type TicketSavePayload = {
 };
 
 export const BRAND_TH: Record<string, string> = {
-  Toyota: 'โตโยต้า', Honda: 'ฮอนด้า', Mazda: 'มาสด้า', Isuzu: 'อีซูซุ', Ford: 'ฟอร์ด',
-  Nissan: 'นิสสัน', Mitsubishi: 'มิตซูบิชิ', Suzuki: 'ซูซูกิ', MG: 'เอ็มจี', BMW: 'บีเอ็มดับเบิลยู', Mercedes: 'เมอร์เซเดส',
+  Toyota: 'โตโยต้า',
+  Honda: 'ฮอนด้า',
+  Mazda: 'มาสด้า',
+  Isuzu: 'อีซูซุ',
+  Ford: 'ฟอร์ด',
+  Nissan: 'นิสสัน',
+  Mitsubishi: 'มิตซูบิชิ',
+  Suzuki: 'ซูซูกิ',
+  MG: 'เอ็มจี',
+  BMW: 'บีเอ็มดับเบิลยู',
+  Mercedes: 'เมอร์เซเดส',
 };
 export const MODEL_TH: Record<string, string> = {
-  Vios: 'วีออส', City: 'ซิตี้', Camry: 'แคมรี่', 'D-Max': 'ดีแม็กซ์', Jazz: 'แจ๊ส', Yaris: 'ยาริส',
-  Civic: 'ซีวิค', Altis: 'อัลติส', Ranger: 'เรนเจอร์', '2': 'ทู', Fortuner: 'ฟอร์จูนเนอร์', Revo: 'รีโว่', Almera: 'อัลเมร่า',
+  Vios: 'วีออส',
+  City: 'ซิตี้',
+  Camry: 'แคมรี่',
+  'D-Max': 'ดีแม็กซ์',
+  Jazz: 'แจ๊ส',
+  Yaris: 'ยาริส',
+  Civic: 'ซีวิค',
+  Altis: 'อัลติส',
+  Ranger: 'เรนเจอร์',
+  '2': 'ทู',
+  Fortuner: 'ฟอร์จูนเนอร์',
+  Revo: 'รีโว่',
+  Almera: 'อัลเมร่า',
 };

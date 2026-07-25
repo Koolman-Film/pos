@@ -69,7 +69,7 @@ export function CommissionModule({
 
   const [showAdd, setShowAdd] = useState(false);
   const [shopFilter, setShopFilter] = useState(
-    canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all'
+    canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
   );
   const [period, setPeriod] = useState('today');
   const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
@@ -85,9 +85,7 @@ export function CommissionModule({
   const [isPending, startTransition] = useTransition();
 
   const filteredRules =
-    shopFilter === 'all'
-      ? rules
-      : rules.filter((r) => r.shop === 'all' || r.shop === shopFilter);
+    shopFilter === 'all' ? rules : rules.filter((r) => r.shop === 'all' || r.shop === shopFilter);
   const categories = [...new Set(filteredRules.map((r) => r.category))];
 
   function addRule() {

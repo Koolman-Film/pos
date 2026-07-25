@@ -68,7 +68,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         list_price: Number(it.listPrice) || 0,
         requested_price: Number(it.requestedPrice) || 0,
         reason: it.reason || '',
-      }))
+      })),
     );
     if (error) throw new Error(error.message);
   }
@@ -81,7 +81,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         item_name: r.item,
         qty: Number(r.qty) || 0,
         reason: r.reason || '',
-      }))
+      })),
     );
     if (error) throw new Error(error.message);
   }
@@ -97,7 +97,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         amount: Number(a.amount) || 0,
         reason: a.reason || '',
         adjusted_at: nowIso,
-      }))
+      })),
     );
     if (error) throw new Error(error.message);
   }
@@ -110,7 +110,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         amount: Number(p.amount) || 0,
         method: p.method,
         paid_at: nowIso,
-      }))
+      })),
     );
     if (error) throw new Error(error.message);
   }

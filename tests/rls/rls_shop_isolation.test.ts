@@ -1,7 +1,13 @@
 // tests/rls/rls_shop_isolation.test.ts
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { adminClient, anonClient, assertNoError, createAuthUser, deleteAuthUserByEmail } from './_helpers';
+import {
+  adminClient,
+  anonClient,
+  assertNoError,
+  createAuthUser,
+  deleteAuthUserByEmail,
+} from './_helpers';
 
 const admin = adminClient();
 
@@ -19,16 +25,26 @@ async function createSalesUser(email: string, shopId: string): Promise<SupabaseC
   await deleteAuthUserByEmail(admin, email);
   const user = await createAuthUser(admin, email, PASSWORD);
 
-  const { error: appUserError } = await admin.from('app_users')
-    .insert({ id: user.id, email, name: email, role_id: 'sales', active: true, sees_all_shops: false });
+  const { error: appUserError } = await admin.from('app_users').insert({
+    id: user.id,
+    email,
+    name: email,
+    role_id: 'sales',
+    active: true,
+    sees_all_shops: false,
+  });
   assertNoError(`insert app_users for ${email}`, appUserError);
 
-  const { error: accessError } = await admin.from('user_shop_access')
+  const { error: accessError } = await admin
+    .from('user_shop_access')
     .insert({ user_id: user.id, shop_id: shopId });
   assertNoError(`insert user_shop_access for ${email}`, accessError);
 
   const client = anonClient();
-  const { error: signInError } = await client.auth.signInWithPassword({ email, password: PASSWORD });
+  const { error: signInError } = await client.auth.signInWithPassword({
+    email,
+    password: PASSWORD,
+  });
   assertNoError(`sign in as ${email}`, signInError);
   return client;
 }
@@ -42,8 +58,22 @@ describe('RLS shop isolation', () => {
     await admin.from('statuses').update({ short: 'จองแล้ว' }).eq('key', 'จองแล้ว');
 
     const { error } = await admin.from('tickets').insert([
-      { id: 'JT-RLS-CM', shop_id: 'cm', customer_name: 'CM Customer', status: 'จองแล้ว', drop_off_date: '2026-07-23T09:00:00Z', pickup_date: '2026-07-24T09:00:00Z' },
-      { id: 'JT-RLS-LP', shop_id: 'lp', customer_name: 'LP Customer', status: 'จองแล้ว', drop_off_date: '2026-07-23T09:00:00Z', pickup_date: '2026-07-24T09:00:00Z' },
+      {
+        id: 'JT-RLS-CM',
+        shop_id: 'cm',
+        customer_name: 'CM Customer',
+        status: 'จองแล้ว',
+        drop_off_date: '2026-07-23T09:00:00Z',
+        pickup_date: '2026-07-24T09:00:00Z',
+      },
+      {
+        id: 'JT-RLS-LP',
+        shop_id: 'lp',
+        customer_name: 'LP Customer',
+        status: 'จองแล้ว',
+        drop_off_date: '2026-07-23T09:00:00Z',
+        pickup_date: '2026-07-24T09:00:00Z',
+      },
     ]);
     assertNoError('seed RLS fixture tickets', error);
   });
@@ -61,19 +91,23 @@ describe('RLS shop isolation', () => {
     const cmUser = await createSalesUser('sales-cm@test.local', 'cm');
     const { data, error } = await cmUser.from('tickets').select('id').in('id', TICKET_IDS);
     expect(error).toBeNull();
-    expect(data?.map(t => t.id)).toEqual(['JT-RLS-CM']);
+    expect(data?.map((t) => t.id)).toEqual(['JT-RLS-CM']);
   });
 
   it('a sales user scoped to shop lp only sees shop lp tickets', async () => {
     const lpUser = await createSalesUser('sales-lp@test.local', 'lp');
     const { data } = await lpUser.from('tickets').select('id').in('id', TICKET_IDS);
-    expect(data?.map(t => t.id)).toEqual(['JT-RLS-LP']);
+    expect(data?.map((t) => t.id)).toEqual(['JT-RLS-LP']);
   });
 
   it('a sales user cannot edit the shared statuses config table (nav.permissions is false for sales)', async () => {
     const cmUser = await createSalesUser('sales-cm-2@test.local', 'cm');
     await cmUser.from('statuses').update({ short: 'hacked' }).eq('key', 'จองแล้ว');
-    const { data: check } = await admin.from('statuses').select('short').eq('key', 'จองแล้ว').single();
+    const { data: check } = await admin
+      .from('statuses')
+      .select('short')
+      .eq('key', 'จองแล้ว')
+      .single();
     expect(check!.short).toBe('จองแล้ว'); // unchanged — RLS silently filtered the update to 0 rows
   });
 });

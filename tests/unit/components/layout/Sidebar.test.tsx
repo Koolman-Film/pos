@@ -37,9 +37,7 @@ describe('Sidebar', () => {
     ]);
 
     for (const item of NAV_ITEMS) {
-      const { unmount } = render(
-        <Sidebar activePath="/dashboard" hasNav={(k) => k === item.id} />
-      );
+      const { unmount } = render(<Sidebar activePath="/dashboard" hasNav={(k) => k === item.id} />);
       expect(screen.getByText(item.label)).toBeInTheDocument();
       for (const other of NAV_ITEMS) {
         if (other.id !== item.id) expect(screen.queryByText(other.label)).not.toBeInTheDocument();

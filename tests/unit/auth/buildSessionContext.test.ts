@@ -33,7 +33,7 @@ describe('buildSessionContext', () => {
       'admin@test.local',
       { name: 'Admin', role_id: 'admin', sees_all_shops: false, shop_access: [] },
       allShops,
-      []
+      [],
     );
     expect(ctx.seesAllShops).toBe(true);
     expect(ctx.accessibleShopIds).toEqual(allShops);
@@ -48,7 +48,7 @@ describe('buildSessionContext', () => {
       'exec@test.local',
       { name: 'Exec', role_id: 'exec', sees_all_shops: true, shop_access: [] },
       allShops,
-      perms
+      perms,
     );
     expect(ctx.seesAllShops).toBe(true);
     expect(ctx.accessibleShopIds).toEqual(allShops);
@@ -93,7 +93,7 @@ describe('buildSessionContext', () => {
         shop_access: ['ca', 'lp', 'deleted-shop'],
       },
       allShops,
-      perms
+      perms,
     );
     expect(ctx.accessibleShopIds).toEqual(['lp', 'ca']);
   });

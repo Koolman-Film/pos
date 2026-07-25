@@ -44,12 +44,12 @@ Two things about this worktree specifically:
 Seeded logins — all share the password `finnix-staging-2026`, which is for local
 and staging only:
 
-| Email | Role | Shops |
-|---|---|---|
-| `admin@finnixfilm.com` | admin | all |
-| `exec@finnixfilm.com` | exec | all |
+| Email                  | Role  | Shops          |
+| ---------------------- | ----- | -------------- |
+| `admin@finnixfilm.com` | admin | all            |
+| `exec@finnixfilm.com`  | exec  | all            |
 | `sales@finnixfilm.com` | sales | เชียงใหม่ only |
-| `tech@finnixfilm.com` | tech | เชียงใหม่ only |
+| `tech@finnixfilm.com`  | tech  | เชียงใหม่ only |
 
 ## A note on dates in the seed
 

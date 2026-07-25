@@ -67,7 +67,7 @@ export function WholesaleList({
   const [filter, setFilter] = useState('all');
   const [custFilter, setCustFilter] = useState('all');
   const [shopFilter, setShopFilter] = useState(
-    canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all'
+    canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
   );
   const [period, setPeriod] = useState('today');
   const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
@@ -84,7 +84,7 @@ export function WholesaleList({
   const productScoped = list.filter(
     (o) =>
       (shopFilter === 'all' || o.shop === shopFilter) &&
-      (custFilter === 'all' || o.customerId === Number(custFilter))
+      (custFilter === 'all' || o.customerId === Number(custFilter)),
   );
   const productOptions = [
     ...new Set(productScoped.flatMap((o) => o.items.map((it) => it.name)).filter(Boolean)),
@@ -95,8 +95,8 @@ export function WholesaleList({
     .sort((a, b) =>
       customerName(a.customerId, customers).localeCompare(
         customerName(b.customerId, customers),
-        'th'
-      )
+        'th',
+      ),
     );
 
   function exportExcel() {
@@ -247,13 +247,19 @@ export function WholesaleList({
                         className="group rounded-2xl flex items-stretch justify-between cursor-pointer gap-3 overflow-hidden hover:shadow-md transition"
                         style={{ border: '1px solid var(--line)' }}
                       >
-                        <div className="status-bar" style={{ background: st.dot || '#B5AAA1' }}></div>
+                        <div
+                          className="status-bar"
+                          style={{ background: st.dot || '#B5AAA1' }}
+                        ></div>
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between flex-1 min-w-0 gap-1.5 sm:gap-3 py-3 pr-3">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">
                               {customerName(o.customerId, customers)}
                             </p>
-                            <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-soft)' }}>
+                            <p
+                              className="text-xs mt-0.5 truncate"
+                              style={{ color: 'var(--ink-soft)' }}
+                            >
                               {o.id}
                             </p>
                           </div>
@@ -267,7 +273,10 @@ export function WholesaleList({
                                   updateOrderStatus(o.id, e.target.value);
                                 }}
                                 className="text-xs font-semibold px-2.5 py-1 rounded-full border-none cursor-pointer"
-                                style={{ background: st.bg || '#F1EDE7', color: st.text || '#6B5F55' }}
+                                style={{
+                                  background: st.bg || '#F1EDE7',
+                                  color: st.text || '#6B5F55',
+                                }}
                               >
                                 {Object.keys(wsStatuses).map((s) => (
                                   <option key={s} value={s}>
@@ -344,7 +353,7 @@ export function WholesaleList({
               </div>
             ))}
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

@@ -25,11 +25,18 @@ export function PaymentsSection({
 }) {
   return (
     <div className="pt-5 mb-5" style={{ borderTop: '1px solid var(--line)' }}>
-      <p className="text-xs font-medium mb-3 flex items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
+      <p
+        className="text-xs font-medium mb-3 flex items-center gap-1.5"
+        style={{ color: 'var(--ink-soft)' }}
+      >
         <i className="fa-solid fa-money-bill-wave"></i>การชำระเงิน
       </p>
       {t.payments.map((p, idx) => (
-        <div key={idx} className="rounded-xl p-2.5 mb-2.5" style={{ border: '1px solid var(--line)' }}>
+        <div
+          key={idx}
+          className="rounded-xl p-2.5 mb-2.5"
+          style={{ border: '1px solid var(--line)' }}
+        >
           <div className="flex gap-2 mb-2">
             <select
               value={p.type}
@@ -71,7 +78,11 @@ export function PaymentsSection({
                 className="hidden"
                 onChange={(e) => {
                   const files = Array.from(e.target.files || []);
-                  if (files.length) updatePayment(idx, 'attachments', [...(p.attachments || []), ...files.map((f) => f.name)]);
+                  if (files.length)
+                    updatePayment(idx, 'attachments', [
+                      ...(p.attachments || []),
+                      ...files.map((f) => f.name),
+                    ]);
                   e.target.value = '';
                 }}
               />
@@ -89,7 +100,13 @@ export function PaymentsSection({
                     <i
                       className="fa-solid fa-xmark cursor-pointer"
                       style={{ color: '#B23A48' }}
-                      onClick={() => updatePayment(idx, 'attachments', p.attachments!.filter((_, fi2) => fi2 !== fi))}
+                      onClick={() =>
+                        updatePayment(
+                          idx,
+                          'attachments',
+                          p.attachments!.filter((_, fi2) => fi2 !== fi),
+                        )
+                      }
                     ></i>
                   </span>
                 ))}
@@ -104,11 +121,17 @@ export function PaymentsSection({
       >
         <i className="fa-solid fa-plus"></i>เพิ่มรายการรับเงิน
       </button>
-      <div className="flex justify-between text-sm mt-4 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+      <div
+        className="flex justify-between text-sm mt-4 pt-3"
+        style={{ borderTop: '1px solid var(--line)' }}
+      >
         <span style={{ color: 'var(--ink-soft)' }}>
           ยอดสุทธิ {fmt(total)} &middot; ชำระแล้ว {fmt(paid)}
         </span>
-        <span className="font-semibold" style={{ color: total - paid <= 0 ? '#4C7A3E' : '#B23A48' }}>
+        <span
+          className="font-semibold"
+          style={{ color: total - paid <= 0 ? '#4C7A3E' : '#B23A48' }}
+        >
           {total - paid <= 0 ? 'ชำระครบแล้ว' : `คงเหลือ ${fmt(total - paid)}`}
         </span>
       </div>

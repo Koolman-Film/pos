@@ -101,7 +101,10 @@ export default async function LoginPage({
           </p>
         )}
 
-        <button type="submit" className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold mt-3">
+        <button
+          type="submit"
+          className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold mt-3"
+        >
           เข้าสู่ระบบ
         </button>
       </form>

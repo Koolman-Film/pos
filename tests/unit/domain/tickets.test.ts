@@ -24,7 +24,9 @@ describe('itemNetPrice', () => {
     expect(itemNetPrice({ soldPrice: 1000, discountType: 'percent', discountValue: 0 })).toBe(1000);
   });
   it('does not round fractional results', () => {
-    expect(itemNetPrice({ soldPrice: 1300, discountType: 'percent', discountValue: 7.5 })).toBe(1202.5);
+    expect(itemNetPrice({ soldPrice: 1300, discountType: 'percent', discountValue: 7.5 })).toBe(
+      1202.5,
+    );
   });
 });
 
@@ -47,6 +49,8 @@ describe('ticketTotal / ticketPaid', () => {
     expect(ticketPaid({ items: [], payments: [] })).toBe(0);
   });
   it('treats a missing payment amount as 0', () => {
-    expect(ticketPaid({ items: [], payments: [{} as { amount: number }, { amount: 500 }] })).toBe(500);
+    expect(ticketPaid({ items: [], payments: [{} as { amount: number }, { amount: 500 }] })).toBe(
+      500,
+    );
   });
 });

@@ -36,7 +36,7 @@ export const DEFAULT_THEME: Theme = 'light';
  * privacy modes, and a throw here would abort parsing of the rest of `<head>`.
  */
 export const THEME_INIT_SCRIPT = `(function(){try{var k=${JSON.stringify(
-  THEME_STORAGE_KEY
+  THEME_STORAGE_KEY,
 )};var t=window.localStorage.getItem(k);if(t!=="dark"&&t!=="light"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();`;
 
 /** The theme currently painted, read back off the attribute the script set. */

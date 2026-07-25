@@ -12,7 +12,11 @@ export default async function NewTicketPage() {
   // direct navigation to /tickets/new should not render the form otherwise.
   if (!session.canDo('list.createNew')) redirect('/tickets');
 
-  const [shops, statuses, registries] = await Promise.all([loadShops(), loadStatuses(), loadDetailRegistries()]);
+  const [shops, statuses, registries] = await Promise.all([
+    loadShops(),
+    loadStatuses(),
+    loadDetailRegistries(),
+  ]);
   const accessibleShops = shops.filter((s) => session.accessibleShopIds.includes(s.id));
   const defaultShop = accessibleShops[0]?.id ?? shops[0]?.id ?? 'cm';
 

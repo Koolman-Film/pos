@@ -45,7 +45,7 @@ export function TicketList({
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [shopFilter, setShopFilter] = useState<string>(
-    canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all'
+    canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
   );
   const [customerFilter, setCustomerFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -87,13 +87,17 @@ export function TicketList({
   if (search.trim()) {
     const q = search.trim().toLowerCase();
     visible = visible.filter(
-      (t) => t.customer.toLowerCase().includes(q) || t.plate.toLowerCase().includes(q)
+      (t) => t.customer.toLowerCase().includes(q) || t.plate.toLowerCase().includes(q),
     );
   }
   visible = visible.filter((t) => inSelectedPeriod(t.dropOffDateObj));
 
   const customerOptions = [
-    ...new Set((shopFilter === 'all' ? tickets : tickets.filter((t) => t.shop === shopFilter)).map((t) => t.customer)),
+    ...new Set(
+      (shopFilter === 'all' ? tickets : tickets.filter((t) => t.shop === shopFilter)).map(
+        (t) => t.customer,
+      ),
+    ),
   ].sort((a, b) => a.localeCompare(b, 'th'));
 
   const exportShopIds =
@@ -107,7 +111,7 @@ export function TicketList({
       .sort(
         (a, b) =>
           (a.dropOffDateObj ? new Date(a.dropOffDateObj).getTime() : 0) -
-          (b.dropOffDateObj ? new Date(b.dropOffDateObj).getTime() : 0)
+          (b.dropOffDateObj ? new Date(b.dropOffDateObj).getTime() : 0),
       ),
   }));
 
@@ -128,7 +132,10 @@ export function TicketList({
           ยอดสุทธิ: ticketTotal(t),
         }));
         const ws = XLSX.utils.json_to_sheet(data);
-        const sheetName = shopName(g.shopId).replace(/[:\\/?*[\]]/g, '').slice(0, 31) || g.shopId;
+        const sheetName =
+          shopName(g.shopId)
+            .replace(/[:\\/?*[\]]/g, '')
+            .slice(0, 31) || g.shopId;
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       });
     }
@@ -144,7 +151,11 @@ export function TicketList({
   });
   const chips = [
     { key: 'all', label: 'ทั้งหมด', count: tickets.length },
-    { key: 'กำลัง QC ก่อนติดตั้ง', label: 'รอ QC', count: statusCounts['กำลัง QC ก่อนติดตั้ง'] || 0 },
+    {
+      key: 'กำลัง QC ก่อนติดตั้ง',
+      label: 'รอ QC',
+      count: statusCounts['กำลัง QC ก่อนติดตั้ง'] || 0,
+    },
     { key: 'กำลังติดตั้ง', label: 'กำลังติดตั้ง', count: statusCounts['กำลังติดตั้ง'] || 0 },
     { key: 'รอส่งมอบ', label: 'รอส่งมอบ', count: statusCounts['รอส่งมอบ'] || 0 },
     { key: 'ค้างชำระ', label: 'รอชำระ', count: statusCounts['ค้างชำระ'] || 0 },
@@ -164,7 +175,10 @@ export function TicketList({
         )}
       </div>
       <div className="card p-3 mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex rounded-xl overflow-hidden" style={{ border: '1.5px solid var(--line)' }}>
+        <div
+          className="flex rounded-xl overflow-hidden"
+          style={{ border: '1.5px solid var(--line)' }}
+        >
           {(
             [
               ['today', 'วันนี้'],
@@ -192,7 +206,11 @@ export function TicketList({
             style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
           >
             <i className="fa-regular fa-calendar mr-1.5"></i>
-            {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+            {new Date().toLocaleDateString('th-TH', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })}
           </span>
         )}
         {period === 'month' && (
@@ -204,7 +222,11 @@ export function TicketList({
           />
         )}
         {period === 'year' && (
-          <select value={periodValue} onChange={(e) => setPeriodValue(e.target.value)} className="field text-sm px-3 py-2">
+          <select
+            value={periodValue}
+            onChange={(e) => setPeriodValue(e.target.value)}
+            className="field text-sm px-3 py-2"
+          >
             {[2569, 2568, 2567].map((y) => (
               <option key={y} value={y}>
                 {y}
@@ -220,7 +242,10 @@ export function TicketList({
               onChange={(e) => setRangeStart(e.target.value)}
               className="field text-sm px-3 py-2"
             />
-            <i className="fa-solid fa-arrow-right text-xs" style={{ color: 'var(--ink-faint)' }}></i>
+            <i
+              className="fa-solid fa-arrow-right text-xs"
+              style={{ color: 'var(--ink-faint)' }}
+            ></i>
             <input
               type="date"
               value={rangeEnd}
@@ -249,7 +274,10 @@ export function TicketList({
               ))}
             </select>
           ) : (
-            <div className="field flex-1 text-sm px-3.5 py-2.5" style={{ color: 'var(--ink-soft)' }}>
+            <div
+              className="field flex-1 text-sm px-3.5 py-2.5"
+              style={{ color: 'var(--ink-soft)' }}
+            >
               {shopName(accessibleShops[0]?.id || '')}
             </div>
           )}
@@ -321,11 +349,17 @@ export function TicketList({
         </div>
         <div className="flex flex-col gap-2.5">
           {visible.length === 0 && (
-            <p className="text-sm py-10 text-center flex flex-col items-center gap-2" style={{ color: 'var(--ink-faint)' }}>
+            <p
+              className="text-sm py-10 text-center flex flex-col items-center gap-2"
+              style={{ color: 'var(--ink-faint)' }}
+            >
               <i className="fa-regular fa-face-frown text-xl"></i>ไม่มีใบงานตรงกับตัวกรองนี้
             </p>
           )}
-          {(shopFilter === 'all' ? accessibleShops : shopList.filter((s) => s.id === shopFilter)).map((shop) => {
+          {(shopFilter === 'all'
+            ? accessibleShops
+            : shopList.filter((s) => s.id === shopFilter)
+          ).map((shop) => {
             const shopTickets = visible.filter((t) => t.shop === shop.id);
             if (shopTickets.length === 0) return null;
             return (
@@ -346,20 +380,30 @@ export function TicketList({
                       className="group rounded-2xl flex items-stretch justify-between cursor-pointer gap-3 overflow-hidden transition hover:shadow-md"
                       style={{ border: '1px solid var(--line)' }}
                     >
-                      <div className="status-bar" style={{ background: getStatus(statuses, t.status).dot }}></div>
+                      <div
+                        className="status-bar"
+                        style={{ background: getStatus(statuses, t.status).dot }}
+                      ></div>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between flex-1 min-w-0 gap-1.5 sm:gap-3 py-3 pr-2">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold truncate">
                             {t.customer} &middot; {t.plate}
                           </p>
-                          <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-soft)' }}>
-                            {t.items.map((i) => i.category).join(' + ') || 'ยังไม่มีสินค้า'} &middot; {t.id}
+                          <p
+                            className="text-xs mt-0.5 truncate"
+                            style={{ color: 'var(--ink-soft)' }}
+                          >
+                            {t.items.map((i) => i.category).join(' + ') || 'ยังไม่มีสินค้า'}{' '}
+                            &middot; {t.id}
                           </p>
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">
                           <div className="text-right">
                             <Badge status={t.status} statuses={statuses} />
-                            <p className="text-xs mt-1.5 hidden sm:block" style={{ color: 'var(--ink-faint)' }}>
+                            <p
+                              className="text-xs mt-1.5 hidden sm:block"
+                              style={{ color: 'var(--ink-faint)' }}
+                            >
                               {(() => {
                                 const all = Object.values(t.techByCategory || {}).flat();
                                 return all.length ? all.join(', ') : 'ยังไม่มอบหมาย';
@@ -430,11 +474,18 @@ export function TicketList({
             ))}
             <p style={{ textAlign: 'right' }}>
               <strong>
-                ยอดรวม: {fmt(exportGroups.reduce((s, g) => s + g.items.reduce((s2, t) => s2 + ticketTotal(t), 0), 0))} บาท
+                ยอดรวม:{' '}
+                {fmt(
+                  exportGroups.reduce(
+                    (s, g) => s + g.items.reduce((s2, t) => s2 + ticketTotal(t), 0),
+                    0,
+                  ),
+                )}{' '}
+                บาท
               </strong>
             </p>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

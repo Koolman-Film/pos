@@ -51,7 +51,7 @@ test('every route renders for an admin with no errors', async ({ page }) => {
     // error boundary that happens to return 200.
     await expect(
       page.locator('.app-shell').getByText(route.marker, { exact: false }).first(),
-      `${route.path} should render its content`
+      `${route.path} should render its content`,
     ).toBeVisible();
   }
 

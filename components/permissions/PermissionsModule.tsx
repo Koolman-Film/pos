@@ -183,7 +183,8 @@ export function PermissionsModule({
       window.alert('ต้องมีอย่างน้อย 1 สถานะเสมอ');
       return;
     }
-    if (!window.confirm(`ลบสถานะ "${key}"? ใบงานที่ใช้สถานะนี้อยู่จะไม่ถูกเปลี่ยนอัตโนมัติ`)) return;
+    if (!window.confirm(`ลบสถานะ "${key}"? ใบงานที่ใช้สถานะนี้อยู่จะไม่ถูกเปลี่ยนอัตโนมัติ`))
+      return;
     run(onDeleteStatus?.(key));
   }
 
@@ -246,7 +247,8 @@ export function PermissionsModule({
       window.alert('ไม่สามารถลบบทบาทแอดมินได้ เพราะต้องมีผู้ดูแลระบบเสมอ');
       return;
     }
-    if (!window.confirm('ยืนยันการลบบทบาทนี้? พนักงานที่ใช้บทบาทนี้อยู่จะต้องถูกกำหนดบทบาทใหม่')) return;
+    if (!window.confirm('ยืนยันการลบบทบาทนี้? พนักงานที่ใช้บทบาทนี้อยู่จะต้องถูกกำหนดบทบาทใหม่'))
+      return;
     run(onDeleteRole?.(id));
   }
 
@@ -276,10 +278,12 @@ export function PermissionsModule({
       {/* ---------- users ---------- */}
       <div className="card p-5 sm:p-6 mb-4">
         <p className="text-sm font-semibold mb-1 flex items-center gap-1.5">
-          <i className="fa-solid fa-user-lock" style={{ color: 'var(--primary)' }}></i>จัดการผู้ใช้งาน
+          <i className="fa-solid fa-user-lock" style={{ color: 'var(--primary)' }}></i>
+          จัดการผู้ใช้งาน
         </p>
         <p className="text-xs mb-4" style={{ color: 'var(--ink-soft)' }}>
-          รายชื่ออีเมลที่อนุญาตให้เข้าสู่ระบบได้ พร้อมบทบาทที่กำหนดสิทธิ์การใช้งาน และสาขาที่แต่ละคนสามารถเห็นข้อมูลได้
+          รายชื่ออีเมลที่อนุญาตให้เข้าสู่ระบบได้ พร้อมบทบาทที่กำหนดสิทธิ์การใช้งาน
+          และสาขาที่แต่ละคนสามารถเห็นข้อมูลได้
         </p>
         <div className="flex flex-col gap-2 mb-4">
           {users.map((u) => (
@@ -362,7 +366,10 @@ export function PermissionsModule({
                   onClick={() => run(onUpdateUser?.(u.id, { active: !u.active }))}
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
                   title={u.active ? 'ระงับการใช้งาน' : 'เปิดใช้งาน'}
-                  style={{ background: 'var(--paper)', color: u.active ? '#4C7A3E' : 'var(--ink-soft)' }}
+                  style={{
+                    background: 'var(--paper)',
+                    color: u.active ? '#4C7A3E' : 'var(--ink-soft)',
+                  }}
                 >
                   <i className={`fa-solid ${u.active ? 'fa-toggle-on' : 'fa-toggle-off'}`}></i>
                 </button>
@@ -434,7 +441,10 @@ export function PermissionsModule({
                       if (e.key === 'Escape') setEditingRoleId(null);
                     }}
                   />
-                  <button onClick={saveEditRole} className="btn-primary text-xs px-3 py-1.5 rounded-lg font-semibold">
+                  <button
+                    onClick={saveEditRole}
+                    className="btn-primary text-xs px-3 py-1.5 rounded-lg font-semibold"
+                  >
                     บันทึก
                   </button>
                   <button
@@ -447,8 +457,14 @@ export function PermissionsModule({
               ) : (
                 <>
                   <div className="flex items-center gap-2.5">
-                    <div className="icon-tile" style={{ width: 30, height: 30, background: 'var(--paper)' }}>
-                      <i className={`fa-solid ${r.icon} text-xs`} style={{ color: 'var(--primary)' }}></i>
+                    <div
+                      className="icon-tile"
+                      style={{ width: 30, height: 30, background: 'var(--paper)' }}
+                    >
+                      <i
+                        className={`fa-solid ${r.icon} text-xs`}
+                        style={{ color: 'var(--primary)' }}
+                      ></i>
                     </div>
                     <span className="text-sm font-medium">{r.name}</span>
                     {r.id === 'admin' && (
@@ -602,14 +618,16 @@ export function PermissionsModule({
           </button>
         </div>
         <p className="text-xs mt-3" style={{ color: 'var(--ink-faint)' }}>
-          <i className="fa-solid fa-circle-info mr-1"></i>สถานะที่ใช้อยู่ในใบงานเดิม จะไม่เปลี่ยนตามอัตโนมัติถ้าลบหรือเปลี่ยนชื่อสถานะที่ใช้อยู่ ต้องไปแก้ทีละใบงานเอง
+          <i className="fa-solid fa-circle-info mr-1"></i>สถานะที่ใช้อยู่ในใบงานเดิม
+          จะไม่เปลี่ยนตามอัตโนมัติถ้าลบหรือเปลี่ยนชื่อสถานะที่ใช้อยู่ ต้องไปแก้ทีละใบงานเอง
         </p>
       </div>
 
       {/* ---------- wholesale statuses ---------- */}
       <div className="card p-5 sm:p-6 mb-4">
         <p className="text-sm font-semibold mb-4 flex items-center gap-1.5">
-          <i className="fa-solid fa-truck-ramp-box" style={{ color: 'var(--primary)' }}></i>จัดการสถานะขายส่ง (PO)
+          <i className="fa-solid fa-truck-ramp-box" style={{ color: 'var(--primary)' }}></i>
+          จัดการสถานะขายส่ง (PO)
         </p>
         <div className="flex flex-col gap-2 mb-4">
           {wsStatuses.map((c) => (
@@ -663,20 +681,26 @@ export function PermissionsModule({
           </button>
         </div>
         <p className="text-xs mt-3" style={{ color: 'var(--ink-faint)' }}>
-          <i className="fa-solid fa-circle-info mr-1"></i>PO ที่ใช้อยู่ในสถานะเดิม จะไม่เปลี่ยนตามอัตโนมัติถ้าลบหรือเปลี่ยนชื่อสถานะที่ใช้อยู่
+          <i className="fa-solid fa-circle-info mr-1"></i>PO ที่ใช้อยู่ในสถานะเดิม
+          จะไม่เปลี่ยนตามอัตโนมัติถ้าลบหรือเปลี่ยนชื่อสถานะที่ใช้อยู่
         </p>
       </div>
 
       {/* ---------- shop info ---------- */}
       <div className="card p-5 sm:p-6 mb-4">
         <p className="text-sm font-semibold mb-4 flex items-center gap-1.5">
-          <i className="fa-solid fa-location-dot" style={{ color: 'var(--primary)' }}></i>ข้อมูลนิติบุคคลของสาขา (สำหรับพิมพ์เอกสารการเงิน)
+          <i className="fa-solid fa-location-dot" style={{ color: 'var(--primary)' }}></i>
+          ข้อมูลนิติบุคคลของสาขา (สำหรับพิมพ์เอกสารการเงิน)
         </p>
         <div className="flex flex-col gap-3">
           {shops.map((s) => {
             const info = shopInfo[s.id];
             return (
-              <div key={s.id} className="rounded-xl p-3" style={{ border: '1px solid var(--line)' }}>
+              <div
+                key={s.id}
+                className="rounded-xl p-3"
+                style={{ border: '1px solid var(--line)' }}
+              >
                 <p className="text-sm font-semibold mb-2">{s.name}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                   <input
@@ -745,16 +769,33 @@ export function PermissionsModule({
       {/* ---------- nav (sidebar) permissions ---------- */}
       <div className="card p-5 sm:p-6 overflow-x-auto mb-4">
         <p className="text-sm font-semibold mb-4 flex items-center gap-1.5">
-          <i className="fa-solid fa-bars" style={{ color: 'var(--primary)' }}></i>สิทธิ์เข้าถึงเมนู (Sidebar)
+          <i className="fa-solid fa-bars" style={{ color: 'var(--primary)' }}></i>สิทธิ์เข้าถึงเมนู
+          (Sidebar)
         </p>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 500 }}>
+              <th
+                style={{
+                  textAlign: 'left',
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  color: 'var(--ink-soft)',
+                  fontWeight: 500,
+                }}
+              >
                 เมนู
               </th>
               {roles.map((r) => (
-                <th key={r.id} style={{ padding: '8px 12px', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 500 }}>
+                <th
+                  key={r.id}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 12,
+                    color: 'var(--ink-soft)',
+                    fontWeight: 500,
+                  }}
+                >
                   {r.name}
                 </th>
               ))}
@@ -786,16 +827,33 @@ export function PermissionsModule({
       {/* ---------- dashboard widget / capability permissions ---------- */}
       <div className="card p-5 sm:p-6 overflow-x-auto">
         <p className="text-sm font-semibold mb-4 flex items-center gap-1.5">
-          <i className="fa-solid fa-gauge-high" style={{ color: 'var(--primary)' }}></i>สิทธิ์ในหน้าแดชบอร์ด
+          <i className="fa-solid fa-gauge-high" style={{ color: 'var(--primary)' }}></i>
+          สิทธิ์ในหน้าแดชบอร์ด
         </p>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 500 }}>
+              <th
+                style={{
+                  textAlign: 'left',
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  color: 'var(--ink-soft)',
+                  fontWeight: 500,
+                }}
+              >
                 การ์ด / กราฟ / ความสามารถ
               </th>
               {roles.map((r) => (
-                <th key={r.id} style={{ padding: '8px 12px', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 500 }}>
+                <th
+                  key={r.id}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 12,
+                    color: 'var(--ink-soft)',
+                    fontWeight: 500,
+                  }}
+                >
                   {r.name}
                 </th>
               ))}
@@ -823,23 +881,42 @@ export function PermissionsModule({
           </tbody>
         </table>
         <p className="text-xs mt-4" style={{ color: 'var(--ink-faint)' }}>
-          <i className="fa-solid fa-circle-info mr-1"></i>คอลัมน์ &quot;แอดมิน/หลังบ้าน&quot; ล็อกไว้ให้เห็นครบทุกอย่างเสมอ กันลืมปิดสิทธิ์ตัวเองจนเข้าระบบไม่ได้ ส่วนบทบาทอื่นแก้ไขได้อิสระและมีผลทันที
+          <i className="fa-solid fa-circle-info mr-1"></i>คอลัมน์ &quot;แอดมิน/หลังบ้าน&quot;
+          ล็อกไว้ให้เห็นครบทุกอย่างเสมอ กันลืมปิดสิทธิ์ตัวเองจนเข้าระบบไม่ได้
+          ส่วนบทบาทอื่นแก้ไขได้อิสระและมีผลทันที
         </p>
       </div>
 
       {/* ---------- module capability permissions ---------- */}
       <div className="card p-5 sm:p-6 overflow-x-auto mt-4">
         <p className="text-sm font-semibold mb-4 flex items-center gap-1.5">
-          <i className="fa-solid fa-sliders" style={{ color: 'var(--primary)' }}></i>สิทธิ์การใช้งานในแต่ละเมนู
+          <i className="fa-solid fa-sliders" style={{ color: 'var(--primary)' }}></i>
+          สิทธิ์การใช้งานในแต่ละเมนู
         </p>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 500 }}>
+              <th
+                style={{
+                  textAlign: 'left',
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  color: 'var(--ink-soft)',
+                  fontWeight: 500,
+                }}
+              >
                 การกระทำ
               </th>
               {roles.map((r) => (
-                <th key={r.id} style={{ padding: '8px 12px', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 500 }}>
+                <th
+                  key={r.id}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 12,
+                    color: 'var(--ink-soft)',
+                    fontWeight: 500,
+                  }}
+                >
                   {r.name}
                 </th>
               ))}
@@ -867,7 +944,8 @@ export function PermissionsModule({
           </tbody>
         </table>
         <p className="text-xs mt-4" style={{ color: 'var(--ink-faint)' }}>
-          <i className="fa-solid fa-circle-info mr-1"></i>ควบคุมปุ่ม/การกระทำเฉพาะจุดในแต่ละเมนู เช่น ปิดปุ่ม &quot;เพิ่มสินค้า&quot; สำหรับพนักงานขาย โดยที่ยังเข้าดูเมนูสต็อกได้ตามปกติ
+          <i className="fa-solid fa-circle-info mr-1"></i>ควบคุมปุ่ม/การกระทำเฉพาะจุดในแต่ละเมนู
+          เช่น ปิดปุ่ม &quot;เพิ่มสินค้า&quot; สำหรับพนักงานขาย โดยที่ยังเข้าดูเมนูสต็อกได้ตามปกติ
         </p>
       </div>
     </div>

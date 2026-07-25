@@ -5,13 +5,7 @@
 // the bars keep the same colour (#7A2333), 6px corner radius, 22px max thickness,
 // hidden legend, hidden y-axis and muted x-tick styling.
 
-import {
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  LinearScale,
-  Tooltip,
-} from 'chart.js';
+import { BarElement, CategoryScale, Chart as ChartJS, LinearScale, Tooltip } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip);

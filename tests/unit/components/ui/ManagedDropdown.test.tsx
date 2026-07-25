@@ -10,14 +10,28 @@ describe('ManagedDropdown', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
-      <ManagedDropdown value="" onChange={onChange} options={options} setOptions={vi.fn()} placeholder="เลือกช่องทาง..." />,
+      <ManagedDropdown
+        value=""
+        onChange={onChange}
+        options={options}
+        setOptions={vi.fn()}
+        placeholder="เลือกช่องทาง..."
+      />,
     );
     await user.selectOptions(screen.getByRole('combobox'), 'โอน');
     expect(onChange).toHaveBeenCalledWith('โอน');
   });
 
   it('renders the placeholder as the disabled empty option', () => {
-    render(<ManagedDropdown value="" onChange={vi.fn()} options={options} setOptions={vi.fn()} placeholder="เลือกช่องทาง..." />);
+    render(
+      <ManagedDropdown
+        value=""
+        onChange={vi.fn()}
+        options={options}
+        setOptions={vi.fn()}
+        placeholder="เลือกช่องทาง..."
+      />,
+    );
     expect(screen.getByRole('option', { name: 'เลือกช่องทาง...' })).toBeDisabled();
   });
 
@@ -25,7 +39,9 @@ describe('ManagedDropdown', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const setOptions = vi.fn();
-    render(<ManagedDropdown value="" onChange={onChange} options={options} setOptions={setOptions} />);
+    render(
+      <ManagedDropdown value="" onChange={onChange} options={options} setOptions={setOptions} />,
+    );
 
     await user.selectOptions(screen.getByRole('combobox'), '__add__');
     const input = screen.getByPlaceholderText('พิมพ์ตัวเลือกใหม่...');
@@ -49,7 +65,9 @@ describe('ManagedDropdown', () => {
     expect(setOptions).toHaveBeenCalledWith(['เงินสด', 'โอน', 'พร้อมเพย์']);
 
     setOptions.mockClear();
-    rerender(<ManagedDropdown value="" onChange={onChange} options={options} setOptions={setOptions} />);
+    rerender(
+      <ManagedDropdown value="" onChange={onChange} options={options} setOptions={setOptions} />,
+    );
     await user.selectOptions(screen.getByRole('combobox'), '__add__');
     await user.type(screen.getByPlaceholderText('พิมพ์ตัวเลือกใหม่...'), 'เช็ค{Escape}');
     expect(setOptions).not.toHaveBeenCalled();
@@ -60,7 +78,9 @@ describe('ManagedDropdown', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const setOptions = vi.fn();
-    render(<ManagedDropdown value="โอน" onChange={onChange} options={options} setOptions={setOptions} />);
+    render(
+      <ManagedDropdown value="โอน" onChange={onChange} options={options} setOptions={setOptions} />,
+    );
 
     await user.click(screen.getByRole('button', { name: 'ลบตัวเลือกนี้ออกจากระบบ' }));
     expect(setOptions).toHaveBeenCalledWith(['เงินสด']);
@@ -69,6 +89,8 @@ describe('ManagedDropdown', () => {
 
   it('hides the remove button when nothing is selected', () => {
     render(<ManagedDropdown value="" onChange={vi.fn()} options={options} setOptions={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: 'ลบตัวเลือกนี้ออกจากระบบ' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'ลบตัวเลือกนี้ออกจากระบบ' }),
+    ).not.toBeInTheDocument();
   });
 });

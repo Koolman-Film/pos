@@ -23,11 +23,7 @@ import { loadOrderDetailData } from '../data';
  * capability on the server per correction C2. The `caps` map here only controls
  * whether the buttons render.
  */
-export default async function WholesaleDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function WholesaleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getSessionContext();
   if (!session.hasNav('wholesale')) notFound();

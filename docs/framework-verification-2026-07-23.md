@@ -3,6 +3,7 @@
 Verification date: 2026-07-23. Every claim below is backed by a fetched authoritative source (official docs via Context7 MCP, official Next.js/Tailwind docs, or the live npm registry). Nothing here is from training memory.
 
 Snapshot of current versions found:
+
 - **Next.js**: 16.2.x (docs page reports `version: 16.2.11`, `lastUpdated: 2026-03-03`; Context7 `/vercel/next.js` latest indexed v16.2.9). Next.js 16 GA was 2025-10-21.
 - **React**: 19.2 (Next.js 16 App Router runs the React 19.2 canary line).
 - **Tailwind CSS**: v4 (CSS-first) is what `create-next-app` installs.
@@ -18,6 +19,7 @@ Snapshot of current versions found:
 **VERDICT:** Flags = CORRECT (all still valid). Scaffolded-stack assumptions = PARTIALLY OUTDATED.
 
 **CORRECT CURRENT FORM:**
+
 - All six flags exist and work in the current CLI. Per the official flag table:
   - `--typescript` / `--ts` ✔ (also the default)
   - `--tailwind` ✔ (default)
@@ -42,6 +44,7 @@ Snapshot of current versions found:
 **VERDICT:** CORRECT (and now mandatory, not just recommended).
 
 **CORRECT CURRENT FORM:**
+
 - `const cookieStore = await cookies()` is correct. Same for `await headers()` and `await draftMode()`.
 - Page/layout props: `params: Promise<{ slug: string }>` and `searchParams` are Promises; resolve with `await`.
 - In Next.js 16 the **synchronous** forms were **removed** (they were deprecated-with-warning in 15). So async is no longer optional — sync access of `params`/`searchParams`/`cookies()`/`headers()`/`draftMode()` breaks.
@@ -60,25 +63,28 @@ Snapshot of current versions found:
 **CORRECT CURRENT FORM:**
 
 (a) Browser client — `utils/supabase/client.ts`:
+
 ```ts
-import { createBrowserClient } from '@supabase/ssr'
+import { createBrowserClient } from '@supabase/ssr';
 
 export function createClient() {
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  )
+  );
 }
 ```
+
 Signature (current): `createBrowserClient<Database>(supabaseUrl, supabaseKey, options?)` where `options` may include `cookies`, `cookieOptions`, `cookieEncoding: 'raw' | 'base64url'`, `isSingleton`. Passing a cookie handler requires BOTH `getAll` and `setAll` — supplying only `getAll` (or deprecated `get`/`remove`) throws.
 
 (b) Server client used in Server Components / Server Actions / Route Handlers — `utils/supabase/server.ts` (note `await cookies()`):
+
 ```ts
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 export async function createClient() {
-  const cookieStore = await cookies()
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -86,33 +92,35 @@ export async function createClient() {
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll()
+          return cookieStore.getAll();
         },
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
+              cookieStore.set(name, value, options),
+            );
           } catch {
             // Called from a Server Component — safe to ignore when
             // middleware/proxy is refreshing the session.
           }
         },
       },
-    }
-  )
+    },
+  );
 }
 ```
+
 The `try/catch` is the canonical Server-Component guard (Server Components cannot write cookies). If you omit `setAll` entirely on a server client, the library no longer throws — it installs a warning stub advising you to check middleware/route-handlers/server-actions.
 
 (c) Session-refresh middleware. IMPORTANT Next.js 16 change: `middleware.ts` is deprecated and renamed to **`proxy.ts`** (exported function `proxy`, runs on Node.js runtime). `middleware.ts` still works for now but is deprecated. The Supabase pattern itself is unchanged except cookie plumbing:
+
 ```ts
 // proxy.ts  (formerly middleware.ts)
-import { createServerClient } from '@supabase/ssr'
-import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr';
+import { NextRequest, NextResponse } from 'next/server';
 
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request })
+  let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -120,28 +128,29 @@ export async function proxy(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll()
+          return request.cookies.getAll();
         },
         // NOTE the SECOND arg `headers` — new in current @supabase/ssr
         setAll(cookiesToSet, headers) {
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
+            response.cookies.set(name, value, options),
+          );
           Object.entries(headers).forEach(([key, value]) =>
-            response.headers.set(key, value)
-          )
+            response.headers.set(key, value),
+          );
         },
       },
-    }
-  )
+    },
+  );
 
   // Refresh the session — use getUser(), do not trust getSession() alone in middleware
-  await supabase.auth.getUser()
-  return response
+  await supabase.auth.getUser();
+  return response;
 }
 ```
 
 **What changed vs older (pre-cutoff) knowledge:**
+
 - `getAll`/`setAll` remain THE recommended API; the older per-cookie `get`/`set`/`remove` are deprecated.
 - `setAll` now takes an optional **second `headers` argument**. When auth cookies are written, the library passes `Cache-Control: private, no-cache, no-store, must-revalidate, max-age=0`, `Expires: 0`, `Pragma: no-cache`. Applying these to the response prevents a CDN/reverse-proxy from caching one user's session token and serving it to another user — a real security fix. Older middleware snippets that implement `setAll(cookiesToSet)` (one arg) still compile but skip this hardening.
 - `createServerClient(url, key, { cookies, cookieOptions?, cookieEncoding? })` core signature unchanged; default `cookieEncoding` is `base64url`.
@@ -158,15 +167,16 @@ export async function proxy(request: NextRequest) {
 **VERDICT:** If the plan uses the three `@tailwind` directives + a JS/TS config = OUTDATED for v4. `:root {}` custom properties = UNCHANGED (still work as before).
 
 **CORRECT CURRENT FORM (Tailwind v4, CSS-first):**
+
 - Entry: **`@import "tailwindcss";`** at the top of `globals.css`. The v3 trio `@tailwind base; @tailwind components; @tailwind utilities;` is replaced and not used in v4.
 - Design tokens that should generate utilities go in **`@theme`**:
   ```css
-  @import "tailwindcss";
+  @import 'tailwindcss';
 
   @theme {
     --color-brand-500: oklch(0.84 0.18 117.33);
     --radius-lg: 0.75rem;
-    --font-display: "Satoshi", sans-serif;
+    --font-display: 'Satoshi', sans-serif;
   }
   ```
 - Plain CSS custom properties that should NOT generate utilities: keep them in `:root {}` exactly as before — unchanged:
@@ -209,6 +219,7 @@ export async function proxy(request: NextRequest) {
 **VERDICT:** OUTDATED concern — the React 19 peer-dep problem is FIXED. No peer issues now.
 
 **CORRECT CURRENT FORM (from live npm registry, 2026-07-23):**
+
 - `react-chartjs-2@5.3.1` — `peerDependencies`: `react: "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"` and `chart.js: "^4.1.1"`. React 19 is now explicitly in range, so `npm install` produces no peer warning and needs no `--legacy-peer-deps`.
 - `chart.js@4.5.1` — current.
 - Both are maintained and compatible with React 19 / Next.js 16. (The old `^16 || ^17 || ^18` range that excluded React 19, and the corresponding GitHub issue, are resolved in 5.3.x.)
@@ -224,6 +235,7 @@ export async function proxy(request: NextRequest) {
 **VERDICT:** CORRECT that there's a version gotcha — you need a React-19-capable `@testing-library/react` (v16+). Otherwise setup is standard.
 
 **CORRECT CURRENT FORM:**
+
 - Install: `vitest`, `@testing-library/react` (**v16+ is the React 19-compatible line**; v15 and earlier target React 18), `@testing-library/dom` (peer of RTL 16, install explicitly), `@testing-library/jest-dom`, `@testing-library/user-event`, and `jsdom` (or `happy-dom`).
 - `vitest.config.ts`: `test.environment: 'jsdom'`, `globals: true`, `setupFiles: './test/setup.ts'`. Use the `@vitejs/plugin-react` (or SWC) plugin.
 - Setup file: `import '@testing-library/jest-dom/vitest'` and run `cleanup()` after each test (`afterEach(cleanup)`) if `globals`/auto-cleanup is not configured.
@@ -235,11 +247,11 @@ export async function proxy(request: NextRequest) {
 
 ## Summary of outdated claims
 
-| # | Item | Status | Most important correction |
-|---|------|--------|---------------------------|
-| 1 | create-next-app flags/stack | Flags OK; stack assumption outdated | Scaffolds Next 16 + React 19 + **Tailwind v4 (no `tailwind.config.ts`)**, Turbopack default |
-| 2 | async cookies/params | Correct | Now **mandatory** in Next 16 (sync removed) |
-| 3 | @supabase/ssr | getAll/setAll correct; details changed | `setAll` gains a 2nd `headers` arg (cache-control security); Next 16 renames `middleware.ts` → `proxy.ts` |
-| 4 | Tailwind v4 CSS | `@tailwind` directives outdated | Use `@import "tailwindcss";` + `@theme`/`@layer components`/`@utility`; `:root {}` unchanged |
-| 5 | react-chartjs-2 + chart.js | Concern outdated (fixed) | 5.3.1 peer deps include `react ^19`; no peer issue |
-| 6 | Vitest + RTL React 19 | Correct (version gotcha) | Need `@testing-library/react` **v16+** for React 19 |
+| #   | Item                        | Status                                 | Most important correction                                                                                 |
+| --- | --------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 1   | create-next-app flags/stack | Flags OK; stack assumption outdated    | Scaffolds Next 16 + React 19 + **Tailwind v4 (no `tailwind.config.ts`)**, Turbopack default               |
+| 2   | async cookies/params        | Correct                                | Now **mandatory** in Next 16 (sync removed)                                                               |
+| 3   | @supabase/ssr               | getAll/setAll correct; details changed | `setAll` gains a 2nd `headers` arg (cache-control security); Next 16 renames `middleware.ts` → `proxy.ts` |
+| 4   | Tailwind v4 CSS             | `@tailwind` directives outdated        | Use `@import "tailwindcss";` + `@theme`/`@layer components`/`@utility`; `:root {}` unchanged              |
+| 5   | react-chartjs-2 + chart.js  | Concern outdated (fixed)               | 5.3.1 peer deps include `react ^19`; no peer issue                                                        |
+| 6   | Vitest + RTL React 19       | Correct (version gotcha)               | Need `@testing-library/react` **v16+** for React 19                                                       |

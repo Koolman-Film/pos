@@ -64,7 +64,10 @@ export function PeriodShopFilter({
           ))}
         </select>
       )}
-      <div className="flex rounded-xl overflow-hidden" style={{ border: '1.5px solid var(--line)' }}>
+      <div
+        className="flex rounded-xl overflow-hidden"
+        style={{ border: '1.5px solid var(--line)' }}
+      >
         {(
           [
             ['today', 'วันนี้'],
@@ -92,7 +95,11 @@ export function PeriodShopFilter({
           style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
         >
           <i className="fa-regular fa-calendar mr-1.5"></i>
-          {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+          {new Date().toLocaleDateString('th-TH', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
         </span>
       )}
       {period === 'month' && (

@@ -25,7 +25,7 @@ describe('Dashboard', () => {
         shopBreakdown={[]}
         expenseByCategory={[]}
         trend={emptyTrend}
-      />
+      />,
     );
     expect(screen.queryByText('ยอดขายรวม (บาท)')).not.toBeInTheDocument();
   });
@@ -42,7 +42,7 @@ describe('Dashboard', () => {
         shopBreakdown={[]}
         expenseByCategory={[]}
         trend={emptyTrend}
-      />
+      />,
     );
     expect(screen.getByText('คุณ เอ (1กก)')).toBeInTheDocument();
   });
@@ -93,7 +93,7 @@ describe('Dashboard job-status totals', () => {
           { key: 'จองแล้ว', count: 3, pct: 75 },
           { key: 'กำลังติดตั้ง', count: 1, pct: 25 },
         ]}
-      />
+      />,
     );
     // Bare numbers like "4" appear in several cards, so scope to this one.
     const card = screen.getByText('งานทั้งหมด').closest('.card') as HTMLElement;
@@ -114,7 +114,7 @@ describe('Dashboard upcoming bookings', () => {
           { ...job({ id: 'JT-1' }), dropOff: day },
           { ...job({ id: 'JT-2', customer: 'คุณ บี', serviceType: 'ถอดฟิล์ม' }), dropOff: day },
         ]}
-      />
+      />,
     );
     // Both appointment types appear as their own subheading under the one day.
     expect(screen.getByText('เข้าทำ/ติดตั้ง')).toBeInTheDocument();
@@ -143,7 +143,7 @@ describe('Dashboard pending approvals', () => {
         {...base}
         hasDashboardWidget={(k) => k !== 'pendingApprovals'}
         pendingApprovals={{ discount: 2, badDebt: 1 }}
-      />
+      />,
     );
     expect(screen.queryByText('รอการอนุมัติ')).not.toBeInTheDocument();
   });
@@ -160,17 +160,17 @@ describe('Dashboard recent jobs', () => {
 
   it('falls back to the prototype placeholder copy when a job has no details', () => {
     render(
-      <Dashboard {...base} recentJobs={[job({ serviceType: '', categories: [], products: [] })]} />
+      <Dashboard {...base} recentJobs={[job({ serviceType: '', categories: [], products: [] })]} />,
     );
-    expect(
-      screen.getByText(/ยังไม่ระบุการนัดหมาย · ยังไม่ระบุชนิดสินค้า/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/ยังไม่ระบุการนัดหมาย · ยังไม่ระบุชนิดสินค้า/)).toBeInTheDocument();
     expect(screen.getByText('ยังไม่ระบุสินค้า')).toBeInTheDocument();
   });
 
   it('calls the status action with the ticket id and the newly picked status', async () => {
     const onUpdateTicketStatus = vi.fn().mockResolvedValue(undefined);
-    render(<Dashboard {...base} recentJobs={[job()]} onUpdateTicketStatus={onUpdateTicketStatus} />);
+    render(
+      <Dashboard {...base} recentJobs={[job()]} onUpdateTicketStatus={onUpdateTicketStatus} />,
+    );
 
     await userEvent.selectOptions(screen.getByLabelText('สถานะของ JT-1'), 'กำลังติดตั้ง');
 

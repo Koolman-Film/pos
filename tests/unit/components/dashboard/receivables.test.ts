@@ -11,7 +11,14 @@ import {
 describe('computeReceivables', () => {
   it('includes an unpaid ticket and an unpaid wholesale order, sorted by amount descending', () => {
     const tickets = [
-      { id: 'JT-1', shop: 'cm', customer: 'A', plate: '1กก', items: [{ soldPrice: 1000 }], payments: [] },
+      {
+        id: 'JT-1',
+        shop: 'cm',
+        customer: 'A',
+        plate: '1กก',
+        items: [{ soldPrice: 1000 }],
+        payments: [],
+      },
     ];
     const orders = [
       {
@@ -48,9 +55,33 @@ describe('computeReceivables', () => {
 describe('computePayables', () => {
   it('only includes expenses with status รอจ่าย, filtered by shop', () => {
     const expenses = [
-      { id: 1, shop: 'cm', desc: 'A', category: 'ค่าเช่า', amount: 1000, status: 'รอจ่าย', due: '25 ก.ค.' },
-      { id: 2, shop: 'lp', desc: 'B', category: 'ค่าเช่า', amount: 2000, status: 'รอจ่าย', due: '25 ก.ค.' },
-      { id: 3, shop: 'cm', desc: 'C', category: 'ค่าเช่า', amount: 500, status: 'จ่ายแล้ว', due: '' },
+      {
+        id: 1,
+        shop: 'cm',
+        desc: 'A',
+        category: 'ค่าเช่า',
+        amount: 1000,
+        status: 'รอจ่าย',
+        due: '25 ก.ค.',
+      },
+      {
+        id: 2,
+        shop: 'lp',
+        desc: 'B',
+        category: 'ค่าเช่า',
+        amount: 2000,
+        status: 'รอจ่าย',
+        due: '25 ก.ค.',
+      },
+      {
+        id: 3,
+        shop: 'cm',
+        desc: 'C',
+        category: 'ค่าเช่า',
+        amount: 500,
+        status: 'จ่ายแล้ว',
+        due: '',
+      },
     ];
     expect(computePayables(expenses, 'cm')).toEqual([
       { id: 1, name: 'A', amount: 1000, source: 'ค่าเช่า', due: '25 ก.ค.' },

@@ -48,10 +48,15 @@ export function ExtrasSection({
         style={{ color: 'var(--primary)' }}
       >
         <i className="fa-solid fa-sliders"></i>ข้อมูลเพิ่มเติม (กรอกทีหลังได้){' '}
-        <i className={`fa-solid fa-chevron-${showOptional ? 'up' : 'down'} text-xs transition-transform`}></i>
+        <i
+          className={`fa-solid fa-chevron-${showOptional ? 'up' : 'down'} text-xs transition-transform`}
+        ></i>
       </button>
       <div className="fade-page">
-        <p className="text-xs font-medium mb-3 flex items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
+        <p
+          className="text-xs font-medium mb-3 flex items-center gap-1.5"
+          style={{ color: 'var(--ink-soft)' }}
+        >
           <i className="fa-solid fa-list-check"></i>บริการเสริม
         </p>
         {extraOptions.map((name) => {
@@ -64,7 +69,12 @@ export function ExtrasSection({
             <div key={name} className="mb-3 group">
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={!!ex.checked} onChange={() => toggleExtra(name)} className="w-4 h-4" />
+                  <input
+                    type="checkbox"
+                    checked={!!ex.checked}
+                    onChange={() => toggleExtra(name)}
+                    className="w-4 h-4"
+                  />
                   <span className="font-medium">{name}</span>
                 </label>
                 <button
@@ -128,7 +138,11 @@ export function ExtrasSection({
                   </div>
                   {ex.slideType === 'Walk-in' &&
                     legs.map((leg, legIdx) => (
-                      <div key={legIdx} className="rounded-xl p-2.5 mb-2" style={{ background: 'var(--paper)' }}>
+                      <div
+                        key={legIdx}
+                        className="rounded-xl p-2.5 mb-2"
+                        style={{ background: 'var(--paper)' }}
+                      >
                         <p className="text-xs font-semibold mb-1.5">ถึงหน้าร้าน</p>
                         <div className="grid grid-cols-2 gap-2">
                           <input
@@ -149,7 +163,11 @@ export function ExtrasSection({
                     ))}
                   {ex.slideType === 'Showroom' &&
                     legs.map((leg, legIdx) => (
-                      <div key={legIdx} className="rounded-xl p-2.5 mb-2" style={{ background: 'var(--paper)' }}>
+                      <div
+                        key={legIdx}
+                        className="rounded-xl p-2.5 mb-2"
+                        style={{ background: 'var(--paper)' }}
+                      >
                         <p className="text-xs font-semibold mb-1.5">ขาที่ {legIdx + 1}</p>
                         <div className="grid grid-cols-2 gap-2 mb-2">
                           <input
@@ -221,8 +239,12 @@ export function ExtrasSection({
                           </label>
                           <input
                             type="number"
-                            value={(ex.serviceCount as string | number) ?? wrapStock?.serviceCount ?? ''}
-                            onChange={(e) => updateExtraDetail(name, 'serviceCount', e.target.value)}
+                            value={
+                              (ex.serviceCount as string | number) ?? wrapStock?.serviceCount ?? ''
+                            }
+                            onChange={(e) =>
+                              updateExtraDetail(name, 'serviceCount', e.target.value)
+                            }
                             className="field text-xs px-2.5 py-1.5 w-full"
                           />
                         </div>
@@ -241,7 +263,8 @@ export function ExtrasSection({
                     </>
                   ) : (
                     <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                      ยังไม่มีสินค้าหมวด &quot;ฟิล์มกันรอย&quot; ในใบงานนี้ เพิ่มก่อนเพื่อดึงข้อมูลบริการ
+                      ยังไม่มีสินค้าหมวด &quot;ฟิล์มกันรอย&quot; ในใบงานนี้
+                      เพิ่มก่อนเพื่อดึงข้อมูลบริการ
                     </p>
                   )}
                 </div>
@@ -276,12 +299,18 @@ export function ExtrasSection({
             >
               เพิ่ม
             </button>
-            <button onClick={() => setAddingExtra(false)} className="btn-outline px-3 rounded-lg text-xs">
+            <button
+              onClick={() => setAddingExtra(false)}
+              className="btn-outline px-3 rounded-lg text-xs"
+            >
               ยกเลิก
             </button>
           </div>
         ) : (
-          <button onClick={() => setAddingExtra(true)} className="btn-outline text-xs px-3 py-1.5 rounded-full">
+          <button
+            onClick={() => setAddingExtra(true)}
+            className="btn-outline text-xs px-3 py-1.5 rounded-full"
+          >
             <i className="fa-solid fa-plus mr-1"></i>เพิ่มตัวเลือกใหม่
           </button>
         )}

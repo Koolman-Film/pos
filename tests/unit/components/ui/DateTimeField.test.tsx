@@ -11,7 +11,12 @@ const dateInput = (container: HTMLElement) =>
 describe('DateTimeField', () => {
   it('renders the local date and time of the supplied value', () => {
     render(
-      <DateTimeField value={new Date(2026, 6, 23, 13, 0)} onChange={vi.fn()} timeSlots={timeSlots} setTimeSlots={vi.fn()} />,
+      <DateTimeField
+        value={new Date(2026, 6, 23, 13, 0)}
+        onChange={vi.fn()}
+        timeSlots={timeSlots}
+        setTimeSlots={vi.fn()}
+      />,
     );
     expect(screen.getByDisplayValue('2026-07-23')).toBeInTheDocument();
     expect(screen.getByRole('combobox')).toHaveValue('13:00');
@@ -20,7 +25,12 @@ describe('DateTimeField', () => {
   it('changing the date part preserves the time of day', () => {
     const onChange = vi.fn();
     const { container } = render(
-      <DateTimeField value={new Date(2026, 6, 23, 13, 0)} onChange={onChange} timeSlots={timeSlots} setTimeSlots={vi.fn()} />,
+      <DateTimeField
+        value={new Date(2026, 6, 23, 13, 0)}
+        onChange={onChange}
+        timeSlots={timeSlots}
+        setTimeSlots={vi.fn()}
+      />,
     );
 
     fireEvent.change(dateInput(container), { target: { value: '2026-08-01' } });
@@ -37,7 +47,12 @@ describe('DateTimeField', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
-      <DateTimeField value={new Date(2026, 6, 23, 13, 0)} onChange={onChange} timeSlots={timeSlots} setTimeSlots={vi.fn()} />,
+      <DateTimeField
+        value={new Date(2026, 6, 23, 13, 0)}
+        onChange={onChange}
+        timeSlots={timeSlots}
+        setTimeSlots={vi.fn()}
+      />,
     );
 
     await user.selectOptions(screen.getByRole('combobox'), '16:30');
@@ -52,7 +67,12 @@ describe('DateTimeField', () => {
 
   it('keeps the local calendar day for an early-morning time (no UTC drift)', () => {
     render(
-      <DateTimeField value={new Date(2026, 6, 23, 2, 0)} onChange={vi.fn()} timeSlots={timeSlots} setTimeSlots={vi.fn()} />,
+      <DateTimeField
+        value={new Date(2026, 6, 23, 2, 0)}
+        onChange={vi.fn()}
+        timeSlots={timeSlots}
+        setTimeSlots={vi.fn()}
+      />,
     );
     expect(screen.getByDisplayValue('2026-07-23')).toBeInTheDocument();
   });

@@ -33,13 +33,15 @@ type OrderRow = {
   shop_id: string;
   customer_id: number | null;
   status: string;
-  order_items: {
-    name: string;
-    qty: number;
-    list_price: number;
-    requested_price: number;
-    reason: string;
-  }[] | null;
+  order_items:
+    | {
+        name: string;
+        qty: number;
+        list_price: number;
+        requested_price: number;
+        reason: string;
+      }[]
+    | null;
   order_returns: { item_name: string; qty: number; reason: string }[] | null;
   order_adjustments: { amount: number; reason: string }[] | null;
   order_payments: { amount: number; method: string }[] | null;
@@ -133,7 +135,7 @@ export async function loadWholesaleListData(session: SessionContext): Promise<{
 
 export async function loadOrderDetailData(
   session: SessionContext,
-  id: string
+  id: string,
 ): Promise<{
   order: WsOrder | null;
   isNew: boolean;
@@ -160,17 +162,22 @@ export async function loadOrderDetailData(
     if (!session.accessibleShopIds.includes(order.shop)) return null;
   }
 
-  const [customers, wsStatuses, allOrdersRes, stockRes, shopInfoRes, methodsRes] = await Promise.all([
-    loadCustomers(),
-    loadWsStatuses(),
-    supabase.from('orders').select(ORDER_SELECT).in('shop_id', session.accessibleShopIds),
-    supabase
-      .from('stock')
-      .select('id, name, short_name, shop_id, qty, sell_price')
-      .eq('shop_id', order.shop),
-    supabase.from('shop_info').select('shop_id, company_name, address, phone, payment_channels'),
-    supabase.from('option_lists').select('value, sort_order, list_key').eq('list_key', 'payment_methods').order('sort_order'),
-  ]);
+  const [customers, wsStatuses, allOrdersRes, stockRes, shopInfoRes, methodsRes] =
+    await Promise.all([
+      loadCustomers(),
+      loadWsStatuses(),
+      supabase.from('orders').select(ORDER_SELECT).in('shop_id', session.accessibleShopIds),
+      supabase
+        .from('stock')
+        .select('id, name, short_name, shop_id, qty, sell_price')
+        .eq('shop_id', order.shop),
+      supabase.from('shop_info').select('shop_id, company_name, address, phone, payment_channels'),
+      supabase
+        .from('option_lists')
+        .select('value, sort_order, list_key')
+        .eq('list_key', 'payment_methods')
+        .order('sort_order'),
+    ]);
 
   const orders = ((allOrdersRes.data as OrderRow[] | null) ?? []).map(mapOrder);
 

@@ -45,7 +45,7 @@ export function buildSessionContext(
   email: string,
   profile: Profile,
   allShopIds: string[],
-  perms: PermissionRow[]
+  perms: PermissionRow[],
 ): SessionContext {
   const lookup = (type: string, key: string) =>
     profile.role_id === 'admin' ||
@@ -58,8 +58,7 @@ export function buildSessionContext(
   // silently scopes execs to one shop. Kept as a permission (not an app_users flag)
   // so it stays editable via the Permissions UI, per spec §7.
   // Must stay in sync with `current_user_sees_all_shops()` in migration 0008.
-  const seesAllShops =
-    profile.sees_all_shops || lookup('dashboard_widget', 'seeAllShops');
+  const seesAllShops = profile.sees_all_shops || lookup('dashboard_widget', 'seeAllShops');
 
   // Filter the canonical shop list rather than returning `profile.shop_access`
   // verbatim, so the order always matches `shops.sort_order` and an access row

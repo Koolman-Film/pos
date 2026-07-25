@@ -16,9 +16,19 @@ import type {
 } from '@/components/tickets/types';
 
 const OPTION_LISTS: OptionListName[] = [
-  'booking_channels', 'service_types', 'car_types', 'car_brands', 'time_slots',
-  'film_positions', 'wrap_positions', 'extra_options', 'slide_types', 'technicians',
-  'product_categories', 'service_items', 'payment_methods',
+  'booking_channels',
+  'service_types',
+  'car_types',
+  'car_brands',
+  'time_slots',
+  'film_positions',
+  'wrap_positions',
+  'extra_options',
+  'slide_types',
+  'technicians',
+  'product_categories',
+  'service_items',
+  'payment_methods',
 ];
 
 export async function loadShops(): Promise<Shop[]> {
@@ -29,8 +39,17 @@ export async function loadShops(): Promise<Shop[]> {
 
 export async function loadStatuses(): Promise<StatusConfig[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from('statuses').select('key, short, bg, text_color, dot').order('sort_order');
-  return (data ?? []).map((s) => ({ key: s.key, short: s.short, bg: s.bg, text: s.text_color, dot: s.dot }));
+  const { data } = await supabase
+    .from('statuses')
+    .select('key, short, bg, text_color, dot')
+    .order('sort_order');
+  return (data ?? []).map((s) => ({
+    key: s.key,
+    short: s.short,
+    bg: s.bg,
+    text: s.text_color,
+    dot: s.dot,
+  }));
 }
 
 type ListRow = {
@@ -42,7 +61,12 @@ type ListRow = {
   tech_by_category: Record<string, string[]> | null;
   drop_off_date: string | null;
   pickup_date: string | null;
-  ticket_items: { category: string; sold_price: number; discount_type: string | null; discount_value: number | null }[];
+  ticket_items: {
+    category: string;
+    sold_price: number;
+    discount_type: string | null;
+    discount_value: number | null;
+  }[];
   ticket_payments: { amount: number }[];
 };
 
@@ -53,7 +77,7 @@ export async function loadTicketList(): Promise<TicketListRow[]> {
     .from('tickets')
     .select(
       'id, shop_id, customer_name, plate, status, tech_by_category, drop_off_date, pickup_date, ' +
-        'ticket_items(category, sold_price, discount_type, discount_value), ticket_payments(amount)'
+        'ticket_items(category, sold_price, discount_type, discount_value), ticket_payments(amount)',
     )
     .order('created_at', { ascending: false });
 
@@ -89,19 +113,36 @@ export type DetailRegistries = {
 
 export async function loadDetailRegistries(): Promise<DetailRegistries> {
   const supabase = await createClient();
-  const [optionsRes, stockRes, carModelsRes, priceRes, filmPriceRes, customersRes, buyersRes, shopInfoRes] =
-    await Promise.all([
-      supabase.from('option_lists').select('list_key, value, sort_order').is('shop_id', null).order('sort_order'),
-      supabase.from('stock').select('id, name, short_name, category, shop_id, qty, cost, sell_price'),
-      supabase.from('car_models').select('model, brand, car_type'),
-      supabase.from('price_matrix').select('car_type, product, price'),
-      supabase.from('film_price_matrix').select('category, product, position, car_type, price'),
-      supabase.from('retail_customers').select('id, name, phone'),
-      supabase.from('corporate_buyers').select('name, address, tax_id'),
-      supabase.from('shop_info').select('shop_id, company_name, address, phone, tax_id, payment_channels'),
-    ]);
+  const [
+    optionsRes,
+    stockRes,
+    carModelsRes,
+    priceRes,
+    filmPriceRes,
+    customersRes,
+    buyersRes,
+    shopInfoRes,
+  ] = await Promise.all([
+    supabase
+      .from('option_lists')
+      .select('list_key, value, sort_order')
+      .is('shop_id', null)
+      .order('sort_order'),
+    supabase.from('stock').select('id, name, short_name, category, shop_id, qty, cost, sell_price'),
+    supabase.from('car_models').select('model, brand, car_type'),
+    supabase.from('price_matrix').select('car_type, product, price'),
+    supabase.from('film_price_matrix').select('category, product, position, car_type, price'),
+    supabase.from('retail_customers').select('id, name, phone'),
+    supabase.from('corporate_buyers').select('name, address, tax_id'),
+    supabase
+      .from('shop_info')
+      .select('shop_id, company_name, address, phone, tax_id, payment_channels'),
+  ]);
 
-  const options = Object.fromEntries(OPTION_LISTS.map((k) => [k, [] as string[]])) as Record<OptionListName, string[]>;
+  const options = Object.fromEntries(OPTION_LISTS.map((k) => [k, [] as string[]])) as Record<
+    OptionListName,
+    string[]
+  >;
   for (const row of optionsRes.data ?? []) {
     const key = row.list_key as OptionListName;
     if (key in options) options[key].push(row.value);
@@ -130,8 +171,16 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
       cost: Number(s.cost || 0),
       sellPrice: Number(s.sell_price || 0),
     })),
-    carModels: (carModelsRes.data ?? []).map((m) => ({ model: m.model, brand: m.brand, carType: m.car_type })),
-    priceMatrix: (priceRes.data ?? []).map((p) => ({ carType: p.car_type, product: p.product, price: Number(p.price || 0) })),
+    carModels: (carModelsRes.data ?? []).map((m) => ({
+      model: m.model,
+      brand: m.brand,
+      carType: m.car_type,
+    })),
+    priceMatrix: (priceRes.data ?? []).map((p) => ({
+      carType: p.car_type,
+      product: p.product,
+      price: Number(p.price || 0),
+    })),
     filmPriceMatrix: (filmPriceRes.data ?? []).map((p) => ({
       category: p.category,
       product: p.product,
@@ -139,8 +188,16 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
       carType: p.car_type,
       price: Number(p.price || 0),
     })),
-    retailCustomers: (customersRes.data ?? []).map((c) => ({ id: c.id, name: c.name, phone: c.phone })),
-    corporateBuyers: (buyersRes.data ?? []).map((b) => ({ name: b.name, address: b.address, taxId: b.tax_id })),
+    retailCustomers: (customersRes.data ?? []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+    })),
+    corporateBuyers: (buyersRes.data ?? []).map((b) => ({
+      name: b.name,
+      address: b.address,
+      taxId: b.tax_id,
+    })),
     shopInfo,
   };
 }
@@ -193,7 +250,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
         'booking_channel, tech_by_category, drop_off_date, pickup_date, extras, ' +
         'ticket_items(id, category, booked, booked_price, sold, sold_price, discount_type, discount_value, ' +
         'ticket_item_positions(position, product, price)), ' +
-        'ticket_payments(type, method, amount, paid_at)'
+        'ticket_payments(type, method, amount, paid_at)',
     )
     .eq('id', id)
     .maybeSingle();

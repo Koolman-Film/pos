@@ -5,7 +5,11 @@ import { loadShops, loadStatuses, loadTicketList } from './data';
 
 export default async function TicketsPage() {
   const session = await getSessionContext();
-  const [tickets, statuses, shops] = await Promise.all([loadTicketList(), loadStatuses(), loadShops()]);
+  const [tickets, statuses, shops] = await Promise.all([
+    loadTicketList(),
+    loadStatuses(),
+    loadShops(),
+  ]);
   const accessibleShops = shops.filter((s) => session.accessibleShopIds.includes(s.id));
 
   return (

@@ -35,13 +35,16 @@ export function TechSection({
   const [showQcPreview, setShowQcPreview] = useState(false);
 
   const qcCategories = [...new Set(t.items.filter((i) => i.sold).map((i) => i.category))].filter(
-    (c) => c === 'ฟิล์มกรองแสง' || c === 'ฟิล์มกันรอย'
+    (c) => c === 'ฟิล์มกรองแสง' || c === 'ฟิล์มกันรอย',
   );
   const showInstallConfirm = !!(t.qcPhotos && t.qcPhotos.length > 0) && qcCategories.length > 0;
 
   return (
     <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--line)' }}>
-      <p className="text-xs font-medium mb-3 flex items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
+      <p
+        className="text-xs font-medium mb-3 flex items-center gap-1.5"
+        style={{ color: 'var(--ink-soft)' }}
+      >
         <i className="fa-solid fa-user-gear"></i>ข้อมูลของช่าง{' '}
         <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
           (แยกตามชนิดสินค้า เพราะแต่ละชนิดใช้ช่างคนละคนและตัดสต็อกต่างกัน)
@@ -64,7 +67,8 @@ export function TechSection({
             className="hidden"
             onChange={(e) => {
               const files = Array.from(e.target.files || []);
-              if (files.length) field('qcPhotos', [...(t.qcPhotos || []), ...files.map((f) => f.name)]);
+              if (files.length)
+                field('qcPhotos', [...(t.qcPhotos || []), ...files.map((f) => f.name)]);
               e.target.value = '';
             }}
           />
@@ -82,7 +86,12 @@ export function TechSection({
                 <i
                   className="fa-solid fa-xmark cursor-pointer"
                   style={{ color: '#B23A48' }}
-                  onClick={() => field('qcPhotos', t.qcPhotos!.filter((_, fi2) => fi2 !== fi))}
+                  onClick={() =>
+                    field(
+                      'qcPhotos',
+                      t.qcPhotos!.filter((_, fi2) => fi2 !== fi),
+                    )
+                  }
                 ></i>
               </span>
             ))}
@@ -90,16 +99,29 @@ export function TechSection({
         )}
       </div>
       {showInstallConfirm && (
-        <div className="mb-3 rounded-xl p-3" style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>
-          <p className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--primary)' }}>
+        <div
+          className="mb-3 rounded-xl p-3"
+          style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}
+        >
+          <p
+            className="text-xs font-semibold mb-2 flex items-center gap-1.5"
+            style={{ color: 'var(--primary)' }}
+          >
             <i className="fa-solid fa-file-signature"></i>แบบฟอร์มการยืนยันการติดตั้ง
           </p>
           {t.installConfirmed ? (
-            <p className="text-xs font-semibold flex items-center gap-1.5 mb-3" style={{ color: '#4C7A3E' }}>
-              <i className="fa-solid fa-circle-check"></i>ยืนยันการติดตั้งแล้ว &middot; {t.installConfirmedAt}
+            <p
+              className="text-xs font-semibold flex items-center gap-1.5 mb-3"
+              style={{ color: '#4C7A3E' }}
+            >
+              <i className="fa-solid fa-circle-check"></i>ยืนยันการติดตั้งแล้ว &middot;{' '}
+              {t.installConfirmedAt}
             </p>
           ) : (
-            <button onClick={confirmInstall} className="btn-primary text-xs px-4 py-2 rounded-lg font-semibold w-full mb-3">
+            <button
+              onClick={confirmInstall}
+              className="btn-primary text-xs px-4 py-2 rounded-lg font-semibold w-full mb-3"
+            >
               ยืนยันการติดตั้ง
             </button>
           )}
@@ -116,12 +138,20 @@ export function TechSection({
               style={{ color: 'var(--primary)' }}
             >
               <i className={`fa-solid fa-eye${showQcPreview ? '-slash' : ''}`}></i>
-              {showQcPreview ? 'ซ่อนตัวอย่างข้อมูลที่แชร์ให้ลูกค้า' : 'ดูตัวอย่างข้อมูลที่แชร์ให้ลูกค้า'}
+              {showQcPreview
+                ? 'ซ่อนตัวอย่างข้อมูลที่แชร์ให้ลูกค้า'
+                : 'ดูตัวอย่างข้อมูลที่แชร์ให้ลูกค้า'}
             </button>
           </div>
           {showQcPreview && (
-            <div className="mt-3 rounded-xl p-4" style={{ background: '#fff', border: '1.5px dashed var(--primary)' }}>
-              <p className="text-xs font-semibold mb-3 text-center" style={{ color: 'var(--ink-faint)' }}>
+            <div
+              className="mt-3 rounded-xl p-4"
+              style={{ background: '#fff', border: '1.5px dashed var(--primary)' }}
+            >
+              <p
+                className="text-xs font-semibold mb-3 text-center"
+                style={{ color: 'var(--ink-faint)' }}
+              >
                 ตัวอย่างหน้าที่ลูกค้าเห็น (ดูอย่างเดียว)
               </p>
               <p className="text-sm font-bold mb-1">{shopName(t.shop)}</p>
@@ -129,7 +159,8 @@ export function TechSection({
                 ลูกค้า: {t.customer || '-'} &middot; ทะเบียน: {t.plate || '-'}
               </p>
               <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--primary)' }}>
-                <i className="fa-solid fa-camera mr-1"></i>รูป QC ก่อนติดตั้ง ({(t.qcPhotos || []).length} รูป)
+                <i className="fa-solid fa-camera mr-1"></i>รูป QC ก่อนติดตั้ง (
+                {(t.qcPhotos || []).length} รูป)
               </p>
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {(t.qcPhotos || []).map((fn, fi) => (
@@ -150,16 +181,21 @@ export function TechSection({
                   </p>
                   <p className="mb-1">
                     1. การตรวจสภาพรถเป็นการตรวจสภาพก่อนการติดตั้งฟิล์มกรองแสง
-                    ไม่ครอบคลุมถึงสภาพตัวรถ และชิ้นส่วนภายหลังจากที่ออกจากศูนย์บริการ หรือมีการใช้งานทุกกรณี
+                    ไม่ครอบคลุมถึงสภาพตัวรถ และชิ้นส่วนภายหลังจากที่ออกจากศูนย์บริการ
+                    หรือมีการใช้งานทุกกรณี
                   </p>
                   <p className="mb-1">
                     2. โปรดนำทรัพย์สินมีค่าออกจากรถของท่านก่อนเข้ารับการบริการ
                     หากทรัพย์สินสูญหายทางร้านจะไม่รับผิดชอบทุกกรณี
                   </p>
                   <p className="mb-1">
-                    3. ร้านจะไม่รับผิดชอบต่อความเสียหายใดๆ ทั้งสิ้น ยกเว้นปัญหาที่เกิดจากผลิตภัณฑ์ที่ติดตั้งไปจากร้าน
+                    3. ร้านจะไม่รับผิดชอบต่อความเสียหายใดๆ ทั้งสิ้น
+                    ยกเว้นปัญหาที่เกิดจากผลิตภัณฑ์ที่ติดตั้งไปจากร้าน
                   </p>
-                  <p>4. ลูกค้าได้รับทราบข้อตกลงทั้งหมดข้างต้น และลงชื่อยินยอมรับทราบข้อตกลงดังกล่าว ก่อนทำการติดตั้ง</p>
+                  <p>
+                    4. ลูกค้าได้รับทราบข้อตกลงทั้งหมดข้างต้น และลงชื่อยินยอมรับทราบข้อตกลงดังกล่าว
+                    ก่อนทำการติดตั้ง
+                  </p>
                 </div>
               )}
               {qcCategories.includes('ฟิล์มกันรอย') && (
@@ -177,7 +213,8 @@ export function TechSection({
                   <ul className="list-disc pl-4 mb-1.5">
                     <li className="mb-1">
                       <b>การรับรองสภาพรถ:</b> ทางร้านได้ตรวจสอบสภาพรถตามข้อเท็จจริงอย่างครบถ้วน
-                      หากพบร่องรอยหรือความเสียหายเดิมที่มีอยู่ก่อนแล้ว จะไม่ถือเป็นความรับผิดชอบของทางร้าน
+                      หากพบร่องรอยหรือความเสียหายเดิมที่มีอยู่ก่อนแล้ว
+                      จะไม่ถือเป็นความรับผิดชอบของทางร้าน
                     </li>
                     <li>
                       <b>กรณีลูกค้าไม่สะดวกตรวจสภาพรถร่วมกัน:</b>{' '}
@@ -228,8 +265,14 @@ export function TechSection({
                       ? [...new Set(it.positions.map((p) => p.product).filter(Boolean))]
                       : [it.sold];
                   return products.map((prod) => (
-                    <div key={realIdx + '-' + prod} className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-xs truncate flex-1" style={{ color: 'var(--ink-soft)' }}>
+                    <div
+                      key={realIdx + '-' + prod}
+                      className="flex items-center justify-between gap-2 mb-2"
+                    >
+                      <span
+                        className="text-xs truncate flex-1"
+                        style={{ color: 'var(--ink-soft)' }}
+                      >
                         {prod}
                       </span>
                       <input

@@ -41,7 +41,7 @@ function readEnvLocal(): Record<string, string> {
         .map((line) => {
           const eq = line.indexOf('=');
           return [line.slice(0, eq).trim(), line.slice(eq + 1).trim()];
-        })
+        }),
     );
   } catch {
     return {};
@@ -174,7 +174,7 @@ describe('resolveSessionContext (live Supabase)', () => {
 
     expect(seesAll.data).toBe(resolved.session.seesAllShops);
     expect((shops.data as unknown as string[]).sort()).toEqual(
-      [...resolved.session.accessibleShopIds].sort()
+      [...resolved.session.accessibleShopIds].sort(),
     );
     expect(canEdit.data).toBe(resolved.session.canDo('stock.editDelete'));
     expect(canCreate.data).toBe(resolved.session.canDo('list.createNew'));

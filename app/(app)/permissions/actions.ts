@@ -68,7 +68,7 @@ export async function setPermission(
   roleId: string,
   permissionType: string,
   permissionKey: string,
-  allowed: boolean
+  allowed: boolean,
 ): Promise<ActionResult> {
   const { supabase } = await authorize();
   // admin is locked to full access — never persist a change against it.
@@ -83,7 +83,7 @@ export async function setPermission(
       permission_key: permissionKey,
       allowed,
     },
-    { onConflict: 'role_id,permission_type,permission_key' }
+    { onConflict: 'role_id,permission_type,permission_key' },
   );
   return error ? fail(error) : done();
 }
@@ -105,17 +105,32 @@ export async function setDashboardPermission(roleId: string, key: string, allowe
 /** Blank permission rows for a brand-new role — matches BLANK_*_PERMISSION_SET
  * (finnix-film.html:202-203,227): every cell off, except the dashboard nav. */
 function blankPermissionRows(
-  roleId: string
+  roleId: string,
 ): Database['public']['Tables']['role_permissions']['Insert'][] {
   const rows: Database['public']['Tables']['role_permissions']['Insert'][] = [];
   for (const n of NAV_ITEMS) {
-    rows.push({ role_id: roleId, permission_type: 'nav', permission_key: n.id, allowed: n.id === 'dashboard' });
+    rows.push({
+      role_id: roleId,
+      permission_type: 'nav',
+      permission_key: n.id,
+      allowed: n.id === 'dashboard',
+    });
   }
   for (const w of [...DASHBOARD_WIDGETS, ...OTHER_CAPABILITIES]) {
-    rows.push({ role_id: roleId, permission_type: 'dashboard_widget', permission_key: w.key, allowed: false });
+    rows.push({
+      role_id: roleId,
+      permission_type: 'dashboard_widget',
+      permission_key: w.key,
+      allowed: false,
+    });
   }
   for (const c of MODULE_CAPABILITIES) {
-    rows.push({ role_id: roleId, permission_type: 'module_capability', permission_key: c.key, allowed: false });
+    rows.push({
+      role_id: roleId,
+      permission_type: 'module_capability',
+      permission_key: c.key,
+      allowed: false,
+    });
   }
   return rows;
 }
@@ -127,7 +142,9 @@ export async function addRole(name: string, icon: string): Promise<ActionResult>
   const id = 'role_' + Date.now();
   const { error: roleError } = await supabase.from('roles').insert({ id, name: trimmed, icon });
   if (roleError) return fail(roleError);
-  const { error: permError } = await supabase.from('role_permissions').insert(blankPermissionRows(id));
+  const { error: permError } = await supabase
+    .from('role_permissions')
+    .insert(blankPermissionRows(id));
   if (permError) return fail(permError);
   return done();
 }
@@ -150,7 +167,11 @@ export async function deleteRole(id: string): Promise<ActionResult> {
 
 // ---------- ticket statuses ----------
 
-export async function addStatus(name: string, short: string, colorHex: string): Promise<ActionResult> {
+export async function addStatus(
+  name: string,
+  short: string,
+  colorHex: string,
+): Promise<ActionResult> {
   const { supabase } = await authorize();
   const key = name.trim();
   if (!key) return { ok: false, error: 'empty status' };
@@ -172,11 +193,19 @@ export async function addStatus(name: string, short: string, colorHex: string): 
   return error ? fail(error) : done();
 }
 
-export async function updateStatus(key: string, field: 'short' | 'color', value: string): Promise<ActionResult> {
+export async function updateStatus(
+  key: string,
+  field: 'short' | 'color',
+  value: string,
+): Promise<ActionResult> {
   const { supabase } = await authorize();
   const patch =
     field === 'color'
-      ? { bg: colorFromHex(value).bg, text_color: colorFromHex(value).text, dot: colorFromHex(value).dot }
+      ? {
+          bg: colorFromHex(value).bg,
+          text_color: colorFromHex(value).text,
+          dot: colorFromHex(value).dot,
+        }
       : { short: value };
   const { error } = await supabase.from('statuses').update(patch).eq('key', key);
   return error ? fail(error) : done();
@@ -266,7 +295,7 @@ export async function updateShopInfo(
     address: string;
     phone: string;
     paymentChannels: string[];
-  }>
+  }>,
 ): Promise<ActionResult> {
   const { supabase } = await authorize();
   const dbPatch: Database['public']['Tables']['shop_info']['Update'] = {};
@@ -283,7 +312,7 @@ export async function updateShopInfo(
 
 export async function updateUser(
   id: string,
-  patch: { role?: string; active?: boolean }
+  patch: { role?: string; active?: boolean },
 ): Promise<ActionResult> {
   const { supabase } = await authorize();
   const dbPatch: Database['public']['Tables']['app_users']['Update'] = {};
@@ -297,7 +326,10 @@ export async function updateUser(
  * prototype's `shopAccess: 'all' -> [SHOPS[0].id]` (finnix-film.html:3922). */
 export async function setUserAllShops(id: string, all: boolean): Promise<ActionResult> {
   const { supabase } = await authorize();
-  const { error: uErr } = await supabase.from('app_users').update({ sees_all_shops: all }).eq('id', id);
+  const { error: uErr } = await supabase
+    .from('app_users')
+    .update({ sees_all_shops: all })
+    .eq('id', id);
   if (uErr) return fail(uErr);
   if (all) return done();
   const { data: firstShop } = await supabase
@@ -308,7 +340,9 @@ export async function setUserAllShops(id: string, all: boolean): Promise<ActionR
     .maybeSingle();
   if (!firstShop) return done();
   await supabase.from('user_shop_access').delete().eq('user_id', id);
-  const { error } = await supabase.from('user_shop_access').insert({ user_id: id, shop_id: firstShop.id });
+  const { error } = await supabase
+    .from('user_shop_access')
+    .insert({ user_id: id, shop_id: firstShop.id });
   return error ? fail(error) : done();
 }
 
@@ -331,7 +365,9 @@ export async function toggleUserShop(id: string, shopId: string): Promise<Action
       .eq('shop_id', shopId);
     return dErr ? fail(dErr) : done();
   }
-  const { error: iErr } = await supabase.from('user_shop_access').insert({ user_id: id, shop_id: shopId });
+  const { error: iErr } = await supabase
+    .from('user_shop_access')
+    .insert({ user_id: id, shop_id: shopId });
   return iErr ? fail(iErr) : done();
 }
 

@@ -34,10 +34,7 @@ export const DEFAULT_STATUSES: CalendarStatus[] = [
 ];
 
 function getStatus(statuses: CalendarStatus[], key: string): CalendarStatus {
-  return (
-    statuses.find((s) => s.key === key) ||
-    statuses[0] || { key, short: key, dot: '#B5AAA1' }
-  );
+  return statuses.find((s) => s.key === key) || statuses[0] || { key, short: key, dot: '#B5AAA1' };
 }
 
 export function JobCalendar({
@@ -100,7 +97,8 @@ export function JobCalendar({
           <i className="fa-solid fa-chevron-left text-xs"></i>
         </button>
         <p className="text-sm font-semibold">
-          ปฏิทินงาน &middot; {calDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
+          ปฏิทินงาน &middot;{' '}
+          {calDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
         </p>
         <button
           onClick={() => setCalDate(new Date(year, month + 1, 1))}
@@ -112,7 +110,11 @@ export function JobCalendar({
       </div>
       <div className="grid grid-cols-7 gap-1.5 mb-1.5">
         {weekdayLabels.map((w) => (
-          <div key={w} className="text-xs text-center font-medium" style={{ color: 'var(--ink-faint)' }}>
+          <div
+            key={w}
+            className="text-xs text-center font-medium"
+            style={{ color: 'var(--ink-faint)' }}
+          >
             {w}
           </div>
         ))}
@@ -147,23 +149,39 @@ export function JobCalendar({
             >
               <span
                 className="text-[10px] mb-1"
-                style={{ color: isToday ? 'var(--primary)' : 'var(--ink-soft)', fontWeight: isToday ? 700 : 500 }}
+                style={{
+                  color: isToday ? 'var(--primary)' : 'var(--ink-soft)',
+                  fontWeight: isToday ? 700 : 500,
+                }}
               >
                 {d}
               </span>
               <div className="flex flex-col gap-px">
                 {dayStatuses.map((s) => (
                   <div key={s} className="flex items-center justify-between gap-0.5">
-                    <span className="flex items-center gap-0.5 min-w-0" style={{ color: 'var(--ink-soft)' }}>
+                    <span
+                      className="flex items-center gap-0.5 min-w-0"
+                      style={{ color: 'var(--ink-soft)' }}
+                    >
                       <span
                         className="rounded-full flex-shrink-0"
-                        style={{ width: '5px', height: '5px', background: getStatus(statuses, s).dot }}
+                        style={{
+                          width: '5px',
+                          height: '5px',
+                          background: getStatus(statuses, s).dot,
+                        }}
                       ></span>
-                      <span style={{ fontSize: '8px', lineHeight: '10px' }}>{getStatus(statuses, s).short}</span>
+                      <span style={{ fontSize: '8px', lineHeight: '10px' }}>
+                        {getStatus(statuses, s).short}
+                      </span>
                     </span>
                     <span
                       className="font-bold flex-shrink-0"
-                      style={{ fontSize: '8px', lineHeight: '10px', color: getStatus(statuses, s).dot }}
+                      style={{
+                        fontSize: '8px',
+                        lineHeight: '10px',
+                        color: getStatus(statuses, s).dot,
+                      }}
                     >
                       {dayTickets.filter((t) => t.status === s).length}
                     </span>

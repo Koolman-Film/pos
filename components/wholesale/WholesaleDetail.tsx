@@ -166,7 +166,7 @@ export function WholesaleDetail({
   function updateAdjustment(
     idx: number,
     k: keyof WsOrder['adjustments'][number],
-    v: string | number
+    v: string | number,
   ) {
     const adjustments = [...o.adjustments];
     adjustments[idx] = { ...adjustments[idx], [k]: v };
@@ -184,7 +184,7 @@ export function WholesaleDetail({
   function updatePayment(
     idx: number,
     k: keyof WsOrder['payments'][number],
-    v: string | number | string[]
+    v: string | number | string[],
   ) {
     const payments = [...o.payments];
     payments[idx] = { ...payments[idx], [k]: v };
@@ -273,7 +273,8 @@ export function WholesaleDetail({
               key={idx}
               className="rounded-2xl p-3.5 mb-2.5"
               style={{
-                border: it.requestedPrice < it.listPrice ? '1px solid #C24B57' : '1px solid var(--line)',
+                border:
+                  it.requestedPrice < it.listPrice ? '1px solid #C24B57' : '1px solid var(--line)',
               }}
             >
               <select
@@ -419,7 +420,8 @@ export function WholesaleDetail({
         </div>
         <div className="mb-5">
           <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
-            <i className="fa-solid fa-money-bill-transfer mr-1.5"></i>ปรับราคา (กรณีเก็บเงินไม่ตรงยอดเรียกเก็บ แม้ส่งของแล้ว)
+            <i className="fa-solid fa-money-bill-transfer mr-1.5"></i>ปรับราคา
+            (กรณีเก็บเงินไม่ตรงยอดเรียกเก็บ แม้ส่งของแล้ว)
           </p>
           {o.adjustments.map((a, idx) => (
             <div key={idx} className="flex gap-2 mb-2">
@@ -515,7 +517,11 @@ export function WholesaleDetail({
             <i className="fa-solid fa-money-bill-wave mr-1.5"></i>การรับชำระ
           </p>
           {o.payments.map((p, idx) => (
-            <div key={idx} className="rounded-xl p-2.5 mb-2.5" style={{ border: '1px solid var(--line)' }}>
+            <div
+              key={idx}
+              className="rounded-xl p-2.5 mb-2.5"
+              style={{ border: '1px solid var(--line)' }}
+            >
               <div className="flex gap-2 mb-2">
                 <input
                   type="number"
@@ -574,7 +580,7 @@ export function WholesaleDetail({
                             updatePayment(
                               idx,
                               'attachments',
-                              p.attachments.filter((_, fi2) => fi2 !== fi)
+                              p.attachments.filter((_, fi2) => fi2 !== fi),
                             )
                           }
                         ></i>
@@ -639,11 +645,15 @@ export function WholesaleDetail({
             className="w-full mb-3 text-xs py-2 rounded-xl font-medium"
             style={{ color: '#B23A48', border: '1px solid #C24B57' }}
           >
-            <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>แจ้งตัดเป็นหนี้สูญ (ต้องผู้บริหารอนุมัติ)
+            <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>แจ้งตัดเป็นหนี้สูญ
+            (ต้องผู้บริหารอนุมัติ)
           </button>
         )}
         <div className="flex gap-3">
-          <button onClick={goBack} className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium">
+          <button
+            onClick={goBack}
+            className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
+          >
             ยกเลิก
           </button>
           <button
@@ -772,7 +782,9 @@ export function WholesaleDetail({
               <tbody>
                 <tr>
                   <th style={{ fontWeight: 'bold' }}>ยอดรวมสุทธิ</th>
-                  <td style={{ width: 110, fontWeight: 'bold', textAlign: 'right' }}>{fmt(total)}</td>
+                  <td style={{ width: 110, fontWeight: 'bold', textAlign: 'right' }}>
+                    {fmt(total)}
+                  </td>
                 </tr>
                 {printMode === 'invoice' && paid > 0 && (
                   <>
@@ -790,7 +802,9 @@ export function WholesaleDetail({
                 )}
               </tbody>
             </table>
-            <p style={{ textAlign: 'right', fontStyle: 'italic', margin: '0 0 16px', fontSize: 12 }}>
+            <p
+              style={{ textAlign: 'right', fontStyle: 'italic', margin: '0 0 16px', fontSize: 12 }}
+            >
               ({' '}
               {printMode === 'invoice'
                 ? thaiBahtText(paid > 0 ? total - paid : total)
@@ -842,13 +856,16 @@ export function WholesaleDetail({
                   </ul>
                 </div>
               )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 44, fontSize: 12 }}>
+            <div
+              style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 44, fontSize: 12 }}
+            >
               <span>
-                ลงชื่อ..................... {printMode === 'invoice' ? 'ผู้ออกเอกสาร' : 'ผู้รับเงิน'}
+                ลงชื่อ.....................{' '}
+                {printMode === 'invoice' ? 'ผู้ออกเอกสาร' : 'ผู้รับเงิน'}
               </span>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

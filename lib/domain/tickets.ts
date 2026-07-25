@@ -13,7 +13,8 @@ export type TicketForTotals = { items: TicketItem[]; payments: TicketPayment[] }
 export function itemNetPrice(i: TicketItem): number {
   const price = Number(i.soldPrice || 0);
   if (!i.discountType || !i.discountValue) return price;
-  if (i.discountType === 'percent') return Math.max(0, price - (price * Number(i.discountValue)) / 100);
+  if (i.discountType === 'percent')
+    return Math.max(0, price - (price * Number(i.discountValue)) / 100);
   return Math.max(0, price - Number(i.discountValue));
 }
 

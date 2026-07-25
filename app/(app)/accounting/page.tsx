@@ -38,9 +38,7 @@ export default async function AccountingPage() {
         .order('sort_order'),
     ]);
 
-  const accessibleShops = (shopRows ?? []).filter((s) =>
-    session.accessibleShopIds.includes(s.id)
-  );
+  const accessibleShops = (shopRows ?? []).filter((s) => session.accessibleShopIds.includes(s.id));
 
   const expenses: ExpenseView[] = (expenseRows ?? []).map((e) => ({
     id: e.id,

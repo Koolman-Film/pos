@@ -20,7 +20,7 @@ import {
 
 async function optionValues(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  listKey: string
+  listKey: string,
 ): Promise<string[]> {
   const { data } = await supabase
     .from('option_lists')

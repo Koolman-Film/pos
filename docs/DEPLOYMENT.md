@@ -45,11 +45,11 @@ and bounces them to login with `no_profile`.
 
 Link the project, then set environment variables per environment:
 
-| Variable | Preview / staging | Production |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | staging project URL | production project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | staging anon key | production anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | staging service key | **only if a server action needs it** |
+| Variable                        | Preview / staging   | Production                           |
+| ------------------------------- | ------------------- | ------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`      | staging project URL | production project URL               |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | staging anon key    | production anon key                  |
+| `SUPABASE_SERVICE_ROLE_KEY`     | staging service key | **only if a server action needs it** |
 
 The service-role key bypasses RLS entirely. Today nothing in `app/` or `lib/`
 imports it — it is used only by `supabase/seed.ts` and the e2e helper, neither of
@@ -80,14 +80,14 @@ the domain is added.
 
 As of the last local run on this branch:
 
-| Check | Result |
-|---|---|
-| `tsc --noEmit` | clean |
-| `eslint .` | clean, 0 errors, 0 warnings |
-| `next build` | succeeds, 13 routes |
-| Unit + RLS (`vitest run`) | 33 files, 170 tests pass |
-| e2e (`playwright test`) | 6 specs pass |
-| Routes render for an admin | all 10, no console errors |
+| Check                      | Result                      |
+| -------------------------- | --------------------------- |
+| `tsc --noEmit`             | clean                       |
+| `eslint .`                 | clean, 0 errors, 0 warnings |
+| `next build`               | succeeds, 13 routes         |
+| Unit + RLS (`vitest run`)  | 33 files, 170 tests pass    |
+| e2e (`playwright test`)    | 6 specs pass                |
+| Routes render for an admin | all 10, no console errors   |
 
 Known items deliberately not done, both recorded in the EXECUTION file:
 

@@ -36,7 +36,9 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: isCI ? `npm run build && npm run start -- --port ${PORT}` : `npm run dev -- --port ${PORT}`,
+    command: isCI
+      ? `npm run build && npm run start -- --port ${PORT}`
+      : `npm run dev -- --port ${PORT}`,
     url: `http://localhost:${PORT}/login`,
     reuseExistingServer: !isCI,
     timeout: 180_000,

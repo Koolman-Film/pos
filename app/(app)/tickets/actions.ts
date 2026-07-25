@@ -22,14 +22,24 @@ export type SaveResult = { ok: boolean; error?: string; id?: string };
  */
 
 const OPTION_LISTS: OptionListName[] = [
-  'booking_channels', 'service_types', 'car_types', 'car_brands', 'time_slots',
-  'film_positions', 'wrap_positions', 'extra_options', 'slide_types', 'technicians',
-  'product_categories', 'service_items', 'payment_methods',
+  'booking_channels',
+  'service_types',
+  'car_types',
+  'car_brands',
+  'time_slots',
+  'film_positions',
+  'wrap_positions',
+  'extra_options',
+  'slide_types',
+  'technicians',
+  'product_categories',
+  'service_items',
+  'payment_methods',
 ];
 
 async function nextTicketId(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  shop: string
+  shop: string,
 ): Promise<string> {
   const prefix = `JT-${shop.toUpperCase()}-`;
   const { data } = await supabase.from('tickets').select('id').like('id', `${prefix}%`);
@@ -44,7 +54,7 @@ async function nextTicketId(
 async function resolveRetailCustomerId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   name: string,
-  phone: string
+  phone: string,
 ): Promise<number | null> {
   if (!name.trim()) return null;
   const { data: existing } = await supabase
@@ -66,7 +76,7 @@ async function resolveRetailCustomerId(
 async function writeTicketChildren(
   supabase: Awaited<ReturnType<typeof createClient>>,
   ticketId: string,
-  p: TicketSavePayload
+  p: TicketSavePayload,
 ) {
   // Replace items (+ positions via cascade) and payments wholesale — the form
   // owns the complete list, so a delete-then-insert keeps them in sync.
@@ -96,7 +106,7 @@ async function writeTicketChildren(
           position: pos.position,
           product: pos.product,
           price: pos.price,
-        }))
+        })),
       );
       if (posErr) throw new Error(posErr.message);
     }
@@ -110,7 +120,7 @@ async function writeTicketChildren(
         method: pay.method,
         amount: pay.amount,
         paid_at: pay.paidAt,
-      }))
+      })),
     );
     if (payErr) throw new Error(payErr.message);
   }
@@ -205,16 +215,24 @@ export async function updateTicketStatus(ticketId: string, newStatus: string): P
  * Full-list replace for a `list_key`: the picker owns the complete value list.
  * Only shop-global lists (shop_id null) are managed here, matching the seed.
  */
-export async function updateOptionList(listKey: OptionListName, values: string[]): Promise<{ ok: boolean; error?: string }> {
+export async function updateOptionList(
+  listKey: OptionListName,
+  values: string[],
+): Promise<{ ok: boolean; error?: string }> {
   await getSessionContext(); // C2: authenticate before mutating
   if (!OPTION_LISTS.includes(listKey)) return { ok: false, error: 'invalid list' };
   const supabase = await createClient();
   try {
     await supabase.from('option_lists').delete().eq('list_key', listKey).is('shop_id', null);
     if (values.length) {
-      const { error } = await supabase
-        .from('option_lists')
-        .insert(values.map((value, i) => ({ list_key: listKey, value, shop_id: null, sort_order: i + 1 })));
+      const { error } = await supabase.from('option_lists').insert(
+        values.map((value, i) => ({
+          list_key: listKey,
+          value,
+          shop_id: null,
+          sort_order: i + 1,
+        })),
+      );
       if (error) throw new Error(error.message);
     }
     revalidatePath('/tickets');

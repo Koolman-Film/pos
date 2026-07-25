@@ -115,7 +115,7 @@ function isInPeriod(
   per: string,
   perVal: string,
   rStart: string,
-  rEnd: string
+  rEnd: string,
 ): boolean {
   if (!dateObj) return true;
   const d = new Date(dateObj);
@@ -213,7 +213,7 @@ export function AccountingModule({
   const isTopupDirty = showTopup && JSON.stringify(topup) !== JSON.stringify(emptyTopup());
   useUnsavedChangesGuard(
     isExDirty || isTopupDirty,
-    'มีข้อมูลค่าใช้จ่าย/เติมเงินสดย่อยที่ยังไม่ได้บันทึก'
+    'มีข้อมูลค่าใช้จ่าย/เติมเงินสดย่อยที่ยังไม่ได้บันทึก',
   );
 
   function inSelectedPeriod(dateObj: Date | string | null | undefined) {
@@ -234,7 +234,7 @@ export function AccountingModule({
     (e) =>
       (categoryFilter === 'all' || e.category === categoryFilter) &&
       (statusFilter === 'all' || e.status === statusFilter) &&
-      inSelectedPeriod(e.dateObj)
+      inSelectedPeriod(e.dateObj),
   );
   const paidTotal = shopExpenses
     .filter((e) => e.status === 'จ่ายแล้ว')
@@ -254,7 +254,7 @@ export function AccountingModule({
     .sort(
       (a, b) =>
         (b.dateObj ? new Date(b.dateObj).getTime() : 0) -
-        (a.dateObj ? new Date(a.dateObj).getTime() : 0)
+        (a.dateObj ? new Date(a.dateObj).getTime() : 0),
     );
   const cashDetailTotal = cashDetailItems.reduce((s, e) => s + Number(e.amount), 0);
   const exportShopIds =
@@ -269,7 +269,7 @@ export function AccountingModule({
         (a, b) =>
           a.category.localeCompare(b.category, 'th') ||
           (a.date || '').localeCompare(b.date || '', 'th') ||
-          a.desc.localeCompare(b.desc, 'th')
+          a.desc.localeCompare(b.desc, 'th'),
       ),
   }));
 
@@ -459,7 +459,10 @@ export function AccountingModule({
         )}
       </div>
       <div className="card p-3 mb-5 flex flex-wrap items-center gap-2">
-        <div className="flex rounded-xl overflow-hidden" style={{ border: '1.5px solid var(--line)' }}>
+        <div
+          className="flex rounded-xl overflow-hidden"
+          style={{ border: '1.5px solid var(--line)' }}
+        >
           {(
             [
               ['today', 'วันนี้'],
@@ -523,7 +526,10 @@ export function AccountingModule({
               onChange={(e) => setRangeStart(e.target.value)}
               className="field text-sm px-3 py-2"
             />
-            <i className="fa-solid fa-arrow-right text-xs" style={{ color: 'var(--ink-faint)' }}></i>
+            <i
+              className="fa-solid fa-arrow-right text-xs"
+              style={{ color: 'var(--ink-faint)' }}
+            ></i>
             <input
               type="date"
               value={rangeEnd}
@@ -1080,7 +1086,7 @@ export function AccountingModule({
                   )}
                 </div>
               </div>
-            )
+            ),
           )}
         </div>
       </div>
@@ -1138,7 +1144,7 @@ export function AccountingModule({
               </strong>
             </p>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

@@ -21,7 +21,12 @@ const statuses = [
 describe('TicketList', () => {
   it('renders a ticket row with its status badge', () => {
     render(
-      <TicketList tickets={tickets} statuses={statuses} canDo={() => true} accessibleShops={[{ id: 'cm', name: 'CM' }]} />
+      <TicketList
+        tickets={tickets}
+        statuses={statuses}
+        canDo={() => true}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
     );
     // customer and plate share a text node in the faithful markup ("คุณ เอ · 250 กก");
     // the customer also appears again inside the body-portaled print table.
@@ -31,7 +36,12 @@ describe('TicketList', () => {
 
   it('hides the "create new" button when canDo("list.createNew") is false', () => {
     render(
-      <TicketList tickets={tickets} statuses={statuses} canDo={() => false} accessibleShops={[{ id: 'cm', name: 'CM' }]} />
+      <TicketList
+        tickets={tickets}
+        statuses={statuses}
+        canDo={() => false}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
     );
     expect(screen.queryByText('สร้างใบงานใหม่')).not.toBeInTheDocument();
     expect(screen.queryByText('สร้างใหม่')).not.toBeInTheDocument();
@@ -39,7 +49,12 @@ describe('TicketList', () => {
 
   it('shows the "create new" controls when canDo("list.createNew") is true', () => {
     render(
-      <TicketList tickets={tickets} statuses={statuses} canDo={() => true} accessibleShops={[{ id: 'cm', name: 'CM' }]} />
+      <TicketList
+        tickets={tickets}
+        statuses={statuses}
+        canDo={() => true}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
     );
     expect(screen.getByText('สร้างใบงานใหม่')).toBeInTheDocument();
   });

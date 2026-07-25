@@ -4,7 +4,9 @@ import { StatusPill } from '@/components/ui/StatusPill';
 
 describe('StatusPill', () => {
   it('renders the label with a flat colorMap applied as inline styles', () => {
-    render(<StatusPill label="จ่ายแล้ว" colorMap={{ bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' }} />);
+    render(
+      <StatusPill label="จ่ายแล้ว" colorMap={{ bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' }} />,
+    );
     const el = screen.getByText('จ่ายแล้ว');
     expect(el).toHaveStyle({ background: '#E6EFDC', color: '#4C7A3E' });
   });
@@ -14,8 +16,8 @@ describe('StatusPill', () => {
       <StatusPill
         label="รอจ่าย"
         colorMap={{
-          'จ่ายแล้ว': { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
-          'รอจ่าย': { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
+          จ่ายแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
+          รอจ่าย: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
         }}
       />,
     );
@@ -25,7 +27,10 @@ describe('StatusPill', () => {
 
   it('falls back to the neutral grey palette for an unmapped label', () => {
     render(
-      <StatusPill label="ไม่รู้จัก" colorMap={{ 'จ่ายแล้ว': { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' } }} />,
+      <StatusPill
+        label="ไม่รู้จัก"
+        colorMap={{ จ่ายแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' } }}
+      />,
     );
     expect(screen.getByText('ไม่รู้จัก')).toHaveStyle({ background: '#F1EDE7', color: '#6B5F55' });
   });

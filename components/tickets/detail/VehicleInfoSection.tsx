@@ -49,7 +49,10 @@ export function VehicleInfoSection({
 }) {
   return (
     <div className="rounded-2xl p-4 mb-5" style={{ background: 'var(--paper)' }}>
-      <p className="text-xs font-medium mb-3 flex items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
+      <p
+        className="text-xs font-medium mb-3 flex items-center gap-1.5"
+        style={{ color: 'var(--ink-soft)' }}
+      >
         <i className="fa-solid fa-car"></i>ข้อมูลงานและลูกค้า
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
@@ -130,7 +133,11 @@ export function VehicleInfoSection({
               if (!t.phone) e.preventDefault();
             }}
             className="px-3.5 rounded-lg text-sm flex items-center justify-center"
-            style={{ background: t.phone ? '#4C7A3E' : 'var(--line)', color: '#fff', pointerEvents: t.phone ? 'auto' : 'none' }}
+            style={{
+              background: t.phone ? '#4C7A3E' : 'var(--line)',
+              color: '#fff',
+              pointerEvents: t.phone ? 'auto' : 'none',
+            }}
           >
             <i className="fa-solid fa-phone"></i>
           </a>
@@ -148,14 +155,20 @@ export function VehicleInfoSection({
             className="field w-full text-sm px-3 py-2"
           />
           {MODEL_TH[t.model] && (
-            <p style={{ fontSize: '10px', color: 'var(--ink-faint)', marginTop: '2px' }}>{MODEL_TH[t.model]}</p>
+            <p style={{ fontSize: '10px', color: 'var(--ink-faint)', marginTop: '2px' }}>
+              {MODEL_TH[t.model]}
+            </p>
           )}
         </div>
         <div>
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
             สีรถ
           </label>
-          <input value={t.color} onChange={(e) => field('color', e.target.value)} className="field w-full text-sm px-3 py-2" />
+          <input
+            value={t.color}
+            onChange={(e) => field('color', e.target.value)}
+            className="field w-full text-sm px-3 py-2"
+          />
         </div>
         <div>
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
@@ -172,7 +185,9 @@ export function VehicleInfoSection({
       <div className="mb-3">
         <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
           8. ยี่ห้อรถ{' '}
-          <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>(เติมอัตโนมัติจากรุ่นรถ แก้ไขได้)</span>
+          <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
+            (เติมอัตโนมัติจากรุ่นรถ แก้ไขได้)
+          </span>
         </label>
         <ManagedDropdown
           value={t.brand}
@@ -185,13 +200,17 @@ export function VehicleInfoSection({
           placeholder="เลือกยี่ห้อรถ..."
         />
         {BRAND_TH[t.brand] && (
-          <p style={{ fontSize: '10px', color: 'var(--ink-faint)', marginTop: '2px' }}>{BRAND_TH[t.brand]}</p>
+          <p style={{ fontSize: '10px', color: 'var(--ink-faint)', marginTop: '2px' }}>
+            {BRAND_TH[t.brand]}
+          </p>
         )}
       </div>
       <div className="mb-3">
         <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
           9. ประเภทรถ{' '}
-          <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>(เติมอัตโนมัติจากรุ่นรถ แก้ไขได้)</span>
+          <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
+            (เติมอัตโนมัติจากรุ่นรถ แก้ไขได้)
+          </span>
         </label>
         <ManagedChipPicker
           value={t.carType}

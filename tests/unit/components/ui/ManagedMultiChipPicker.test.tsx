@@ -9,7 +9,14 @@ describe('ManagedMultiChipPicker', () => {
   it('selecting an unselected option adds it to the values passed to onChange', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<ManagedMultiChipPicker values={['ช่างเอก']} onChange={onChange} options={options} setOptions={vi.fn()} />);
+    render(
+      <ManagedMultiChipPicker
+        values={['ช่างเอก']}
+        onChange={onChange}
+        options={options}
+        setOptions={vi.fn()}
+      />,
+    );
 
     await user.click(screen.getByRole('button', { name: 'ช่างซี' }));
     expect(onChange).toHaveBeenCalledWith(['ช่างเอก', 'ช่างซี']);
@@ -19,7 +26,12 @@ describe('ManagedMultiChipPicker', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
-      <ManagedMultiChipPicker values={['ช่างเอก', 'ช่างบอย']} onChange={onChange} options={options} setOptions={vi.fn()} />,
+      <ManagedMultiChipPicker
+        values={['ช่างเอก', 'ช่างบอย']}
+        onChange={onChange}
+        options={options}
+        setOptions={vi.fn()}
+      />,
     );
 
     await user.click(screen.getByRole('button', { name: 'ช่างเอก' }));
@@ -28,17 +40,35 @@ describe('ManagedMultiChipPicker', () => {
 
   it('highlights every selected chip', () => {
     render(
-      <ManagedMultiChipPicker values={['ช่างเอก', 'ช่างซี']} onChange={vi.fn()} options={options} setOptions={vi.fn()} />,
+      <ManagedMultiChipPicker
+        values={['ช่างเอก', 'ช่างซี']}
+        onChange={vi.fn()}
+        options={options}
+        setOptions={vi.fn()}
+      />,
     );
-    expect(screen.getByRole('button', { name: 'ช่างเอก' })).toHaveStyle({ background: 'var(--primary)' });
-    expect(screen.getByRole('button', { name: 'ช่างซี' })).toHaveStyle({ background: 'var(--primary)' });
-    expect(screen.getByRole('button', { name: 'ช่างบอย' })).toHaveStyle({ background: 'var(--paper)' });
+    expect(screen.getByRole('button', { name: 'ช่างเอก' })).toHaveStyle({
+      background: 'var(--primary)',
+    });
+    expect(screen.getByRole('button', { name: 'ช่างซี' })).toHaveStyle({
+      background: 'var(--primary)',
+    });
+    expect(screen.getByRole('button', { name: 'ช่างบอย' })).toHaveStyle({
+      background: 'var(--paper)',
+    });
   });
 
   it('typing a new value and confirming appends it via setOptions', async () => {
     const user = userEvent.setup();
     const setOptions = vi.fn();
-    render(<ManagedMultiChipPicker values={[]} onChange={vi.fn()} options={options} setOptions={setOptions} />);
+    render(
+      <ManagedMultiChipPicker
+        values={[]}
+        onChange={vi.fn()}
+        options={options}
+        setOptions={setOptions}
+      />,
+    );
 
     await user.click(screen.getByRole('button', { name: 'เพิ่มตัวเลือกใหม่' }));
     await user.type(screen.getByPlaceholderText('ตัวเลือกใหม่'), '  ช่างดี  {Enter}');

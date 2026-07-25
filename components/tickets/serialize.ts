@@ -37,8 +37,14 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
     status: t.status,
     bookingChannel: t.bookingChannel,
     techByCategory: t.techByCategory || {},
-    dropOffDate: t.dropOffDateObj instanceof Date ? t.dropOffDateObj.toISOString() : new Date(t.dropOffDateObj).toISOString(),
-    pickupDate: t.pickupDateObj instanceof Date ? t.pickupDateObj.toISOString() : new Date(t.pickupDateObj).toISOString(),
+    dropOffDate:
+      t.dropOffDateObj instanceof Date
+        ? t.dropOffDateObj.toISOString()
+        : new Date(t.dropOffDateObj).toISOString(),
+    pickupDate:
+      t.pickupDateObj instanceof Date
+        ? t.pickupDateObj.toISOString()
+        : new Date(t.pickupDateObj).toISOString(),
     extras,
     items: t.items.map((i) => ({
       category: i.category,
@@ -47,7 +53,8 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
       sold: i.sold || '',
       soldPrice: Number(i.soldPrice || 0),
       discountType: i.discountType ?? null,
-      discountValue: i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : null,
+      discountValue:
+        i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : null,
       positions: (i.positions || []).map((p) => ({
         position: p.position,
         product: p.product || '',

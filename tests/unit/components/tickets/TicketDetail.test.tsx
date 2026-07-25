@@ -13,9 +13,19 @@ import { itemNetPrice } from '@/lib/domain/tickets';
 import type { OptionListName, Ticket } from '@/components/tickets/types';
 
 const OPTION_LISTS: OptionListName[] = [
-  'booking_channels', 'service_types', 'car_types', 'car_brands', 'time_slots',
-  'film_positions', 'wrap_positions', 'extra_options', 'slide_types', 'technicians',
-  'product_categories', 'service_items', 'payment_methods',
+  'booking_channels',
+  'service_types',
+  'car_types',
+  'car_brands',
+  'time_slots',
+  'film_positions',
+  'wrap_positions',
+  'extra_options',
+  'slide_types',
+  'technicians',
+  'product_categories',
+  'service_items',
+  'payment_methods',
 ];
 
 const statuses = [
@@ -24,7 +34,10 @@ const statuses = [
 ];
 
 function options(overrides: Partial<Record<OptionListName, string[]>> = {}) {
-  const o = Object.fromEntries(OPTION_LISTS.map((k) => [k, [] as string[]])) as Record<OptionListName, string[]>;
+  const o = Object.fromEntries(OPTION_LISTS.map((k) => [k, [] as string[]])) as Record<
+    OptionListName,
+    string[]
+  >;
   o.product_categories = ['ฟิล์มกรองแสง', 'ฟิล์มกันรอย', 'งานบริการ'];
   o.film_positions = ['บานหน้า', 'คู่หน้า'];
   o.payment_methods = ['เงินสด', 'โอนเงิน'];
@@ -79,12 +92,14 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
 
 describe('TicketDetail', () => {
   it('(a) selecting a service category renders that item’s detail row', () => {
-    const ticket = makeTicket({ items: [{ category: '', booked: '', bookedPrice: 0, sold: '', soldPrice: 0 }] });
+    const ticket = makeTicket({
+      items: [{ category: '', booked: '', bookedPrice: 0, sold: '', soldPrice: 0 }],
+    });
     const { container } = render(<TicketDetail {...baseProps(ticket)} />);
 
     // Find the item category <select> (the one offering product categories).
     const categorySelect = Array.from(container.querySelectorAll('select')).find((s) =>
-      Array.from(s.options).some((o) => o.value === 'ฟิล์มกรองแสง')
+      Array.from(s.options).some((o) => o.value === 'ฟิล์มกรองแสง'),
     )!;
     expect(categorySelect).toBeTruthy();
     fireEvent.change(categorySelect, { target: { value: 'ฟิล์มกรองแสง' } });
@@ -96,26 +111,44 @@ describe('TicketDetail', () => {
 
   it('(b) the displayed ticket total equals the sum of itemNetPrice across items', () => {
     const items = [
-      { category: 'ฟิล์มกรองแสง', booked: '', bookedPrice: 0, sold: 'FilmA', soldPrice: 5000, discountType: 'amount' as const, discountValue: 500 },
+      {
+        category: 'ฟิล์มกรองแสง',
+        booked: '',
+        bookedPrice: 0,
+        sold: 'FilmA',
+        soldPrice: 5000,
+        discountType: 'amount' as const,
+        discountValue: 500,
+      },
       { category: 'งานบริการ', booked: '', bookedPrice: 0, sold: 'ล้างรถ', soldPrice: 300 },
     ];
     const ticket = makeTicket({ items });
     const expectedTotal = items.reduce(
-      (s, i) => s + itemNetPrice({ soldPrice: i.soldPrice, discountType: i.discountType, discountValue: i.discountValue }),
-      0
+      (s, i) =>
+        s +
+        itemNetPrice({
+          soldPrice: i.soldPrice,
+          discountType: i.discountType,
+          discountValue: i.discountValue,
+        }),
+      0,
     );
     render(<TicketDetail {...baseProps(ticket)} />);
 
     // The payments summary line shows "ยอดสุทธิ {total}" (scope to the leaf span).
     const summary = screen.getByText(
-      (_, el) => el?.tagName === 'SPAN' && (el.textContent || '').startsWith(`ยอดสุทธิ ${fmt(expectedTotal)}`)
+      (_, el) =>
+        el?.tagName === 'SPAN' &&
+        (el.textContent || '').startsWith(`ยอดสุทธิ ${fmt(expectedTotal)}`),
     );
     expect(summary).toBeInTheDocument();
     expect(fmt(expectedTotal)).toBe('4,800.00'); // (5000 - 500) + 300
   });
 
   it('(c) renders each payment and the outstanding figure equals ticketTotal - ticketPaid', () => {
-    const items = [{ category: 'ฟิล์มกรองแสง', booked: '', bookedPrice: 0, sold: 'FilmA', soldPrice: 4500 }];
+    const items = [
+      { category: 'ฟิล์มกรองแสง', booked: '', bookedPrice: 0, sold: 'FilmA', soldPrice: 4500 },
+    ];
     const payments = [
       { type: 'มัดจำ', method: 'เงินสด', amount: 2000, date: '' },
       { type: 'ชำระส่วนที่เหลือ', method: 'โอนเงิน', amount: 500, date: '' },
@@ -128,12 +161,14 @@ describe('TicketDetail', () => {
 
     // Each payment row renders (amount inputs reflect each payment).
     const amountInputs = Array.from(container.querySelectorAll('input[type="number"]')).filter(
-      (el) => (el as HTMLInputElement).value === '2000' || (el as HTMLInputElement).value === '500'
+      (el) => (el as HTMLInputElement).value === '2000' || (el as HTMLInputElement).value === '500',
     );
     expect(amountInputs.length).toBeGreaterThanOrEqual(2);
 
     // Outstanding == total - paid.
-    const outstanding = screen.getByText((_, el) => (el?.textContent || '') === `คงเหลือ ${fmt(total - paid)}`);
+    const outstanding = screen.getByText(
+      (_, el) => (el?.textContent || '') === `คงเหลือ ${fmt(total - paid)}`,
+    );
     expect(outstanding).toBeInTheDocument();
     expect(fmt(total - paid)).toBe('2,000.00');
   });

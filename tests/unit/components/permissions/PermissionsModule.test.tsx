@@ -12,7 +12,7 @@ describe('PermissionsModule', () => {
         roles={roles}
         modulePermissions={{ sales: { 'stock.editDelete': false } }}
         onToggle={() => {}}
-      />
+      />,
     );
     const toggle = screen.getByRole('checkbox', { name: /stock: แก้ไข\/ลบสินค้า/i });
     expect(toggle).not.toBeChecked();
@@ -24,7 +24,7 @@ describe('PermissionsModule', () => {
         roles={roles}
         modulePermissions={{ sales: { 'stock.editDelete': true } }}
         onToggle={() => {}}
-      />
+      />,
     );
     expect(screen.getByRole('checkbox', { name: /stock: แก้ไข\/ลบสินค้า/i })).toBeChecked();
   });
@@ -36,7 +36,7 @@ describe('PermissionsModule', () => {
         roles={roles}
         modulePermissions={{ sales: { 'stock.editDelete': false } }}
         onToggle={onToggle}
-      />
+      />,
     );
     await userEvent.click(screen.getByRole('checkbox', { name: /stock: แก้ไข\/ลบสินค้า/i }));
     expect(onToggle).toHaveBeenCalledWith('sales', 'stock.editDelete', true);
@@ -49,7 +49,7 @@ describe('PermissionsModule', () => {
         roles={[{ id: 'admin', name: 'แอดมิน/หลังบ้าน', icon: 'fa-gear' }]}
         modulePermissions={{ admin: {} }}
         onToggle={onToggle}
-      />
+      />,
     );
     const cell = screen.getByRole('checkbox', { name: /stock: แก้ไข\/ลบสินค้า/i });
     expect(cell).toBeChecked();
@@ -68,7 +68,7 @@ describe('PermissionsModule', () => {
         dashboardPermissions={{ sales: { revenue: false } }}
         onToggleNav={onToggleNav}
         onToggleDash={onToggleDash}
-      />
+      />,
     );
     // nav row for the "สต็อกสินค้า" menu, key `stock`
     await userEvent.click(screen.getByRole('checkbox', { name: /stock: สต็อกสินค้า/i }));

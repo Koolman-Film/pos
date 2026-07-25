@@ -34,9 +34,14 @@ export type TrendSeries = {
 
 export function computeReceivables(
   tickets: (TicketForTotals & { id: string; shop: string; customer: string; plate: string })[],
-  orders: (OrderForTotals & { id: string; shop: string; customerId: number; payments: { amount: number }[] })[],
+  orders: (OrderForTotals & {
+    id: string;
+    shop: string;
+    customerId: number;
+    payments: { amount: number }[];
+  })[],
   customers: { id: number; name: string }[],
-  shopFilter: string
+  shopFilter: string,
 ): ARItem[] {
   const visible = tickets.filter((t) => shopFilter === 'all' || t.shop === shopFilter);
   const arFromTickets: ARItem[] = visible
@@ -71,7 +76,7 @@ export function computePayables(
     status: string;
     due?: string;
   }[],
-  shopFilter: string
+  shopFilter: string,
 ): APItem[] {
   return expenses
     .filter((e) => (shopFilter === 'all' || e.shop === shopFilter) && e.status === 'รอจ่าย')
@@ -91,8 +96,18 @@ export type TrendTicket = TicketForTotals & { shop: string; dropOff: Date | null
 export type TrendExpense = { shop: string; amount: number; status: string; paidAt: Date | null };
 
 const MONTH_LABELS = [
-  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
-  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
+  'ม.ค.',
+  'ก.พ.',
+  'มี.ค.',
+  'เม.ย.',
+  'พ.ค.',
+  'มิ.ย.',
+  'ก.ค.',
+  'ส.ค.',
+  'ก.ย.',
+  'ต.ค.',
+  'พ.ย.',
+  'ธ.ค.',
 ];
 
 function startOfDay(d: Date): Date {
@@ -119,12 +134,12 @@ export function buildTrend(
   period: string,
   periodValue: string,
   rangeStart: string,
-  rangeEnd: string
+  rangeEnd: string,
 ): TrendSeries {
   const inShop = (shop: string) => shopFilter === 'all' || shop === shopFilter;
   const visibleTickets = tickets.filter((t) => inShop(t.shop) && t.dropOff);
   const paidExpenses = expenses.filter(
-    (e) => inShop(e.shop) && e.status === 'จ่ายแล้ว' && e.paidAt
+    (e) => inShop(e.shop) && e.status === 'จ่ายแล้ว' && e.paidAt,
   );
 
   // Year view: 12 monthly buckets for the selected Buddhist-era year.
@@ -137,7 +152,8 @@ export function buildTrend(
       if (t.dropOff!.getFullYear() === ceYear) revenue[t.dropOff!.getMonth()] += ticketTotal(t);
     }
     for (const e of paidExpenses) {
-      if (e.paidAt!.getFullYear() === ceYear) expense[e.paidAt!.getMonth()] += Number(e.amount || 0);
+      if (e.paidAt!.getFullYear() === ceYear)
+        expense[e.paidAt!.getMonth()] += Number(e.amount || 0);
     }
     return {
       labels: MONTH_LABELS,
@@ -158,7 +174,9 @@ export function buildTrend(
     start = new Date(year, month, 1);
     end = new Date(year, month + 1, 0);
   } else if (period === 'range') {
-    start = rangeStart ? startOfDay(new Date(rangeStart)) : new Date(today.getTime() - 6 * 86400000);
+    start = rangeStart
+      ? startOfDay(new Date(rangeStart))
+      : new Date(today.getTime() - 6 * 86400000);
     end = rangeEnd ? startOfDay(new Date(rangeEnd)) : today;
   } else {
     // 'today' (default): the trailing 7 days.
@@ -170,9 +188,11 @@ export function buildTrend(
   const step = days > 30 ? Math.ceil(days / 20) : 1;
 
   const revByDay = new Map<string, number>();
-  for (const t of visibleTickets) revByDay.set(dayKey(t.dropOff!), (revByDay.get(dayKey(t.dropOff!)) || 0) + ticketTotal(t));
+  for (const t of visibleTickets)
+    revByDay.set(dayKey(t.dropOff!), (revByDay.get(dayKey(t.dropOff!)) || 0) + ticketTotal(t));
   const expByDay = new Map<string, number>();
-  for (const e of paidExpenses) expByDay.set(dayKey(e.paidAt!), (expByDay.get(dayKey(e.paidAt!)) || 0) + Number(e.amount || 0));
+  for (const e of paidExpenses)
+    expByDay.set(dayKey(e.paidAt!), (expByDay.get(dayKey(e.paidAt!)) || 0) + Number(e.amount || 0));
 
   const labels: string[] = [];
   const revenue: number[] = [];

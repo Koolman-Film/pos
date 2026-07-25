@@ -45,21 +45,35 @@ export function ItemsSection({
   updateItemFields: (idx: number, fields: Partial<TicketItem>) => void;
   updateFilmPositions: (idx: number, positions: TicketPosition[]) => void;
   lookupPrice: (product: string, fallback: number) => number;
-  lookupFilmPrice: (category: string, product: string, position: string, fallback: number) => number;
+  lookupFilmPrice: (
+    category: string,
+    product: string,
+    position: string,
+    fallback: number,
+  ) => number;
   commitPrice: (product: string, price: number | string) => void;
 }) {
-  const upsell = t.items.reduce((s, i) => s + (Number(i.soldPrice || 0) - Number(i.bookedPrice || 0)), 0);
+  const upsell = t.items.reduce(
+    (s, i) => s + (Number(i.soldPrice || 0) - Number(i.bookedPrice || 0)),
+    0,
+  );
 
   return (
     <div className="mb-5">
       <div className="flex justify-between items-center mb-3">
-        <p className="text-xs font-medium flex items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
+        <p
+          className="text-xs font-medium flex items-center gap-1.5"
+          style={{ color: 'var(--ink-soft)' }}
+        >
           <i className="fa-solid fa-bag-shopping"></i>สินค้า/การติดตั้ง ({t.items.length})
         </p>
         {upsell !== 0 && (
           <span
             className="text-xs px-2.5 py-1 rounded-full font-semibold"
-            style={{ background: upsell >= 0 ? '#E6EFDC' : '#FBEAEC', color: upsell >= 0 ? '#4C7A3E' : '#B23A48' }}
+            style={{
+              background: upsell >= 0 ? '#E6EFDC' : '#FBEAEC',
+              color: upsell >= 0 ? '#4C7A3E' : '#B23A48',
+            }}
           >
             ส่วนต่างเชียร์ขาย {upsell >= 0 ? '+' : ''}
             {fmt(upsell)}
@@ -68,17 +82,31 @@ export function ItemsSection({
       </div>
       {t.items.map((it, idx) => {
         const inShop = stock.filter((s) => s.category === it.category && s.shop === t.shop);
-        const productOptions = inShop.length ? inShop : stock.filter((s) => s.category === it.category);
+        const productOptions = inShop.length
+          ? inShop
+          : stock.filter((s) => s.category === it.category);
         const usesPositions = it.category === 'ฟิล์มกรองแสง' || it.category === 'ฟิล์มกันรอย';
         const isService = it.category === 'งานบริการ';
         const positionOptions = it.category === 'ฟิล์มกรองแสง' ? filmPositions : wrapPositions;
-        const setPositionOptions = it.category === 'ฟิล์มกรองแสง' ? setFilmPositions : setWrapPositions;
+        const setPositionOptions =
+          it.category === 'ฟิล์มกรองแสง' ? setFilmPositions : setWrapPositions;
         return (
-          <div key={idx} className="rounded-2xl p-3.5 mb-2.5" style={{ border: '1px solid var(--line)' }}>
+          <div
+            key={idx}
+            className="rounded-2xl p-3.5 mb-2.5"
+            style={{ border: '1px solid var(--line)' }}
+          >
             <div className="flex justify-between mb-2.5 gap-2">
               <select
                 value={it.category}
-                onChange={(e) => updateItemFields(idx, { category: e.target.value, sold: '', booked: '', positions: [] })}
+                onChange={(e) =>
+                  updateItemFields(idx, {
+                    category: e.target.value,
+                    sold: '',
+                    booked: '',
+                    positions: [],
+                  })
+                }
                 className="field text-xs px-2.5 py-1.5 flex-1"
               >
                 <option value="" disabled>
@@ -90,7 +118,12 @@ export function ItemsSection({
                   </option>
                 ))}
               </select>
-              <button onClick={() => removeItem(idx)} className="text-xs px-2 rounded-lg" style={{ color: '#B23A48' }} aria-label="ลบรายการ">
+              <button
+                onClick={() => removeItem(idx)}
+                className="text-xs px-2 rounded-lg"
+                style={{ color: '#B23A48' }}
+                aria-label="ลบรายการ"
+              >
                 <i className="fa-solid fa-trash"></i>
               </button>
             </div>
@@ -132,7 +165,12 @@ export function ItemsSection({
                 {it.interested && (
                   <div
                     className="flex justify-between text-xs mt-2"
-                    style={{ color: Number(it.soldPrice || 0) - Number(it.interestedPrice || 0) >= 0 ? '#4C7A3E' : '#B23A48' }}
+                    style={{
+                      color:
+                        Number(it.soldPrice || 0) - Number(it.interestedPrice || 0) >= 0
+                          ? '#4C7A3E'
+                          : '#B23A48',
+                    }}
                   >
                     <span>ส่วนต่างจากสินค้าที่สนใจ (Cheer-up)</span>
                     <span>
@@ -154,7 +192,12 @@ export function ItemsSection({
                     onChange={(selected) => {
                       const existing = it.positions || [];
                       const positions = selected.map(
-                        (pos) => existing.find((p) => p.position === pos) || { position: pos, product: '', price: 0 }
+                        (pos) =>
+                          existing.find((p) => p.position === pos) || {
+                            position: pos,
+                            product: '',
+                            price: 0,
+                          },
                       );
                       updateFilmPositions(idx, positions);
                     }}
@@ -168,7 +211,11 @@ export function ItemsSection({
                   </p>
                 )}
                 {(it.positions || []).map((p, pIdx) => (
-                  <div key={p.position} className="rounded-xl p-2.5 mb-2" style={{ background: 'var(--paper)' }}>
+                  <div
+                    key={p.position}
+                    className="rounded-xl p-2.5 mb-2"
+                    style={{ background: 'var(--paper)' }}
+                  >
                     <p className="text-xs font-semibold mb-1.5">
                       {p.position} <span style={{ color: '#B23A48' }}>*</span>
                     </p>
@@ -179,7 +226,12 @@ export function ItemsSection({
                           const prodName = e.target.value;
                           const match = productOptions.find((x) => x.name === prodName);
                           const fallback = match ? match.sellPrice || match.cost * 2 : 0;
-                          const price = lookupFilmPrice(it.category, prodName, p.position, fallback);
+                          const price = lookupFilmPrice(
+                            it.category,
+                            prodName,
+                            p.position,
+                            fallback,
+                          );
                           const positions = [...(it.positions || [])];
                           positions[pIdx] = { ...positions[pIdx], product: prodName, price };
                           updateFilmPositions(idx, positions);
@@ -215,7 +267,12 @@ export function ItemsSection({
                   {isService ? (
                     <ManagedDropdown
                       value={it.sold}
-                      onChange={(v) => updateItemFields(idx, { sold: v, soldPrice: lookupPrice(v, Number(it.soldPrice || 0)) })}
+                      onChange={(v) =>
+                        updateItemFields(idx, {
+                          sold: v,
+                          soldPrice: lookupPrice(v, Number(it.soldPrice || 0)),
+                        })
+                      }
                       options={serviceItems}
                       setOptions={setServiceItems}
                       placeholder="เลือกบริการ..."
@@ -227,12 +284,17 @@ export function ItemsSection({
                         const prodName = e.target.value;
                         const p = productOptions.find((x) => x.name === prodName);
                         const fallback = p ? p.sellPrice || p.cost * 2 : 0;
-                        updateItemFields(idx, { sold: prodName, soldPrice: lookupPrice(prodName, fallback) });
+                        updateItemFields(idx, {
+                          sold: prodName,
+                          soldPrice: lookupPrice(prodName, fallback),
+                        });
                       }}
                       disabled={!it.category}
                       className="field text-sm px-3 py-2 font-medium"
                     >
-                      <option value="">{it.category ? 'สินค้าที่ขาย...' : 'เลือกชนิดสินค้าก่อน'}</option>
+                      <option value="">
+                        {it.category ? 'สินค้าที่ขาย...' : 'เลือกชนิดสินค้าก่อน'}
+                      </option>
                       {productOptions.map((p) => (
                         <option key={p.id} value={p.name}>
                           {p.name}
@@ -254,8 +316,9 @@ export function ItemsSection({
                 </div>
                 {it.category && !isService && productOptions.length === 0 && (
                   <p className="text-xs mt-1.5" style={{ color: '#B23A48' }}>
-                    <i className="fa-solid fa-triangle-exclamation mr-1"></i>ยังไม่มีสินค้าหมวด &quot;{it.category}&quot; ในสต็อก —
-                    ไปเพิ่มสินค้าที่เมนู &quot;สต็อกสินค้า&quot; &rarr; &quot;เพิ่มสินค้า&quot; ก่อน
+                    <i className="fa-solid fa-triangle-exclamation mr-1"></i>ยังไม่มีสินค้าหมวด
+                    &quot;{it.category}&quot; ในสต็อก — ไปเพิ่มสินค้าที่เมนู &quot;สต็อกสินค้า&quot;
+                    &rarr; &quot;เพิ่มสินค้า&quot; ก่อน
                   </p>
                 )}
                 {!isService && (
@@ -314,9 +377,20 @@ export function ItemsSection({
                   )}
                 </div>
                 {it.discountType && it.discountValue ? (
-                  <div className="flex justify-between text-sm font-bold mt-2" style={{ color: '#4C7A3E' }}>
+                  <div
+                    className="flex justify-between text-sm font-bold mt-2"
+                    style={{ color: '#4C7A3E' }}
+                  >
                     <span>ยอดสุทธิหลังส่วนลด</span>
-                    <span>{fmt(itemNetPrice({ soldPrice: Number(it.soldPrice || 0), discountType: it.discountType, discountValue: Number(it.discountValue) }))}</span>
+                    <span>
+                      {fmt(
+                        itemNetPrice({
+                          soldPrice: Number(it.soldPrice || 0),
+                          discountType: it.discountType,
+                          discountValue: Number(it.discountValue),
+                        }),
+                      )}
+                    </span>
                   </div>
                 ) : null}
               </div>

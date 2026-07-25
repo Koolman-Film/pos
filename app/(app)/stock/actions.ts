@@ -103,7 +103,9 @@ export async function bulkImportAction(rows: BulkImportRow[]): Promise<void> {
   const session = await requireCapability('stock.addProduct');
   const canSeePrices = session.hasDashboardWidget('seeStockPrices');
   const supabase = await createClient();
-  const clean = rows.filter((r) => r.name && r.category && session.accessibleShopIds.includes(r.shop));
+  const clean = rows.filter(
+    (r) => r.name && r.category && session.accessibleShopIds.includes(r.shop),
+  );
   if (clean.length === 0) return;
   const base = Date.now();
   const { error } = await supabase.from('stock').insert(
@@ -117,7 +119,7 @@ export async function bulkImportAction(rows: BulkImportRow[]): Promise<void> {
       min_qty: 5,
       cost: canSeePrices ? Number(r.cost) || 0 : 0,
       sell_price: canSeePrices ? Number(r.sellPrice) || 0 : 0,
-    }))
+    })),
   );
   if (error) throw error;
   revalidatePath('/stock');

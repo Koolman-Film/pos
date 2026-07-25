@@ -76,11 +76,17 @@ export function TicketDetail({
   initialCorporateBuyers: CorporateBuyer[];
   shopInfo: Record<string, ShopInfo>;
   saveAction: (payload: TicketSavePayload) => Promise<SaveResult>;
-  optionAction: (listKey: OptionListName, values: string[]) => Promise<{ ok: boolean; error?: string }>;
+  optionAction: (
+    listKey: OptionListName,
+    values: string[],
+  ) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
-  const isDirty = useMemo(() => JSON.stringify(t) !== JSON.stringify(initialTicket), [t, initialTicket]);
+  const isDirty = useMemo(
+    () => JSON.stringify(t) !== JSON.stringify(initialTicket),
+    [t, initialTicket],
+  );
   useUnsavedChangesGuard(isDirty, 'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก');
 
   // Admin-managed option lists — optimistic local state, persisted via optionAction.
@@ -148,7 +154,11 @@ export function TicketDetail({
     setT({ ...t, [key]: value });
   }
   function changeStatus(newStatus: string) {
-    setT({ ...t, status: newStatus, statusHistory: [...(t.statusHistory || []), { status: newStatus, date: new Date() }] });
+    setT({
+      ...t,
+      status: newStatus,
+      statusHistory: [...(t.statusHistory || []), { status: newStatus, date: new Date() }],
+    });
   }
   function onModelChange(v: string) {
     const match = carModels.find((m) => m.model.trim().toLowerCase() === v.trim().toLowerCase());
@@ -158,7 +168,9 @@ export function TicketDetail({
   function commitModelRegistry(brand: string, carType: string) {
     if (!t.model) return;
     setCarModels((prev) => {
-      const idx = prev.findIndex((m) => m.model.trim().toLowerCase() === t.model.trim().toLowerCase());
+      const idx = prev.findIndex(
+        (m) => m.model.trim().toLowerCase() === t.model.trim().toLowerCase(),
+      );
       const entry = { model: t.model, brand, carType };
       if (idx >= 0) {
         const copy = [...prev];
@@ -174,7 +186,11 @@ export function TicketDetail({
   }
   function lookupFilmPrice(category: string, product: string, position: string, fallback: number) {
     const m = filmPriceMatrix.find(
-      (p) => p.category === category && p.product === product && p.position === position && p.carType === t.carType
+      (p) =>
+        p.category === category &&
+        p.product === product &&
+        p.position === position &&
+        p.carType === t.carType,
     );
     return m ? m.price : fallback;
   }
@@ -197,7 +213,17 @@ export function TicketDetail({
     let items = t.items;
     if (name === 'ประกัน') {
       if (nowChecked && !items.some((i) => i.autoInsurance)) {
-        items = [...items, { category: 'ประกัน', booked: 'ประกัน', bookedPrice: 0, sold: 'ประกัน', soldPrice: 0, autoInsurance: true }];
+        items = [
+          ...items,
+          {
+            category: 'ประกัน',
+            booked: 'ประกัน',
+            bookedPrice: 0,
+            sold: 'ประกัน',
+            soldPrice: 0,
+            autoInsurance: true,
+          },
+        ];
       } else if (!nowChecked) {
         items = items.filter((i) => !i.autoInsurance);
       }
@@ -211,17 +237,23 @@ export function TicketDetail({
     const current = t.extras?.['รถสไลด์'] || {};
     const legCount = st === 'Walk-in' ? 1 : st === 'Showroom' ? 2 : 0;
     const prevLegs = (current.legs as unknown[]) || [];
-    const legs = Array.from({ length: legCount }, (_, i) => prevLegs[i] || { from: '', to: '', date: '', time: '' });
-    setT({ ...t, extras: { ...t.extras, 'รถสไลด์': { ...current, slideType: st, legs } } });
+    const legs = Array.from(
+      { length: legCount },
+      (_, i) => prevLegs[i] || { from: '', to: '', date: '', time: '' },
+    );
+    setT({ ...t, extras: { ...t.extras, รถสไลด์: { ...current, slideType: st, legs } } });
   }
   function updateSlideLeg(legIdx: number, key: string, val: unknown) {
     const current = t.extras?.['รถสไลด์'] || {};
     const legs = [...((current.legs as Record<string, unknown>[]) || [])];
     legs[legIdx] = { ...(legs[legIdx] || {}), [key]: val };
-    setT({ ...t, extras: { ...t.extras, 'รถสไลด์': { ...current, legs } } });
+    setT({ ...t, extras: { ...t.extras, รถสไลด์: { ...current, legs } } });
   }
   function addItem() {
-    setT({ ...t, items: [...t.items, { category: '', booked: '', bookedPrice: 0, sold: '', soldPrice: 0 }] });
+    setT({
+      ...t,
+      items: [...t.items, { category: '', booked: '', bookedPrice: 0, sold: '', soldPrice: 0 }],
+    });
   }
   function updateItem(idx: number, key: keyof TicketItem, val: unknown) {
     const items = [...t.items];
@@ -243,7 +275,7 @@ export function TicketDetail({
     items[idx] = { ...items[idx], positions, soldPrice, sold };
     const hasBuildingFilm = positions.some((p) => p.position === 'ฟิล์มอาคาร');
     const extras = hasBuildingFilm
-      ? { ...t.extras, 'นอกสถานที่': { ...(t.extras?.['นอกสถานที่'] || {}), checked: true } }
+      ? { ...t.extras, นอกสถานที่: { ...(t.extras?.['นอกสถานที่'] || {}), checked: true } }
       : t.extras;
     setT({ ...t, items, extras });
   }
@@ -254,7 +286,9 @@ export function TicketDetail({
     const delta = Number(newQty) - prevQty;
     if (delta !== 0 && productName) {
       setStock((prevStock) =>
-        prevStock.map((s) => (s.name === productName && s.shop === t.shop ? { ...s, qty: s.qty - delta } : s))
+        prevStock.map((s) =>
+          s.name === productName && s.shop === t.shop ? { ...s, qty: s.qty - delta } : s,
+        ),
       );
     }
     const items = [...t.items];
@@ -262,7 +296,13 @@ export function TicketDetail({
     setT({ ...t, items });
   }
   function addPayment() {
-    setT({ ...t, payments: [...t.payments, { type: 'มัดจำ', method: 'เงินสด', amount: 0, date: '', attachments: [] }] });
+    setT({
+      ...t,
+      payments: [
+        ...t.payments,
+        { type: 'มัดจำ', method: 'เงินสด', amount: 0, date: '', attachments: [] },
+      ],
+    });
   }
   function updatePayment(idx: number, key: keyof TicketPayment, val: unknown) {
     const payments = [...t.payments];
@@ -271,20 +311,27 @@ export function TicketDetail({
   }
   function shareLink(link?: string) {
     if (!link) return;
-    if (navigator.share) navigator.share({ title: 'ตำแหน่งงานนอกสถานที่', url: link }).catch(() => {});
+    if (navigator.share)
+      navigator.share({ title: 'ตำแหน่งงานนอกสถานที่', url: link }).catch(() => {});
     else if (navigator.clipboard) {
       navigator.clipboard.writeText(link);
       window.alert('คัดลอกลิงก์แล้ว');
     }
   }
   function confirmInstall() {
-    setT((prev) => ({ ...prev, installConfirmed: true, installConfirmedAt: new Date().toLocaleString('th-TH') }));
+    setT((prev) => ({
+      ...prev,
+      installConfirmed: true,
+      installConfirmedAt: new Date().toLocaleString('th-TH'),
+    }));
   }
   function shareQcAlbum() {
     const link = `${window.location.origin}${window.location.pathname}#qc-album-${t.id}`;
     const text = `อัลบั้มรูป QC ก่อนติดตั้ง — ${t.customer || ''} (${t.plate || ''})`;
     if (navigator.share)
-      navigator.share({ title: 'อัลบั้มรูป QC ก่อนติดตั้ง (ดูอย่างเดียว)', text, url: link }).catch(() => {});
+      navigator
+        .share({ title: 'อัลบั้มรูป QC ก่อนติดตั้ง (ดูอย่างเดียว)', text, url: link })
+        .catch(() => {});
     else if (navigator.clipboard) {
       navigator.clipboard.writeText(link);
       window.alert('คัดลอกลิงก์อัลบั้มรูป QC แล้ว (ลูกค้าดูได้อย่างเดียว)');
@@ -297,9 +344,10 @@ export function TicketDetail({
       itemNetPrice({
         soldPrice: Number(i.soldPrice || 0),
         discountType: i.discountType ?? undefined,
-        discountValue: i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : undefined,
+        discountValue:
+          i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : undefined,
       }),
-    0
+    0,
   );
   const paid = t.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
@@ -307,7 +355,12 @@ export function TicketDetail({
     <div className="max-w-2xl fade-page">
       <button
         onClick={() => {
-          if (confirmDiscardIfDirty(isDirty, 'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?'))
+          if (
+            confirmDiscardIfDirty(
+              isDirty,
+              'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
+            )
+          )
             router.push('/tickets');
         }}
         className="text-sm mb-4 flex items-center gap-2 font-medium"
@@ -317,7 +370,10 @@ export function TicketDetail({
       </button>
       <div className="card p-5 sm:p-7">
         <div className="flex items-start justify-between mb-1">
-          <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--primary)' }}>
+          <p
+            className="text-xs font-semibold flex items-center gap-1.5"
+            style={{ color: 'var(--primary)' }}
+          >
             <i className="fa-solid fa-store"></i>
             {shopName(t.shop)}
           </p>
@@ -325,7 +381,10 @@ export function TicketDetail({
             value={t.status}
             onChange={(e) => changeStatus(e.target.value)}
             className="text-sm font-bold px-3 py-1.5 rounded-full border-none cursor-pointer"
-            style={{ background: getStatus(statuses, t.status).bg, color: getStatus(statuses, t.status).text }}
+            style={{
+              background: getStatus(statuses, t.status).bg,
+              color: getStatus(statuses, t.status).text,
+            }}
           >
             {statuses.map((s) => (
               <option key={s.key} value={s.key}>
@@ -437,7 +496,10 @@ export function TicketDetail({
           </p>
         )}
         <div className="flex gap-3">
-          <button onClick={() => router.push('/tickets')} className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium">
+          <button
+            onClick={() => router.push('/tickets')}
+            className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
+          >
             ยกเลิก
           </button>
           <button
@@ -467,16 +529,22 @@ export function TicketDetail({
             </button>
           </div>
         )}
-        {!isNew && t.items.some((i) => i.sold) && canDo('list.printSheet') && t.extras?.['นอกสถานที่']?.checked && (
-          <button
-            onClick={() => doPrint('offsite')}
-            className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-          >
-            <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
-          </button>
-        )}
+        {!isNew &&
+          t.items.some((i) => i.sold) &&
+          canDo('list.printSheet') &&
+          t.extras?.['นอกสถานที่']?.checked && (
+            <button
+              onClick={() => doPrint('offsite')}
+              className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
+            </button>
+          )}
         {!isNew && (
-          <div className="rounded-2xl p-4 mt-4" style={{ background: '#EAF1FB', border: '1.5px solid #2563EB' }}>
+          <div
+            className="rounded-2xl p-4 mt-4"
+            style={{ background: '#EAF1FB', border: '1.5px solid #2563EB' }}
+          >
             <p className="text-xs font-semibold mb-2" style={{ color: '#1D4ED8' }}>
               <i className="fa-solid fa-file-invoice mr-1.5"></i>ออกเอกสารทางการเงิน
             </p>
@@ -486,7 +554,10 @@ export function TicketDetail({
                   key={dt}
                   onClick={() => changeDocType(dt)}
                   className="text-xs px-2.5 py-1.5 rounded-full font-semibold flex-1"
-                  style={{ background: docType === dt ? '#2563EB' : '#fff', color: docType === dt ? '#fff' : '#1D4ED8' }}
+                  style={{
+                    background: docType === dt ? '#2563EB' : '#fff',
+                    color: docType === dt ? '#fff' : '#1D4ED8',
+                  }}
                 >
                   {dt}
                 </button>
@@ -564,7 +635,10 @@ export function TicketDetail({
                 </button>
               </div>
             )}
-            <label className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer" style={{ color: '#1D4ED8' }}>
+            <label
+              className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
+              style={{ color: '#1D4ED8' }}
+            >
               <input
                 type="checkbox"
                 checked={showCompanyInfo}
@@ -573,7 +647,10 @@ export function TicketDetail({
               />
               แสดงชื่อนิติบุคคล/เลขผู้เสียภาษีของร้าน
             </label>
-            <label className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer" style={{ color: '#1D4ED8' }}>
+            <label
+              className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
+              style={{ color: '#1D4ED8' }}
+            >
               <input
                 type="checkbox"
                 checked={showDisclaimer}

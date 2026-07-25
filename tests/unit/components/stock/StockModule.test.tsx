@@ -38,7 +38,7 @@ describe('StockModule', () => {
     // prototype is the source of truth over the plan's "<=" wording.
     const atMin: StockItem[] = [{ ...stock[0], qty: 10, min: 10 }];
     const { rerender } = render(
-      <StockModule stock={atMin} canDo={() => true} canSeeStockPrices={false} />
+      <StockModule stock={atMin} canDo={() => true} canSeeStockPrices={false} />,
     );
     let card = screen.getByText('ใกล้หมด').closest('div');
     expect(card?.textContent).toContain('0'); // at min → not low
@@ -68,7 +68,7 @@ describe('StockModule', () => {
         accessibleShops={[{ id: 'cm', name: 'เชียงใหม่' }]}
         canDo={() => true}
         canSeeStockPrices={false}
-      />
+      />,
     );
     // The pill renders the status label; a keyed map (not a flat object) is what
     // colours it — a flat object would grey it out but still show the text.

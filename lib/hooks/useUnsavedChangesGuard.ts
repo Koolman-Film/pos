@@ -61,7 +61,10 @@ export function useUnsavedChangesGuard(isDirty: boolean, message: string = DEFAU
  * Ask before discarding, when the caller already knows it is dirty.
  * Returns true when it is safe to proceed.
  */
-export function confirmDiscardIfDirty(isDirty: boolean, message: string = DEFAULT_CONFIRM): boolean {
+export function confirmDiscardIfDirty(
+  isDirty: boolean,
+  message: string = DEFAULT_CONFIRM,
+): boolean {
   if (!isDirty) return true;
   return window.confirm(message || DEFAULT_CONFIRM);
 }

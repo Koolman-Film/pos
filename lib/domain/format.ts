@@ -16,7 +16,10 @@ export function fmtThaiDate(d: Date | null | undefined): string {
 }
 
 export function fmt(n: number | null | undefined): string {
-  return Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Number(n || 0).toLocaleString('th-TH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 const NUM_TEXT = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];

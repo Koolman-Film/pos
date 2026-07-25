@@ -16,8 +16,17 @@ const PETTY_CASH_NOTE = 'TEST-FIXTURE ops_schema';
 // a root row and has to be deleted explicitly.
 async function removeFixtures() {
   await supabase.from('stock').delete().eq('sku', STOCK_SKU);
-  await supabase.from('commission_rules').delete().eq('name', RULE_NAME).eq('category', RULE_CATEGORY);
-  await supabase.from('expenses').delete().eq('shop_id', 'cm').eq('description', EXPENSE_DESCRIPTION).eq('category', 'ค่าเช่า');
+  await supabase
+    .from('commission_rules')
+    .delete()
+    .eq('name', RULE_NAME)
+    .eq('category', RULE_CATEGORY);
+  await supabase
+    .from('expenses')
+    .delete()
+    .eq('shop_id', 'cm')
+    .eq('description', EXPENSE_DESCRIPTION)
+    .eq('category', 'ค่าเช่า');
   await supabase.from('petty_cash').delete().eq('note', PETTY_CASH_NOTE);
 }
 
@@ -30,14 +39,56 @@ describe('stock/commission/accounting schema', () => {
   afterAll(removeFixtures);
 
   it('stores stock, a commission rule with a team, an expense, and a petty cash entry', async () => {
-    await supabase.from('stock').insert({ sku: STOCK_SKU, name: 'ทดสอบ', category: 'ฟิล์มกรองแสง', shop_id: 'cm', qty: 5, min_qty: 2, cost: 100, sell_price: 200 });
-    const { data: rule } = await supabase.from('commission_rules').insert({ category: RULE_CATEGORY, name: RULE_NAME, type: 'percent_of_sale', value: 3, shop_id: 'cm' }).select().single();
-    await supabase.from('commission_rule_teams').insert({ commission_rule_id: rule!.id, team_member: 'กมล' });
-    await supabase.from('expenses').insert({ shop_id: 'cm', description: EXPENSE_DESCRIPTION, category: 'ค่าเช่า', source: 'บัญชีธนาคารสาขา', amount: 1000, status: 'จ่ายแล้ว', paid_at: '2026-07-23' });
-    await supabase.from('petty_cash').insert({ shop_id: 'cm', type: 'เติมเงิน', amount: 5000, entry_at: '2026-07-23', note: PETTY_CASH_NOTE });
+    await supabase.from('stock').insert({
+      sku: STOCK_SKU,
+      name: 'ทดสอบ',
+      category: 'ฟิล์มกรองแสง',
+      shop_id: 'cm',
+      qty: 5,
+      min_qty: 2,
+      cost: 100,
+      sell_price: 200,
+    });
+    const { data: rule } = await supabase
+      .from('commission_rules')
+      .insert({
+        category: RULE_CATEGORY,
+        name: RULE_NAME,
+        type: 'percent_of_sale',
+        value: 3,
+        shop_id: 'cm',
+      })
+      .select()
+      .single();
+    await supabase
+      .from('commission_rule_teams')
+      .insert({ commission_rule_id: rule!.id, team_member: 'กมล' });
+    await supabase.from('expenses').insert({
+      shop_id: 'cm',
+      description: EXPENSE_DESCRIPTION,
+      category: 'ค่าเช่า',
+      source: 'บัญชีธนาคารสาขา',
+      amount: 1000,
+      status: 'จ่ายแล้ว',
+      paid_at: '2026-07-23',
+    });
+    await supabase.from('petty_cash').insert({
+      shop_id: 'cm',
+      type: 'เติมเงิน',
+      amount: 5000,
+      entry_at: '2026-07-23',
+      note: PETTY_CASH_NOTE,
+    });
 
-    const { data: stockRow } = await supabase.from('stock').select('qty').eq('sku', STOCK_SKU).single();
-    const { data: team } = await supabase.from('commission_rule_teams').select('team_member').eq('commission_rule_id', rule!.id);
+    const { data: stockRow } = await supabase
+      .from('stock')
+      .select('qty')
+      .eq('sku', STOCK_SKU)
+      .single();
+    const { data: team } = await supabase
+      .from('commission_rule_teams')
+      .select('team_member')
+      .eq('commission_rule_id', rule!.id);
     expect(stockRow!.qty).toBe(5);
     expect(team).toEqual([{ team_member: 'กมล' }]);
   });

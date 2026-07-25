@@ -110,7 +110,7 @@ export async function deleteExpense(id: number): Promise<void> {
  * layout (finnix-film.html:3584-3597).
  */
 export async function exportExpenses(
-  payload: ExportPayload
+  payload: ExportPayload,
 ): Promise<{ fileName: string; base64: string } | null> {
   const session = await getSessionContext();
   if (!session.canDo('accounting.export')) throw new Error('forbidden');

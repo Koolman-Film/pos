@@ -35,15 +35,7 @@ const ROLE_META: Record<string, { name: string; icon: string }> = {
  * The search field is carried over exactly as the prototype had it: decorative,
  * not wired to anything.
  */
-export function Header({
-  name,
-  roleId,
-  email,
-}: {
-  name: string;
-  roleId: string;
-  email?: string;
-}) {
+export function Header({ name, roleId, email }: { name: string; roleId: string; email?: string }) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { setOpen } = useMobileNav();
   const role = ROLE_META[roleId] ?? { name: roleId, icon: 'fa-user' };
@@ -75,7 +67,11 @@ export function Header({
         <div className="flex items-center gap-2 ml-auto">
           <ThemeToggle />
 
-          <button type="button" className="icon-tile relative" style={{ background: 'var(--paper)' }}>
+          <button
+            type="button"
+            className="icon-tile relative"
+            style={{ background: 'var(--paper)' }}
+          >
             <i className="fa-regular fa-bell text-sm" style={{ color: 'var(--ink-soft)' }} />
             <span
               className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full"
@@ -96,7 +92,10 @@ export function Header({
                 style={{ color: 'var(--primary)' }}
               />
               <span className="hidden sm:inline">{name}</span>
-              <i className="fa-solid fa-chevron-down text-xs" style={{ color: 'var(--ink-faint)' }} />
+              <i
+                className="fa-solid fa-chevron-down text-xs"
+                style={{ color: 'var(--ink-faint)' }}
+              />
             </button>
 
             {showUserMenu && (

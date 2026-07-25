@@ -40,7 +40,7 @@ export async function proxy(request: NextRequest) {
           });
         },
       },
-    }
+    },
   );
 
   // Must run before the response is produced, otherwise a refresh that lands

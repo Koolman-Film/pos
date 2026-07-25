@@ -20,7 +20,9 @@ const order = {
 const discountedOrder = {
   id: 'WS-CM-0092',
   status: 'รออนุมัติราคา',
-  items: [{ name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 10, listPrice: 1200, requestedPrice: 1000, reason: '' }],
+  items: [
+    { name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 10, listPrice: 1200, requestedPrice: 1000, reason: '' },
+  ],
   returns: [],
   adjustments: [],
   payments: [],

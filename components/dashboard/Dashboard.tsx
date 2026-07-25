@@ -135,7 +135,11 @@ export function Dashboard({
           <h1 className="text-xl font-bold">ภาพรวมธุรกิจ</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--ink-soft)' }}>
             สรุปข้อมูลวันนี้ &middot;{' '}
-            {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+            {new Date().toLocaleDateString('th-TH', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })}
           </p>
         </div>
       </div>
@@ -167,7 +171,10 @@ export function Dashboard({
                   <div className="h-1.5 rounded-full" style={{ background: 'var(--paper)' }}>
                     <div
                       className="h-1.5 rounded-full"
-                      style={{ width: `${(s.count / maxShopCount) * 100}%`, background: 'var(--revenue)' }}
+                      style={{
+                        width: `${(s.count / maxShopCount) * 100}%`,
+                        background: 'var(--revenue)',
+                      }}
                     ></div>
                   </div>
                 </div>
@@ -208,7 +215,10 @@ export function Dashboard({
                   <div className="h-1.5 rounded-full" style={{ background: 'var(--paper)' }}>
                     <div
                       className="h-1.5 rounded-full"
-                      style={{ width: `${(c.amount / maxExpenseCat) * 100}%`, background: '#C24B57' }}
+                      style={{
+                        width: `${(c.amount / maxExpenseCat) * 100}%`,
+                        background: '#C24B57',
+                      }}
                     ></div>
                   </div>
                 </div>
@@ -224,7 +234,10 @@ export function Dashboard({
         )}
 
         {hasDashboardWidget('pettycash') && (
-          <div className="card p-5" style={{ background: 'var(--primary-soft)', borderColor: 'transparent' }}>
+          <div
+            className="card p-5"
+            style={{ background: 'var(--primary-soft)', borderColor: 'transparent' }}
+          >
             <div className="flex items-start justify-between mb-3">
               <div className="icon-tile" style={{ background: 'rgba(255,255,255,.6)' }}>
                 <i className="fa-solid fa-wallet" style={{ color: 'var(--primary)' }}></i>
@@ -309,7 +322,10 @@ export function Dashboard({
                       {i.source}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#4C7A3E' }}>
+                  <span
+                    className="text-xs font-semibold flex-shrink-0"
+                    style={{ color: '#4C7A3E' }}
+                  >
                     {fmt(i.amount)}
                   </span>
                 </Link>
@@ -356,7 +372,10 @@ export function Dashboard({
                       {i.due ? ` · กำหนด ${i.due}` : ''}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#B23A48' }}>
+                  <span
+                    className="text-xs font-semibold flex-shrink-0"
+                    style={{ color: '#B23A48' }}
+                  >
                     {fmt(i.amount)}
                   </span>
                 </Link>
@@ -513,7 +532,10 @@ export function Dashboard({
               <div className="h-full" style={{ width: '50%', background: '#C24B57' }}></div>
             </div>
             <div className="flex flex-col gap-3 text-sm">
-              <Link href="/wholesale" className="flex items-center justify-between hover:opacity-80">
+              <Link
+                href="/wholesale"
+                className="flex items-center justify-between hover:opacity-80"
+              >
                 <span className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full" style={{ background: '#E8B23D' }}></span>
                   ส่วนลด PO รออนุมัติ
@@ -525,7 +547,10 @@ export function Dashboard({
                   {pendingApprovals.discount}
                 </span>
               </Link>
-              <Link href="/wholesale" className="flex items-center justify-between hover:opacity-80">
+              <Link
+                href="/wholesale"
+                className="flex items-center justify-between hover:opacity-80"
+              >
                 <span className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full" style={{ background: '#C24B57' }}></span>
                   ขอตัดหนี้สูญ
@@ -546,10 +571,7 @@ export function Dashboard({
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <p className="text-sm font-semibold">งานล่าสุด</p>
-          <Link
-            href="/tickets"
-            className="btn-primary text-xs px-3 py-1.5 rounded-lg font-medium"
-          >
+          <Link href="/tickets" className="btn-primary text-xs px-3 py-1.5 rounded-lg font-medium">
             ดูทั้งหมด
           </Link>
         </div>
@@ -627,7 +649,11 @@ export function Dashboard({
  * `[...new Set(...)]` produced them.
  */
 function groupUpcoming(upcoming: UpcomingTicket[]) {
-  const days: { key: string; date: Date; byService: { serviceType: string; tickets: UpcomingTicket[] }[] }[] = [];
+  const days: {
+    key: string;
+    date: Date;
+    byService: { serviceType: string; tickets: UpcomingTicket[] }[];
+  }[] = [];
   for (const t of upcoming) {
     const key = t.dropOff.toDateString();
     let day = days.find((d) => d.key === key);

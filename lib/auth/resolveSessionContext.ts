@@ -14,8 +14,7 @@ import { buildSessionContext, type SessionContext } from './buildSessionContext'
 export type SessionFailureReason = 'unauthenticated' | 'no_profile' | 'inactive';
 
 export type ResolvedSession =
-  | { ok: true; session: SessionContext }
-  | { ok: false; reason: SessionFailureReason };
+  { ok: true; session: SessionContext } | { ok: false; reason: SessionFailureReason };
 
 /**
  * Resolve a full `SessionContext` from an authenticated Supabase client.
@@ -41,7 +40,7 @@ export type ResolvedSession =
  *     never sees more than the signed-in user is allowed to see.
  */
 export async function resolveSessionContext(
-  supabase: SupabaseClient<Database>
+  supabase: SupabaseClient<Database>,
 ): Promise<ResolvedSession> {
   const {
     data: { user },
@@ -84,7 +83,7 @@ export async function resolveSessionContext(
         shop_access: (profileRow.user_shop_access ?? []).map((a) => a.shop_id),
       },
       (shops ?? []).map((s) => s.id),
-      perms ?? []
+      perms ?? [],
     ),
   };
 }

@@ -114,7 +114,9 @@ function isTransient(error: unknown): boolean {
   const message = String((error as { message?: unknown } | null)?.message ?? error ?? '');
   const status = Number((error as { status?: unknown } | null)?.status ?? 0);
   return (
-    /fetch failed|network|ECONNRESET|ECONNREFUSED|EPIPE|socket hang up|terminated|timeout/i.test(message) ||
+    /fetch failed|network|ECONNRESET|ECONNREFUSED|EPIPE|socket hang up|terminated|timeout/i.test(
+      message,
+    ) ||
     (status >= 500 && status <= 599)
   );
 }
@@ -145,7 +147,7 @@ async function withRetry<T>(label: string, operation: () => Promise<T>): Promise
     } catch (error) {
       lastError = error;
       if (!isTransient(error) || attempt === attempts) break;
-      await new Promise(resolve => setTimeout(resolve, 150 * attempt));
+      await new Promise((resolve) => setTimeout(resolve, 150 * attempt));
     }
   }
   const detail = String((lastError as { message?: unknown } | null)?.message ?? lastError);
@@ -177,7 +179,7 @@ export async function findAuthUserByEmail(
       return result;
     });
     const users = data?.users ?? [];
-    const match = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+    const match = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
     if (match) return { id: match.id };
     if (users.length < perPage) return null;
   }
@@ -213,7 +215,9 @@ export async function createAuthUser(
 ): Promise<{ id: string }> {
   return withRetry(`createUser(${email})`, async () => {
     const { data, error } = await admin.auth.admin.createUser({
-      email, password, email_confirm: true,
+      email,
+      password,
+      email_confirm: true,
     });
     if (error) throw error;
     if (!data?.user) throw new Error(`createUser returned no user for ${email}`);

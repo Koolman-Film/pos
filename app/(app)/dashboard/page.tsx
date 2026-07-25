@@ -52,13 +52,13 @@ export default async function DashboardPage({
     supabase
       .from('tickets')
       .select(
-        'id, shop_id, customer_name, plate, brand, model, service_type, status, drop_off_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)'
+        'id, shop_id, customer_name, plate, brand, model, service_type, status, drop_off_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
       )
       .order('drop_off_date', { ascending: false }),
     supabase
       .from('orders')
       .select(
-        'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount)'
+        'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount)',
       ),
     supabase.from('wholesale_customers').select('id, name'),
     supabase
@@ -84,7 +84,7 @@ export default async function DashboardPage({
   // ---- Resolve the active filter from the URL ----
   const getStr = (k: string) => (typeof params[k] === 'string' ? (params[k] as string) : '');
   const requestedShop = getStr('shop');
-  const defaultShop = allowAllShops ? 'all' : session.accessibleShopIds[0] ?? 'all';
+  const defaultShop = allowAllShops ? 'all' : (session.accessibleShopIds[0] ?? 'all');
   const shopFilter =
     requestedShop === 'all' || session.accessibleShopIds.includes(requestedShop)
       ? requestedShop || defaultShop
@@ -156,7 +156,10 @@ export default async function DashboardPage({
     status: e.status,
     paidAt: toDate(e.paid_at),
     due: e.due_at
-      ? new Date(`${e.due_at}T00:00:00`).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
+      ? new Date(`${e.due_at}T00:00:00`).toLocaleDateString('th-TH', {
+          day: 'numeric',
+          month: 'short',
+        })
       : '',
   }));
 
@@ -168,7 +171,10 @@ export default async function DashboardPage({
   const apItems = computePayables(expenses, shopFilter);
 
   const revenue = visibleTickets.reduce((s, t) => s + ticketTotal(t), 0);
-  const outstanding = visibleTickets.reduce((s, t) => s + Math.max(ticketTotal(t) - ticketPaid(t), 0), 0);
+  const outstanding = visibleTickets.reduce(
+    (s, t) => s + Math.max(ticketTotal(t) - ticketPaid(t), 0),
+    0,
+  );
 
   const paidExpenses = expenses.filter((e) => inShop(e.shop) && e.status === 'จ่ายแล้ว');
   const totalExpenses = paidExpenses.reduce((s, e) => s + e.amount, 0);
@@ -211,7 +217,15 @@ export default async function DashboardPage({
     status: e.status,
     paidAt: e.paidAt,
   }));
-  const trend = buildTrend(trendTickets, trendExpenses, shopFilter, period, periodValue, rangeStart, rangeEnd);
+  const trend = buildTrend(
+    trendTickets,
+    trendExpenses,
+    shopFilter,
+    period,
+    periodValue,
+    rangeStart,
+    rangeEnd,
+  );
 
   // ---- Row 3 / Row 4 widgets (correction C13) ----
   const statuses: StatusConfig[] = (statusRows ?? []).map((s) => ({
@@ -258,7 +272,7 @@ export default async function DashboardPage({
   // rather than `wsVisible` here (:896-897).
   const pendingApprovals: PendingApprovals = {
     discount: orders.filter(
-      (o) => o.status === 'รออนุมัติราคา' && o.items.some((i) => i.requestedPrice < i.listPrice)
+      (o) => o.status === 'รออนุมัติราคา' && o.items.some((i) => i.requestedPrice < i.listPrice),
     ).length,
     badDebt: orders.filter((o) => o.status === 'ค้างชำระ').length,
   };

@@ -80,10 +80,7 @@ export function shopName(id: string, shops: Shop[]): string {
 }
 
 /** Prototype: `reference/v0.4/finnix-film.html:297-301`. */
-export function customerPurchasedProducts(
-  customerId: number | null,
-  orders: WsOrder[]
-): string[] {
+export function customerPurchasedProducts(customerId: number | null, orders: WsOrder[]): string[] {
   const names = new Set<string>();
   orders
     .filter((ord) => ord.customerId === customerId)

@@ -84,7 +84,8 @@ export function PrintJobSheet({
         {filledExtras.map((name) => {
           const ex = t.extras[name];
           if (name === 'รถสไลด์') {
-            const legs = (ex.legs as { from?: string; to?: string; date?: string; time?: string }[]) || [];
+            const legs =
+              (ex.legs as { from?: string; to?: string; date?: string; time?: string }[]) || [];
             return (
               <div key={name} style={{ marginBottom: 6 }}>
                 <p style={{ margin: 0 }}>
@@ -152,8 +153,18 @@ export function PrintJobSheet({
                 บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
               </p>
             </div>
-            <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>{shopName(t.shop)}</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 28px', fontSize: 13, marginBottom: 8 }}>
+            <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>
+              {shopName(t.shop)}
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '4px 28px',
+                fontSize: 13,
+                marginBottom: 8,
+              }}
+            >
               <span>
                 ชื่อลูกค้า: <b>{t.customer}</b>
               </span>
@@ -161,7 +172,15 @@ export function PrintJobSheet({
                 เบอร์โทร: <b>{t.phone}</b>
               </span>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 22px', fontSize: 13, marginBottom: 10 }}>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '4px 22px',
+                fontSize: 13,
+                marginBottom: 10,
+              }}
+            >
               <span>
                 ยี่ห้อรถ: <b>{t.brand}</b>
               </span>
@@ -180,8 +199,8 @@ export function PrintJobSheet({
             </div>
             {categories.length > 1 && (
               <p style={{ margin: '0 0 10px', fontSize: 11, color: '#B23A48', fontWeight: 'bold' }}>
-                งานนี้มี {categories.length} ชนิดสินค้า — หน้านี้แสดงเฉพาะ &quot;{cat}&quot; (หน้า {catIdx + 1}/
-                {categories.length})
+                งานนี้มี {categories.length} ชนิดสินค้า — หน้านี้แสดงเฉพาะ &quot;{cat}&quot; (หน้า{' '}
+                {catIdx + 1}/{categories.length})
               </p>
             )}
             <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
@@ -195,7 +214,10 @@ export function PrintJobSheet({
                     if (!grouped[p.product]) grouped[p.product] = [];
                     grouped[p.product].push(p.position);
                   });
-                  rows = Object.entries(grouped).map(([product, labels]) => ({ label: labels.join(', '), product }));
+                  rows = Object.entries(grouped).map(([product, labels]) => ({
+                    label: labels.join(', '),
+                    product,
+                  }));
                 } else {
                   rows = [{ label: null, product: i.sold }];
                 }
@@ -218,7 +240,16 @@ export function PrintJobSheet({
                       const stockMatch = stock.find((s) => s.name === r.product);
                       const short = stockMatch?.shortName || r.product;
                       return (
-                        <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, paddingLeft: 12 }}>
+                        <div
+                          key={ri}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            marginBottom: 8,
+                            paddingLeft: 12,
+                          }}
+                        >
                           {r.label && <span style={emboss}>{r.label}</span>}
                           <span style={{ fontSize: 18, fontWeight: 'bold' }}>{short}</span>
                           <span style={{ fontSize: 11, color: '#777' }}>({r.product})</span>
@@ -236,14 +267,38 @@ export function PrintJobSheet({
                             {(i.category === 'ฟิล์มกรองแสง' || i.category === 'ฟิล์มกันรอย') && (
                               <>
                                 ขนาด
-                                <span style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 120 }}>&nbsp;</span>
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    borderBottom: '1px solid #999',
+                                    width: 120,
+                                  }}
+                                >
+                                  &nbsp;
+                                </span>
                                 &nbsp;ตัด
-                                <span style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 120 }}>&nbsp;</span>
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    borderBottom: '1px solid #999',
+                                    width: 120,
+                                  }}
+                                >
+                                  &nbsp;
+                                </span>
                                 &nbsp;
                               </>
                             )}
                             ใช้จริง
-                            <span style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 30 }}>&nbsp;</span>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                borderBottom: '1px solid #999',
+                                width: 30,
+                              }}
+                            >
+                              &nbsp;
+                            </span>
                           </span>
                         </div>
                       );
@@ -272,30 +327,90 @@ export function PrintJobSheet({
               {t.techByCategory && t.techByCategory[cat] && t.techByCategory[cat].length > 0 ? (
                 <span style={{ fontWeight: 'bold' }}>{t.techByCategory[cat].join(', ')}</span>
               ) : (
-                <span style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 240 }}>&nbsp;</span>
+                <span
+                  style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 240 }}
+                >
+                  &nbsp;
+                </span>
               )}
             </p>
             <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ flex: 1, border: '1.5px solid #555', borderRadius: 6, padding: '10px 12px' }}>
-                <p style={{ margin: '0 0 8px', fontWeight: 'bold', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ display: 'inline-block', width: 16, height: 16, border: '2px solid #D8722A', borderRadius: 3, flexShrink: 0 }}></span>
+              <div
+                style={{
+                  flex: 1,
+                  border: '1.5px solid #555',
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                }}
+              >
+                <p
+                  style={{
+                    margin: '0 0 8px',
+                    fontWeight: 'bold',
+                    fontSize: 13,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 16,
+                      height: 16,
+                      border: '2px solid #D8722A',
+                      borderRadius: 3,
+                      flexShrink: 0,
+                    }}
+                  ></span>
                   QC ก่อนติดตั้ง
                 </p>
-                <p style={{ margin: 0, fontSize: 11 }}>วันที่ ....................................</p>
+                <p style={{ margin: 0, fontSize: 11 }}>
+                  วันที่ ....................................
+                </p>
               </div>
-              <div style={{ flex: 1, border: '1.5px solid #555', borderRadius: 6, padding: '10px 12px' }}>
-                <p style={{ margin: '0 0 8px', fontWeight: 'bold', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ display: 'inline-block', width: 16, height: 16, border: '2px solid #D8722A', borderRadius: 3, flexShrink: 0 }}></span>
+              <div
+                style={{
+                  flex: 1,
+                  border: '1.5px solid #555',
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                }}
+              >
+                <p
+                  style={{
+                    margin: '0 0 8px',
+                    fontWeight: 'bold',
+                    fontSize: 13,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 16,
+                      height: 16,
+                      border: '2px solid #D8722A',
+                      borderRadius: 3,
+                      flexShrink: 0,
+                    }}
+                  ></span>
                   QC หลังติดตั้ง
                 </p>
-                <p style={{ margin: 0, fontSize: 11 }}>วันที่ ....................................</p>
+                <p style={{ margin: 0, fontSize: 11 }}>
+                  วันที่ ....................................
+                </p>
               </div>
             </div>
           </div>
         ))}
         {categories.includes('ฟิล์มกรองแสง') && (
           <div style={{ pageBreakBefore: 'always' }}>
-            <h2 style={{ textAlign: 'center', marginBottom: 10, fontSize: 16 }}>ใบตรวจเช็คสภาพก่อนติดตั้ง (ฟิล์มกรองแสง)</h2>
+            <h2 style={{ textAlign: 'center', marginBottom: 10, fontSize: 16 }}>
+              ใบตรวจเช็คสภาพก่อนติดตั้ง (ฟิล์มกรองแสง)
+            </h2>
             <div style={{ fontSize: 11, marginBottom: 8 }}>
               <span>
                 ยี่ห้อ/รุ่นรถ:{' '}
@@ -313,12 +428,17 @@ export function PrintJobSheet({
                 title: 'ระบบไฟฟ้า',
                 items: ['ไฟหน้า', 'ไฟหรี่', 'ไฟสูง', 'สปอตไลท์', 'ไฟเลี้ยวหน้า', 'ไฟเลี้ยวข้าง'],
               },
-              { title: 'ระบบเครื่องเสียง', items: ['เครื่องเล่นวิทยุเดิม', 'ทวิตเตอร์ซ้าย-ขวา', 'ลำโพงหน้า'] },
+              {
+                title: 'ระบบเครื่องเสียง',
+                items: ['เครื่องเล่นวิทยุเดิม', 'ทวิตเตอร์ซ้าย-ขวา', 'ลำโพงหน้า'],
+              },
               { title: 'สภาพภายในรถ', items: ['เพดานรถ', 'คอนโซลรถ', 'เบาะรถ', 'แผงข้าง'] },
               { title: 'สภาพภายนอกรถ', items: ['สภาพรอบคัน', 'กระจกบานหน้า-หลัง', 'กระจกบานข้าง'] },
             ].map((section) => (
               <div key={section.title} style={{ marginBottom: 6 }}>
-                <p style={{ fontSize: 10, fontWeight: 'bold', margin: '0 0 2px' }}>{section.title}</p>
+                <p style={{ fontSize: 10, fontWeight: 'bold', margin: '0 0 2px' }}>
+                  {section.title}
+                </p>
                 <table className="compact-table">
                   <thead>
                     <tr>
@@ -343,7 +463,9 @@ export function PrintJobSheet({
                 </table>
               </div>
             ))}
-            <p style={{ fontSize: 11, marginTop: 20 }}>ลงชื่อ................................ผู้ตรวจสอบก่อนติดตั้ง</p>
+            <p style={{ fontSize: 11, marginTop: 20 }}>
+              ลงชื่อ................................ผู้ตรวจสอบก่อนติดตั้ง
+            </p>
           </div>
         )}
         {categories.includes('ฟิล์มกันรอย') && (
@@ -383,12 +505,31 @@ export function PrintJobSheet({
             </table>
             <div style={{ display: 'flex', gap: 14, marginBottom: 12, alignItems: 'flex-start' }}>
               <div
-                style={{ flex: 1, minHeight: 150, border: '1px dashed #999', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#999' }}
+                style={{
+                  flex: 1,
+                  minHeight: 150,
+                  border: '1px dashed #999',
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 10,
+                  color: '#999',
+                }}
               >
                 แผนผังตัวรถ (สำหรับทำเครื่องหมายจุดที่ตรวจพบ)
               </div>
               <div style={{ width: 200, flexShrink: 0 }}>
-                <p style={{ fontSize: 12, fontWeight: 'bold', margin: '0 0 4px', textAlign: 'center' }}>ภายในตัวรถ</p>
+                <p
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    margin: '0 0 4px',
+                    textAlign: 'center',
+                  }}
+                >
+                  ภายในตัวรถ
+                </p>
                 <table style={{ fontSize: 10 }}>
                   <tbody>
                     <tr>
@@ -417,12 +558,31 @@ export function PrintJobSheet({
             </div>
             <div style={{ display: 'flex', gap: 14, marginBottom: 16, alignItems: 'flex-start' }}>
               <div
-                style={{ flex: 1, minHeight: 150, border: '1px dashed #999', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#999' }}
+                style={{
+                  flex: 1,
+                  minHeight: 150,
+                  border: '1px dashed #999',
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 10,
+                  color: '#999',
+                }}
               >
                 แผนผังตัวรถ (ด้านนอก)
               </div>
               <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 12, fontWeight: 'bold', margin: '0 0 4px', textAlign: 'center' }}>ภายนอกตัวรถ</p>
+                <p
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    margin: '0 0 4px',
+                    textAlign: 'center',
+                  }}
+                >
+                  ภายนอกตัวรถ
+                </p>
                 <table style={{ fontSize: 11, marginBottom: 10, width: 200 }}>
                   <tbody>
                     <tr>
@@ -437,7 +597,9 @@ export function PrintJobSheet({
                 </table>
               </div>
             </div>
-            <p style={{ fontSize: 11, marginTop: 20 }}>ลงชื่อ................................ผู้ตรวจสอบก่อนติดตั้ง</p>
+            <p style={{ fontSize: 11, marginTop: 20 }}>
+              ลงชื่อ................................ผู้ตรวจสอบก่อนติดตั้ง
+            </p>
           </div>
         )}
       </div>
@@ -468,7 +630,15 @@ export function PrintJobSheet({
           </p>
         </div>
         <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>{shopName(t.shop)}</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 28px', fontSize: 13, marginBottom: 8 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px 28px',
+            fontSize: 13,
+            marginBottom: 8,
+          }}
+        >
           <span>
             ชื่อลูกค้า: <b>{t.customer}</b>
           </span>
@@ -476,7 +646,15 @@ export function PrintJobSheet({
             เบอร์โทร: <b>{t.phone}</b>
           </span>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 22px', fontSize: 13, marginBottom: 10 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px 22px',
+            fontSize: 13,
+            marginBottom: 10,
+          }}
+        >
           <span>
             ยี่ห้อรถ: <b>{t.brand}</b>
           </span>
@@ -504,13 +682,23 @@ export function PrintJobSheet({
                 if (!grouped[p.product]) grouped[p.product] = [];
                 grouped[p.product].push(p.position);
               });
-              rows = Object.entries(grouped).map(([product, labels]) => ({ label: labels.join(', '), product }));
+              rows = Object.entries(grouped).map(([product, labels]) => ({
+                label: labels.join(', '),
+                product,
+              }));
             } else {
               rows = [{ label: null, product: i.sold }];
             }
             return (
               <div key={idx} style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'baseline',
+                    marginBottom: 10,
+                  }}
+                >
                   <p
                     style={{
                       margin: 0,
@@ -528,19 +716,32 @@ export function PrintJobSheet({
                     <div style={{ fontSize: 11, color: '#666' }}>
                       ช่าง:{' '}
                       <b>
-                        {t.techByCategory && t.techByCategory[i.category] && t.techByCategory[i.category].length
+                        {t.techByCategory &&
+                        t.techByCategory[i.category] &&
+                        t.techByCategory[i.category].length
                           ? t.techByCategory[i.category].join(', ')
                           : '-'}
                       </b>
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 'bold', marginTop: 2 }}>ยอดรวม: {fmt(itemNetPrice(mapItem(i)))}</div>
+                    <div style={{ fontSize: 14, fontWeight: 'bold', marginTop: 2 }}>
+                      ยอดรวม: {fmt(itemNetPrice(mapItem(i)))}
+                    </div>
                   </div>
                 </div>
                 {rows.map((r, ri) => {
                   const stockMatch = stock.find((s) => s.name === r.product);
                   const short = stockMatch?.shortName || r.product;
                   return (
-                    <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, paddingLeft: 12 }}>
+                    <div
+                      key={ri}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        marginBottom: 8,
+                        paddingLeft: 12,
+                      }}
+                    >
                       {r.label && <span style={emboss}>{r.label}</span>}
                       <span style={{ fontSize: 18, fontWeight: 'bold' }}>{short}</span>
                       <span style={{ fontSize: 11, color: '#777' }}>({r.product})</span>
@@ -562,7 +763,14 @@ export function PrintJobSheet({
             <span>{fmt(paid)}</span>
           </div>
           {total - paid <= 0 ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', color: '#2F7A4F' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontWeight: 'bold',
+                color: '#2F7A4F',
+              }}
+            >
               <span>ชำระครบแล้ว</span>
               <span>-</span>
             </div>
@@ -592,15 +800,22 @@ export function PrintJobSheet({
                 <span>
                   {(() => {
                     const cu = t.items.reduce(
-                      (s, i) => (i.interested ? s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0)) : s),
-                      0
+                      (s, i) =>
+                        i.interested
+                          ? s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0))
+                          : s,
+                      0,
                     );
                     return (cu >= 0 ? '+' : '') + fmt(cu);
                   })()}
                 </span>
               </div>
               <p style={{ margin: '2px 0 0', fontSize: 10, color: '#999' }}>
-                จาก {t.items.filter((i) => i.interested).map((i) => i.interested).join(', ')}
+                จาก{' '}
+                {t.items
+                  .filter((i) => i.interested)
+                  .map((i) => i.interested)
+                  .join(', ')}
               </p>
             </div>
           )}
@@ -613,9 +828,29 @@ export function PrintJobSheet({
         )}
         {extrasBlock(16)}
         <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: 1, border: '1.5px solid #555', borderRadius: 6, padding: '10px 12px' }}>
-            <p style={{ margin: '0 0 8px', fontWeight: 'bold', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ display: 'inline-block', width: 16, height: 16, border: '2px solid #D8722A', borderRadius: 3, flexShrink: 0 }}></span>
+          <div
+            style={{ flex: 1, border: '1.5px solid #555', borderRadius: 6, padding: '10px 12px' }}
+          >
+            <p
+              style={{
+                margin: '0 0 8px',
+                fontWeight: 'bold',
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 16,
+                  height: 16,
+                  border: '2px solid #D8722A',
+                  borderRadius: 3,
+                  flexShrink: 0,
+                }}
+              ></span>
               ส่งมอบงาน
             </p>
             <p style={{ margin: 0, fontSize: 11 }}>วันที่ ....................................</p>
@@ -649,7 +884,15 @@ export function PrintJobSheet({
           </p>
         </div>
         <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>{shopName(t.shop)}</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 28px', fontSize: 13, marginBottom: 8 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px 28px',
+            fontSize: 13,
+            marginBottom: 8,
+          }}
+        >
           <span>
             ชื่อลูกค้า: <b>{t.customer}</b>
           </span>
@@ -659,7 +902,15 @@ export function PrintJobSheet({
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 22px', fontSize: 13, marginBottom: 10 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '4px 22px',
+            fontSize: 13,
+            marginBottom: 10,
+          }}
+        >
           {t.brand && (
             <span>
               ยี่ห้อรถ: <b>{t.brand}</b>
@@ -687,7 +938,15 @@ export function PrintJobSheet({
           )}
         </div>
         {t.extras?.['นอกสถานที่'] && (
-          <div style={{ fontSize: 12, marginBottom: 10, background: '#EAF1FB', borderRadius: 6, padding: '8px 10px' }}>
+          <div
+            style={{
+              fontSize: 12,
+              marginBottom: 10,
+              background: '#EAF1FB',
+              borderRadius: 6,
+              padding: '8px 10px',
+            }}
+          >
             <p style={{ margin: 0 }}>
               <b>สถานที่:</b> {(t.extras['นอกสถานที่'].mapLabel as string) || '-'}
             </p>
@@ -714,14 +973,24 @@ export function PrintJobSheet({
                 if (!grouped[p.product]) grouped[p.product] = [];
                 grouped[p.product].push(p.position);
               });
-              rows = Object.entries(grouped).map(([product, labels]) => ({ label: labels.join(', '), product }));
+              rows = Object.entries(grouped).map(([product, labels]) => ({
+                label: labels.join(', '),
+                product,
+              }));
             } else {
               rows = [{ label: null, product: i.sold }];
             }
             return (
               <div key={idx} style={{ marginBottom: 14 }}>
                 <p
-                  style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 900, borderBottom: '2px solid #333', display: 'inline-block', paddingBottom: 2 }}
+                  style={{
+                    margin: '0 0 8px',
+                    fontSize: 15,
+                    fontWeight: 900,
+                    borderBottom: '2px solid #333',
+                    display: 'inline-block',
+                    paddingBottom: 2,
+                  }}
                 >
                   {i.category}
                 </p>
@@ -729,7 +998,16 @@ export function PrintJobSheet({
                   const stockMatch = stock.find((s) => s.name === r.product);
                   const short = stockMatch?.shortName || r.product;
                   return (
-                    <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, paddingLeft: 12 }}>
+                    <div
+                      key={ri}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        marginBottom: 6,
+                        paddingLeft: 12,
+                      }}
+                    >
                       {r.label && <span style={emboss}>{r.label}</span>}
                       <span style={{ fontSize: 15, fontWeight: 'bold' }}>{short}</span>
                       <span style={{ fontSize: 11, color: '#777' }}>({r.product})</span>
@@ -740,17 +1018,39 @@ export function PrintJobSheet({
             );
           })}
         <div style={{ borderTop: '1.5px solid #333', margin: '10px 0 16px' }}></div>
-        <p style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 6 }}>พื้นที่สำหรับวาดแบบอาคาร/ตำแหน่งติดตั้งที่หน้างาน</p>
-        <div style={{ border: '1.5px dashed #999', borderRadius: 6, minHeight: 380, width: '100%', boxSizing: 'border-box' }}></div>
+        <p style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 6 }}>
+          พื้นที่สำหรับวาดแบบอาคาร/ตำแหน่งติดตั้งที่หน้างาน
+        </p>
+        <div
+          style={{
+            border: '1.5px dashed #999',
+            borderRadius: 6,
+            minHeight: 380,
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        ></div>
       </div>
     );
   } else if (printMode === 'doc') {
-    const totalDiscount = t.items.reduce((s, i) => s + (Number(i.soldPrice || 0) - itemNetPrice(mapItem(i))), 0);
+    const totalDiscount = t.items.reduce(
+      (s, i) => s + (Number(i.soldPrice || 0) - itemNetPrice(mapItem(i))),
+      0,
+    );
     content = (
       <div className="print-area">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: 16,
+          }}
+        >
           <div>
-            <h2 style={{ margin: 0 }}>{(showCompanyInfo && info.companyName) || shopName(t.shop)}</h2>
+            <h2 style={{ margin: 0 }}>
+              {(showCompanyInfo && info.companyName) || shopName(t.shop)}
+            </h2>
             {showCompanyInfo && info.companyName && (
               <p style={{ margin: '2px 0 0', fontSize: 12, color: '#333' }}>{shopName(t.shop)}</p>
             )}
@@ -761,18 +1061,29 @@ export function PrintJobSheet({
               </p>
             )}
             {showCompanyInfo && info.taxId && (
-              <p style={{ margin: '2px 0 0', fontSize: 11, color: '#555' }}>เลขผู้เสียภาษี {info.taxId}</p>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: '#555' }}>
+                เลขผู้เสียภาษี {info.taxId}
+              </p>
             )}
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={{ margin: 0, fontSize: 12 }}>
               เลขที่เอกสาร{' '}
-              {docType === 'ใบเสนอราคา' ? 'QT' : docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน' ? 'INV' : 'RCT'}-
-              {t.shop.toUpperCase()}-{t.id.replace('JT-', '')}
+              {docType === 'ใบเสนอราคา'
+                ? 'QT'
+                : docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน'
+                  ? 'INV'
+                  : 'RCT'}
+              -{t.shop.toUpperCase()}-{t.id.replace('JT-', '')}
             </p>
             <h3 style={{ margin: '4px 0 0' }}>{docType}</h3>
             <p style={{ fontSize: 12, margin: '2px 0 0' }}>
-              วันที่ {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+              วันที่{' '}
+              {new Date().toLocaleDateString('th-TH', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
             </p>
           </div>
         </div>
@@ -851,7 +1162,15 @@ export function PrintJobSheet({
           </tbody>
         </table>
         {totalDiscount > 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#B23A48', marginBottom: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: 12,
+              color: '#B23A48',
+              marginBottom: 8,
+            }}
+          >
             <span>ส่วนลดรวม</span>
             <span>-{fmt(totalDiscount)}</span>
           </div>
@@ -883,7 +1202,9 @@ export function PrintJobSheet({
             </tbody>
           </table>
         )}
-        <p style={{ textAlign: 'right', fontStyle: 'italic', margin: '0 0 16px', fontSize: 12 }}>( {thaiBahtText(total)} )</p>
+        <p style={{ textAlign: 'right', fontStyle: 'italic', margin: '0 0 16px', fontSize: 12 }}>
+          ( {thaiBahtText(total)} )
+        </p>
         {docType !== 'ใบเสนอราคา' && (
           <div style={{ marginBottom: 16 }}>
             <p style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>รายละเอียดการชำระเงิน</p>
@@ -894,12 +1215,21 @@ export function PrintJobSheet({
                     <td style={{ padding: '3px 6px' }}>
                       {p.type} &middot; {p.method}
                     </td>
-                    <td style={{ width: 110, textAlign: 'right', padding: '3px 6px' }}>{fmt(Number(p.amount))}</td>
+                    <td style={{ width: 110, textAlign: 'right', padding: '3px 6px' }}>
+                      {fmt(Number(p.amount))}
+                    </td>
                   </tr>
                 ))}
                 <tr>
                   <th style={{ padding: '3px 6px' }}>สถานะ</th>
-                  <td style={{ width: 110, fontWeight: 'bold', textAlign: 'right', padding: '3px 6px' }}>
+                  <td
+                    style={{
+                      width: 110,
+                      fontWeight: 'bold',
+                      textAlign: 'right',
+                      padding: '3px 6px',
+                    }}
+                  >
                     {total - paid <= 0 ? 'ชำระครบแล้ว' : `คงเหลือ ${fmt(total - paid)}`}
                   </td>
                 </tr>
@@ -908,14 +1238,25 @@ export function PrintJobSheet({
           </div>
         )}
         {showDisclaimer && (
-          <p style={{ fontSize: 10, color: '#777', lineHeight: 1.6, marginBottom: 20, borderTop: '1px solid #ddd', paddingTop: 8 }}>
+          <p
+            style={{
+              fontSize: 10,
+              color: '#777',
+              lineHeight: 1.6,
+              marginBottom: 20,
+              borderTop: '1px solid #ddd',
+              paddingTop: 8,
+            }}
+          >
             กรุณาตรวจเช็คบริเวณรอบรถของท่านทุกครั้งก่อนเข้าบริการ
             หากท่านนำรถไปใช้แล้วเกิดความเสียหายบริเวณรอบรถทางร้านจะไม่รับผิดชอบใดๆทั้งสิ้น
             ยกเว้นความเสียหายอยู่ในการรับประกันสินค้า
           </p>
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 44, fontSize: 12 }}>
-          <span>ลงชื่อ..................... {docType === 'ใบเสนอราคา' ? 'ผู้เสนอราคา' : 'ผู้รับเงิน'}</span>
+          <span>
+            ลงชื่อ..................... {docType === 'ใบเสนอราคา' ? 'ผู้เสนอราคา' : 'ผู้รับเงิน'}
+          </span>
         </div>
       </div>
     );
@@ -925,7 +1266,11 @@ export function PrintJobSheet({
 }
 
 // Map a client TicketItem into the pure-domain shape itemNetPrice expects.
-function mapItem(i: { soldPrice: number | string; discountType?: 'percent' | 'amount' | null; discountValue?: number | string }) {
+function mapItem(i: {
+  soldPrice: number | string;
+  discountType?: 'percent' | 'amount' | null;
+  discountValue?: number | string;
+}) {
   return {
     soldPrice: Number(i.soldPrice || 0),
     discountType: i.discountType ?? undefined,

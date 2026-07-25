@@ -33,9 +33,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext> => {
   const resolved = await resolveSessionContext(supabase);
 
   if (!resolved.ok) {
-    redirect(
-      resolved.reason === 'unauthenticated' ? '/login' : `/login?error=${resolved.reason}`
-    );
+    redirect(resolved.reason === 'unauthenticated' ? '/login' : `/login?error=${resolved.reason}`);
   }
 
   return resolved.session;

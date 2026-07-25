@@ -23,19 +23,43 @@ describe('tickets schema', () => {
 
   it('stores a ticket with items, positions, and a payment', async () => {
     await supabase.from('tickets').insert({
-      id: TICKET_ID, shop_id: 'cm', customer_name: 'คุณ ทดสอบ', phone: '080-000-0000',
-      plate: '1กก 1111', car_type: 'เก๋งเล็ก', brand: 'Toyota', model: 'Vios', color: 'ขาว',
-      service_type: 'เข้าทำ/ติดตั้ง', status: 'จองแล้ว', booking_channel: 'Walk-in',
-      drop_off_date: '2026-07-23T09:00:00Z', pickup_date: '2026-07-24T09:00:00Z',
+      id: TICKET_ID,
+      shop_id: 'cm',
+      customer_name: 'คุณ ทดสอบ',
+      phone: '080-000-0000',
+      plate: '1กก 1111',
+      car_type: 'เก๋งเล็ก',
+      brand: 'Toyota',
+      model: 'Vios',
+      color: 'ขาว',
+      service_type: 'เข้าทำ/ติดตั้ง',
+      status: 'จองแล้ว',
+      booking_channel: 'Walk-in',
+      drop_off_date: '2026-07-23T09:00:00Z',
+      pickup_date: '2026-07-24T09:00:00Z',
     });
-    const { data: item } = await supabase.from('ticket_items').insert({
-      ticket_id: TICKET_ID, category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%', sold_price: 1300,
-    }).select().single();
+    const { data: item } = await supabase
+      .from('ticket_items')
+      .insert({
+        ticket_id: TICKET_ID,
+        category: 'ฟิล์มกรองแสง',
+        sold: 'ฟิล์ม FINNIX CT 40%',
+        sold_price: 1300,
+      })
+      .select()
+      .single();
     await supabase.from('ticket_item_positions').insert({
-      ticket_item_id: item!.id, position: 'บานหน้า', product: 'ฟิล์ม FINNIX CT 40%', price: 1300,
+      ticket_item_id: item!.id,
+      position: 'บานหน้า',
+      product: 'ฟิล์ม FINNIX CT 40%',
+      price: 1300,
     });
     await supabase.from('ticket_payments').insert({
-      ticket_id: TICKET_ID, type: 'มัดจำ', method: 'โอน TTB', amount: 500, paid_at: '2026-07-23',
+      ticket_id: TICKET_ID,
+      type: 'มัดจำ',
+      method: 'โอน TTB',
+      amount: 500,
+      paid_at: '2026-07-23',
     });
 
     const { data: full } = await supabase

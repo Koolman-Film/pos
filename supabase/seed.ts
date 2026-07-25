@@ -40,10 +40,34 @@ type SeedUser = {
 };
 
 const USERS: SeedUser[] = [
-  { email: 'admin@finnixfilm.com', name: 'แอดมินระบบ', roleId: 'admin', seesAllShops: true, shopAccess: [] },
-  { email: 'exec@finnixfilm.com', name: 'ผู้บริหาร', roleId: 'exec', seesAllShops: true, shopAccess: [] },
-  { email: 'sales@finnixfilm.com', name: 'พนักงานขาย', roleId: 'sales', seesAllShops: false, shopAccess: ['cm'] },
-  { email: 'tech@finnixfilm.com', name: 'หัวหน้าช่าง', roleId: 'tech', seesAllShops: false, shopAccess: ['cm'] },
+  {
+    email: 'admin@finnixfilm.com',
+    name: 'แอดมินระบบ',
+    roleId: 'admin',
+    seesAllShops: true,
+    shopAccess: [],
+  },
+  {
+    email: 'exec@finnixfilm.com',
+    name: 'ผู้บริหาร',
+    roleId: 'exec',
+    seesAllShops: true,
+    shopAccess: [],
+  },
+  {
+    email: 'sales@finnixfilm.com',
+    name: 'พนักงานขาย',
+    roleId: 'sales',
+    seesAllShops: false,
+    shopAccess: ['cm'],
+  },
+  {
+    email: 'tech@finnixfilm.com',
+    name: 'หัวหน้าช่าง',
+    roleId: 'tech',
+    seesAllShops: false,
+    shopAccess: ['cm'],
+  },
 ];
 
 /**
@@ -75,7 +99,7 @@ async function main() {
   if (!url || !serviceKey) {
     throw new Error(
       'Need NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (see .env.local.example).\n' +
-        'Get them from `npx supabase status`.'
+        'Get them from `npx supabase status`.',
     );
   }
 
@@ -90,7 +114,7 @@ async function main() {
   const { error: rolesError } = await admin.from('roles').select('id').limit(1);
   if (rolesError) {
     throw new Error(
-      `Cannot read the roles table (${rolesError.message}). Run \`npx supabase db reset\` first.`
+      `Cannot read the roles table (${rolesError.message}). Run \`npx supabase db reset\` first.`,
     );
   }
 
@@ -130,7 +154,7 @@ async function main() {
         active: true,
         sees_all_shops: u.seesAllShops,
       },
-      { onConflict: 'id' }
+      { onConflict: 'id' },
     );
     if (profileError) throw profileError;
 

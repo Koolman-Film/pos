@@ -55,7 +55,10 @@ export function TicketDetailClient({
   initialCorporateBuyers: CorporateBuyer[];
   shopInfo: Record<string, ShopInfo>;
   saveAction: (payload: TicketSavePayload) => Promise<SaveResult>;
-  optionAction: (listKey: OptionListName, values: string[]) => Promise<{ ok: boolean; error?: string }>;
+  optionAction: (
+    listKey: OptionListName,
+    values: string[],
+  ) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (

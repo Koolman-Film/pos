@@ -1,4 +1,7 @@
-import { CommissionModule, type CommissionRuleView } from '@/components/commission/CommissionModule';
+import {
+  CommissionModule,
+  type CommissionRuleView,
+} from '@/components/commission/CommissionModule';
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 
@@ -20,7 +23,9 @@ export default async function CommissionPage() {
   const [{ data: ruleRows }, { data: shopRows }] = await Promise.all([
     supabase
       .from('commission_rules')
-      .select('id, category, name, type, value, shop_id, active, commission_rule_teams(team_member)')
+      .select(
+        'id, category, name, type, value, shop_id, active, commission_rule_teams(team_member)',
+      )
       .order('id'),
     supabase.from('shops').select('id, name').order('sort_order'),
   ]);
@@ -38,9 +43,7 @@ export default async function CommissionPage() {
   }));
 
   // Only the shops this caller may see, in canonical sort order.
-  const accessibleShops = (shopRows ?? []).filter((s) =>
-    session.accessibleShopIds.includes(s.id)
-  );
+  const accessibleShops = (shopRows ?? []).filter((s) => session.accessibleShopIds.includes(s.id));
 
   return (
     <CommissionModule

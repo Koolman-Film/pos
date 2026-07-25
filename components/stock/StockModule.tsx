@@ -140,7 +140,11 @@ export function StockModule({
 
   function getFilmPrice(category: string, product: string, position: string, carType: string) {
     const m = priceMatrix.find(
-      (e) => e.category === category && e.product === product && e.position === position && e.carType === carType
+      (e) =>
+        e.category === category &&
+        e.product === product &&
+        e.position === position &&
+        e.carType === carType,
     );
     return m ? m.price : '';
   }
@@ -149,12 +153,22 @@ export function StockModule({
     product: string,
     position: string,
     carType: string,
-    price: string
+    price: string,
   ) {
-    const entry: FilmPriceEntry = { category, product, position, carType, price: Number(price) || 0 };
+    const entry: FilmPriceEntry = {
+      category,
+      product,
+      position,
+      carType,
+      price: Number(price) || 0,
+    };
     setPriceMatrix((prev) => {
       const idx = prev.findIndex(
-        (e) => e.category === category && e.product === product && e.position === position && e.carType === carType
+        (e) =>
+          e.category === category &&
+          e.product === product &&
+          e.position === position &&
+          e.carType === carType,
       );
       if (idx >= 0) {
         const copy = [...prev];
@@ -166,7 +180,9 @@ export function StockModule({
     await actions.setFilmPrice?.(entry);
   }
 
-  const [shopFilter, setShopFilter] = useState(canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all');
+  const [shopFilter, setShopFilter] = useState(
+    canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
+  );
   const [period, setPeriod] = useState('today');
   const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
@@ -175,7 +191,12 @@ export function StockModule({
 
   const stockScopedToAccess = stock.filter((s) => accessibleShops.some((a) => a.id === s.shop));
 
-  const [wd, setWd] = useState({ id: stock[0]?.id ?? 0, qty: 1, type: 'สินค้าตัวอย่าง', reason: '' });
+  const [wd, setWd] = useState({
+    id: stock[0]?.id ?? 0,
+    qty: 1,
+    type: 'สินค้าตัวอย่าง',
+    reason: '',
+  });
   const [addStk, setAddStk] = useState({
     mode: 'existing' as 'existing' | 'new',
     existingId: stock[0]?.id ?? 0,
@@ -191,7 +212,15 @@ export function StockModule({
     reason: 'ซื้อเพิ่ม',
   });
   const [adjustments, setAdjustments] = useState<
-    { id: number; item: string; before: number; after: number; diff: number; note: string; date: string }[]
+    {
+      id: number;
+      item: string;
+      before: number;
+      after: number;
+      diff: number;
+      note: string;
+      date: string;
+    }[]
   >([]);
   const [adj, setAdj] = useState({ id: stock[0]?.id ?? 0, counted: 0, note: '' });
 
@@ -268,7 +297,9 @@ export function StockModule({
   async function confirmBulkImport() {
     const validRows = bulkRows.filter((r) => r.valid);
     if (validRows.length === 0) return;
-    const newCats = [...new Set(validRows.map((r) => r.category))].filter((c) => !categories.includes(c));
+    const newCats = [...new Set(validRows.map((r) => r.category))].filter(
+      (c) => !categories.includes(c),
+    );
     if (newCats.length) setCategories([...categories, ...newCats]);
     await actions.bulkImport?.(
       validRows.map((r) => ({
@@ -280,14 +311,15 @@ export function StockModule({
         qty: r.qty,
         cost: r.cost,
         sellPrice: r.sellPrice,
-      }))
+      })),
     );
     const skipped = bulkRows.length - validRows.length;
     setBulkRows([]);
     setBulkFileName('');
     setPanel(null);
     window.alert(
-      `นำเข้าสำเร็จ ${validRows.length} รายการ` + (skipped > 0 ? ` (ข้าม ${skipped} แถวที่ข้อมูลไม่ครบ)` : '')
+      `นำเข้าสำเร็จ ${validRows.length} รายการ` +
+        (skipped > 0 ? ` (ข้าม ${skipped} แถวที่ข้อมูลไม่ครบ)` : ''),
     );
   }
 
@@ -303,9 +335,11 @@ export function StockModule({
     shopFilter === 'all' ? withdrawals : withdrawals.filter((w) => w.shop === shopFilter);
   const lowStock = visible.filter((s) => s.qty < s.min).length;
   const totalValue = visible.reduce((sum, i) => sum + i.qty * (i.cost || 0), 0);
-  const shopScoped = branchFilter === 'all' ? visible : visible.filter((s) => s.shop === branchFilter);
+  const shopScoped =
+    branchFilter === 'all' ? visible : visible.filter((s) => s.shop === branchFilter);
   const catOptions = [...new Set(shopScoped.map((s) => s.category))];
-  const catScoped = catFilter === 'all' ? shopScoped : shopScoped.filter((s) => s.category === catFilter);
+  const catScoped =
+    catFilter === 'all' ? shopScoped : shopScoped.filter((s) => s.category === catFilter);
   const nameOptions = [...new Set(catScoped.map((s) => s.name))];
   const searchQ = search.trim().toLowerCase();
   const filtered = catScoped.filter(
@@ -314,15 +348,19 @@ export function StockModule({
       (!searchQ ||
         s.name.toLowerCase().includes(searchQ) ||
         (s.shortName || '').toLowerCase().includes(searchQ) ||
-        s.sku.toLowerCase().includes(searchQ))
+        s.sku.toLowerCase().includes(searchQ)),
   );
   const filteredTotalValue = filtered.reduce((sum, i) => sum + i.qty * (i.cost || 0), 0);
-  const exportShopIds = accessibleShops.map((sh) => sh.id).filter((id) => filtered.some((s) => s.shop === id));
+  const exportShopIds = accessibleShops
+    .map((sh) => sh.id)
+    .filter((id) => filtered.some((s) => s.shop === id));
   const exportGroups = exportShopIds.map((id) => ({
     shopId: id,
     items: filtered
       .filter((s) => s.shop === id)
-      .sort((a, b) => a.category.localeCompare(b.category, 'th') || a.name.localeCompare(b.name, 'th')),
+      .sort(
+        (a, b) => a.category.localeCompare(b.category, 'th') || a.name.localeCompare(b.name, 'th'),
+      ),
   }));
 
   async function submitWithdraw() {
@@ -430,7 +468,10 @@ export function StockModule({
           มูลค่ารวม: s.qty * (s.cost || 0),
         }));
         const ws = XLSX.utils.json_to_sheet(data);
-        const sheetName = shopName(g.shopId).replace(/[:\\/?*[\]]/g, '').slice(0, 31) || g.shopId;
+        const sheetName =
+          shopName(g.shopId)
+            .replace(/[:\\/?*[\]]/g, '')
+            .slice(0, 31) || g.shopId;
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       });
     }
@@ -494,7 +535,8 @@ export function StockModule({
         <div className="card p-5 mb-4 fade-page">
           <p className="text-sm font-semibold mb-1">นำเข้าสินค้าหลาย SKU พร้อมกัน</p>
           <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
-            ดาวน์โหลด template กรอกข้อมูลในไฟล์ แล้วอัปโหลดกลับเข้าระบบเพื่อขึ้นทะเบียนสินค้าใหม่หลายรายการพร้อมกัน
+            ดาวน์โหลด template กรอกข้อมูลในไฟล์
+            แล้วอัปโหลดกลับเข้าระบบเพื่อขึ้นทะเบียนสินค้าใหม่หลายรายการพร้อมกัน
           </p>
           <div className="flex flex-wrap gap-2 mb-4">
             <button
@@ -506,7 +548,12 @@ export function StockModule({
             <label className="btn-outline text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1.5 cursor-pointer">
               <i className="fa-solid fa-file-arrow-up"></i>
               {bulkFileName || 'เลือกไฟล์ที่กรอกแล้ว...'}
-              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleBulkFile} />
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleBulkFile}
+              />
             </label>
           </div>
           {bulkRows.length > 0 && (
@@ -519,7 +566,10 @@ export function StockModule({
                         <th
                           key={h}
                           className="text-xs text-left px-2 py-2"
-                          style={{ borderBottom: '1px solid var(--line)', color: 'var(--ink-soft)' }}
+                          style={{
+                            borderBottom: '1px solid var(--line)',
+                            color: 'var(--ink-soft)',
+                          }}
                         >
                           {h}
                         </th>
@@ -547,16 +597,28 @@ export function StockModule({
                   <tbody>
                     {bulkRows.map((r, i) => (
                       <tr key={i}>
-                        <td className="text-xs px-2 py-1.5" style={{ borderBottom: '1px solid var(--line)' }}>
+                        <td
+                          className="text-xs px-2 py-1.5"
+                          style={{ borderBottom: '1px solid var(--line)' }}
+                        >
                           {r.sku || '-'}
                         </td>
-                        <td className="text-xs px-2 py-1.5" style={{ borderBottom: '1px solid var(--line)' }}>
+                        <td
+                          className="text-xs px-2 py-1.5"
+                          style={{ borderBottom: '1px solid var(--line)' }}
+                        >
                           {r.name || '-'}
                         </td>
-                        <td className="text-xs px-2 py-1.5" style={{ borderBottom: '1px solid var(--line)' }}>
+                        <td
+                          className="text-xs px-2 py-1.5"
+                          style={{ borderBottom: '1px solid var(--line)' }}
+                        >
                           {r.category || '-'}
                         </td>
-                        <td className="text-xs px-2 py-1.5" style={{ borderBottom: '1px solid var(--line)' }}>
+                        <td
+                          className="text-xs px-2 py-1.5"
+                          style={{ borderBottom: '1px solid var(--line)' }}
+                        >
                           {r.shopRaw || '-'}
                         </td>
                         <td
@@ -643,7 +705,9 @@ export function StockModule({
                 className="field w-full text-sm px-3 py-2"
               >
                 <option value="">เลือกสินค้า...</option>
-                {[...new Set(stock.filter((s) => s.category === priceProdCat).map((s) => s.name))].map((n) => (
+                {[
+                  ...new Set(stock.filter((s) => s.category === priceProdCat).map((s) => s.name)),
+                ].map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
@@ -683,11 +747,17 @@ export function StockModule({
                         {pos}
                       </td>
                       {carTypes.map((ct) => (
-                        <td key={ct} className="px-1 py-1" style={{ borderBottom: '1px solid var(--line)' }}>
+                        <td
+                          key={ct}
+                          className="px-1 py-1"
+                          style={{ borderBottom: '1px solid var(--line)' }}
+                        >
                           <input
                             type="number"
                             value={getFilmPrice(priceProdCat, priceProd, pos, ct)}
-                            onChange={(e) => setFilmPrice(priceProdCat, priceProd, pos, ct, e.target.value)}
+                            onChange={(e) =>
+                              setFilmPrice(priceProdCat, priceProd, pos, ct, e.target.value)
+                            }
                             placeholder="0"
                             className="field text-xs px-2 py-1.5 w-24"
                           />
@@ -946,7 +1016,10 @@ export function StockModule({
               className="field w-full text-sm px-3 py-2"
             />
           </div>
-          <button onClick={submitAdjust} className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold">
+          <button
+            onClick={submitAdjust}
+            className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold"
+          >
             บันทึกการปรับสต็อก
           </button>
         </div>
@@ -1010,7 +1083,10 @@ export function StockModule({
               />
             </div>
           </div>
-          <button onClick={submitWithdraw} className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold">
+          <button
+            onClick={submitWithdraw}
+            className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold"
+          >
             บันทึกการเบิก
           </button>
         </div>
@@ -1033,12 +1109,18 @@ export function StockModule({
           <p className="text-xs" style={{ color: lowStock > 0 ? '#B23A48' : 'var(--ink-soft)' }}>
             ใกล้หมด
           </p>
-          <p className="text-xl font-bold mt-1" style={{ color: lowStock > 0 ? '#B23A48' : 'var(--ink)' }}>
+          <p
+            className="text-xl font-bold mt-1"
+            style={{ color: lowStock > 0 ? '#B23A48' : 'var(--ink)' }}
+          >
             {lowStock}
           </p>
         </div>
         {canSeePrices && (
-          <div className="card p-4" style={{ background: 'var(--primary-soft)', borderColor: 'transparent' }}>
+          <div
+            className="card p-4"
+            style={{ background: 'var(--primary-soft)', borderColor: 'transparent' }}
+          >
             <p className="text-xs" style={{ color: 'var(--primary)' }}>
               มูลค่าสต็อกรวม
             </p>
@@ -1144,7 +1226,10 @@ export function StockModule({
             );
           return cats.map((cat) => (
             <div key={cat} className="mb-4">
-              <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: 'var(--primary)' }}>
+              <p
+                className="text-xs font-bold uppercase tracking-wide mb-2"
+                style={{ color: 'var(--primary)' }}
+              >
                 {cat} ({filtered.filter((s) => s.category === cat).length})
               </p>
               <div className="flex flex-col gap-2.5">
@@ -1155,7 +1240,10 @@ export function StockModule({
                       <div
                         key={s.id}
                         className="rounded-2xl p-3.5"
-                        style={{ border: '1px solid var(--primary)', background: 'var(--primary-soft)' }}
+                        style={{
+                          border: '1px solid var(--primary)',
+                          background: 'var(--primary-soft)',
+                        }}
                       >
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                           <input
@@ -1166,7 +1254,9 @@ export function StockModule({
                           />
                           <input
                             value={editForm.shortName || ''}
-                            onChange={(e) => setEditForm({ ...editForm, shortName: e.target.value })}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, shortName: e.target.value })
+                            }
                             placeholder="ชื่อย่อ (keyword)"
                             className="field text-sm px-2.5 py-1.5"
                           />
@@ -1189,7 +1279,9 @@ export function StockModule({
                             <input
                               type="number"
                               value={editForm.qty}
-                              onChange={(e) => setEditForm({ ...editForm, qty: Number(e.target.value) })}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, qty: Number(e.target.value) })
+                              }
                               className="field text-sm px-2.5 py-1.5 w-full"
                             />
                           </div>
@@ -1200,7 +1292,9 @@ export function StockModule({
                             <input
                               type="number"
                               value={editForm.min}
-                              onChange={(e) => setEditForm({ ...editForm, min: Number(e.target.value) })}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, min: Number(e.target.value) })
+                              }
                               className="field text-sm px-2.5 py-1.5 w-full"
                             />
                           </div>
@@ -1213,7 +1307,9 @@ export function StockModule({
                                 <input
                                   type="number"
                                   value={editForm.cost ?? 0}
-                                  onChange={(e) => setEditForm({ ...editForm, cost: Number(e.target.value) })}
+                                  onChange={(e) =>
+                                    setEditForm({ ...editForm, cost: Number(e.target.value) })
+                                  }
                                   className="field text-sm px-2.5 py-1.5 w-full"
                                 />
                               </div>
@@ -1255,13 +1351,18 @@ export function StockModule({
                       <div
                         key={s.id}
                         className="group rounded-2xl p-3.5 flex items-center justify-between gap-2"
-                        style={{ border: s.qty < s.min ? '1px solid #C24B57' : '1px solid var(--line)' }}
+                        style={{
+                          border: s.qty < s.min ? '1px solid #C24B57' : '1px solid var(--line)',
+                        }}
                       >
                         <div className="min-w-0">
                           <p className="text-sm font-semibold">
                             {s.name}{' '}
                             {s.shortName && (
-                              <span className="text-xs font-normal" style={{ color: 'var(--ink-faint)' }}>
+                              <span
+                                className="text-xs font-normal"
+                                style={{ color: 'var(--ink-faint)' }}
+                              >
                                 ({s.shortName})
                               </span>
                             )}
@@ -1316,7 +1417,7 @@ export function StockModule({
                           )}
                         </div>
                       </div>
-                    )
+                    ),
                   )}
               </div>
             </div>
@@ -1395,48 +1496,46 @@ export function StockModule({
       {mounted &&
         createPortal(
           <div className="print-area">
-            <h2>
-              รายการสต็อกสินค้า{branchFilter !== 'all' ? ' · ' + shopName(branchFilter) : ''}
-            </h2>
-        <p>วันที่พิมพ์: {new Date().toLocaleDateString('th-TH')}</p>
-        {exportGroups.map((g) => (
-          <div key={g.shopId} style={{ marginBottom: 16 }}>
-            <h3>{shopName(g.shopId)}</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>ชื่อย่อสินค้า</th>
-                  <th>สินค้า</th>
-                  <th>หมวด</th>
-                  <th>คงเหลือ</th>
-                  <th>ขั้นต่ำ</th>
-                  <th style={{ textAlign: 'right' }}>ราคา/หน่วย</th>
-                  <th style={{ textAlign: 'right' }}>มูลค่ารวม</th>
-                </tr>
-              </thead>
-              <tbody>
-                {g.items.map((s) => (
-                  <tr key={s.id}>
-                    <td>{s.shortName || '-'}</td>
-                    <td>{s.name}</td>
-                    <td>{s.category}</td>
-                    <td>{s.qty}</td>
-                    <td>{s.min}</td>
-                    <td style={{ textAlign: 'right' }}>{fmt(s.cost || 0)}</td>
-                    <td style={{ textAlign: 'right' }}>{fmt(s.qty * (s.cost || 0))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
+            <h2>รายการสต็อกสินค้า{branchFilter !== 'all' ? ' · ' + shopName(branchFilter) : ''}</h2>
+            <p>วันที่พิมพ์: {new Date().toLocaleDateString('th-TH')}</p>
+            {exportGroups.map((g) => (
+              <div key={g.shopId} style={{ marginBottom: 16 }}>
+                <h3>{shopName(g.shopId)}</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ชื่อย่อสินค้า</th>
+                      <th>สินค้า</th>
+                      <th>หมวด</th>
+                      <th>คงเหลือ</th>
+                      <th>ขั้นต่ำ</th>
+                      <th style={{ textAlign: 'right' }}>ราคา/หน่วย</th>
+                      <th style={{ textAlign: 'right' }}>มูลค่ารวม</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.items.map((s) => (
+                      <tr key={s.id}>
+                        <td>{s.shortName || '-'}</td>
+                        <td>{s.name}</td>
+                        <td>{s.category}</td>
+                        <td>{s.qty}</td>
+                        <td>{s.min}</td>
+                        <td style={{ textAlign: 'right' }}>{fmt(s.cost || 0)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmt(s.qty * (s.cost || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
             <p style={{ textAlign: 'right' }}>
               <strong style={{ background: '#FFEB3B', padding: '2px 8px', borderRadius: 4 }}>
                 มูลค่าสต็อกรวม: {fmt(filteredTotalValue)} บาท
               </strong>
             </p>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );
