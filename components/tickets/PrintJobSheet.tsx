@@ -1,9 +1,10 @@
 'use client';
 
-import { CSSProperties, useEffect, useState } from 'react';
+import { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
 import { fmt, fmtThaiDate, thaiBahtText } from '@/lib/domain/format';
+import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
 import type { ShopInfo, StockRow, Ticket } from './types';
@@ -69,8 +70,7 @@ export function PrintJobSheet({
   showCompanyInfo: boolean;
   showDisclaimer: boolean;
 }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useIsMounted();
   if (!mounted || !printMode) return null;
 
   const categories = [...new Set(t.items.filter((i) => i.sold).map((i) => i.category))];

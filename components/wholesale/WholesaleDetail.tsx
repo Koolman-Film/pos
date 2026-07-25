@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { fmt, thaiBahtText } from '@/lib/domain/format';
+import { useIsMounted } from '@/lib/hooks/useIsMounted';
+import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { orderTotal, orderPaid } from '@/lib/domain/orders';
 
 import { CustomerPicker } from './CustomerPicker';
@@ -21,25 +23,6 @@ import {
   type WsStatusMap,
   type WsStockItem,
 } from './types';
-
-/**
- * Warn on navigating away with unsaved edits — the port of the prototype's
- * `useUnsavedChangesGuard` (reference/v0.4/finnix-film.html). Kept local to the
- * wholesale module; only wires the `beforeunload` guard (real browser tab
- * close/reload), which is all a client component can portably do.
- */
-function useUnsavedChangesGuard(isDirty: boolean, message: string) {
-  useEffect(() => {
-    if (!isDirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = message;
-      return message;
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [isDirty, message]);
-}
 
 /**
  * Ported from reference/v0.4/finnix-film.html:2690-2967.
@@ -110,9 +93,8 @@ export function WholesaleDetail({
   const can = canDo ?? ((k: string) => !!caps?.[k]);
   const [o, setO] = useState<WsOrder>(order);
   const [methods, setMethods] = useState<string[]>(paymentMethods);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsMounted();
   const [printMode, setPrintMode] = useState<'invoice' | 'receipt' | null>(null);
-  useEffect(() => setMounted(true), []);
 
   const isDirty = JSON.stringify(o) !== JSON.stringify(order);
   useUnsavedChangesGuard(isDirty, 'มีข้อมูลใน PO นี้ที่ยังไม่ได้บันทึก');

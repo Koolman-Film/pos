@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { currentMonthValue, daysAgoValue, todayValue } from '@/lib/domain/now';
+import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { StatusPill } from '@/components/ui/StatusPill';
 import type { Shop } from '@/components/ui/PeriodShopFilter';
@@ -90,25 +92,6 @@ export type ExportPayload = {
 };
 
 type ExpenseLine = { desc: string; category: string; amount: number | string };
-
-/** Ported verbatim from finnix-film.html:374-382 — warns before unloading a dirty form. */
-function useUnsavedChangesGuard(isDirty: boolean, message: string) {
-  useEffect(() => {
-    const w = window as unknown as { __hasUnsavedFormChanges?: boolean };
-    w.__hasUnsavedFormChanges = isDirty;
-    if (!isDirty) return () => void (w.__hasUnsavedFormChanges = false);
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = message || 'มีข้อมูลที่ยังไม่ได้บันทึก';
-      return e.returnValue;
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => {
-      window.removeEventListener('beforeunload', handler);
-      w.__hasUnsavedFormChanges = false;
-    };
-  }, [isDirty, message]);
-}
 
 /** Reconstruct the download of a base64 xlsx returned by the Server Action. */
 function downloadBase64(base64: string, fileName: string) {
@@ -208,11 +191,9 @@ export function AccountingModule({
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [period, setPeriod] = useState('today');
-  const [periodValue, setPeriodValue] = useState(new Date().toISOString().slice(0, 7));
-  const [rangeStart, setRangeStart] = useState(
-    new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
-  );
-  const [rangeEnd, setRangeEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
+  const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
+  const [rangeEnd, setRangeEnd] = useState(() => todayValue());
 
   const emptyEx = () => ({
     shop: firstShop,
@@ -237,11 +218,9 @@ export function AccountingModule({
 
   const [showCashDetail, setShowCashDetail] = useState(false);
   const [cashPeriod, setCashPeriod] = useState('today');
-  const [cashPeriodValue, setCashPeriodValue] = useState(new Date().toISOString().slice(0, 7));
-  const [cashRangeStart, setCashRangeStart] = useState(
-    new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
-  );
-  const [cashRangeEnd, setCashRangeEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [cashPeriodValue, setCashPeriodValue] = useState(() => currentMonthValue());
+  const [cashRangeStart, setCashRangeStart] = useState(() => daysAgoValue(6));
+  const [cashRangeEnd, setCashRangeEnd] = useState(() => todayValue());
   function inCashPeriod(dateObj: Date | string | null | undefined) {
     return isInPeriod(dateObj, cashPeriod, cashPeriodValue, cashRangeStart, cashRangeEnd);
   }
@@ -856,8 +835,8 @@ export function AccountingModule({
             </span>
           </div>
           <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
-            <i className="fa-solid fa-circle-info mr-1"></i>ทุกรายการด้านบนใช้ "จ่ายจาก" "สถานะ"
-            และไฟล์แนบเดียวกันตามที่กรอกด้านล่าง
+            <i className="fa-solid fa-circle-info mr-1"></i>ทุกรายการด้านบนใช้ &quot;จ่ายจาก&quot;
+            &quot;สถานะ&quot; และไฟล์แนบเดียวกันตามที่กรอกด้านล่าง
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <div>

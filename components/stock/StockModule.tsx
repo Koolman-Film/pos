@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { fmt } from '@/lib/domain/format';
+import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
+import { useIsMounted } from '@/lib/hooks/useIsMounted';
 
 /**
  * Ported from reference/v0.4/finnix-film.html:2980-3462 (`StockModule`).
@@ -117,8 +119,7 @@ export function StockModule({
   // `.app-shell` subtree — Task 1's print CSS hides `.app-shell` and shows only
   // `.print-area`, so a nested print-area would be hidden with it. Portaling
   // needs `document`, which is absent during SSR, hence the mount gate.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useIsMounted();
 
   const [categories, setCategories] = useState<string[]>(productCategories);
   const [priceMatrix, setPriceMatrix] = useState<FilmPriceEntry[]>(filmPriceMatrix);
@@ -155,11 +156,9 @@ export function StockModule({
 
   const [shopFilter, setShopFilter] = useState(canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all');
   const [period, setPeriod] = useState('today');
-  const [periodValue, setPeriodValue] = useState(new Date().toISOString().slice(0, 7));
-  const [rangeStart, setRangeStart] = useState(
-    new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
-  );
-  const [rangeEnd, setRangeEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
+  const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
+  const [rangeEnd, setRangeEnd] = useState(() => todayValue());
   const [panel, setPanel] = useState<string | null>(null); // null | 'withdraw' | 'add' | 'adjust' | 'price' | 'bulk'
 
   const stockScopedToAccess = stock.filter((s) => accessibleShops.some((a) => a.id === s.shop));
@@ -423,7 +422,7 @@ export function StockModule({
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       });
     }
-    XLSX.writeFile(wb, `stock-${branchFilter}-${Date.now()}.xlsx`);
+    XLSX.writeFile(wb, `stock-${branchFilter}-${exportStamp()}.xlsx`);
   }
   function exportPDF() {
     window.print();

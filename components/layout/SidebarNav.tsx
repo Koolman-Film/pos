@@ -3,25 +3,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { confirmDiscardIfPendingChanges } from '@/lib/hooks/useUnsavedChangesGuard';
+
 import { useMobileNav } from './MobileNavContext';
 import { resolveActiveNavId, type NavItem } from './navItems';
-
-declare global {
-  interface Window {
-    /**
-     * Set by module forms (the prototype's `useUnsavedChangesWarning`) while a
-     * form has unsaved edits. Read here so leaving via the sidebar prompts the
-     * same way leaving via the browser does.
-     */
-    __hasUnsavedFormChanges?: boolean;
-  }
-}
-
-/** Port of the prototype's `confirmDiscardIfDirty` (finnix-film.html:383-386). */
-function confirmDiscardIfDirty(): boolean {
-  if (typeof window === 'undefined' || !window.__hasUnsavedFormChanges) return true;
-  return window.confirm('มีข้อมูลที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?');
-}
 
 /**
  * The interactive half of the sidebar (see `Sidebar.tsx` for the permission
@@ -91,7 +76,7 @@ export function SidebarNav({
                 href={item.href}
                 aria-current={isActive ? 'page' : undefined}
                 onClick={(e) => {
-                  if (!confirmDiscardIfDirty()) {
+                  if (!confirmDiscardIfPendingChanges()) {
                     e.preventDefault();
                     return;
                   }

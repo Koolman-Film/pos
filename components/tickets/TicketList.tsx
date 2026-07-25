@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Badge, getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
+import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { ticketTotal } from '@/lib/domain/tickets';
 
 import type { Shop, TicketListRow } from './types';
@@ -39,8 +41,7 @@ export function TicketList({
   const shopName = (id: string) => shopList.find((s) => s.id === id)?.name ?? id;
 
   // document.body only exists client-side; guard the print portal on mount.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useIsMounted();
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [shopFilter, setShopFilter] = useState<string>(
@@ -49,9 +50,9 @@ export function TicketList({
   const [customerFilter, setCustomerFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState('today');
-  const [periodValue, setPeriodValue] = useState(new Date().toISOString().slice(0, 7));
-  const [rangeStart, setRangeStart] = useState(new Date(new Date().getTime() - 6 * 86400000).toISOString().slice(0, 10));
-  const [rangeEnd, setRangeEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
+  const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
+  const [rangeEnd, setRangeEnd] = useState(() => todayValue());
 
   function inSelectedPeriod(dateObj: Date | null | undefined) {
     if (!dateObj) return true;
@@ -131,7 +132,7 @@ export function TicketList({
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       });
     }
-    XLSX.writeFile(wb, `tickets-${shopFilter}-${new Date().getTime()}.xlsx`);
+    XLSX.writeFile(wb, `tickets-${shopFilter}-${exportStamp()}.xlsx`);
   }
   function exportPDF() {
     window.print();

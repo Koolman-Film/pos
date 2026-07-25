@@ -5,17 +5,36 @@ import { render } from '@testing-library/react';
 // and capture the `data`/`options` each wrapper builds. These tests assert the
 // wrappers forward the exact prototype config (colours, cutout, datasets) rather
 // than exercising Chart.js itself.
-const captured: Record<string, { data: any; options: any }> = {};
+// Only the fields these tests assert on are described; Chart.js passes plenty
+// more, hence the index signatures rather than `any`.
+type CapturedDataset = {
+  label?: string;
+  data?: number[];
+  backgroundColor?: string | string[];
+  borderDash?: number[];
+  [key: string]: unknown;
+};
+
+type CapturedChart = {
+  data: { labels?: unknown[]; datasets: CapturedDataset[] };
+  options: {
+    cutout?: string;
+    plugins?: { legend?: { display?: boolean } };
+    [key: string]: unknown;
+  };
+};
+
+const captured: Record<string, CapturedChart> = {};
 vi.mock('react-chartjs-2', () => ({
-  Doughnut: (p: any) => {
+  Doughnut: (p: CapturedChart) => {
     captured.doughnut = p;
     return null;
   },
-  Bar: (p: any) => {
+  Bar: (p: CapturedChart) => {
     captured.bar = p;
     return null;
   },
-  Line: (p: any) => {
+  Line: (p: CapturedChart) => {
     captured.line = p;
     return null;
   },
@@ -38,14 +57,16 @@ describe('BarChart', () => {
   it('uses the prototype bar colour and hides the legend', () => {
     render(<BarChart labels={['a']} data={[5]} />);
     expect(captured.bar.data.datasets[0].backgroundColor).toBe('#7A2333');
-    expect(captured.bar.options.plugins.legend.display).toBe(false);
+    // `?.` keeps the assertion strict: a missing plugins/legend yields undefined,
+    // which still fails the toBe(false).
+    expect(captured.bar.options.plugins?.legend?.display).toBe(false);
   });
 });
 
 describe('LineChart', () => {
   it('builds the three revenue/expense/profit datasets', () => {
     render(<LineChart labels={['a']} revenue={[10]} expense={[6]} profit={[4]} />);
-    const labels = captured.line.data.datasets.map((d: any) => d.label);
+    const labels = captured.line.data.datasets.map((d) => d.label);
     expect(labels).toEqual(['รายได้', 'ค่าใช้จ่าย', 'กำไร']);
     expect(captured.line.data.datasets[1].borderDash).toEqual([4, 3]);
   });

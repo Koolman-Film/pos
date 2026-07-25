@@ -21,7 +21,10 @@ html[data-theme="dark"] {
   --shadow-red: 0 10px 24px rgba(178,58,72,.32);
 }
 * { box-sizing: border-box; }
-body { font-family:'Plus Jakarta Sans','Noto Sans Thai',-apple-system,sans-serif; background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; transition:background .2s ease, color .2s ease; }
+/* The two families are self-hosted by next/font (app/layout.tsx) and reach here
+   as CSS variables. The literal names stay as fallbacks so the stack still
+   resolves if a font ever fails to load. */
+body { font-family:var(--font-jakarta),'Plus Jakarta Sans',var(--font-noto-thai),'Noto Sans Thai',-apple-system,sans-serif; background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; transition:background .2s ease, color .2s ease; }
 ::placeholder { color:var(--ink-faint); }
 
 @layer components {

@@ -1,6 +1,27 @@
 import type { Metadata } from 'next';
+import { Noto_Sans_Thai, Plus_Jakarta_Sans } from 'next/font/google';
 import { THEME_INIT_SCRIPT } from '@/components/layout/theme';
 import './globals.css';
+
+// The prototype pulled these two families from the Google Fonts CDN at runtime.
+// `next/font/google` fetches them at build time and self-hosts, which keeps the
+// exact same typefaces and weights while removing a third-party request from
+// every page load — worth having for a shop-floor app on unreliable wifi, and it
+// eliminates the font-swap flash. Exposed as CSS variables because the
+// `font-family` stack lives in app/globals.css, not on a className.
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-jakarta',
+  display: 'swap',
+});
+
+const notoThai = Noto_Sans_Thai({
+  subsets: ['thai'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-noto-thai',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Finnix Film — ระบบบริหารจัดการร้าน',
@@ -13,18 +34,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // corrects it during HTML parsing, before the first paint;
     // `suppressHydrationWarning` stops React from flagging the difference it
     // finds on `<html>` at hydration time.
-    <html lang="th" data-theme="light" suppressHydrationWarning>
+    <html
+      lang="th"
+      data-theme="light"
+      className={`${jakarta.variable} ${notoThai.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         {/* Must stay first in <head> and must stay synchronous — anything that
             defers it (async/defer, moving it into <body>, a Client Component)
             reintroduces the flash of light theme. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
         <link
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
           rel="stylesheet"

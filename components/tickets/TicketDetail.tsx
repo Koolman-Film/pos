@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
+import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
 import { PrintJobSheet, type PrintMode } from './PrintJobSheet';
@@ -13,7 +14,6 @@ import { ItemsSection } from './detail/ItemsSection';
 import { PaymentsSection } from './detail/PaymentsSection';
 import { TechSection } from './detail/TechSection';
 import { VehicleInfoSection } from './detail/VehicleInfoSection';
-import { confirmDiscardIfDirty, useUnsavedChangesGuard } from './useUnsavedChangesGuard';
 import type {
   CarModel,
   CorporateBuyer,

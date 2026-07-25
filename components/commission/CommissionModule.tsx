@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import { fmt } from '@/lib/domain/format';
+import { currentMonthValue, daysAgoValue, todayValue } from '@/lib/domain/now';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 import { StatusPill } from '@/components/ui/StatusPill';
 
@@ -71,11 +72,9 @@ export function CommissionModule({
     canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all'
   );
   const [period, setPeriod] = useState('today');
-  const [periodValue, setPeriodValue] = useState(new Date().toISOString().slice(0, 7));
-  const [rangeStart, setRangeStart] = useState(
-    new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
-  );
-  const [rangeEnd, setRangeEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
+  const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
+  const [rangeEnd, setRangeEnd] = useState(() => todayValue());
   const [nr, setNr] = useState<{
     category: string;
     name: string;

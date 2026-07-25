@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
 import { fmt } from '@/lib/domain/format';
+import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { orderTotal, orderPaid } from '@/lib/domain/orders';
 
 import {
@@ -65,11 +66,9 @@ export function WholesaleList({
     canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all'
   );
   const [period, setPeriod] = useState('today');
-  const [periodValue, setPeriodValue] = useState(new Date().toISOString().slice(0, 7));
-  const [rangeStart, setRangeStart] = useState(
-    new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
-  );
-  const [rangeEnd, setRangeEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
+  const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
+  const [rangeEnd, setRangeEnd] = useState(() => todayValue());
   const [productFilter, setProductFilter] = useState('all');
 
   let visible = filter === 'all' ? list : list.filter((o) => o.status === filter);
@@ -118,7 +117,7 @@ export function WholesaleList({
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       });
     }
-    XLSX.writeFile(wb, `wholesale-orders-${Date.now()}.xlsx`);
+    XLSX.writeFile(wb, `wholesale-orders-${exportStamp()}.xlsx`);
   }
   function exportPDF() {
     window.print();
