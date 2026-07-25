@@ -165,6 +165,27 @@ export async function deleteRole(id: string): Promise<ActionResult> {
   return error ? fail(error) : done();
 }
 
+/**
+ * "รีเซ็ตค่าเริ่มต้น" — restore the four default roles and the whole permission
+ * matrix (prototype :4033-4039).
+ *
+ * The defaults live in the `reset_permissions_to_defaults()` SQL function
+ * (migration 0009), not here, because in the port they are database state rather
+ * than JS constants. Keeping them in one place means this action cannot drift from
+ * what a fresh `db reset` produces.
+ *
+ * DESTRUCTIVE, exactly as the prototype was: custom roles are dropped and any user
+ * holding one becomes an admin. The UI confirms before calling.
+ */
+export async function resetPermissionsToDefaults(): Promise<ActionResult> {
+  const { supabase } = await authorize();
+  const { error } = await supabase.rpc('reset_permissions_to_defaults');
+  if (error) return fail(error);
+  // The reset can change this caller's own nav, so refresh the shell too.
+  revalidatePath('/', 'layout');
+  return done();
+}
+
 // ---------- ticket statuses ----------
 
 export async function addStatus(

@@ -60,6 +60,14 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
         product: p.product || '',
         price: Number(p.price || 0),
       })),
+      // Recorded actual usage. This was previously dropped here, which meant the
+      // technician's numbers never reached the server and no stock ever moved.
+      // Blank/non-numeric entries are discarded rather than sent as NaN.
+      actualQty: Object.fromEntries(
+        Object.entries(i.actualQtyMap ?? {})
+          .map(([name, qty]) => [name, Number(qty)] as const)
+          .filter(([name, qty]) => name && Number.isFinite(qty) && qty !== 0),
+      ),
     })),
     payments: t.payments.map((p) => ({
       type: p.type,

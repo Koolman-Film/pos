@@ -11,6 +11,59 @@ import type { ShopInfo, StockRow, Ticket } from './types';
 
 export type PrintMode = 'job' | 'sale' | 'offsite' | 'doc' | null;
 
+/**
+ * The pre-installation inspection sheet (ใบตรวจเช็คสภาพก่อนติดตั้ง), ported
+ * verbatim from reference/v0.4/finnix-film.html:2101-2105.
+ *
+ * This is the sheet a technician walks around the car with before touching it, so
+ * a missing row is a check nobody performs and a dispute the shop cannot answer
+ * later. An earlier port truncated ระบบไฟฟ้า to 6 of 20 rows and
+ * ระบบเครื่องเสียง to 3 of 7; the full lists are restored here, in the
+ * prototype's order. Extracted to a named constant so the next diff against a new
+ * prototype drop is a one-line comparison instead of a hunt through JSX.
+ */
+export const QC_CHECKLIST_SECTIONS: { title: string; items: string[] }[] = [
+  {
+    title: 'ระบบไฟฟ้า',
+    items: [
+      'ไฟหน้า',
+      'ไฟหรี่',
+      'ไฟสูง',
+      'สปอตไลท์',
+      'ไฟเลี้ยวหน้า',
+      'ไฟเลี้ยวข้าง',
+      'ไฟฉุกเฉิน',
+      'ไฟท้าย',
+      'ไฟเบรก',
+      'ไฟเลี้ยวถอย',
+      'ไฟเลี้ยวหลัง',
+      'ระบบกระจกบานข้าง',
+      'ระบบกระจกมองข้าง',
+      'คอนโทรพวงมาลัย',
+      'ไฟหน้าปัด',
+      'ไฟปุ่มแอร์',
+      'ระบบแอร์',
+      'ไฟเพดาน',
+      'กล้องหน้า-หลัง',
+      'เซนเซอร์หน้า-หลัง',
+    ],
+  },
+  {
+    title: 'ระบบเครื่องเสียง',
+    items: [
+      'เครื่องเล่นวิทยุเดิม',
+      'ทวิตเตอร์ซ้าย-ขวา',
+      'ลำโพงหน้าซ้าย-ขวา',
+      'ลำโพงหลังซ้าย-ขวา',
+      'Sub Box',
+      'ปรีแอมป์',
+      'DSP',
+    ],
+  },
+  { title: 'สภาพภายในรถ', items: ['เพดานรถ', 'คอนโซลรถ', 'เบาะรถ', 'แผงข้าง'] },
+  { title: 'สภาพภายนอกรถ', items: ['สภาพรอบคัน', 'กระจกบานหน้า-หลัง', 'กระจกบานข้าง'] },
+];
+
 const emboss: CSSProperties = {
   display: 'inline-block',
   padding: '2px 9px',
@@ -423,18 +476,7 @@ export function PrintJobSheet({
                 ทะเบียนรถ/เลขถัง: <b>{t.plate}</b>
               </span>
             </div>
-            {[
-              {
-                title: 'ระบบไฟฟ้า',
-                items: ['ไฟหน้า', 'ไฟหรี่', 'ไฟสูง', 'สปอตไลท์', 'ไฟเลี้ยวหน้า', 'ไฟเลี้ยวข้าง'],
-              },
-              {
-                title: 'ระบบเครื่องเสียง',
-                items: ['เครื่องเล่นวิทยุเดิม', 'ทวิตเตอร์ซ้าย-ขวา', 'ลำโพงหน้า'],
-              },
-              { title: 'สภาพภายในรถ', items: ['เพดานรถ', 'คอนโซลรถ', 'เบาะรถ', 'แผงข้าง'] },
-              { title: 'สภาพภายนอกรถ', items: ['สภาพรอบคัน', 'กระจกบานหน้า-หลัง', 'กระจกบานข้าง'] },
-            ].map((section) => (
+            {QC_CHECKLIST_SECTIONS.map((section) => (
               <div key={section.title} style={{ marginBottom: 6 }}>
                 <p style={{ fontSize: 10, fontWeight: 'bold', margin: '0 0 2px' }}>
                   {section.title}

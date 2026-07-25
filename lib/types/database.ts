@@ -737,6 +737,7 @@ export type Database = {
       }
       ticket_items: {
         Row: {
+          actual_qty: Json
           booked: string
           booked_price: number
           category: string
@@ -748,6 +749,7 @@ export type Database = {
           ticket_id: string
         }
         Insert: {
+          actual_qty?: Json
           booked?: string
           booked_price?: number
           category: string
@@ -759,6 +761,7 @@ export type Database = {
           ticket_id: string
         }
         Update: {
+          actual_qty?: Json
           booked?: string
           booked_price?: number
           category?: string
@@ -1054,6 +1057,7 @@ export type Database = {
       current_user_role: { Args: never; Returns: string }
       current_user_sees_all_shops: { Args: never; Returns: boolean }
       current_user_shops: { Args: never; Returns: string[] }
+      reset_permissions_to_defaults: { Args: never; Returns: undefined }
     }
     Enums: {
       permission_type: "nav" | "dashboard_widget" | "module_capability"

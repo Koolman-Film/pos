@@ -168,6 +168,12 @@ export type TicketSavePayload = {
     discountType: DiscountType;
     discountValue: number | null;
     positions: { position: string; product: string; price: number }[];
+    /**
+     * Product -> quantity actually used. Persisted to `ticket_items.actual_qty`
+     * and diffed against the stored value on save to drive automatic stock
+     * movement (see lib/stock/movements.ts).
+     */
+    actualQty: Record<string, number>;
   }[];
   payments: { type: string; method: string; amount: number; paidAt: string }[];
 };

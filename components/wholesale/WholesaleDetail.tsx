@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { fmt, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
-import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
+import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { orderTotal, orderPaid } from '@/lib/domain/orders';
 
 import { CustomerPicker } from './CustomerPicker';
@@ -114,6 +114,17 @@ export function WholesaleDetail({
   // tested rendered bare, so it must not call `useRouter`); the page supplies
   // `onBack` for a soft navigation, otherwise fall back to a hard nav.
   function goBack() {
+    // Confirm before throwing away edits, as the prototype does (:2743). The port
+    // had only the beforeunload guard here, so the in-app back button silently
+    // discarded a half-edited PO.
+    if (
+      !confirmDiscardIfDirty(
+        isDirty,
+        'มีข้อมูลใน PO นี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
+      )
+    ) {
+      return;
+    }
     if (onBack) onBack();
     else if (typeof window !== 'undefined') window.location.assign('/wholesale');
   }

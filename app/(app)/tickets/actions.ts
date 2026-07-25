@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
 import type { TablesInsert, TablesUpdate } from '@/lib/types/database';
 import type { OptionListName, TicketSavePayload } from '@/components/tickets/types';
 
@@ -73,6 +74,24 @@ async function resolveRetailCustomerId(
   return inserted?.id ?? null;
 }
 
+/**
+ * Total actual usage per product currently STORED for a ticket.
+ *
+ * Must be read before `writeTicketChildren` deletes the rows, because it is the
+ * "before" side of the stock delta. A brand-new ticket has no stored rows, so this
+ * is `{}` and the whole recorded quantity counts as consumed.
+ */
+async function storedActualQty(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ticketId: string,
+): Promise<QtyMap> {
+  const { data } = await supabase
+    .from('ticket_items')
+    .select('actual_qty')
+    .eq('ticket_id', ticketId);
+  return sumQtyMaps((data ?? []).map((r) => r.actual_qty as QtyMap));
+}
+
 async function writeTicketChildren(
   supabase: Awaited<ReturnType<typeof createClient>>,
   ticketId: string,
@@ -95,6 +114,7 @@ async function writeTicketChildren(
         sold_price: it.soldPrice,
         discount_type: it.discountType,
         discount_value: it.discountValue,
+        actual_qty: it.actualQty ?? {},
       })
       .select('id')
       .single();
@@ -123,6 +143,38 @@ async function writeTicketChildren(
       })),
     );
     if (payErr) throw new Error(payErr.message);
+  }
+}
+
+/**
+ * Move stock to match the actual quantities recorded on this ticket, and log it.
+ *
+ * The prototype credited the movement to the logged-in user and fell back to
+ * `ระบบ (ใบงาน)` when there was none (:1416), so the same fallback applies here.
+ * Stock movement must never fail a save that already succeeded — the ticket is the
+ * record of what happened, and a stock row that could not be found is a data
+ * problem to surface, not a reason to lose the technician's work. So this is
+ * called after the write and its own failure is swallowed deliberately.
+ */
+async function syncTicketStock(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ticketId: string,
+  p: TicketSavePayload,
+  before: QtyMap,
+  userName: string,
+): Promise<void> {
+  const after = sumQtyMaps(p.items.map((it) => it.actualQty));
+  const delta = diffQtyMaps(before, after);
+  if (Object.keys(delta).length === 0) return;
+  try {
+    await applyStockMovements(supabase, delta, {
+      kind: 'ใบงาน',
+      documentId: ticketId,
+      by: userName || 'ระบบ (ใบงาน)',
+      shopId: p.shop,
+    });
+  } catch {
+    // Intentionally non-fatal; see the note above.
   }
 }
 
@@ -161,6 +213,8 @@ export async function createTicket(p: TicketSavePayload): Promise<SaveResult> {
     if (error) throw new Error(error.message);
     await writeTicketChildren(supabase, id, p);
     await supabase.from('ticket_status_history').insert({ ticket_id: id, status: p.status });
+    // A new ticket has no stored quantities, so everything recorded is consumed.
+    await syncTicketStock(supabase, id, p, {}, session.name);
     revalidatePath('/tickets');
     revalidatePath(`/tickets/${id}`);
     return { ok: true, id };
@@ -173,10 +227,12 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
   // Editing an existing ticket is not separately capability-gated in the
   // prototype; authentication (via getSessionContext) plus RLS shop-scoping is
   // the boundary. getSessionContext still runs first per C2.
-  await getSessionContext();
+  const session = await getSessionContext();
   const supabase = await createClient();
   try {
     const retailId = await resolveRetailCustomerId(supabase, p.customer, p.phone);
+    // Read the stored quantities BEFORE writeTicketChildren deletes the rows.
+    const before = await storedActualQty(supabase, p.id);
     const { id, ...cols } = ticketRow(p, p.id, retailId);
     const { error } = await supabase
       .from('tickets')
@@ -184,6 +240,7 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
       .eq('id', id);
     if (error) throw new Error(error.message);
     await writeTicketChildren(supabase, p.id, p);
+    await syncTicketStock(supabase, p.id, p, before, session.name);
     revalidatePath('/tickets');
     revalidatePath(`/tickets/${p.id}`);
     return { ok: true, id: p.id };

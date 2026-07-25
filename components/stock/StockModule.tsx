@@ -9,6 +9,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { fmt } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
+import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 
 /**
  * Ported from reference/v0.4/finnix-film.html:2980-3462 (`StockModule`).
@@ -191,13 +192,16 @@ export function StockModule({
 
   const stockScopedToAccess = stock.filter((s) => accessibleShops.some((a) => a.id === s.shop));
 
-  const [wd, setWd] = useState({
+  // The pristine shapes of the three data-entry panels, kept as functions so the
+  // `useState` seed and the dirty comparison below can never drift apart — the
+  // prototype inlined both copies and any edit had to be made twice (:3007-3009).
+  const blankWithdraw = () => ({
     id: stock[0]?.id ?? 0,
     qty: 1,
     type: 'สินค้าตัวอย่าง',
     reason: '',
   });
-  const [addStk, setAddStk] = useState({
+  const blankAddStock = () => ({
     mode: 'existing' as 'existing' | 'new',
     existingId: stock[0]?.id ?? 0,
     newName: '',
@@ -211,6 +215,10 @@ export function StockModule({
     serviceCount: '' as string | number,
     reason: 'ซื้อเพิ่ม',
   });
+  const blankAdjust = () => ({ id: stock[0]?.id ?? 0, counted: 0, note: '' });
+
+  const [wd, setWd] = useState(blankWithdraw);
+  const [addStk, setAddStk] = useState(blankAddStock);
   const [adjustments, setAdjustments] = useState<
     {
       id: number;
@@ -222,7 +230,20 @@ export function StockModule({
       date: string;
     }[]
   >([]);
-  const [adj, setAdj] = useState({ id: stock[0]?.id ?? 0, counted: 0, note: '' });
+  const [adj, setAdj] = useState(blankAdjust);
+
+  // Warn before discarding a half-filled panel — the prototype's guard at :3010,
+  // which the port had dropped. Only the open panel counts as dirty, exactly as
+  // the prototype scoped it, so a stale closed panel never blocks navigation.
+  const isWithdrawDirty =
+    panel === 'withdraw' && JSON.stringify(wd) !== JSON.stringify(blankWithdraw());
+  const isAddStockDirty =
+    panel === 'add' && JSON.stringify(addStk) !== JSON.stringify(blankAddStock());
+  const isAdjustDirty = panel === 'adjust' && JSON.stringify(adj) !== JSON.stringify(blankAdjust());
+  useUnsavedChangesGuard(
+    isWithdrawDirty || isAddStockDirty || isAdjustDirty,
+    'มีข้อมูลสต็อกที่ยังไม่ได้บันทึก',
+  );
 
   const [bulkRows, setBulkRows] = useState<
     {

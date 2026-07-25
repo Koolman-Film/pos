@@ -24,6 +24,7 @@ import {
   moveStatus,
   renameRole,
   renameWsStatus,
+  resetPermissionsToDefaults,
   setDashboardPermission,
   setModulePermission,
   setNavPermission,
@@ -143,6 +144,7 @@ export default async function PermissionsPage() {
       onAddRole={addRole}
       onRenameRole={renameRole}
       onDeleteRole={deleteRole}
+      onResetDefaults={resetPermissionsToDefaults}
       onAddStatus={addStatus}
       onUpdateStatus={updateStatus}
       onDeleteStatus={deleteStatus}

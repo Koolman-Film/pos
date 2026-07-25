@@ -279,6 +279,20 @@ export function TicketDetail({
       : t.extras;
     setT({ ...t, items, extras });
   }
+  /**
+   * Record how much of a product was actually used on this job item.
+   *
+   * The prototype decremented `stock` here, inline, on every keystroke
+   * (:1409-1421). That worked because its stock array WAS the database. In the
+   * port the authoritative movement happens server-side when the ticket is saved
+   * (`syncTicketStock` in app/(app)/tickets/actions.ts), which is the only place
+   * that can diff against what is stored and avoid two technicians racing.
+   *
+   * The local `setStock` below is therefore a PREVIEW only — it keeps the
+   * on-screen remaining-quantity hint responsive while typing, and the server is
+   * what actually moves stock. It used to be the whole mechanism, which meant
+   * nothing was ever persisted.
+   */
   function updateActualQty(idx: number, productName: string, newQty: string) {
     const it = t.items[idx];
     const currentMap = it.actualQtyMap || {};

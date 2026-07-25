@@ -56,6 +56,8 @@ export type PermissionsModuleProps = {
   onAddRole?: (name: string, icon: string) => Maybe;
   onRenameRole?: (id: string, name: string) => Maybe;
   onDeleteRole?: (id: string) => Maybe;
+  /** "รีเซ็ตค่าเริ่มต้น" (prototype :4047). Omitted hides the button entirely. */
+  onResetDefaults?: () => Maybe;
   onAddStatus?: (name: string, short: string, colorHex: string) => Maybe;
   onUpdateStatus?: (key: string, field: 'short' | 'color', value: string) => Maybe;
   onDeleteStatus?: (key: string) => Maybe;
@@ -120,6 +122,7 @@ export function PermissionsModule({
   onAddRole,
   onRenameRole,
   onDeleteRole,
+  onResetDefaults,
   onAddStatus,
   onUpdateStatus,
   onDeleteStatus,
@@ -273,6 +276,18 @@ export function PermissionsModule({
             เพิ่ม/ลบ/แก้ไขบทบาท และกำหนดสิทธิ์การเข้าถึงเมนู+การ์ดต่างๆ &middot; แก้ไขได้เฉพาะแอดมิน
           </p>
         </div>
+        {onResetDefaults && (
+          <button
+            onClick={() => {
+              // The prototype confirms first (:4034) — this drops custom roles.
+              if (!window.confirm('รีเซ็ตบทบาทและสิทธิ์ทั้งหมดกลับเป็นค่าเริ่มต้น?')) return;
+              run(onResetDefaults());
+            }}
+            className="btn-outline text-sm px-4 py-2 rounded-xl font-medium flex items-center gap-2"
+          >
+            <i className="fa-solid fa-rotate-left"></i>รีเซ็ตค่าเริ่มต้น
+          </button>
+        )}
       </div>
 
       {/* ---------- users ---------- */}

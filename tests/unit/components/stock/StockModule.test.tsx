@@ -75,3 +75,133 @@ describe('StockModule', () => {
     expect(screen.getByText('รออนุมัติ')).toBeInTheDocument();
   });
 });
+
+// --- The capability gate. This module 500'd the whole /stock route once because a
+// --- Server Component handed it `canDo` as a closure, so both shapes are pinned.
+
+const CAP_KEYS = [
+  'stock.addProduct',
+  'stock.adjustStock',
+  'stock.withdraw',
+  'stock.editDelete',
+  'stock.export',
+] as const;
+
+const allCaps = (value: boolean) =>
+  Object.fromEntries(CAP_KEYS.map((k) => [k, value])) as Record<string, boolean>;
+
+describe('StockModule capability gate', () => {
+  it('accepts a serialisable caps map, which is what a Server Component must pass', () => {
+    render(<StockModule stock={stock} caps={allCaps(true)} canSeeStockPrices={false} />);
+    expect(screen.getByRole('button', { name: /เพิ่มสินค้า/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /ปรับสต็อก/ })).toBeInTheDocument();
+  });
+
+  it('hides every gated control when the caps map denies them', () => {
+    render(<StockModule stock={stock} caps={allCaps(false)} canSeeStockPrices={false} />);
+    expect(screen.queryByRole('button', { name: /เพิ่มสินค้า/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ปรับสต็อก/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /เบิกใช้ภายใน/ })).not.toBeInTheDocument();
+  });
+
+  it('denies everything when neither canDo nor caps is supplied', () => {
+    // Fail closed: a wiring mistake must hide controls, never expose them.
+    render(<StockModule stock={stock} canSeeStockPrices={false} />);
+    expect(screen.queryByRole('button', { name: /เพิ่มสินค้า/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /เบิกใช้ภายใน/ })).not.toBeInTheDocument();
+  });
+
+  it('gates edit and delete per row independently of the other capabilities', () => {
+    const { rerender } = render(
+      <StockModule
+        stock={stock}
+        caps={{ ...allCaps(false), 'stock.editDelete': true }}
+        accessibleShops={[{ id: 'cm', name: 'เชียงใหม่' }]}
+        canSeeStockPrices={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'แก้ไขสินค้า SKU-FLM-3M60' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ลบสินค้า SKU-FLM-3M60' })).toBeInTheDocument();
+
+    rerender(
+      <StockModule
+        stock={stock}
+        caps={allCaps(false)}
+        accessibleShops={[{ id: 'cm', name: 'เชียงใหม่' }]}
+        canSeeStockPrices={false}
+      />,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'แก้ไขสินค้า SKU-FLM-3M60' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('gates the Excel export separately from the rest', () => {
+    const { rerender } = render(
+      <StockModule
+        stock={stock}
+        caps={{ ...allCaps(false), 'stock.export': true }}
+        canSeeStockPrices={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /Excel/ })).toBeInTheDocument();
+
+    rerender(<StockModule stock={stock} caps={allCaps(false)} canSeeStockPrices={false} />);
+    expect(screen.queryByRole('button', { name: /Excel/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('StockModule totals and grouping', () => {
+  const twoShops: StockItem[] = [
+    { ...stock[0], id: 1, sku: 'A', shop: 'cm', qty: 10, cost: 100, sellPrice: 200 },
+    {
+      ...stock[0],
+      id: 2,
+      sku: 'B',
+      shop: 'lp',
+      qty: 5,
+      cost: 100,
+      sellPrice: 200,
+      category: 'เครื่องเสียง',
+    },
+  ];
+
+  it('counts every row the user can access, across shops', () => {
+    render(
+      <StockModule
+        stock={twoShops}
+        caps={allCaps(true)}
+        accessibleShops={[
+          { id: 'cm', name: 'เชียงใหม่' },
+          { id: 'lp', name: 'ลำพูน' },
+        ]}
+        canSeeStockPrices={false}
+      />,
+    );
+    const card = screen.getByText('รายการทั้งหมด').closest('div');
+    expect(card?.textContent).toContain('2');
+  });
+
+  it('groups rows under their product category heading', () => {
+    render(
+      <StockModule
+        stock={twoShops}
+        caps={allCaps(true)}
+        accessibleShops={[
+          { id: 'cm', name: 'เชียงใหม่' },
+          { id: 'lp', name: 'ลำพูน' },
+        ]}
+        canSeeStockPrices={false}
+      />,
+    );
+    // The bare category name also appears in the filter <select>, so match the
+    // "name (count)" group-heading form specifically.
+    expect(screen.getByText('ฟิล์มกรองแสง (1)')).toBeInTheDocument();
+    expect(screen.getByText('เครื่องเสียง (1)')).toBeInTheDocument();
+  });
+
+  it('renders an empty module without crashing when there is no stock at all', () => {
+    render(<StockModule stock={[]} caps={allCaps(true)} canSeeStockPrices={false} />);
+    expect(screen.getByText('สต็อกสินค้า')).toBeInTheDocument();
+  });
+});

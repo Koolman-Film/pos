@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
 
 import type { SaveOrderInput } from '@/components/wholesale/types';
 
@@ -45,6 +46,12 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
   }
 
   const supabase = await createClient();
+
+  // Net quantity per product currently STORED for this PO — sold minus returned,
+  // exactly the prototype's origSold/origReturned pair (:2694-2701). Must be read
+  // before the delete-then-insert below wipes the rows, because it is the "before"
+  // side of the stock delta.
+  const before = await storedOrderNetQty(supabase, input.id);
 
   const { error: headerErr } = await supabase.from('orders').upsert({
     id: input.id,
@@ -115,8 +122,64 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
     if (error) throw new Error(error.message);
   }
 
+  // Move stock to match the new net quantities and log it (prototype :2702-2712).
+  // Sold goes out of stock, returned comes back, so the net is what matters.
+  // Non-fatal: the PO is already saved, and losing the sale over a stock lookup
+  // would be the worse failure.
+  const after = orderNetQty(
+    input.items.map((it) => ({ name: it.name, qty: Number(it.qty) || 0 })),
+    input.returns.map((r) => ({ name: r.item, qty: Number(r.qty) || 0 })),
+  );
+  const delta = diffQtyMaps(before, after);
+  if (Object.keys(delta).length > 0) {
+    try {
+      await applyStockMovements(supabase, delta, {
+        kind: 'ขายส่ง',
+        documentId: input.id,
+        // The prototype always credited the system here, never the user (:2709).
+        by: 'ระบบ (ขายส่ง)',
+        shopId: input.shop,
+      });
+    } catch {
+      // Deliberately swallowed; see above.
+    }
+  }
+
   revalidatePath('/wholesale');
+  revalidatePath('/stock');
   redirect('/wholesale');
+}
+
+/** Net = sold - returned, per product. */
+function orderNetQty(
+  sold: { name: string; qty: number }[],
+  returned: { name: string; qty: number }[],
+): QtyMap {
+  return diffQtyMaps(sumQtyMaps([toQtyMap(returned)]), sumQtyMaps([toQtyMap(sold)]));
+}
+
+function toQtyMap(rows: { name: string; qty: number }[]): QtyMap {
+  const map: QtyMap = {};
+  for (const r of rows) {
+    if (!r.name) continue;
+    map[r.name] = (map[r.name] ?? 0) + r.qty;
+  }
+  return map;
+}
+
+/** The stored net-per-product for a PO, read straight from its child tables. */
+async function storedOrderNetQty(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orderId: string,
+): Promise<QtyMap> {
+  const [{ data: items }, { data: returns }] = await Promise.all([
+    supabase.from('order_items').select('name, qty').eq('order_id', orderId),
+    supabase.from('order_returns').select('item_name, qty').eq('order_id', orderId),
+  ]);
+  return orderNetQty(
+    (items ?? []).map((i) => ({ name: i.name, qty: Number(i.qty) || 0 })),
+    (returns ?? []).map((r) => ({ name: r.item_name, qty: Number(r.qty) || 0 })),
+  );
 }
 
 /** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
