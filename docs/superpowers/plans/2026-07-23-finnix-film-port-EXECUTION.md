@@ -146,6 +146,15 @@ Nothing currently sets `data-theme` on `<html>`. `app/globals.css` defines the f
 ### C10 — login error codes, not raw error text
 Plan Task 9 Step 3 specified `?error=${error.message}`, which renders raw (English, attacker-influenceable) Supabase error text inside the login card. Superseded: use fixed codes (`missing_email`, `missing_password`, `invalid_credentials`, `no_profile`, `inactive`) mapped to Thai copy. Unknown codes render nothing. Apply the same rule anywhere else errors reach a URL.
 
+### C11 — Stock low-stock threshold must be `qty < min` (not `<=`)
+The plan's Task 16 text (and, propagated from it, the T16 agent brief) says low-stock is `qty <= min_qty`. The **prototype uses strict `qty < min`**. This is a business-logic divergence — the boundary case `qty === min` must NOT count as low. Fix in the Stock module's filter to match the prototype. Orchestrator error (plan value copied into the brief without checking the source); fixed at the Wave 4 integration gate.
+
+### C12 — `useUnsavedChangesGuard` should be a shared hook
+The prototype has a `beforeunload`/navigation dirty-guard (`useUnsavedChangesGuard`/`confirmDiscardIfDirty`, reference `:374-386`) used by multiple modules (tickets, stock, wholesale, accounting). Wave 4 tracks each either ported it locally or omitted it, since no shared version exists in `lib/`. Post-fan-out, consolidate into one shared hook (`lib/hooks/` or similar) and have the modules consume it, to avoid four divergent copies. Assess at the integration gate.
+
+### C13 — dashboard omits several prototype elements
+Task 13 rendered the permission-gated bento but omitted the prototype's pending-approvals, recent-jobs list, upcoming-bookings, job-status totals, and the "สร้างใบงานใหม่" button, because the plan's dashboard props contract ships neither per-ticket row arrays nor `canDo`. Decide whether these belong on the dashboard; if so they need dedicated leaf components + the missing props. Assess at the gate against the prototype.
+
 ### C6 — `fmt` / `fmtThaiDate` require full-ICU Node
 The Buddhist-era assertion (`15 ก.ค. 2569`) and comma grouping depend on a full-ICU runtime. If these fail in Task 21/CI, fix the Node build — do not weaken the assertions.
 

@@ -1,0 +1,335 @@
+'use client';
+
+import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
+import { fmt } from '@/lib/domain/format';
+import { itemNetPrice } from '@/lib/domain/tickets';
+
+import type { StockRow, Ticket, TicketItem, TicketPosition } from '../types';
+
+/**
+ * สินค้า/การติดตั้ง — items-by-category with per-position pickers.
+ * Ported from reference/v0.4/finnix-film.html:1514-1656.
+ */
+export function ItemsSection({
+  t,
+  stock,
+  productCategories,
+  filmPositions,
+  setFilmPositions,
+  wrapPositions,
+  setWrapPositions,
+  serviceItems,
+  setServiceItems,
+  addItem,
+  removeItem,
+  updateItem,
+  updateItemFields,
+  updateFilmPositions,
+  lookupPrice,
+  lookupFilmPrice,
+  commitPrice,
+}: {
+  t: Ticket;
+  stock: StockRow[];
+  productCategories: string[];
+  filmPositions: string[];
+  setFilmPositions: (v: string[]) => void;
+  wrapPositions: string[];
+  setWrapPositions: (v: string[]) => void;
+  serviceItems: string[];
+  setServiceItems: (v: string[]) => void;
+  addItem: () => void;
+  removeItem: (idx: number) => void;
+  updateItem: (idx: number, key: keyof TicketItem, val: unknown) => void;
+  updateItemFields: (idx: number, fields: Partial<TicketItem>) => void;
+  updateFilmPositions: (idx: number, positions: TicketPosition[]) => void;
+  lookupPrice: (product: string, fallback: number) => number;
+  lookupFilmPrice: (category: string, product: string, position: string, fallback: number) => number;
+  commitPrice: (product: string, price: number | string) => void;
+}) {
+  const upsell = t.items.reduce((s, i) => s + (Number(i.soldPrice || 0) - Number(i.bookedPrice || 0)), 0);
+
+  return (
+    <div className="mb-5">
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs font-medium flex items-center gap-1.5" style={{ color: 'var(--ink-soft)' }}>
+          <i className="fa-solid fa-bag-shopping"></i>สินค้า/การติดตั้ง ({t.items.length})
+        </p>
+        {upsell !== 0 && (
+          <span
+            className="text-xs px-2.5 py-1 rounded-full font-semibold"
+            style={{ background: upsell >= 0 ? '#E6EFDC' : '#FBEAEC', color: upsell >= 0 ? '#4C7A3E' : '#B23A48' }}
+          >
+            ส่วนต่างเชียร์ขาย {upsell >= 0 ? '+' : ''}
+            {fmt(upsell)}
+          </span>
+        )}
+      </div>
+      {t.items.map((it, idx) => {
+        const inShop = stock.filter((s) => s.category === it.category && s.shop === t.shop);
+        const productOptions = inShop.length ? inShop : stock.filter((s) => s.category === it.category);
+        const usesPositions = it.category === 'ฟิล์มกรองแสง' || it.category === 'ฟิล์มกันรอย';
+        const isService = it.category === 'งานบริการ';
+        const positionOptions = it.category === 'ฟิล์มกรองแสง' ? filmPositions : wrapPositions;
+        const setPositionOptions = it.category === 'ฟิล์มกรองแสง' ? setFilmPositions : setWrapPositions;
+        return (
+          <div key={idx} className="rounded-2xl p-3.5 mb-2.5" style={{ border: '1px solid var(--line)' }}>
+            <div className="flex justify-between mb-2.5 gap-2">
+              <select
+                value={it.category}
+                onChange={(e) => updateItemFields(idx, { category: e.target.value, sold: '', booked: '', positions: [] })}
+                className="field text-xs px-2.5 py-1.5 flex-1"
+              >
+                <option value="" disabled>
+                  ชนิดสินค้า...
+                </option>
+                {productCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <button onClick={() => removeItem(idx)} className="text-xs px-2 rounded-lg" style={{ color: '#B23A48' }} aria-label="ลบรายการ">
+                <i className="fa-solid fa-trash"></i>
+              </button>
+            </div>
+            {it.category && (
+              <div className="mb-3 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  สินค้าที่สนใจ (ไม่บังคับ — ใช้เทียบ cheer-up)
+                </label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <select
+                    value={it.interested || ''}
+                    onChange={(e) => {
+                      const prodName = e.target.value;
+                      const p = productOptions.find((x) => x.name === prodName);
+                      const fallback = p ? p.sellPrice || p.cost * 2 : 0;
+                      updateItemFields(idx, {
+                        interested: prodName,
+                        interestedPrice: prodName ? lookupPrice(prodName, fallback) : '',
+                      });
+                    }}
+                    className="field text-xs px-2.5 py-1.5"
+                  >
+                    <option value="">ไม่ระบุ</option>
+                    {productOptions.map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name}
+                        {p.shortName ? ` (${p.shortName})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="ราคา"
+                    value={it.interestedPrice ?? ''}
+                    onChange={(e) => updateItem(idx, 'interestedPrice', e.target.value)}
+                    className="field text-xs px-2.5 py-1.5"
+                  />
+                </div>
+                {it.interested && (
+                  <div
+                    className="flex justify-between text-xs mt-2"
+                    style={{ color: Number(it.soldPrice || 0) - Number(it.interestedPrice || 0) >= 0 ? '#4C7A3E' : '#B23A48' }}
+                  >
+                    <span>ส่วนต่างจากสินค้าที่สนใจ (Cheer-up)</span>
+                    <span>
+                      {Number(it.soldPrice || 0) - Number(it.interestedPrice || 0) >= 0 ? '+' : ''}
+                      {fmt(Number(it.soldPrice || 0) - Number(it.interestedPrice || 0))}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            {usesPositions ? (
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  ตำแหน่งติดตั้ง (เลือกได้หลายตำแหน่ง)
+                </label>
+                <div className="mt-1.5 mb-2.5">
+                  <ManagedMultiChipPicker
+                    values={(it.positions || []).map((p) => p.position)}
+                    onChange={(selected) => {
+                      const existing = it.positions || [];
+                      const positions = selected.map(
+                        (pos) => existing.find((p) => p.position === pos) || { position: pos, product: '', price: 0 }
+                      );
+                      updateFilmPositions(idx, positions);
+                    }}
+                    options={positionOptions}
+                    setOptions={setPositionOptions}
+                  />
+                </div>
+                {(it.positions || []).length === 0 && (
+                  <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                    เลือกตำแหน่งที่ต้องการติดตั้งด้านบน
+                  </p>
+                )}
+                {(it.positions || []).map((p, pIdx) => (
+                  <div key={p.position} className="rounded-xl p-2.5 mb-2" style={{ background: 'var(--paper)' }}>
+                    <p className="text-xs font-semibold mb-1.5">
+                      {p.position} <span style={{ color: '#B23A48' }}>*</span>
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={p.product}
+                        onChange={(e) => {
+                          const prodName = e.target.value;
+                          const match = productOptions.find((x) => x.name === prodName);
+                          const fallback = match ? match.sellPrice || match.cost * 2 : 0;
+                          const price = lookupFilmPrice(it.category, prodName, p.position, fallback);
+                          const positions = [...(it.positions || [])];
+                          positions[pIdx] = { ...positions[pIdx], product: prodName, price };
+                          updateFilmPositions(idx, positions);
+                        }}
+                        className="field text-xs px-2.5 py-1.5"
+                      >
+                        <option value="">เลือกสินค้า...</option>
+                        {productOptions.map((pr) => (
+                          <option key={pr.id} value={pr.name}>
+                            {pr.name}
+                            {pr.shortName ? ` (${pr.shortName})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        placeholder="ราคา"
+                        value={p.price}
+                        onChange={(e) => {
+                          const positions = [...(it.positions || [])];
+                          positions[pIdx] = { ...positions[pIdx], price: e.target.value };
+                          updateFilmPositions(idx, positions);
+                        }}
+                        className="field text-xs px-2.5 py-1.5"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {isService ? (
+                    <ManagedDropdown
+                      value={it.sold}
+                      onChange={(v) => updateItemFields(idx, { sold: v, soldPrice: lookupPrice(v, Number(it.soldPrice || 0)) })}
+                      options={serviceItems}
+                      setOptions={setServiceItems}
+                      placeholder="เลือกบริการ..."
+                    />
+                  ) : (
+                    <select
+                      value={it.sold}
+                      onChange={(e) => {
+                        const prodName = e.target.value;
+                        const p = productOptions.find((x) => x.name === prodName);
+                        const fallback = p ? p.sellPrice || p.cost * 2 : 0;
+                        updateItemFields(idx, { sold: prodName, soldPrice: lookupPrice(prodName, fallback) });
+                      }}
+                      disabled={!it.category}
+                      className="field text-sm px-3 py-2 font-medium"
+                    >
+                      <option value="">{it.category ? 'สินค้าที่ขาย...' : 'เลือกชนิดสินค้าก่อน'}</option>
+                      {productOptions.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name}
+                          {p.shortName ? ` (${p.shortName})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    type="number"
+                    placeholder="ราคาที่ขาย"
+                    value={it.soldPrice}
+                    onChange={(e) => {
+                      updateItem(idx, 'soldPrice', e.target.value);
+                      commitPrice(it.sold, e.target.value);
+                    }}
+                    className="field text-sm px-3 py-2"
+                  />
+                </div>
+                {it.category && !isService && productOptions.length === 0 && (
+                  <p className="text-xs mt-1.5" style={{ color: '#B23A48' }}>
+                    <i className="fa-solid fa-triangle-exclamation mr-1"></i>ยังไม่มีสินค้าหมวด &quot;{it.category}&quot; ในสต็อก —
+                    ไปเพิ่มสินค้าที่เมนู &quot;สต็อกสินค้า&quot; &rarr; &quot;เพิ่มสินค้า&quot; ก่อน
+                  </p>
+                )}
+                {!isService && (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <select
+                      value={it.booked}
+                      onChange={(e) => updateItem(idx, 'booked', e.target.value)}
+                      disabled={!it.category}
+                      className="field text-xs px-2.5 py-1.5"
+                      style={{ color: 'var(--ink-soft)' }}
+                    >
+                      <option value="">{it.category ? 'สินค้าที่จอง...' : '-'}</option>
+                      {productOptions.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name}
+                          {p.shortName ? ` (${p.shortName})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      placeholder="ราคาที่จอง"
+                      value={it.bookedPrice}
+                      onChange={(e) => updateItem(idx, 'bookedPrice', e.target.value)}
+                      className="field text-xs px-2.5 py-1.5"
+                      style={{ color: 'var(--ink-soft)' }}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+            {it.sold && (
+              <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+                <div className="flex justify-between text-sm font-semibold mb-2">
+                  <span>ยอดรวม</span>
+                  <span>{fmt(Number(it.soldPrice || 0))}</span>
+                </div>
+                <div className="flex gap-2 items-center">
+                  <select
+                    value={it.discountType || ''}
+                    onChange={(e) => updateItem(idx, 'discountType', e.target.value || null)}
+                    className="field text-xs px-2 py-1.5"
+                  >
+                    <option value="">ไม่มีส่วนลด</option>
+                    <option value="percent">ส่วนลด %</option>
+                    <option value="amount">ส่วนลด บาท</option>
+                  </select>
+                  {it.discountType && (
+                    <input
+                      type="number"
+                      placeholder={it.discountType === 'percent' ? 'เช่น 10' : 'เช่น 500'}
+                      value={it.discountValue || ''}
+                      onChange={(e) => updateItem(idx, 'discountValue', e.target.value)}
+                      className="field text-xs px-2.5 py-1.5 flex-1"
+                    />
+                  )}
+                </div>
+                {it.discountType && it.discountValue ? (
+                  <div className="flex justify-between text-sm font-bold mt-2" style={{ color: '#4C7A3E' }}>
+                    <span>ยอดสุทธิหลังส่วนลด</span>
+                    <span>{fmt(itemNetPrice({ soldPrice: Number(it.soldPrice || 0), discountType: it.discountType, discountValue: Number(it.discountValue) }))}</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <button
+        onClick={addItem}
+        className="btn-outline w-full text-sm rounded-2xl py-2.5 flex items-center justify-center gap-2 font-medium"
+      >
+        <i className="fa-solid fa-plus"></i>เพิ่มสินค้าในคันนี้
+      </button>
+    </div>
+  );
+}
