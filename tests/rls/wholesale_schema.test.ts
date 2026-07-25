@@ -1,5 +1,5 @@
 // tests/rls/wholesale_schema.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { adminClient } from './_helpers';
 
 const supabase = adminClient();
@@ -18,6 +18,11 @@ async function removeFixtures() {
 
 describe('wholesale schema', () => {
   beforeEach(removeFixtures);
+  // Clean up AFTER as well as before. Cleaning only before keeps this file
+  // idempotent but leaves its rows in the database once the run ends, which
+  // skews the seeded figures the app displays (the dashboard totals in
+  // particular) for anyone who runs the suite against a staging stack.
+  afterAll(removeFixtures);
 
   it('stores an order with items, a return, a payment, and an adjustment', async () => {
     const { data: cust } = await supabase.from('wholesale_customers')

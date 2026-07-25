@@ -1,5 +1,5 @@
 // tests/rls/tickets_schema.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { adminClient } from './_helpers';
 
 const supabase = adminClient();
@@ -15,6 +15,11 @@ async function removeFixtures() {
 
 describe('tickets schema', () => {
   beforeEach(removeFixtures);
+  // Clean up AFTER as well as before. Cleaning only before keeps this file
+  // idempotent but leaves its rows in the database once the run ends, which
+  // skews the seeded figures the app displays (the dashboard totals in
+  // particular) for anyone who runs the suite against a staging stack.
+  afterAll(removeFixtures);
 
   it('stores a ticket with items, positions, and a payment', async () => {
     await supabase.from('tickets').insert({

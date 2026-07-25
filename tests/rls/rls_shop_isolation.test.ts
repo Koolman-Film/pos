@@ -1,5 +1,5 @@
 // tests/rls/rls_shop_isolation.test.ts
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { adminClient, anonClient, assertNoError, createAuthUser, deleteAuthUserByEmail } from './_helpers';
 
@@ -46,6 +46,15 @@ describe('RLS shop isolation', () => {
       { id: 'JT-RLS-LP', shop_id: 'lp', customer_name: 'LP Customer', status: 'จองแล้ว', drop_off_date: '2026-07-23T09:00:00Z', pickup_date: '2026-07-24T09:00:00Z' },
     ]);
     assertNoError('seed RLS fixture tickets', error);
+  });
+
+  // Take the fixtures back out. Cleaning only in beforeAll leaves two fake
+  // tickets and three fake sales users in the database after the run, which show
+  // up in the app's own numbers — the dashboard counted them as real jobs.
+  afterAll(async () => {
+    await admin.from('tickets').delete().in('id', TICKET_IDS);
+    for (const email of SALES_EMAILS) await deleteAuthUserByEmail(admin, email);
+    await admin.from('statuses').update({ short: 'จองแล้ว' }).eq('key', 'จองแล้ว');
   });
 
   it('a sales user scoped to shop cm only sees shop cm tickets', async () => {

@@ -1,5 +1,5 @@
 // tests/rls/ops_schema.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { adminClient } from './_helpers';
 
 const supabase = adminClient();
@@ -23,6 +23,11 @@ async function removeFixtures() {
 
 describe('stock/commission/accounting schema', () => {
   beforeEach(removeFixtures);
+  // Clean up AFTER as well as before. Cleaning only before keeps this file
+  // idempotent but leaves its rows in the database once the run ends, which
+  // skews the seeded figures the app displays (the dashboard totals in
+  // particular) for anyone who runs the suite against a staging stack.
+  afterAll(removeFixtures);
 
   it('stores stock, a commission rule with a team, an expense, and a petty cash entry', async () => {
     await supabase.from('stock').insert({ sku: STOCK_SKU, name: 'ทดสอบ', category: 'ฟิล์มกรองแสง', shop_id: 'cm', qty: 5, min_qty: 2, cost: 100, sell_price: 200 });
