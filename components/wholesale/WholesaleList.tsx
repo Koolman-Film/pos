@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
 import { fmt } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
+import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { orderTotal, orderPaid } from '@/lib/domain/orders';
 
 import {
@@ -59,6 +60,9 @@ export function WholesaleList({
     setList((prev) => prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o)));
     if (onUpdateStatus) onUpdateStatus(id, newStatus);
   }
+
+  // Gates the body-level print portal below; document does not exist during SSR.
+  const mounted = useIsMounted();
 
   const [filter, setFilter] = useState('all');
   const [custFilter, setCustFilter] = useState('all');
@@ -299,7 +303,10 @@ export function WholesaleList({
           })}
         </div>
       </div>
-      {typeof document !== 'undefined' &&
+      {/* `mounted`, not `typeof document`: the latter is false on the server but
+          true on the first client render, so hydration finds a .print-area the
+          server never sent and React logs a mismatch. */}
+      {mounted &&
         createPortal(
           <div className="print-area">
             <h2>

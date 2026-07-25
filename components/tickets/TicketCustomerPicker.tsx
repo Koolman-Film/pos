@@ -55,6 +55,7 @@ export function TicketCustomerPicker({
       <div className="flex gap-2 items-center">
         <select
           value={matched ? matched.id : ''}
+          aria-label="เลือกลูกค้าจากทะเบียน"
           onChange={(e) => {
             if (e.target.value === '__new__') {
               startNew();

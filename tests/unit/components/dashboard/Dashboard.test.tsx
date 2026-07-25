@@ -8,7 +8,7 @@ import userEvent from '@testing-library/user-event';
 vi.mock('@/components/charts/LineChart', () => ({ LineChart: () => null }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => {} }) }));
 
-import { Dashboard } from '@/components/dashboard/Dashboard';
+import { Dashboard, type RecentJob } from '@/components/dashboard/Dashboard';
 
 const emptyTrend = { labels: [], revenue: [], expense: [], profit: [] };
 
@@ -68,7 +68,7 @@ const base = {
   statuses: STATUSES,
 };
 
-function job(over: Partial<Parameters<typeof Dashboard>[0]['recentJobs'][number]> = {}) {
+function job(over: Partial<RecentJob> = {}): RecentJob {
   return {
     id: 'JT-1',
     customer: 'คุณ เอ',

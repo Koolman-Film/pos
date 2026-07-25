@@ -161,7 +161,12 @@ export function VehicleInfoSection({
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
             ทะเบียนรถ/เลขถัง
           </label>
-          <input value={t.plate} onChange={(e) => field('plate', e.target.value)} className="field w-full text-sm px-3 py-2" />
+          <input
+            value={t.plate}
+            onChange={(e) => field('plate', e.target.value)}
+            aria-label="ทะเบียนรถ/เลขถัง"
+            className="field w-full text-sm px-3 py-2"
+          />
         </div>
       </div>
       <div className="mb-3">

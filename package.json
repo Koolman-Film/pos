@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run tests/unit",
+    "test:rls": "vitest run tests/rls",
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:rls && npm run test:e2e",
+    "db:seed": "tsx supabase/seed.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
@@ -34,6 +40,7 @@
     "jsdom": "^29.1.1",
     "supabase": "^2.109.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.1",
     "typescript": "^5",
     "vitest": "^4.1.10"
   }

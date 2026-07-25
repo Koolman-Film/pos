@@ -131,11 +131,22 @@ export default async function StockPage() {
     }));
   }
 
+  // A serialisable map, NOT session.canDo. StockModule is a Client Component, and
+  // handing it the closure makes React refuse to serialise the tree, which 500s
+  // the whole /stock route. Only the keys this module actually gates on.
+  const caps = {
+    'stock.addProduct': session.canDo('stock.addProduct'),
+    'stock.adjustStock': session.canDo('stock.adjustStock'),
+    'stock.withdraw': session.canDo('stock.withdraw'),
+    'stock.editDelete': session.canDo('stock.editDelete'),
+    'stock.export': session.canDo('stock.export'),
+  };
+
   return (
     <StockModule
       stock={stock}
       withdrawals={withdrawals}
-      canDo={session.canDo}
+      caps={caps}
       canSeeStockPrices={canSeeStockPrices}
       isAdmin={isAdmin}
       accessibleShops={accessibleShops}

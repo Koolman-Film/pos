@@ -87,6 +87,7 @@ export function StockModule({
   stock,
   withdrawals = [],
   canDo,
+  caps,
   canSeeStockPrices,
   isAdmin = false,
   accessibleShops = [],
@@ -100,7 +101,15 @@ export function StockModule({
 }: {
   stock: StockItem[];
   withdrawals?: Withdrawal[];
-  canDo: (cap: string) => boolean;
+  /**
+   * Capability check. A Server Component CANNOT pass this — it is a closure, and
+   * this module is a Client Component, so React refuses to serialise it and the
+   * whole route 500s. Pages must pass the serialisable `caps` map instead; the
+   * function form exists for unit tests that render this component directly.
+   * Same contract as WholesaleDetail.
+   */
+  canDo?: (cap: string) => boolean;
+  caps?: Record<string, boolean>;
   canSeeStockPrices: boolean;
   isAdmin?: boolean;
   accessibleShops?: Shop[];
@@ -112,6 +121,9 @@ export function StockModule({
   filmPriceMatrix?: FilmPriceEntry[];
   actions?: StockActions;
 }) {
+  // Deny by default when neither form is supplied, so a wiring mistake hides
+  // controls rather than exposing them.
+  const can = canDo ?? ((k: string) => !!caps?.[k]);
   const canSeePrices = canSeeStockPrices;
   const shopName = (id: string) => accessibleShops.find((s) => s.id === id)?.name || id;
 
@@ -435,7 +447,7 @@ export function StockModule({
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <h1 className="text-xl font-bold">สต็อกสินค้า</h1>
         <div className="flex gap-2 flex-wrap">
-          {canDo('stock.addProduct') && (
+          {can('stock.addProduct') && (
             <button
               onClick={() => setPanel(panel === 'add' ? null : 'add')}
               className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'add' ? 'btn-primary' : 'btn-outline'}`}
@@ -443,7 +455,7 @@ export function StockModule({
               <i className="fa-solid fa-cart-plus"></i>เพิ่มสินค้า
             </button>
           )}
-          {canDo('stock.adjustStock') && (
+          {can('stock.adjustStock') && (
             <button
               onClick={() => setPanel(panel === 'adjust' ? null : 'adjust')}
               className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'adjust' ? 'btn-primary' : 'btn-outline'}`}
@@ -451,7 +463,7 @@ export function StockModule({
               <i className="fa-solid fa-scale-balanced"></i>ปรับสต็อก
             </button>
           )}
-          {canDo('stock.withdraw') && (
+          {can('stock.withdraw') && (
             <button
               onClick={() => setPanel(panel === 'withdraw' ? null : 'withdraw')}
               className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'withdraw' ? 'btn-primary' : 'btn-outline'}`}
@@ -467,7 +479,7 @@ export function StockModule({
               <i className="fa-solid fa-tags"></i>ตั้งราคาฟิล์ม/กันรอย
             </button>
           )}
-          {canDo('stock.addProduct') && (
+          {can('stock.addProduct') && (
             <button
               onClick={() => setPanel(panel === 'bulk' ? null : 'bulk')}
               className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'bulk' ? 'btn-primary' : 'btn-outline'}`}
@@ -1084,7 +1096,7 @@ export function StockModule({
                 </option>
               ))}
             </select>
-            {canDo('stock.export') && (
+            {can('stock.export') && (
               <div className="flex gap-2">
                 <button
                   onClick={exportExcel}
@@ -1280,10 +1292,13 @@ export function StockModule({
                                   : ''}
                             </p>
                           </div>
-                          {canDo('stock.editDelete') && (
+                          {can('stock.editDelete') && (
                             <div className="flex flex-col gap-1 row-action">
+                              {/* Icon-only, so the SKU carries the accessible name —
+                                  otherwise every row's pair is indistinguishable. */}
                               <button
                                 onClick={() => startEdit(s)}
+                                aria-label={`แก้ไขสินค้า ${s.sku}`}
                                 className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
                                 style={{ background: 'var(--paper)', color: 'var(--primary)' }}
                               >
@@ -1291,6 +1306,7 @@ export function StockModule({
                               </button>
                               <button
                                 onClick={() => deleteStockItem(s.id)}
+                                aria-label={`ลบสินค้า ${s.sku}`}
                                 className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
                                 style={{ background: 'var(--paper)', color: '#B23A48' }}
                               >

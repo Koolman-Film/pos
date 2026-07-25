@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, todayValue } from '@/lib/domain/now';
+import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -184,6 +185,9 @@ export function AccountingModule({
   const [expenseCategories, setExpenseCategories] = useState<string[]>(expenseCategoriesProp);
   const [paymentSources, setPaymentSources] = useState<string[]>(paymentSourcesProp);
   const [, startTransition] = useTransition();
+
+  // Gates the body-level print portal below; document does not exist during SSR.
+  const mounted = useIsMounted();
 
   const [showAdd, setShowAdd] = useState(false);
   const [showTopup, setShowTopup] = useState(false);
@@ -1080,7 +1084,9 @@ export function AccountingModule({
           )}
         </div>
       </div>
-      {typeof document !== 'undefined' &&
+      {/* See WholesaleList: `typeof document` is false on the server and true on
+          the first client render, which is a hydration mismatch. */}
+      {mounted &&
         createPortal(
           <div className="print-area">
             <h2>

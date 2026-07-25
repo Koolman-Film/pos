@@ -1,18 +1,31 @@
 import { test, expect } from '@playwright/test';
 
-// Written now, executed in Task 21 once the full app is wired end-to-end.
+import { login } from './helpers';
+
+/**
+ * Ticket creation, end to end: the sales user has `list.createNew`, so the form
+ * is reachable and the insert should land in the list.
+ *
+ * A unique plate per run keeps this idempotent — the spec inserts a real row into
+ * the local database and does not clean up, which is intentional: re-running
+ * against an accumulating table is exactly what production does.
+ */
 test('sales user can create a ticket and see it in the list', async ({ page }) => {
-  await page.goto('/login');
-  await page.fill('input[name=email]', 'sales@finnixfilm.com');
-  await page.fill('input[name=password]', 'test-password-123');
-  await page.click('button[type=submit]');
-  await expect(page).toHaveURL(/dashboard/);
+  await login(page, 'sales');
+
+  const plate = `9กก ${Date.now().toString().slice(-4)}`;
 
   await page.goto('/tickets/new');
-  await page.fill('input[name=customerName]', 'คุณ ทดสอบ E2E');
-  await page.fill('input[name=plate]', '9กก 9999');
-  await page.click('button:has-text("บันทึก")');
 
-  await page.goto('/tickets');
-  await expect(page.getByText('คุณ ทดสอบ E2E')).toBeVisible();
+  // Pick an existing customer from the register — this fills both the name and
+  // the phone, the two fields the form marks required.
+  // The option label is `{name} · {phone}`, built in TicketCustomerPicker.
+  await page.getByLabel('เลือกลูกค้าจากทะเบียน').selectOption({ label: 'คุณ เอ · 081-234-5678' });
+  await page.getByLabel('ทะเบียนรถ/เลขถัง').fill(plate);
+
+  await page.click('button:has-text("บันทึกใบงาน")');
+
+  // The save action redirects to the list on success.
+  await expect(page).toHaveURL(/\/tickets(\?|$)/);
+  await expect(page.getByText(plate).first()).toBeVisible();
 });
