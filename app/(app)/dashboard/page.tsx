@@ -3,7 +3,15 @@ import { Suspense } from 'react';
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { ticketTotal, ticketPaid } from '@/lib/domain/tickets';
+import type { StatusConfig } from '@/components/ui/Badge';
 import { Dashboard } from '@/components/dashboard/Dashboard';
+import type {
+  PendingApprovals,
+  RecentJob,
+  StatusTotal,
+  UpcomingTicket,
+} from '@/components/dashboard/Dashboard';
+import { updateTicketStatus } from '@/app/(app)/tickets/actions';
 import { DashboardFilter } from '@/components/dashboard/DashboardFilter';
 import {
   buildTrend,
@@ -39,16 +47,18 @@ export default async function DashboardPage({
     { data: pettyRows },
     { data: stockRows },
     { data: shopRows },
+    { data: statusRows },
   ] = await Promise.all([
     supabase
       .from('tickets')
       .select(
-        'id, shop_id, customer_name, plate, status, drop_off_date, ticket_items(sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)'
-      ),
+        'id, shop_id, customer_name, plate, brand, model, service_type, status, drop_off_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)'
+      )
+      .order('drop_off_date', { ascending: false }),
     supabase
       .from('orders')
       .select(
-        'id, shop_id, customer_id, order_items(name, qty, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount)'
+        'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount)'
       ),
     supabase.from('wholesale_customers').select('id, name'),
     supabase
@@ -57,6 +67,10 @@ export default async function DashboardPage({
     supabase.from('petty_cash').select('shop_id, type, amount'),
     supabase.from('stock').select('category, shop_id, qty'),
     supabase.from('shops').select('id, name, sort_order').order('sort_order'),
+    supabase
+      .from('statuses')
+      .select('key, short, bg, text_color, dot, sort_order')
+      .order('sort_order'),
   ]);
 
   // ---- Shop options for the filter (names + access) ----
@@ -93,8 +107,15 @@ export default async function DashboardPage({
     shop: t.shop_id,
     customer: t.customer_name,
     plate: t.plate,
+    brand: t.brand,
+    model: t.model,
+    serviceType: t.service_type,
     status: t.status,
     dropOff: toDate(t.drop_off_date),
+    // Distinct product categories, and the product names the prototype shows on
+    // the recent-jobs rows (`i.sold || i.booked`).
+    categories: [...new Set((t.ticket_items ?? []).map((i) => i.category).filter(Boolean))],
+    products: [...new Set((t.ticket_items ?? []).map((i) => i.sold || i.booked).filter(Boolean))],
     items: (t.ticket_items ?? []).map((i) => ({
       soldPrice: num(i.sold_price),
       discountType: (i.discount_type ?? undefined) as 'percent' | 'amount' | undefined,
@@ -111,9 +132,11 @@ export default async function DashboardPage({
     id: o.id,
     shop: o.shop_id,
     customerId: num(o.customer_id),
+    status: o.status,
     items: (o.order_items ?? []).map((i) => ({
       name: i.name,
       qty: num(i.qty),
+      listPrice: num(i.list_price),
       requestedPrice: num(i.requested_price),
     })),
     returns: (o.order_returns ?? []).map((r) => ({ item: r.item_name, qty: num(r.qty) })),
@@ -190,6 +213,70 @@ export default async function DashboardPage({
   }));
   const trend = buildTrend(trendTickets, trendExpenses, shopFilter, period, periodValue, rangeStart, rangeEnd);
 
+  // ---- Row 3 / Row 4 widgets (correction C13) ----
+  const statuses: StatusConfig[] = (statusRows ?? []).map((s) => ({
+    key: s.key,
+    short: s.short,
+    bg: s.bg,
+    text: s.text_color,
+    dot: s.dot,
+  }));
+
+  // Per-status bars over the shop-filtered set. The prototype divides by
+  // `visible.length || 1` so an empty set yields 0% rather than NaN.
+  const statusDenominator = visibleTickets.length || 1;
+  const statusTotals: StatusTotal[] = statuses.map((s) => {
+    const count = visibleTickets.filter((t) => t.status === s.key).length;
+    return { key: s.key, count, pct: Math.round((count / statusDenominator) * 100) };
+  });
+
+  // Bookings from today through 7 days out, ascending — prototype `isWithinDays`
+  // (:109) inlined here because the boundary is what matters: from today at
+  // 00:00:00.000 through the 7th day at 23:59:59.999.
+  const windowStart = new Date();
+  windowStart.setHours(0, 0, 0, 0);
+  const windowEnd = new Date(windowStart);
+  windowEnd.setDate(windowEnd.getDate() + 7);
+  windowEnd.setHours(23, 59, 59, 999);
+
+  const upcoming: UpcomingTicket[] = visibleTickets
+    .filter((t) => t.dropOff && t.dropOff >= windowStart && t.dropOff <= windowEnd)
+    .sort((a, b) => (a.dropOff as Date).getTime() - (b.dropOff as Date).getTime())
+    .map((t) => ({
+      id: t.id,
+      customer: t.customer,
+      brand: t.brand,
+      model: t.model,
+      plate: t.plate,
+      serviceType: t.serviceType,
+      categories: t.categories,
+      dropOff: t.dropOff as Date,
+    }));
+
+  // Pending approvals count across ALL orders the caller can see, not the
+  // shop-filtered subset — matching the prototype, which reads `orders` directly
+  // rather than `wsVisible` here (:896-897).
+  const pendingApprovals: PendingApprovals = {
+    discount: orders.filter(
+      (o) => o.status === 'รออนุมัติราคา' && o.items.some((i) => i.requestedPrice < i.listPrice)
+    ).length,
+    badDebt: orders.filter((o) => o.status === 'ค้างชำระ').length,
+  };
+
+  // Newest five in scope. The query already sorts by drop-off descending, which
+  // is the order the prototype's seeded array happens to be in.
+  const recentJobs: RecentJob[] = visibleTickets.slice(0, 5).map((t) => ({
+    id: t.id,
+    customer: t.customer,
+    brand: t.brand,
+    model: t.model,
+    plate: t.plate,
+    serviceType: t.serviceType,
+    categories: t.categories,
+    products: t.products,
+    status: t.status,
+  }));
+
   const calendarTickets: CalendarTicket[] = tickets
     .filter((t) => t.dropOff)
     .map((t) => ({
@@ -218,6 +305,14 @@ export default async function DashboardPage({
       trend={trend}
       calendarTickets={calendarTickets}
       shopFilter={shopFilter}
+      statuses={statuses}
+      totalJobs={visibleTickets.length}
+      statusTotals={statusTotals}
+      upcoming={upcoming}
+      pendingApprovals={pendingApprovals}
+      recentJobs={recentJobs}
+      canDo={session.canDo}
+      onUpdateTicketStatus={updateTicketStatus}
       filter={
         <Suspense fallback={null}>
           <DashboardFilter

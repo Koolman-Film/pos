@@ -8,23 +8,60 @@
 // it is safe to receive as a function here because Dashboard is itself a Server
 // Component (no server→client function-prop boundary is crossed).
 //
-// Widgets whose prototype data is a full per-ticket client array (job-status
-// totals, upcoming bookings, pending approvals, recent-jobs list) are not part of
-// this server-aggregated contract and are intentionally omitted — the port pushes
-// numbers, not row arrays, to the client. The remaining widgets are faithful.
+// The four row-shaped widgets — job-status totals, this-week bookings, pending
+// approvals and the recent-jobs list — were initially left out because the port's
+// instinct is to push numbers rather than row arrays to the client (correction
+// C13). They are back, because the prototype's dashboard is not a numbers
+// dashboard: those four are half of what the screen is *for*. The rows are still
+// assembled and trimmed server-side (top 5 recent, 7-day booking window), so what
+// crosses the wire is a small bounded projection, not the full ticket set. The
+// only interactive leaf is the status dropdown (TicketStatusSelect).
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { LineChart } from '@/components/charts/LineChart';
-import { fmt } from '@/lib/domain/format';
+import { getStatus, type StatusConfig } from '@/components/ui/Badge';
+import { fmt, fmtThaiDate } from '@/lib/domain/format';
 
 import { JobCalendar, type CalendarTicket } from './JobCalendar';
+import { TicketStatusSelect } from './TicketStatusSelect';
 import type { APItem, ARItem, TrendSeries } from './receivables';
 
 export type ShopBreakdown = { name: string; count: number };
 export type ExpenseByCategory = { name: string; amount: number };
 export type StockByCategory = { name: string; qty: number };
+
+/** One bar in the "งานทั้งหมด" breakdown (prototype `statusList`). */
+export type StatusTotal = { key: string; count: number; pct: number };
+
+/** A booking inside the next-7-days window (prototype `upcoming`). */
+export type UpcomingTicket = {
+  id: string;
+  customer: string;
+  brand: string;
+  model: string;
+  plate: string;
+  serviceType: string;
+  categories: string[];
+  dropOff: Date;
+};
+
+/** A row of the "งานล่าสุด" list (prototype `visible.slice(0,5)`). */
+export type RecentJob = {
+  id: string;
+  customer: string;
+  brand: string;
+  model: string;
+  plate: string;
+  serviceType: string;
+  categories: string[];
+  products: string[];
+  status: string;
+};
+
+/** The two counters on the "รอการอนุมัติ" card. */
+export type PendingApprovals = { discount: number; badDebt: number };
 
 export type DashboardProps = {
   hasDashboardWidget: (key: string) => boolean;
@@ -44,6 +81,18 @@ export type DashboardProps = {
   calendarTickets?: CalendarTicket[];
   shopFilter?: string;
   filter?: ReactNode;
+  /** Live `statuses` config (labels, pill colours, dots). Falls back to none. */
+  statuses?: StatusConfig[];
+  /** Total jobs in scope — the big number above the status bars. */
+  totalJobs?: number;
+  statusTotals?: StatusTotal[];
+  upcoming?: UpcomingTicket[];
+  pendingApprovals?: PendingApprovals;
+  recentJobs?: RecentJob[];
+  /** Capability check, for the `list.createNew` button. Denies by default. */
+  canDo?: (capabilityKey: string) => boolean;
+  /** `updateTicketStatus` Server Action; omitted renders the select read-only. */
+  onUpdateTicketStatus?: (ticketId: string, newStatus: string) => Promise<void>;
 };
 
 export function Dashboard({
@@ -64,6 +113,14 @@ export function Dashboard({
   calendarTickets = [],
   shopFilter = 'all',
   filter,
+  statuses = [],
+  totalJobs = 0,
+  statusTotals = [],
+  upcoming = [],
+  pendingApprovals,
+  recentJobs = [],
+  canDo = () => false,
+  onUpdateTicketStatus,
 }: DashboardProps) {
   const maxShopCount = Math.max(...shopBreakdown.map((s) => s.count), 1);
   const maxExpenseCat = Math.max(...expenseByCategory.map((c) => c.amount), 1);
@@ -356,6 +413,235 @@ export function Dashboard({
           <JobCalendar tickets={calendarTickets} shopFilter={shopFilter} />
         )}
       </div>
+
+      {/* Row 3: job status totals + this-week bookings + pending approvals
+          (prototype :844-917). The first two are ungated there, so they are
+          ungated here; only รอการอนุมัติ sits behind a widget permission. */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
+        <div className="card p-5 lg:col-span-4">
+          <div className="flex items-start justify-between mb-3">
+            <div className="icon-tile" style={{ background: '#E6EFDC' }}>
+              <i className="fa-solid fa-clipboard-check" style={{ color: '#4C7A3E' }}></i>
+            </div>
+          </div>
+          <p className="text-2xl font-extrabold">{totalJobs}</p>
+          <p className="text-sm mt-0.5 mb-3" style={{ color: 'var(--ink-soft)' }}>
+            งานทั้งหมด
+          </p>
+          <div className="flex flex-col gap-2.5">
+            {statusTotals.map((s) => {
+              const conf = getStatus(statuses, s.key);
+              return (
+                <div key={s.key}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span style={{ color: 'var(--ink-soft)' }}>{conf.short}</span>
+                    <span className="font-medium">{s.count}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full" style={{ background: 'var(--paper)' }}>
+                    <div
+                      className="h-1.5 rounded-full"
+                      style={{ width: `${s.pct}%`, background: conf.dot }}
+                    ></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card p-5 lg:col-span-4">
+          <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
+            <i className="fa-solid fa-calendar-week" style={{ color: 'var(--primary)' }}></i>
+            การนัดหมายวันนี้ &ndash; อีก 7 วันข้างหน้า ({upcoming.length})
+          </p>
+          {upcoming.length === 0 && (
+            <p className="text-xs py-6 text-center" style={{ color: 'var(--ink-faint)' }}>
+              ยังไม่มีนัดหมายในช่วงนี้
+            </p>
+          )}
+          <div className="flex flex-col max-h-72 overflow-y-auto scrollbar-thin">
+            {groupUpcoming(upcoming).map((day) => (
+              <div key={day.key} className="mb-2">
+                <p className="text-xs font-bold mt-2 mb-1.5" style={{ color: 'var(--primary)' }}>
+                  {fmtThaiDate(day.date)}
+                </p>
+                {day.byService.map((group) => (
+                  <div key={group.serviceType} className="mb-1.5 ml-2">
+                    <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)' }}>
+                      {group.serviceType}
+                    </p>
+                    {group.tickets.map((t, i) => (
+                      <Link
+                        key={t.id}
+                        href={`/tickets/${t.id}`}
+                        className="flex items-center justify-between gap-2 cursor-pointer py-2 pl-2"
+                        style={{ borderTop: i === 0 ? 'none' : '1px solid var(--line)' }}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {t.customer} &middot; {t.brand} {t.model} &middot; {t.plate}
+                          </p>
+                          {t.categories.length > 0 && (
+                            <p
+                              className="text-xs truncate mt-0.5"
+                              style={{ color: 'var(--ink-faint)' }}
+                            >
+                              {t.categories.join(', ')}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className="row-action text-xs flex-shrink-0"
+                          style={{ color: 'var(--primary)' }}
+                        >
+                          <i className="fa-solid fa-chevron-right"></i>
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {hasDashboardWidget('pendingApprovals') && pendingApprovals && (
+          <div className="card p-5 lg:col-span-4">
+            <p className="text-sm font-semibold mb-3">รอการอนุมัติ</p>
+            <div className="h-1.5 rounded-full flex overflow-hidden mb-4">
+              <div className="h-full" style={{ width: '50%', background: '#E8B23D' }}></div>
+              <div className="h-full" style={{ width: '50%', background: '#C24B57' }}></div>
+            </div>
+            <div className="flex flex-col gap-3 text-sm">
+              <Link href="/wholesale" className="flex items-center justify-between hover:opacity-80">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ background: '#E8B23D' }}></span>
+                  ส่วนลด PO รออนุมัติ
+                </span>
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: '#FBF1DA', color: '#8A5A12' }}
+                >
+                  {pendingApprovals.discount}
+                </span>
+              </Link>
+              <Link href="/wholesale" className="flex items-center justify-between hover:opacity-80">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ background: '#C24B57' }}></span>
+                  ขอตัดหนี้สูญ
+                </span>
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: '#FBEAEC', color: '#B23A48' }}
+                >
+                  {pendingApprovals.badDebt}
+                </span>
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Row 4: the wide "งานล่าสุด" list (prototype :919-943). */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <p className="text-sm font-semibold">งานล่าสุด</p>
+          <Link
+            href="/tickets"
+            className="btn-primary text-xs px-3 py-1.5 rounded-lg font-medium"
+          >
+            ดูทั้งหมด
+          </Link>
+        </div>
+        <div className="flex flex-col">
+          {recentJobs.length === 0 && (
+            <p className="text-xs py-6 text-center" style={{ color: 'var(--ink-faint)' }}>
+              ยังไม่มีใบงาน
+            </p>
+          )}
+          {recentJobs.map((t, i) => (
+            <div
+              key={t.id}
+              className="group flex items-center justify-between gap-3 py-3"
+              style={{ borderTop: i === 0 ? 'none' : '1px solid var(--line)' }}
+            >
+              {/* The row is a link and the status select is not — nesting a
+                  <select> inside an <a> would be invalid HTML and would swallow
+                  its clicks, so they sit side by side instead of the prototype's
+                  onClick-on-the-row. */}
+              <Link href={`/tickets/${t.id}`} className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="icon-tile" style={{ background: 'var(--paper)' }}>
+                  <i className="fa-solid fa-car text-sm" style={{ color: 'var(--primary)' }}></i>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">
+                    {t.customer} &middot; {t.brand} {t.model} &middot; {t.plate}
+                  </p>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-faint)' }}>
+                    {t.serviceType || 'ยังไม่ระบุการนัดหมาย'} &middot;{' '}
+                    {t.categories.join(', ') || 'ยังไม่ระบุชนิดสินค้า'}
+                  </p>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-soft)' }}>
+                    {t.products.join(', ') || 'ยังไม่ระบุสินค้า'}
+                  </p>
+                </div>
+              </Link>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <TicketStatusSelect
+                  ticketId={t.id}
+                  status={t.status}
+                  statuses={statuses}
+                  onChange={onUpdateTicketStatus}
+                />
+                <Link
+                  href={`/tickets/${t.id}`}
+                  aria-label={`เปิดใบงาน ${t.id}`}
+                  className="row-action text-xs"
+                  style={{ color: 'var(--primary)' }}
+                >
+                  <i className="fa-solid fa-arrow-right"></i>
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {canDo('list.createNew') && (
+        <Link
+          href="/tickets/new"
+          className="btn-primary mt-6 w-full rounded-2xl py-3.5 text-sm font-semibold flex items-center justify-center gap-2"
+        >
+          <i className="fa-solid fa-plus"></i> สร้างใบงานใหม่
+        </Link>
+      )}
     </div>
   );
+}
+
+/**
+ * Group the 7-day booking window by day, then by appointment type — the
+ * prototype's nested `dateKeys` / `apptTypes` IIFE (:865-892), lifted out so the
+ * JSX above stays readable. Input order is preserved (the caller sorts by
+ * drop-off), so days and service types come out in first-seen order exactly as
+ * `[...new Set(...)]` produced them.
+ */
+function groupUpcoming(upcoming: UpcomingTicket[]) {
+  const days: { key: string; date: Date; byService: { serviceType: string; tickets: UpcomingTicket[] }[] }[] = [];
+  for (const t of upcoming) {
+    const key = t.dropOff.toDateString();
+    let day = days.find((d) => d.key === key);
+    if (!day) {
+      day = { key, date: t.dropOff, byService: [] };
+      days.push(day);
+    }
+    const serviceType = t.serviceType || 'ยังไม่ระบุการนัดหมาย';
+    let group = day.byService.find((g) => g.serviceType === serviceType);
+    if (!group) {
+      group = { serviceType, tickets: [] };
+      day.byService.push(group);
+    }
+    group.tickets.push(t);
+  }
+  return days;
 }

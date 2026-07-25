@@ -194,6 +194,10 @@ export async function updateTicketStatus(ticketId: string, newStatus: string): P
   await supabase.from('ticket_status_history').insert({ ticket_id: ticketId, status: newStatus });
   revalidatePath('/tickets');
   revalidatePath(`/tickets/${ticketId}`);
+  // The dashboard's recent-jobs list carries this same status dropdown (C13), and
+  // its status bars and job calendar are derived from status too, so a change made
+  // there has to invalidate it or the row snaps back to the stale value.
+  revalidatePath('/dashboard');
 }
 
 /**
