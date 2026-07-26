@@ -1,0 +1,152 @@
+name: CI
+
+# Until this existed, all 300-odd checks in this repo ran only when somebody
+# remembered to run them. That is the difference between having tests and being
+# defended by them.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# A newer push makes an in-flight run pointless; don't pay for it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # An explicit major rather than `latest`, so a Node release cannot turn a green
+  # branch red on its own. Note this is NOT the version used for local development
+  # (26.x at the time of writing) — it is the oldest line the app is expected to
+  # run on, which is the more useful thing for CI to prove.
+  NODE_VERSION: '22'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Everything that needs no database. Fast, and the majority of the signal.
+  # ---------------------------------------------------------------------------
+  static:
+    name: types, lint, format, unit, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Unit tests
+        # tests/unit is pure + jsdom; nothing here touches Postgres.
+        run: npm run test:unit
+
+      - name: Production build
+        # Every route is dynamic, so the build never queries the database — but the
+        # Supabase client is constructed from these, so they must be present and
+        # syntactically valid. They are deliberately not real.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: build-time-placeholder-not-a-real-key
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # The suites that need a real Postgres with RLS and a real Auth server. These
+  # are the ones that would otherwise never run automatically.
+  # ---------------------------------------------------------------------------
+  database:
+    name: integration, RLS, e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Pinned to a commit SHA, not a tag: a tag is mutable, so `@v1` means
+      # "whatever supabase pushes there", and this step runs with access to the
+      # workflow. v1.7.1.
+      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1
+        with:
+          # Match the version in devDependencies; a CLI bump can change what
+          # `db reset` does, and that should be a deliberate change.
+          version: 2.109.1
+
+      - name: Start the local stack
+        # Brings up Postgres, GoTrue and PostgREST and applies migrations 0001-0011.
+        run: supabase start
+
+      - name: Export the stack's URL and keys
+        # `supabase status -o env` is the only source for these — they are generated
+        # per-stack. The test helpers read process.env first and fall back to
+        # .env.local, so exporting here is enough.
+        run: |
+          eval "$(supabase status -o env)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=${API_URL}"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${ANON_KEY}"
+            echo "SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}"
+          } >> "$GITHUB_ENV"
+
+      - name: Reset and seed
+        # `db reset` re-applies every migration and runs seed.sql (which creates the
+        # admin login); db:seed adds the other three sample accounts through the
+        # Auth Admin API, which SQL cannot do. Several specs sign in as those.
+        run: npm run db:reset
+
+      - name: Integration tests
+        run: npm run test:integration
+
+      - name: RLS tests
+        run: npm run test:rls
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Functional e2e
+        # CI=true makes playwright.config build and run production, not next dev.
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Stack logs on failure
+        if: failure()
+        run: supabase status || true
+
+# ---------------------------------------------------------------------------
+# NOT RUN HERE: the visual regression suite (tests/e2e/visual.spec.ts).
+#
+# Playwright names snapshots per platform, and the committed baselines are
+# `*-darwin.png` — captured on the machine this port is developed on. Running them
+# on ubuntu would compare against baselines that do not exist, and generating
+# linux baselines here would mean committing images nobody has reviewed. Font
+# rasterisation differs enough between the two that a shared baseline is not
+# realistic either.
+#
+# So visual stays a local gate: `npm run test:e2e:visual`, which reseeds first.
+# If this ever needs to run in CI, the honest way is to generate and review the
+# linux baselines inside the same container image CI uses, and commit those
+# alongside the darwin ones.
+# ---------------------------------------------------------------------------
