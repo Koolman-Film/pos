@@ -61,6 +61,7 @@ export function VehicleInfoSection({
             1. วันที่รับงาน
           </label>
           <DateTimeField
+            label="วันที่รับรถ"
             value={t.dropOffDateObj}
             onChange={(v) => field('dropOffDateObj', v)}
             timeSlots={timeSlots}
@@ -72,6 +73,7 @@ export function VehicleInfoSection({
             2. วันที่ส่งงาน
           </label>
           <DateTimeField
+            label="วันที่ส่งงาน"
             value={t.pickupDateObj}
             onChange={(v) => field('pickupDateObj', v)}
             timeSlots={timeSlots}
@@ -129,6 +131,7 @@ export function VehicleInfoSection({
           />
           <a
             href={t.phone ? `tel:${t.phone}` : undefined}
+            aria-label={t.phone ? `โทรหา ${t.customer} ${t.phone}` : 'ยังไม่มีเบอร์โทร'}
             onClick={(e) => {
               if (!t.phone) e.preventDefault();
             }}
@@ -166,6 +169,7 @@ export function VehicleInfoSection({
           </label>
           <input
             value={t.color}
+            aria-label="สีรถ"
             onChange={(e) => field('color', e.target.value)}
             className="field w-full text-sm px-3 py-2"
           />

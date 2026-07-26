@@ -40,6 +40,7 @@ export function PaymentsSection({
           <div className="flex gap-2 mb-2">
             <select
               value={p.type}
+              aria-label="ประเภทการชำระเงิน"
               onChange={(e) => updatePayment(idx, 'type', e.target.value)}
               className="field text-xs px-2.5 py-1.5"
             >

@@ -13,6 +13,7 @@ ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip);
 export function BarChart({ labels, data }: { labels: string[]; data: number[] }) {
   return (
     <Bar
+      aria-label="กราฟแท่งสรุปข้อมูล"
       data={{
         labels,
         datasets: [{ data, backgroundColor: '#7A2333', borderRadius: 6, maxBarThickness: 22 }],

@@ -368,6 +368,7 @@ export function PermissionsModule({
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <select
                   value={u.role}
+                  aria-label="บทบาทของผู้ใช้"
                   onChange={(e) => run(onUpdateUser?.(u.id, { role: e.target.value }))}
                   className="field text-xs px-2.5 py-1.5"
                 >
@@ -390,6 +391,7 @@ export function PermissionsModule({
                 </button>
                 <button
                   onClick={() => deleteUser(u.id)}
+                  aria-label={`ลบผู้ใช้ ${u.name}`}
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
                   style={{ background: 'var(--paper)', color: '#B23A48' }}
                 >
@@ -414,6 +416,7 @@ export function PermissionsModule({
           />
           <select
             value={newUserRole}
+            aria-label="บทบาทของผู้ใช้ใหม่"
             onChange={(e) => setNewUserRole(e.target.value)}
             className="field text-sm px-3 py-2"
           >
@@ -494,6 +497,7 @@ export function PermissionsModule({
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => startEditRole(r)}
+                      aria-label={`แก้ไขบทบาท ${r.name}`}
                       className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
                       style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
                     >
@@ -501,6 +505,7 @@ export function PermissionsModule({
                     </button>
                     <button
                       onClick={() => deleteRole(r.id)}
+                      aria-label={`ลบบทบาท ${r.name}`}
                       className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
                       style={{ background: 'var(--paper)', color: '#B23A48' }}
                     >
@@ -515,6 +520,7 @@ export function PermissionsModule({
         <div className="flex gap-2">
           <select
             value={newRoleIcon}
+            aria-label="ไอคอนของบทบาทใหม่"
             onChange={(e) => setNewRoleIcon(e.target.value)}
             className="field text-sm px-3 py-2"
           >
@@ -557,6 +563,7 @@ export function PermissionsModule({
               <div className="flex flex-col flex-shrink-0">
                 <button
                   onClick={() => run(onMoveStatus?.(s.key, -1))}
+                  aria-label={`เลื่อนสถานะ ${s.key} ขึ้น`}
                   disabled={idx === 0}
                   className="w-6 h-5 flex items-center justify-center text-xs"
                   style={{
@@ -568,6 +575,7 @@ export function PermissionsModule({
                 </button>
                 <button
                   onClick={() => run(onMoveStatus?.(s.key, 1))}
+                  aria-label={`เลื่อนสถานะ ${s.key} ลง`}
                   disabled={idx === statuses.length - 1}
                   className="w-6 h-5 flex items-center justify-center text-xs"
                   style={{
@@ -581,6 +589,7 @@ export function PermissionsModule({
               <input
                 type="color"
                 value={s.dot}
+                aria-label={`สีของสถานะ ${s.key}`}
                 onChange={(e) => run(onUpdateStatus?.(s.key, 'color', e.target.value))}
                 className="w-8 h-8 rounded-lg border-none cursor-pointer flex-shrink-0"
               />
@@ -595,6 +604,7 @@ export function PermissionsModule({
               />
               <button
                 onClick={() => deleteStatus(s.key)}
+                aria-label={`ลบสถานะ ${s.key}`}
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-xs flex-shrink-0"
                 style={{ background: 'var(--paper)', color: '#B23A48' }}
               >
@@ -607,6 +617,7 @@ export function PermissionsModule({
           <input
             type="color"
             value={newStatusColor}
+            aria-label="สีของสถานะใหม่"
             onChange={(e) => setNewStatusColor(e.target.value)}
             className="w-9 h-9 rounded-lg border-none cursor-pointer flex-shrink-0"
           />
@@ -654,16 +665,19 @@ export function PermissionsModule({
               <input
                 type="color"
                 value={c.dot}
+                aria-label={`สีของสถานะขายส่ง ${c.key}`}
                 onChange={(e) => run(onUpdateWsStatusColor?.(c.key, e.target.value))}
                 className="w-8 h-8 rounded-lg border-none cursor-pointer flex-shrink-0"
               />
               <input
                 defaultValue={c.key}
+                aria-label={`ชื่อสถานะขายส่ง ${c.key}`}
                 onBlur={(e) => run(onRenameWsStatus?.(c.key, e.target.value))}
                 className="field text-sm px-2.5 py-1.5 flex-1"
               />
               <button
                 onClick={() => deleteWsStatus(c.key)}
+                aria-label={`ลบสถานะขายส่ง ${c.key}`}
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-xs flex-shrink-0"
                 style={{ background: 'var(--paper)', color: '#B23A48' }}
               >
@@ -676,6 +690,7 @@ export function PermissionsModule({
           <input
             type="color"
             value={newWsStatusColor}
+            aria-label="สีของสถานะขายส่งใหม่"
             onChange={(e) => setNewWsStatusColor(e.target.value)}
             className="w-9 h-9 rounded-lg border-none cursor-pointer flex-shrink-0"
           />
@@ -760,6 +775,7 @@ export function PermissionsModule({
                         />
                         <button
                           onClick={() => removePaymentChannel(s.id, idx)}
+                          aria-label="ลบช่องทางการชำระเงินนี้"
                           className="w-7 h-7 rounded-lg flex items-center justify-center text-xs flex-shrink-0"
                           style={{ background: 'var(--paper)', color: '#B23A48' }}
                         >

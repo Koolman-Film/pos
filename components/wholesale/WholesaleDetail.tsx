@@ -253,6 +253,7 @@ export function WholesaleDetail({
           </p>
           <select
             value={o.status}
+            aria-label="สถานะของ PO"
             onChange={(e) => field('status', e.target.value)}
             className="text-xs font-semibold px-2.5 py-1 rounded-full border-none cursor-pointer"
             style={{ background: st.bg || '#F1EDE7', color: st.text || '#6B5F55' }}
@@ -290,6 +291,7 @@ export function WholesaleDetail({
             >
               <select
                 value={it.name}
+                aria-label="สินค้าในรายการ"
                 onChange={(e) => selectProduct(idx, e.target.value)}
                 className="field text-sm px-3 py-2 w-full mb-2 font-medium"
               >
@@ -396,6 +398,7 @@ export function WholesaleDetail({
             <div key={idx} className="flex gap-2 mb-2">
               <select
                 value={r.item}
+                aria-label="สินค้าที่รับคืน"
                 onChange={(e) => updateReturn(idx, 'item', e.target.value)}
                 className="field text-xs px-2.5 py-1.5 flex-1"
               >

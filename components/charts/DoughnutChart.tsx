@@ -22,6 +22,7 @@ export function DoughnutChart({
 }) {
   return (
     <Doughnut
+      aria-label="กราฟวงกลมสรุปสัดส่วน"
       data={{
         labels,
         datasets: [{ data, backgroundColor: colors, borderWidth: 0, spacing: 2 }],

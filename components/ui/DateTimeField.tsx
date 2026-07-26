@@ -19,11 +19,17 @@ export function DateTimeField({
   onChange,
   timeSlots,
   setTimeSlots,
+  label,
 }: {
   value: Date;
   onChange: (d: Date) => void;
   timeSlots: string[];
   setTimeSlots: (s: string[]) => void;
+  /**
+   * Names the date input for assistive tech. The visible caption sits outside
+   * this component, so without it the field is announced only as "date".
+   */
+  label?: string;
 }) {
   const dateStr = `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
   const timeStr = `${pad(value.getHours())}:${pad(value.getMinutes())}`;
@@ -41,6 +47,7 @@ export function DateTimeField({
       <input
         type="date"
         value={dateStr}
+        aria-label={label ? `${label} — วันที่` : undefined}
         onChange={(e) => setDate(e.target.value)}
         className="field w-full text-sm px-3 py-2"
       />

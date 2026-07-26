@@ -65,12 +65,17 @@ the domain is added.
 
 ## Pre-flight checklist
 
+- [ ] `npm test` green — runs everything below in order
 - [ ] `npm run typecheck` clean
 - [ ] `npm run lint` clean
+- [ ] `npm run format:check` clean
 - [ ] `npm run build` succeeds
 - [ ] `npm run test:unit` green
-- [ ] `npm run test:rls` green (needs a stack with the migrations applied)
+- [ ] `npm run test:integration` green (needs a stack with the migrations applied)
+- [ ] `npm run test:rls` green (same)
 - [ ] `npm run test:e2e` green (needs the seed and a dev/prod server)
+- [ ] `npm run test:e2e:visual` green — reseeds first, since the screenshot
+      baselines were captured on pristine seed data
 - [ ] `lib/types/database.ts` regenerated from the hosted project and diff-clean
 - [ ] Production Supabase has **no** seeded sample data and no shared password
 - [ ] Auth redirect URLs in the hosted projects include the Vercel domains

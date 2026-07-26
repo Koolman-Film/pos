@@ -44,6 +44,7 @@ export function ManagedDropdown({
           value={newVal}
           onChange={(e) => setNewVal(e.target.value)}
           placeholder="พิมพ์ตัวเลือกใหม่..."
+          aria-label={`เพิ่มตัวเลือกใหม่${placeholder ? ` — ${placeholder}` : ''}`}
           className="field flex-1 text-sm px-3 py-2"
           onKeyDown={(e) => {
             if (e.key === 'Enter') commitAdd();
@@ -70,6 +71,9 @@ export function ManagedDropdown({
             onChange(e.target.value);
           }
         }}
+        // The visible cue for this control is its placeholder option; without
+        // this the select is announced as unnamed.
+        aria-label={placeholder || 'เลือก...'}
         className="field flex-1 text-sm px-3 py-2"
       >
         <option value="" disabled>

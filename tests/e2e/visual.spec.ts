@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-import { login } from './helpers';
+import { dbAdmin, login } from './helpers';
 
 /**
  * Visual regression baselines.
@@ -22,6 +22,49 @@ import { login } from './helpers';
  *   npm run test:e2e:update-snapshots
  * and read the diff image first — that diff is the point of the test.
  */
+
+/**
+ * Baselines were captured on freshly-seeded data, so anything that changed the
+ * seed changes the pixels. Without this guard the symptom is a pile of pixel
+ * diffs that look like a styling regression, and the actual cause — a ticket some
+ * other spec created — is invisible. Check the precondition and say so plainly.
+ */
+test.beforeAll(async () => {
+  const admin = dbAdmin();
+  const [{ count: tickets }, { data: stock }, { count: movements }] = await Promise.all([
+    admin.from('tickets').select('*', { count: 'exact', head: true }),
+    admin.from('stock').select('qty').eq('sku', 'SKU-FLM-3M60').single(),
+    admin
+      .from('withdrawals')
+      .select('*', { count: 'exact', head: true })
+      .like('type', '%ตัดสต็อกจาก%'),
+  ]);
+
+  const problems: string[] = [];
+  if (tickets !== SEED_TICKET_COUNT) {
+    problems.push(`tickets table has ${tickets} rows, seed has ${SEED_TICKET_COUNT}`);
+  }
+  if (Number(stock?.qty) !== SEED_FIXTURE_STOCK_QTY) {
+    problems.push(`SKU-FLM-3M60 qty is ${stock?.qty}, seed has ${SEED_FIXTURE_STOCK_QTY}`);
+  }
+  if ((movements ?? 0) > 0) {
+    problems.push(`${movements} automatic stock movement(s) recorded — the seed has none`);
+  }
+
+  if (problems.length) {
+    throw new Error(
+      `Visual baselines require pristine seed data, but:\n` +
+        problems.map((p) => `  - ${p}`).join('\n') +
+        `\n\nRun:  npm run db:reset\n` +
+        `(Then re-run. Do NOT --update-snapshots to make this go away; the ` +
+        `baselines are fine, the data is not.)`,
+    );
+  }
+});
+
+/** Invariants of the seed that the screenshots depend on. */
+const SEED_TICKET_COUNT = 5;
+const SEED_FIXTURE_STOCK_QTY = 15;
 
 /** Selectors whose rendered content changes with the clock or the RNG. */
 const NON_DETERMINISTIC = [

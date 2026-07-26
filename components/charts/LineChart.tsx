@@ -43,6 +43,7 @@ export function LineChart({
     <div>
       <div className="relative h-56">
         <Line
+          aria-label="กราฟรายได้ ค่าใช้จ่าย และกำไร"
           data={{
             labels,
             datasets: [

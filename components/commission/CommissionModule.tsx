@@ -148,6 +148,7 @@ export function CommissionModule({
               </label>
               <select
                 value={nr.category}
+                aria-label="กลุ่มค่าคอมมิชชั่น"
                 onChange={(e) => setNr({ ...nr, category: e.target.value })}
                 className="field w-full text-sm px-3 py-2"
               >
@@ -172,6 +173,7 @@ export function CommissionModule({
               </label>
               <select
                 value={nr.type}
+                aria-label="วิธีคิดค่าคอมมิชชั่น"
                 onChange={(e) => setNr({ ...nr, type: e.target.value })}
                 className="field w-full text-sm px-3 py-2"
               >

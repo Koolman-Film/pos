@@ -73,6 +73,7 @@ export function CustomerPicker({
         </button>
         <select
           value={customerId || ''}
+          aria-label="เลือกลูกค้าขายส่ง"
           onChange={(e) => {
             if (e.target.value === '__new__') {
               startNew();

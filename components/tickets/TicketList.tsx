@@ -224,6 +224,7 @@ export function TicketList({
         {period === 'year' && (
           <select
             value={periodValue}
+            aria-label="เลือกปี"
             onChange={(e) => setPeriodValue(e.target.value)}
             className="field text-sm px-3 py-2"
           >
@@ -260,6 +261,7 @@ export function TicketList({
           {accessibleShops.length > 1 ? (
             <select
               value={shopFilter}
+              aria-label="กรองตามสาขา"
               onChange={(e) => {
                 setShopFilter(e.target.value);
                 setCustomerFilter('all');
@@ -297,6 +299,7 @@ export function TicketList({
         <div className="flex flex-col sm:flex-row gap-3 mb-5">
           <select
             value={customerFilter}
+            aria-label="กรองตามลูกค้า"
             onChange={(e) => setCustomerFilter(e.target.value)}
             className="field flex-1 text-sm px-3.5 py-2.5"
           >
@@ -309,6 +312,7 @@ export function TicketList({
           </select>
           <select
             value={statusFilter}
+            aria-label="กรองตามสถานะ"
             onChange={(e) => setStatusFilter(e.target.value)}
             className="field flex-1 text-sm px-3.5 py-2.5"
           >

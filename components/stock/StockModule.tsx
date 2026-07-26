@@ -706,6 +706,7 @@ export function StockModule({
               </label>
               <select
                 value={priceProdCat}
+                aria-label="ชนิดสินค้าสำหรับตั้งราคา"
                 onChange={(e) => {
                   setPriceProdCat(e.target.value);
                   setPriceProd('');
@@ -722,6 +723,7 @@ export function StockModule({
               </label>
               <select
                 value={priceProd}
+                aria-label="สินค้าสำหรับตั้งราคา"
                 onChange={(e) => setPriceProd(e.target.value)}
                 className="field w-full text-sm px-3 py-2"
               >
@@ -837,6 +839,7 @@ export function StockModule({
                 </label>
                 <select
                   value={addStk.existingId}
+                  aria-label="เลือกสินค้าที่มีอยู่แล้ว"
                   onChange={(e) => setAddStk({ ...addStk, existingId: Number(e.target.value) })}
                   className="field w-full text-sm px-3 py-2"
                 >
@@ -899,6 +902,7 @@ export function StockModule({
                   </label>
                   <select
                     value={addStk.shop}
+                    aria-label="สาขาที่รับสินค้าเข้า"
                     onChange={(e) => setAddStk({ ...addStk, shop: e.target.value })}
                     className="field w-full text-sm px-3 py-2"
                   >
@@ -968,6 +972,7 @@ export function StockModule({
               </label>
               <select
                 value={addStk.reason}
+                aria-label="เหตุผลที่รับสินค้าเข้า"
                 onChange={(e) => setAddStk({ ...addStk, reason: e.target.value })}
                 className="field w-full text-sm px-3 py-2"
               >
@@ -996,6 +1001,7 @@ export function StockModule({
               </label>
               <select
                 value={adj.id}
+                aria-label="สินค้าที่ต้องการปรับสต็อก"
                 onChange={(e) => setAdj({ ...adj, id: Number(e.target.value) })}
                 className="field w-full text-sm px-3 py-2"
               >
@@ -1056,6 +1062,7 @@ export function StockModule({
               </label>
               <select
                 value={wd.id}
+                aria-label="สินค้าที่ต้องการเบิก"
                 onChange={(e) => setWd({ ...wd, id: Number(e.target.value) })}
                 className="field w-full text-sm px-3 py-2"
               >
@@ -1083,6 +1090,7 @@ export function StockModule({
               </label>
               <select
                 value={wd.type}
+                aria-label="ประเภทการเบิกใช้"
                 onChange={(e) => setWd({ ...wd, type: e.target.value })}
                 className="field w-full text-sm px-3 py-2"
               >
@@ -1158,6 +1166,7 @@ export function StockModule({
           <div className="flex gap-2 flex-wrap items-center">
             <select
               value={branchFilter}
+              aria-label="กรองตามสาขา"
               onChange={(e) => {
                 setBranchFilter(e.target.value);
                 setCatFilter('all');
@@ -1174,6 +1183,7 @@ export function StockModule({
             </select>
             <select
               value={catFilter}
+              aria-label="กรองตามชนิดสินค้า"
               onChange={(e) => {
                 setCatFilter(e.target.value);
                 setNameFilterSel('all');
@@ -1189,6 +1199,7 @@ export function StockModule({
             </select>
             <select
               value={nameFilterSel}
+              aria-label="กรองตามชื่อสินค้า"
               onChange={(e) => setNameFilterSel(e.target.value)}
               className="field text-xs px-2.5 py-2 rounded-lg"
             >

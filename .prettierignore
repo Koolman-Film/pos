@@ -22,3 +22,6 @@ docs/superpowers/
 
 # Playwright visual baselines
 **/*-snapshots/
+
+# supabase CLI scratch
+supabase/.temp/

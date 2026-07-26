@@ -410,6 +410,7 @@ export function AccountingModule({
       <div className="flex items-center justify-end mb-4 flex-wrap gap-2">
         <select
           value={shopFilter}
+          aria-label="กรองตามสาขา"
           onChange={(e) => setShopFilter(e.target.value)}
           className="field text-sm px-3 py-2"
         >
@@ -422,6 +423,7 @@ export function AccountingModule({
         </select>
         <select
           value={categoryFilter}
+          aria-label="กรองตามกลุ่มค่าใช้จ่าย"
           onChange={(e) => setCategoryFilter(e.target.value)}
           className="field text-sm px-3 py-2"
         >
@@ -434,6 +436,7 @@ export function AccountingModule({
         </select>
         <select
           value={statusFilter}
+          aria-label="กรองตามสถานะ"
           onChange={(e) => setStatusFilter(e.target.value)}
           className="field text-sm px-3 py-2"
         >
@@ -508,6 +511,7 @@ export function AccountingModule({
         {period === 'year' && (
           <select
             value={periodValue}
+            aria-label="เลือกปี"
             onChange={(e) => setPeriodValue(e.target.value)}
             className="field text-sm px-3 py-2"
           >
@@ -634,6 +638,7 @@ export function AccountingModule({
             {cashPeriod === 'year' && (
               <select
                 value={cashPeriodValue}
+                aria-label="เลือกปีของเงินสดย่อย"
                 onChange={(e) => setCashPeriodValue(e.target.value)}
                 className="field text-sm px-3 py-2"
               >
@@ -710,6 +715,7 @@ export function AccountingModule({
                 </label>
                 <select
                   value={topup.shop}
+                  aria-label="สาขาที่เติมเงินสดย่อย"
                   onChange={(e) => setTopup({ ...topup, shop: e.target.value })}
                   className="field w-full text-sm px-3 py-2"
                 >
@@ -764,6 +770,7 @@ export function AccountingModule({
               </label>
               <select
                 value={ex.shop}
+                aria-label="สาขาของค่าใช้จ่าย"
                 onChange={(e) => setEx({ ...ex, shop: e.target.value })}
                 className="field w-full text-sm px-3 py-2"
               >
@@ -867,6 +874,7 @@ export function AccountingModule({
               </label>
               <select
                 value={ex.status}
+                aria-label="สถานะการจ่าย"
                 onChange={(e) => setEx({ ...ex, status: e.target.value })}
                 className="field w-full text-sm px-3 py-2"
               >
@@ -988,6 +996,7 @@ export function AccountingModule({
                     </label>
                     <select
                       value={editExForm.status}
+                      aria-label="แก้ไขสถานะการจ่าย"
                       onChange={(e2) => setEditExForm({ ...editExForm, status: e2.target.value })}
                       className="field text-sm px-2.5 py-1.5 w-full"
                     >
@@ -1070,6 +1079,7 @@ export function AccountingModule({
                     <div className="flex items-center gap-1 row-action">
                       <button
                         onClick={() => startEditExpense(e)}
+                        aria-label={`แก้ไขรายการ ${e.desc}`}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
                         style={{ background: 'var(--paper)', color: 'var(--primary)' }}
                       >
@@ -1077,6 +1087,7 @@ export function AccountingModule({
                       </button>
                       <button
                         onClick={() => deleteExpense(e.id)}
+                        aria-label={`ลบรายการ ${e.desc}`}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
                         style={{ background: 'var(--paper)', color: '#B23A48' }}
                       >

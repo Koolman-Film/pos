@@ -99,6 +99,7 @@ export function ItemsSection({
             <div className="flex justify-between mb-2.5 gap-2">
               <select
                 value={it.category}
+                aria-label="ชนิดสินค้า"
                 onChange={(e) =>
                   updateItemFields(idx, {
                     category: e.target.value,
@@ -135,6 +136,7 @@ export function ItemsSection({
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   <select
                     value={it.interested || ''}
+                    aria-label="สินค้าที่ลูกค้าสนใจ"
                     onChange={(e) => {
                       const prodName = e.target.value;
                       const p = productOptions.find((x) => x.name === prodName);
@@ -222,6 +224,7 @@ export function ItemsSection({
                     <div className="grid grid-cols-2 gap-2">
                       <select
                         value={p.product}
+                        aria-label="สินค้าประจำตำแหน่ง"
                         onChange={(e) => {
                           const prodName = e.target.value;
                           const match = productOptions.find((x) => x.name === prodName);
@@ -280,6 +283,7 @@ export function ItemsSection({
                   ) : (
                     <select
                       value={it.sold}
+                      aria-label="สินค้าที่ขายจริง"
                       onChange={(e) => {
                         const prodName = e.target.value;
                         const p = productOptions.find((x) => x.name === prodName);
@@ -325,6 +329,7 @@ export function ItemsSection({
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <select
                       value={it.booked}
+                      aria-label="สินค้าที่จองไว้"
                       onChange={(e) => updateItem(idx, 'booked', e.target.value)}
                       disabled={!it.category}
                       className="field text-xs px-2.5 py-1.5"
@@ -359,6 +364,7 @@ export function ItemsSection({
                 <div className="flex gap-2 items-center">
                   <select
                     value={it.discountType || ''}
+                    aria-label="ประเภทส่วนลด"
                     onChange={(e) => updateItem(idx, 'discountType', e.target.value || null)}
                     className="field text-xs px-2 py-1.5"
                   >

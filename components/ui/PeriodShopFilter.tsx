@@ -42,6 +42,7 @@ export function PeriodShopFilter({
         <select
           value={shopFilter}
           onChange={(e) => setShopFilter(e.target.value)}
+          aria-label="เลือกสาขา"
           className="field text-sm px-3 py-2 font-medium"
         >
           <option value="all">ทุกร้าน ({shopOptions.length})</option>
@@ -55,6 +56,7 @@ export function PeriodShopFilter({
         <select
           value={shopFilter}
           onChange={(e) => setShopFilter(e.target.value)}
+          aria-label="เลือกสาขา"
           className="field text-sm px-3 py-2 font-medium"
         >
           {shopOptions.map((s) => (
@@ -114,6 +116,7 @@ export function PeriodShopFilter({
         <select
           value={periodValue}
           onChange={(e) => setPeriodValue(e.target.value)}
+          aria-label="เลือกปี"
           className="field text-sm px-3 py-2"
         >
           {[2569, 2568, 2567].map((y) => (

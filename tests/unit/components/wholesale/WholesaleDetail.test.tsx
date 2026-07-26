@@ -58,3 +58,80 @@ describe('WholesaleDetail', () => {
     expect(screen.queryByText('อนุมัติราคานี้')).not.toBeInTheDocument();
   });
 });
+
+describe('WholesaleDetail totals', () => {
+  const build = (over: Partial<WsOrder>) => ({ ...order, ...over }) as unknown as WsOrder;
+
+  it('subtracts a return priced at the matching item price', () => {
+    // 10 x 1000 = 10,000, less 2 returned at 1000 = 8,000.
+    render(
+      <WholesaleDetail
+        order={build({
+          returns: [{ item: 'ฟิล์ม 3M CRM (ม้วน)', qty: 2, reason: '' }],
+        } as Partial<WsOrder>)}
+        canDo={() => true}
+      />,
+    );
+    expect(screen.getAllByText(/8,000\.00/).length).toBeGreaterThan(0);
+  });
+
+  it('ignores a return naming a product that is not on the order', () => {
+    render(
+      <WholesaleDetail
+        order={build({ returns: [{ item: 'ไม่เคยขาย', qty: 5, reason: '' }] } as Partial<WsOrder>)}
+        canDo={() => true}
+      />,
+    );
+    expect(screen.getAllByText(/10,000\.00/).length).toBeGreaterThan(0);
+  });
+
+  it('applies adjustments to the total', () => {
+    render(
+      <WholesaleDetail
+        order={build({
+          adjustments: [{ amount: 500, reason: 'ค่าส่ง', date: '' }],
+        } as Partial<WsOrder>)}
+        canDo={() => true}
+      />,
+    );
+    expect(screen.getAllByText(/9,500\.00/).length).toBeGreaterThan(0);
+  });
+
+  it('shows the outstanding balance after a part payment', () => {
+    render(
+      <WholesaleDetail
+        order={build({
+          payments: [{ amount: 4000, method: 'เงินสด', date: '', attachments: [] }],
+        } as Partial<WsOrder>)}
+        canDo={() => true}
+      />,
+    );
+    // 10,000 billed, 4,000 paid → 6,000 outstanding.
+    expect(screen.getAllByText(/6,000\.00/).length).toBeGreaterThan(0);
+  });
+
+  it('renders an order with no lines at all', () => {
+    // The order id only appears inside the print portal, which is not mounted
+    // here, so assert on the section that is always present.
+    render(<WholesaleDetail order={build({ items: [] } as Partial<WsOrder>)} canDo={() => true} />);
+    expect(screen.getAllByText(/รายการสินค้า/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/0\.00/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('WholesaleDetail capability gates', () => {
+  it('accepts a serialisable caps map from a Server Component', () => {
+    render(<WholesaleDetail order={discountedOrder} caps={{ 'wholesale.priceApproval': true }} />);
+    expect(screen.getByText('อนุมัติราคานี้')).toBeInTheDocument();
+  });
+
+  it('gates bad-debt separately from price approval', () => {
+    render(
+      <WholesaleDetail
+        order={order}
+        caps={{ 'wholesale.priceApproval': true, 'wholesale.badDebt': false }}
+      />,
+    );
+    expect(screen.queryByText(/ตัดหนี้สูญ/)).not.toBeInTheDocument();
+  });
+});

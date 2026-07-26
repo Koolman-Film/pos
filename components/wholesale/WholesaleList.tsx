@@ -159,6 +159,7 @@ export function WholesaleList({
           <div className="flex gap-2 flex-wrap">
             <select
               value={custFilter}
+              aria-label="กรองตามลูกค้า"
               onChange={(e) => setCustFilter(e.target.value)}
               className="field text-sm px-3.5 py-2"
             >
@@ -171,6 +172,7 @@ export function WholesaleList({
             </select>
             <select
               value={productFilter}
+              aria-label="กรองตามสินค้า"
               onChange={(e) => setProductFilter(e.target.value)}
               className="field text-sm px-3.5 py-2"
             >
@@ -267,6 +269,7 @@ export function WholesaleList({
                             <div className="text-right">
                               <select
                                 value={o.status}
+                                aria-label="สถานะของ PO"
                                 onClick={(e) => e.stopPropagation()}
                                 onChange={(e) => {
                                   e.stopPropagation();

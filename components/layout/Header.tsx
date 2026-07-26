@@ -70,6 +70,7 @@ export function Header({ name, roleId, email }: { name: string; roleId: string; 
           <button
             type="button"
             className="icon-tile relative"
+            aria-label="การแจ้งเตือน"
             style={{ background: 'var(--paper)' }}
           >
             <i className="fa-regular fa-bell text-sm" style={{ color: 'var(--ink-soft)' }} />

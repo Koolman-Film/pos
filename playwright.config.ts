@@ -16,12 +16,29 @@ import { defineConfig } from '@playwright/test';
  *  - The webServer runs `next start` against a production build in CI and `next
  *    dev` locally. Dev is fine locally and much faster to iterate on; the print
  *    spec asserts computed CSS, which is identical either way.
+ *  - Two projects. `functional` specs own and restore their own fixtures, so they
+ *    can run in any order. `visual` compares screenshots against baselines
+ *    captured on PRISTINE seed data, so it must not run after specs that mutate
+ *    shared rows (a created ticket changes the list, an approved PO changes the
+ *    dashboard). Keeping them in separate projects — and out of each other's
+ *    default run — is what makes both suites trustworthy rather than flaky.
+ *    `npm run test:e2e` runs functional; `npm run test:e2e:visual` reseeds first.
  */
 const PORT = 3000;
 const isCI = !!process.env.CI;
 
 export default defineConfig({
   testDir: './tests/e2e',
+  projects: [
+    {
+      name: 'functional',
+      testIgnore: /visual\.spec\.ts/,
+    },
+    {
+      name: 'visual',
+      testMatch: /visual\.spec\.ts/,
+    },
+  ],
   // A dev-mode first paint can take a while to compile a route on demand.
   timeout: 60_000,
   expect: { timeout: 10_000 },

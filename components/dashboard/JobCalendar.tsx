@@ -90,6 +90,7 @@ export function JobCalendar({
     <div className="card p-5 lg:col-span-2">
       <div className="flex items-center justify-between mb-4">
         <button
+          aria-label="เดือนก่อนหน้า"
           onClick={() => setCalDate(new Date(year, month - 1, 1))}
           className="w-6 h-6 rounded-lg flex items-center justify-center"
           style={{ color: 'var(--ink-soft)' }}
@@ -101,6 +102,7 @@ export function JobCalendar({
           {calDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
         </p>
         <button
+          aria-label="เดือนถัดไป"
           onClick={() => setCalDate(new Date(year, month + 1, 1))}
           className="w-6 h-6 rounded-lg flex items-center justify-center"
           style={{ color: 'var(--ink-soft)' }}

@@ -393,6 +393,7 @@ export function TicketDetail({
           </p>
           <select
             value={t.status}
+            aria-label="สถานะใบงาน"
             onChange={(e) => changeStatus(e.target.value)}
             className="text-sm font-bold px-3 py-1.5 rounded-full border-none cursor-pointer"
             style={{
