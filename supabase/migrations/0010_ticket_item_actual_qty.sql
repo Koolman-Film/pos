@@ -29,6 +29,10 @@
 -- `ระบบ (ใบงาน)` / `ระบบ (ขายส่ง)`, and lands as `อนุมัติแล้ว` because it records
 -- something that already physically happened rather than requesting it.
 
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 alter table ticket_items
   add column actual_qty jsonb not null default '{}';
 

@@ -13,5 +13,11 @@ export function createClient() {
   return createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      // This app lives in the `pos` schema, not `public` — the database is shared
+      // with the Koolman accounting app, which owns `public` (migration 0000).
+      // Setting it here is what lets every `.from('tickets')` call stay unchanged.
+      db: { schema: 'pos' },
+    },
   );
 }

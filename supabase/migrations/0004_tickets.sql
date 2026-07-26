@@ -1,4 +1,8 @@
 -- supabase/migrations/0004_tickets.sql
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 create table retail_customers (
   id bigint generated always as identity primary key,
   name text not null,

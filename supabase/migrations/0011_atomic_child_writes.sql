@@ -31,6 +31,10 @@
 -- ---------------------------------------------------------------------------
 -- Job ticket: items (each with its positions) + payments
 -- ---------------------------------------------------------------------------
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 create or replace function save_ticket_children(
   p_ticket_id text,
   p_items jsonb,
@@ -39,7 +43,7 @@ create or replace function save_ticket_children(
 returns void
 language plpgsql
 security invoker
-set search_path = public
+set search_path = pos
 as $$
 declare
   v_item jsonb;
@@ -102,7 +106,7 @@ create or replace function save_order_children(
 returns void
 language plpgsql
 security invoker
-set search_path = public
+set search_path = pos
 as $$
 begin
   delete from order_items where order_id = p_order_id;

@@ -7,32 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-  public: {
+  pos: {
     Tables: {
       app_users: {
         Row: {
@@ -533,19 +508,19 @@ export type Database = {
         Row: {
           allowed: boolean
           permission_key: string
-          permission_type: Database["public"]["Enums"]["permission_type"]
+          permission_type: Database["pos"]["Enums"]["permission_type"]
           role_id: string
         }
         Insert: {
           allowed?: boolean
           permission_key: string
-          permission_type: Database["public"]["Enums"]["permission_type"]
+          permission_type: Database["pos"]["Enums"]["permission_type"]
           role_id: string
         }
         Update: {
           allowed?: boolean
           permission_key?: string
-          permission_type?: Database["public"]["Enums"]["permission_type"]
+          permission_type?: Database["pos"]["Enums"]["permission_type"]
           role_id?: string
         }
         Relationships: [
@@ -1201,10 +1176,7 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
-  public: {
+  pos: {
     Enums: {
       permission_type: ["nav", "dashboard_widget", "module_capability"],
     },

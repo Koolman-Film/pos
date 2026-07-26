@@ -24,11 +24,15 @@
 --     state; here the row is real and `app_users.role_id` is NOT NULL, so every
 --     affected user has to land somewhere.
 
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 create or replace function reset_permissions_to_defaults()
 returns void
 language plpgsql
 security invoker           -- runs as the caller, so RLS still applies
-set search_path = public
+set search_path = pos
 as $$
 begin
   -- 1. The four default roles, upserted so existing ones keep their identity.

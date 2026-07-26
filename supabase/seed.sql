@@ -26,6 +26,9 @@
 -- same. Order respects the FKs; the identity sequences restart so the
 -- integer ids below (customer 1..5, stock 1..5) match the prototype's.
 
+-- Seeds this app's own schema; `auth.*` and `extensions.*` stay qualified.
+set search_path = pos, public, extensions;
+
 truncate table
   ticket_item_positions, ticket_items, ticket_payments, ticket_status_history, tickets,
   order_items, order_returns, order_payments, order_adjustments, orders,

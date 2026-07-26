@@ -1,4 +1,8 @@
 -- supabase/migrations/0003_config_lists.sql
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 create table option_lists (
   id bigint generated always as identity primary key,
   list_key text not null,

@@ -5,7 +5,14 @@ import { revalidatePath } from 'next/cache';
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
-import type { TablesInsert, TablesUpdate } from '@/lib/types/database';
+import type { Database } from '@/lib/types/database';
+
+// Addressed through Database['pos'] rather than the generated TablesInsert/
+// TablesUpdate helpers: those derive their default schema from
+// `Extract<keyof Database, 'public'>`, which is `never` for a pos-only codegen
+// and silently degrades the row types to `unknown`.
+type TicketInsert = Database['pos']['Tables']['tickets']['Insert'];
+type TicketUpdate = Database['pos']['Tables']['tickets']['Update'];
 import type { OptionListName, TicketSavePayload } from '@/components/tickets/types';
 
 export type SaveResult = { ok: boolean; error?: string; id?: string };
@@ -180,7 +187,7 @@ export async function createTicket(p: TicketSavePayload): Promise<SaveResult> {
     const retailId = await resolveRetailCustomerId(supabase, p.customer, p.phone);
     const { error } = await supabase
       .from('tickets')
-      .insert(ticketRow(p, id, retailId) as unknown as TablesInsert<'tickets'>);
+      .insert(ticketRow(p, id, retailId) as unknown as TicketInsert);
     if (error) throw new Error(error.message);
     await writeTicketChildren(supabase, id, p);
     await supabase.from('ticket_status_history').insert({ ticket_id: id, status: p.status });
@@ -207,7 +214,7 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
     const { id, ...cols } = ticketRow(p, p.id, retailId);
     const { error } = await supabase
       .from('tickets')
-      .update(cols as unknown as TablesUpdate<'tickets'>)
+      .update(cols as unknown as TicketUpdate)
       .eq('id', id);
     if (error) throw new Error(error.message);
     await writeTicketChildren(supabase, p.id, p);

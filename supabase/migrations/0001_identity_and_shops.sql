@@ -6,6 +6,10 @@
 -- PostgREST returns 42501 "permission denied for table ..." without this. Row access is
 -- still gated by the RLS policies in 0007 — this only restores table-level reachability,
 -- which is the model the rest of this schema is written against.
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 alter default privileges for role postgres in schema public
   grant all on tables to anon, authenticated, service_role;
 alter default privileges for role postgres in schema public

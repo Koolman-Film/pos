@@ -107,6 +107,8 @@ async function main() {
   // and to write app_users before any session exists.
   const admin = createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    // The app's tables are in the `pos` schema (migration 0000), not `public`.
+    db: { schema: 'pos' },
   });
 
   // Fail loudly if the migrations have not been applied — otherwise the FK errors

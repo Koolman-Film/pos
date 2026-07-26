@@ -69,6 +69,10 @@ const ALL_SHOPS = ['cm', 'lp', 'py', 'lpg', 'ca'];
 // fixture clobber another's session.
 const authOptions = {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  // This app's tables are in the `pos` schema (migration 0000); `public` belongs
+  // to the co-located accounting app. All three clients below share these options,
+  // so the schema is stated once.
+  db: { schema: 'pos' as const },
 };
 
 const admin = createClient<Database>(url, serviceKey, authOptions);

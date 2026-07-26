@@ -19,6 +19,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+import type { Database } from '@/lib/types/database';
+
 const ENV_FILE = '.env.local';
 
 /** Walk up from this file looking for the repo-root `.env.local`. */
@@ -91,15 +93,33 @@ export const supabaseServiceRoleKey = (): string => requireEnv(['SUPABASE_SERVIC
 // `persistSession: false` matters: the suite runs under jsdom, where every
 // client built from the same URL would otherwise share one localStorage slot and
 // clobber each other's sessions.
-const NO_SESSION = { auth: { persistSession: false, autoRefreshToken: false } } as const;
+// `db.schema` matters as much as the auth options here: this app's tables live in
+// the `pos` schema (migration 0000), so a client left on the default `public`
+// would query the co-located accounting app's schema and find nothing.
+/**
+ * A client bound to this app's `pos` schema (migration 0000).
+ *
+ * Named so the generic is declared in one place: a bare `SupabaseClient` defaults
+ * to the `public` schema, which in this database belongs to the co-located
+ * accounting app — so an un-parameterised annotation compiles but describes the
+ * wrong database.
+ */
+export type PosClient = SupabaseClient<Database, 'pos'>;
+
+const NO_SESSION = {
+  auth: { persistSession: false, autoRefreshToken: false },
+  db: { schema: 'pos' },
+} as const;
 
 /** Service-role client. Bypasses RLS — use for fixtures and assertions. */
-export function adminClient(): SupabaseClient {
+// The 'pos' schema generic has to appear in the return type too, or the
+// annotation silently widens back to the default 'public' and stops matching.
+export function adminClient(): PosClient {
   return createClient(supabaseUrl(), supabaseServiceRoleKey(), NO_SESSION);
 }
 
 /** Anon-key client. Subject to RLS — use to act as a signed-in end user. */
-export function anonClient(): SupabaseClient {
+export function anonClient(): PosClient {
   return createClient(supabaseUrl(), supabaseAnonKey(), NO_SESSION);
 }
 
@@ -168,7 +188,7 @@ export function assertNoError(label: string, error: { message?: string } | null)
  * Returns null when no such user exists.
  */
 export async function findAuthUserByEmail(
-  admin: SupabaseClient,
+  admin: PosClient,
   email: string,
 ): Promise<{ id: string } | null> {
   const perPage = 200;
@@ -192,7 +212,7 @@ export async function findAuthUserByEmail(
  * `auth.users`, but they are deleted explicitly first so a half-cleaned state
  * (public rows left behind by an aborted run) also gets repaired.
  */
-export async function deleteAuthUserByEmail(admin: SupabaseClient, email: string): Promise<void> {
+export async function deleteAuthUserByEmail(admin: PosClient, email: string): Promise<void> {
   const existing = await findAuthUserByEmail(admin, email);
   if (existing) {
     await admin.from('user_shop_access').delete().eq('user_id', existing.id);
@@ -209,7 +229,7 @@ export async function deleteAuthUserByEmail(admin: SupabaseClient, email: string
 
 /** Create an auth user, retrying only transient stack failures. */
 export async function createAuthUser(
-  admin: SupabaseClient,
+  admin: PosClient,
   email: string,
   password: string,
 ): Promise<{ id: string }> {

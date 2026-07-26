@@ -1,4 +1,8 @@
 -- supabase/migrations/0005_wholesale.sql
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 create table wholesale_customers (
   id bigint generated always as identity primary key,
   name text not null,

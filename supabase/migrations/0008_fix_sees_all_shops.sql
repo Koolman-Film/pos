@@ -19,6 +19,10 @@
 --
 -- Must stay in sync with lib/auth/buildSessionContext.ts.
 
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 create or replace function current_user_sees_all_shops() returns boolean
 language sql stable security definer as $$
   select current_user_role() = 'admin'

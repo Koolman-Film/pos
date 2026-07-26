@@ -1,4 +1,8 @@
 -- supabase/migrations/0002_permissions.sql
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 create type permission_type as enum ('nav', 'dashboard_widget', 'module_capability');
 
 create table role_permissions (

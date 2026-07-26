@@ -61,6 +61,8 @@ export function dbAdmin() {
   }
   return createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
+    // The app's tables are in the `pos` schema (migration 0000), not `public`.
+    db: { schema: 'pos' },
   });
 }
 

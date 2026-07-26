@@ -1,7 +1,7 @@
 // tests/rls/rls_shop_isolation.test.ts
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  type PosClient,
   adminClient,
   anonClient,
   assertNoError,
@@ -21,7 +21,7 @@ const SALES_EMAILS = ['sales-cm@test.local', 'sales-lp@test.local', 'sales-cm-2@
  * "email already exists", returns a null user, and every later step explodes on
  * a null id.
  */
-async function createSalesUser(email: string, shopId: string): Promise<SupabaseClient> {
+async function createSalesUser(email: string, shopId: string): Promise<PosClient> {
   await deleteAuthUserByEmail(admin, email);
   const user = await createAuthUser(admin, email, PASSWORD);
 

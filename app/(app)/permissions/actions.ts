@@ -106,8 +106,8 @@ export async function setDashboardPermission(roleId: string, key: string, allowe
  * (finnix-film.html:202-203,227): every cell off, except the dashboard nav. */
 function blankPermissionRows(
   roleId: string,
-): Database['public']['Tables']['role_permissions']['Insert'][] {
-  const rows: Database['public']['Tables']['role_permissions']['Insert'][] = [];
+): Database['pos']['Tables']['role_permissions']['Insert'][] {
+  const rows: Database['pos']['Tables']['role_permissions']['Insert'][] = [];
   for (const n of NAV_ITEMS) {
     rows.push({
       role_id: roleId,
@@ -319,7 +319,7 @@ export async function updateShopInfo(
   }>,
 ): Promise<ActionResult> {
   const { supabase } = await authorize();
-  const dbPatch: Database['public']['Tables']['shop_info']['Update'] = {};
+  const dbPatch: Database['pos']['Tables']['shop_info']['Update'] = {};
   if (patch.companyName !== undefined) dbPatch.company_name = patch.companyName;
   if (patch.taxId !== undefined) dbPatch.tax_id = patch.taxId;
   if (patch.address !== undefined) dbPatch.address = patch.address;
@@ -336,7 +336,7 @@ export async function updateUser(
   patch: { role?: string; active?: boolean },
 ): Promise<ActionResult> {
   const { supabase } = await authorize();
-  const dbPatch: Database['public']['Tables']['app_users']['Update'] = {};
+  const dbPatch: Database['pos']['Tables']['app_users']['Update'] = {};
   if (patch.role !== undefined) dbPatch.role_id = patch.role;
   if (patch.active !== undefined) dbPatch.active = patch.active;
   const { error } = await supabase.from('app_users').update(dbPatch).eq('id', id);

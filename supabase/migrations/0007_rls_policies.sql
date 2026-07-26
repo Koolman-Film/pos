@@ -1,24 +1,48 @@
 -- supabase/migrations/0007_rls_policies.sql
+-- Everything below is created in the `pos` schema, not `public` — see
+-- 0000_pos_schema.sql for why. This applies for the rest of the file.
+set search_path = pos, public, extensions;
+
 create or replace function current_user_role() returns text
-language sql stable security definer as $$
+language sql stable security definer
+-- Pinned: a `security definer` function without a fixed search_path can be
+-- hijacked by a caller who puts their own `app_users` earlier on the path,
+-- and it would not find pos.* at all now that this app is not in `public`.
+set search_path = pos
+as $$
   select role_id from app_users where id = auth.uid();
 $$;
 
 create or replace function current_user_sees_all_shops() returns boolean
-language sql stable security definer as $$
+language sql stable security definer
+-- Pinned: a `security definer` function without a fixed search_path can be
+-- hijacked by a caller who puts their own `app_users` earlier on the path,
+-- and it would not find pos.* at all now that this app is not in `public`.
+set search_path = pos
+as $$
   select current_user_role() = 'admin'
     or coalesce((select sees_all_shops from app_users where id = auth.uid()), false);
 $$;
 
 create or replace function current_user_shops() returns setof text
-language sql stable security definer as $$
+language sql stable security definer
+-- Pinned: a `security definer` function without a fixed search_path can be
+-- hijacked by a caller who puts their own `app_users` earlier on the path,
+-- and it would not find pos.* at all now that this app is not in `public`.
+set search_path = pos
+as $$
   select id from shops where current_user_sees_all_shops()
   union
   select shop_id from user_shop_access where user_id = auth.uid();
 $$;
 
 create or replace function current_user_can(cap text) returns boolean
-language sql stable security definer as $$
+language sql stable security definer
+-- Pinned: a `security definer` function without a fixed search_path can be
+-- hijacked by a caller who puts their own `app_users` earlier on the path,
+-- and it would not find pos.* at all now that this app is not in `public`.
+set search_path = pos
+as $$
   select current_user_role() = 'admin' or coalesce((
     select allowed from role_permissions
     where role_id = current_user_role() and permission_type = 'module_capability' and permission_key = cap
@@ -26,7 +50,12 @@ language sql stable security definer as $$
 $$;
 
 create or replace function current_user_has_nav(nav_key text) returns boolean
-language sql stable security definer as $$
+language sql stable security definer
+-- Pinned: a `security definer` function without a fixed search_path can be
+-- hijacked by a caller who puts their own `app_users` earlier on the path,
+-- and it would not find pos.* at all now that this app is not in `public`.
+set search_path = pos
+as $$
   select current_user_role() = 'admin' or coalesce((
     select allowed from role_permissions
     where role_id = current_user_role() and permission_type = 'nav' and permission_key = nav_key

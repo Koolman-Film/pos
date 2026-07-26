@@ -51,3 +51,6 @@ next-env.d.ts
 
 # supabase CLI scratch
 /supabase/.temp/
+
+# local secrets, never committed
+.secrets/
