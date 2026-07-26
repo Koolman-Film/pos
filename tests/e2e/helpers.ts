@@ -49,7 +49,7 @@ export async function logout(page: Page) {
  * directly is honest test setup; the assertions still go through the real UI and
  * the real server actions.
  */
-function dbAdmin() {
+export function dbAdmin() {
   const env: Record<string, string> = { ...(process.env as Record<string, string>) };
   if (!env.SUPABASE_SERVICE_ROLE_KEY || !env.NEXT_PUBLIC_SUPABASE_URL) {
     for (const line of readFileSync(join(process.cwd(), '.env.local'), 'utf8').split('\n')) {

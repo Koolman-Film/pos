@@ -278,6 +278,10 @@ export function TechSection({
                       <input
                         type="number"
                         placeholder="จำนวน"
+                        // Every product row has an identical placeholder, so the
+                        // product name is what makes this control identifiable —
+                        // to a screen reader and to a test.
+                        aria-label={`จำนวนที่ใช้จริง ${prod}`}
                         value={(it.actualQtyMap && it.actualQtyMap[prod]) || ''}
                         onChange={(e) => updateActualQty(realIdx, prod, e.target.value)}
                         className="field text-xs px-2.5 py-1.5 w-24"
