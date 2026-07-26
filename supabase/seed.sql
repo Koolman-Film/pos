@@ -1,8 +1,9 @@
 -- supabase/seed.sql — the prototype's sample business data (Task 20, spec §7).
 --
--- Run automatically by `supabase db reset`. The four login accounts are NOT here:
--- they need rows in `auth.users`, which is Auth's own table, so they are created
--- by `supabase/seed.ts` (`npx tsx supabase/seed.ts`) after the reset.
+-- Run automatically by `supabase db reset`. It ends with ONE working admin login
+-- (admin@finnixfilm.com) so a bare reset leaves you able to sign in; the other
+-- three sample accounts (exec / sales / tech) still come from
+-- `supabase/seed.ts` (`npm run db:seed`), which needs the Auth Admin API.
 --
 -- Everything below is `reference/v0.4/finnix-film.html:238-372` — initialTickets,
 -- initialRetailCustomers, initialCustomers, initialOrders, initialStock,
@@ -221,3 +222,108 @@ insert into expenses (shop_id, description, category, source, amount, status, pa
 -- Petty cash: 10,000 topped up, 550 spent from เงินสดย่อย above → balance 9,450.
 insert into petty_cash (shop_id, type, amount, entry_at, note) values
   ('cm', 'เติมเงิน', 10000, date '2026-07-10', 'อนุมัติโดยแอดมิน');
+
+-- ---------------------------------------------------------------------------
+-- A working admin login, so a bare `supabase db reset` leaves you able to sign
+-- in without also remembering `npm run db:seed`.
+--
+-- WHY THIS IS IN seed.sql AND NOT IN A MIGRATION. Migrations are what `supabase
+-- db push` applies to the hosted projects, so an account with a hard-coded
+-- password in a migration would be a permanent, publicly-known admin in
+-- production. seed.sql is only ever run by a local `db reset` — Supabase does
+-- not apply it on push — so the credential cannot escape a developer machine.
+-- Do not move this block into supabase/migrations/.
+--
+-- Creating a login in SQL means writing Auth's own tables directly: `auth.users`
+-- holds the bcrypt hash, and a matching `auth.identities` row is what the email
+-- provider actually authenticates against — without it the password is accepted
+-- but no identity is found and sign-in fails. `crypt`/`gen_salt` live in the
+-- `extensions` schema on Supabase, not `public`.
+--
+-- The uuid is fixed rather than generated so fixtures and tests can reference the
+-- same admin across resets. The email matches supabase/seed.ts's admin, which is
+-- idempotent and will simply update this row if you run it afterwards.
+-- ---------------------------------------------------------------------------
+
+insert into auth.users (
+  instance_id,
+  id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  created_at,
+  updated_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  is_sso_user,
+  is_anonymous,
+  -- These four are nullable in the schema but GoTrue scans them into plain Go
+  -- strings, so a NULL makes every sign-in fail with an opaque 500 rather than an
+  -- auth error. They must be empty strings, not NULL. (phone_change already
+  -- defaults to '', which is why it is not listed.)
+  confirmation_token,
+  recovery_token,
+  email_change,
+  email_change_token_new
+) values (
+  '00000000-0000-0000-0000-000000000000',
+  '00000000-0000-4000-8000-000000000001',
+  'authenticated',
+  'authenticated',
+  'admin@finnixfilm.com',
+  extensions.crypt('finnix-staging-2026', extensions.gen_salt('bf')),
+  now(),
+  now(),
+  now(),
+  '{"provider":"email","providers":["email"]}',
+  '{}',
+  false,
+  false,
+  '',
+  '',
+  '',
+  ''
+)
+on conflict (id) do nothing;
+
+insert into auth.identities (
+  id,
+  user_id,
+  provider_id,
+  identity_data,
+  provider,
+  last_sign_in_at,
+  created_at,
+  updated_at
+) values (
+  '00000000-0000-4000-8000-00000000000a',
+  '00000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000001',
+  '{"sub":"00000000-0000-4000-8000-000000000001","email":"admin@finnixfilm.com","email_verified":true,"phone_verified":false}',
+  'email',
+  now(),
+  now(),
+  now()
+)
+on conflict (id) do nothing;
+
+-- The app-side profile. lib/auth/session.ts treats a missing app_users row as
+-- "no access" and bounces the user back to /login, so the login is only usable
+-- once this exists. sees_all_shops = true means no user_shop_access rows are
+-- needed (see migration 0008 / correction C7).
+insert into app_users (id, email, name, role_id, active, sees_all_shops) values (
+  '00000000-0000-4000-8000-000000000001',
+  'admin@finnixfilm.com',
+  'แอดมินระบบ',
+  'admin',
+  true,
+  true
+)
+on conflict (id) do update set
+  email = excluded.email,
+  name = excluded.name,
+  role_id = excluded.role_id,
+  active = excluded.active,
+  sees_all_shops = excluded.sees_all_shops;
