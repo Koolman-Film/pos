@@ -169,13 +169,67 @@ Swept the other pages for the same shape: `Sidebar` (`hasNav`) and `Dashboard` (
 ### C16 — test fixtures leaked into the seeded database — FIXED
 The RLS suite cleaned up in `beforeEach`/`beforeAll` only. That keeps each file idempotent but leaves its rows behind after the run: two fake tickets, a tagged petty-cash row, a test SKU, a commission rule, an expense, and three fake sales users. They are real rows, so **the app counted them** — the dashboard showed 11 jobs against a 5-ticket seed and a 14,450 petty-cash balance against a seeded 9,450. Every RLS file now also removes its fixtures in `afterAll`. Same rule for e2e: the permissions spec restores the flipped capability in `afterEach`, and the price-approval spec restores its own precondition in `beforeEach` because approval is one-way in the UI by design.
 
+### C17 — automatic stock movement was never persisted — FIXED
+
+Found by the mechanical parity audit (`tests/unit/parity/prototype-parity.test.ts`).
+The prototype decrements `stock.qty` and appends an `ตัดสต็อกจากใบงาน (<id>)` withdrawal row
+whenever a technician records actual usage (`:1409-1421`), and does the same on the wholesale
+side at save (`:2700-2712`). The port had ported the arithmetic but not the persistence:
+`actualQtyMap` was dropped in `serialize.ts` so it never reached the server, and the decrement
+was applied to a client `useState` copy discarded on the next navigation. Recording usage
+therefore changed nothing and logged nothing — a silent functional regression in the one area
+where physical inventory has to match the system.
+
+Fixed: migration 0010 adds `ticket_items.actual_qty`; `lib/stock/movements.ts` owns the delta
+arithmetic and the audit write; both save paths diff the incoming map against stored state and
+move stock **server-side**. Server-side rather than per-keystroke because two technicians
+sharing a product would each compute a delta from their own stale copy and the later save would
+clobber the earlier. Applying at save is the faithful equivalent of the prototype's "immediately"
+once a save button exists — the net effect after saving is identical.
+
+### C18 — the pre-installation QC checklist was truncated — FIXED
+
+`ระบบไฟฟ้า` had 6 of the prototype's 20 rows and `ระบบเครื่องเสียง` 3 of 7. This is the sheet a
+technician walks around the car with, so a missing row is a check nobody performs and a dispute
+the shop cannot answer later. Restored in full as `QC_CHECKLIST_SECTIONS`; a test parses the
+lists out of the prototype and compares, so it cannot drift again.
+
+### C19 — Permissions had no "รีเซ็ตค่าเริ่มต้น" — FIXED
+
+The prototype resets roles and the whole matrix in three lines because its defaults were live JS
+constants. In the port they existed only as literal INSERTs inside migration 0002, which had
+already run and was not addressable at runtime. Migration 0009 turns them into
+`reset_permissions_to_defaults()`, now the single source of truth, and an integration test
+asserts that calling it on a freshly-migrated database is a no-op — which is what stops 0009 and
+0002 drifting apart.
+
+### C20 — two dropped guards — FIXED
+
+The Stock module had lost its unsaved-changes guard (`:3010`), and the Wholesale detail's back
+button discarded a half-edited PO with no confirmation where the prototype confirms (`:2743`).
+The second was found because the parity test saw the confirm text present in the tickets module
+but absent from wholesale — the kind of gap that is invisible to per-module tests, since each
+module's own suite passes.
+
+### C21 — accessibility was inherited unexamined — FIXED (except contrast)
+
+The prototype was a design mock and was never audited. Every route had critical violations: 50
+unnamed `<select>`s, ~15 icon-only buttons, unlabelled date/colour inputs, an icon-only `tel:`
+link, and three chart canvases with no alternative text. All fixed with no pixel change.
+
+Colour contrast is deliberately NOT fixed: eight token pairs fall below 4.5:1, the worst being
+`--ink-faint` at 2.27:1 and `--ink-soft` at 3.89:1 on white. These are the reference design's own
+values, so changing them trades visual parity for accessibility — a decision for the design
+owner, not something to do silently. Listed with measured ratios in `INHERITED_CONTRAST_PAIRS`;
+the audit still fails on any pair not in that list.
+
 ---
 
 ## Wave 5 — serial finish
 
 Task 20 (staging seed) → Task 21 (full suite + Playwright e2e, including the print-isolation e2e that verifies the Task 1 / Task 12 `.app-shell` + portal split) → **Task 22 (deployment checkpoint — STOP for explicit human confirmation; creates real billed cloud resources, per the plan's Global Constraints).**
 
-**Status: Tasks 1-21 COMPLETE.** Integration gate closed (C11 fixed in Wave 4; C12 and C13 closed after it, along with C14-C16 found during Task 21). Task 20 verified against a real `db reset`; Task 21's suites all run green together. Task 22 is **not started and remains gated** — see `docs/DEPLOYMENT.md`, which is the executable runbook for it, written but deliberately unexecuted.
+**Status: Tasks 1-21 COMPLETE, plus a post-hoc parity audit (C17-C21).** Integration gate closed (C11 in Wave 4; C12-C13 after it; C14-C16 during Task 21). A mechanical parity audit against the prototype then found five further gaps — automatic stock movement never persisted, a truncated QC checklist, a missing Permissions reset, two dropped dirty-guards, and an unaudited accessibility baseline — all fixed and covered by tests. Task 22 is **not started and remains gated** — see `docs/DEPLOYMENT.md`, the executable runbook for it, written but deliberately unexecuted.
 
 ---
 
