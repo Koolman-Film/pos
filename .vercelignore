@@ -1,0 +1,26 @@
+# What never leaves this machine.
+#
+# Vercel uploads the working directory, so anything sensitive or irrelevant is
+# excluded explicitly rather than relying on .gitignore being honoured.
+#
+# EVERY DIRECTORY PATTERN IS ANCHORED WITH A LEADING SLASH. These are
+# gitignore-style patterns, so an unanchored `supabase/` matches at any depth —
+# which also excluded `lib/supabase/`, removed the database client from the upload,
+# and failed the build with module-not-found across every route that imports it.
+/.secrets/
+/.env
+/.env.*
+/.vercel/
+
+# Not needed to build or run the app.
+/tests/
+/reference/
+/docs/
+/.github/
+/playwright-report/
+/test-results/
+/supabase/
+
+# Local tooling
+/.claude/
+/.remember/
