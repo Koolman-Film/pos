@@ -1,20 +1,30 @@
 -- supabase/migrations/0001_identity_and_shops.sql
 
--- Restore the classic Supabase default privileges for the API roles on `public`.
--- The Postgres 17.6 Supabase image no longer auto-grants SELECT/INSERT/UPDATE/DELETE on
--- newly created public tables to anon/authenticated/service_role (only D/x/t/m), so
--- PostgREST returns 42501 "permission denied for table ..." without this. Row access is
--- still gated by the RLS policies in 0007 — this only restores table-level reachability,
--- which is the model the rest of this schema is written against.
+-- Restore the classic Supabase default privileges for the API roles.
+-- The Postgres 17.6 Supabase image no longer auto-grants
+-- SELECT/INSERT/UPDATE/DELETE on newly created tables to
+-- anon/authenticated/service_role (only D/x/t/m), so PostgREST returns 42501
+-- "permission denied for table ..." without this. Row access is still gated by the
+-- RLS policies in 0007 — this only restores table-level reachability, which is the
+-- model the rest of this schema is written against.
+--
+-- SCOPED TO `pos`, DELIBERATELY. This originally said `in schema public`, which was
+-- harmless when this app owned its own database. It is not harmless now: the
+-- database is shared with the Koolman accounting app, which owns `public`, so
+-- pushing that statement would have made every table Prisma creates there
+-- world-grantable to `anon` from then on — silently widening a different app's API
+-- surface. 0000 already sets the same defaults for `pos`; these lines add the
+-- `for role postgres` variant, which is the one that applies to tables created by
+-- migrations.
 -- Everything below is created in the `pos` schema, not `public` — see
 -- 0000_pos_schema.sql for why. This applies for the rest of the file.
 set search_path = pos, public, extensions;
 
-alter default privileges for role postgres in schema public
+alter default privileges for role postgres in schema pos
   grant all on tables to anon, authenticated, service_role;
-alter default privileges for role postgres in schema public
+alter default privileges for role postgres in schema pos
   grant all on sequences to anon, authenticated, service_role;
-alter default privileges for role postgres in schema public
+alter default privileges for role postgres in schema pos
   grant all on functions to anon, authenticated, service_role;
 
 create table shops (
