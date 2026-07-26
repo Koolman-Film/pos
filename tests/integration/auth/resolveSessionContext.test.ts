@@ -10,6 +10,11 @@
  * Supabase stack (Postgres + GoTrue + PostgREST) with real auth users and the
  * RLS policies from `supabase/migrations/0007_rls_policies.sql` switched on.
  *
+ * Lives under tests/integration/ for that reason. It spent a while in tests/unit/,
+ * where it passed only because a developer machine happens to have .env.local and
+ * a running stack; the first CI run — which has neither in the unit job — is what
+ * surfaced it.
+ *
  * `resolveSessionContext()` is deliberately Next-free, so it can be exercised
  * here with a plain `@supabase/supabase-js` client — no `next/headers` or
  * `next/navigation` stubbing, and nothing about the check is faked.
