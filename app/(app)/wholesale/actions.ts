@@ -61,66 +61,24 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
   });
   if (headerErr) throw new Error(headerErr.message);
 
-  // Children are replaced wholesale (delete-then-insert) to mirror the
-  // prototype's "the draft IS the truth on save" model.
-  const nowIso = new Date().toISOString();
-
-  await supabase.from('order_items').delete().eq('order_id', input.id);
-  if (input.items.length) {
-    const { error } = await supabase.from('order_items').insert(
-      input.items.map((it) => ({
-        order_id: input.id,
-        name: it.name,
-        qty: Number(it.qty) || 0,
-        list_price: Number(it.listPrice) || 0,
-        requested_price: Number(it.requestedPrice) || 0,
-        reason: it.reason || '',
-      })),
-    );
-    if (error) throw new Error(error.message);
-  }
-
-  await supabase.from('order_returns').delete().eq('order_id', input.id);
-  if (input.returns.length) {
-    const { error } = await supabase.from('order_returns').insert(
-      input.returns.map((r) => ({
-        order_id: input.id,
-        item_name: r.item,
-        qty: Number(r.qty) || 0,
-        reason: r.reason || '',
-      })),
-    );
-    if (error) throw new Error(error.message);
-  }
-
-  await supabase.from('order_adjustments').delete().eq('order_id', input.id);
-  if (input.adjustments.length) {
-    // `adjusted_at` is a NOT NULL timestamptz; the prototype only kept a free
-    // Thai display string ("วันนี้"), which is not a valid timestamp, so persist
-    // the save time here. (Divergence noted for review.)
-    const { error } = await supabase.from('order_adjustments').insert(
-      input.adjustments.map((a) => ({
-        order_id: input.id,
-        amount: Number(a.amount) || 0,
-        reason: a.reason || '',
-        adjusted_at: nowIso,
-      })),
-    );
-    if (error) throw new Error(error.message);
-  }
-
-  await supabase.from('order_payments').delete().eq('order_id', input.id);
-  if (input.payments.length) {
-    const { error } = await supabase.from('order_payments').insert(
-      input.payments.map((p) => ({
-        order_id: input.id,
-        amount: Number(p.amount) || 0,
-        method: p.method,
-        paid_at: nowIso,
-      })),
-    );
-    if (error) throw new Error(error.message);
-  }
+  // Replace all four child tables in ONE atomic call (`save_order_children`,
+  // migration 0011). Previously each delete and each insert was its own
+  // transaction, so a failure part-way through left the PO holding a partial set
+  // of items/returns/adjustments/payments with the originals already deleted.
+  // RLS still applies — the function is `security invoker`.
+  //
+  // `adjusted_at` / `paid_at` are NOT NULL dates and the prototype only kept a
+  // free-text Thai display string ("วันนี้"), so the save date is persisted.
+  const savedOn = new Date().toISOString().slice(0, 10);
+  const { error: childErr } = await supabase.rpc('save_order_children', {
+    p_order_id: input.id,
+    p_items: input.items,
+    p_returns: input.returns,
+    p_adjustments: input.adjustments,
+    p_payments: input.payments,
+    p_saved_on: savedOn,
+  });
+  if (childErr) throw new Error(childErr.message);
 
   // Move stock to match the new net quantities and log it (prototype :2702-2712).
   // Sold goes out of stock, returned comes back, so the net is what matters.

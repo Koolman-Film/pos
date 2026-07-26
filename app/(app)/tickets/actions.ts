@@ -92,58 +92,29 @@ async function storedActualQty(
   return sumQtyMaps((data ?? []).map((r) => r.actual_qty as QtyMap));
 }
 
+/**
+ * Replace a ticket's items (with their positions) and payments, atomically.
+ *
+ * The form owns the complete list, so this is a wholesale replacement. It runs as
+ * ONE database call — `save_ticket_children` (migration 0011) — rather than a
+ * delete followed by a loop of inserts. That matters: the old version issued each
+ * statement as its own transaction, so an insert failing part-way left the ticket
+ * with some or none of its items and the previous values already deleted. Now
+ * either the whole new set lands or nothing changes.
+ *
+ * RLS still applies — the function is `security invoker`.
+ */
 async function writeTicketChildren(
   supabase: Awaited<ReturnType<typeof createClient>>,
   ticketId: string,
   p: TicketSavePayload,
 ) {
-  // Replace items (+ positions via cascade) and payments wholesale — the form
-  // owns the complete list, so a delete-then-insert keeps them in sync.
-  await supabase.from('ticket_items').delete().eq('ticket_id', ticketId);
-  await supabase.from('ticket_payments').delete().eq('ticket_id', ticketId);
-
-  for (const it of p.items) {
-    const { data: itemRow, error: itemErr } = await supabase
-      .from('ticket_items')
-      .insert({
-        ticket_id: ticketId,
-        category: it.category,
-        booked: it.booked,
-        booked_price: it.bookedPrice,
-        sold: it.sold,
-        sold_price: it.soldPrice,
-        discount_type: it.discountType,
-        discount_value: it.discountValue,
-        actual_qty: it.actualQty ?? {},
-      })
-      .select('id')
-      .single();
-    if (itemErr) throw new Error(itemErr.message);
-    if (itemRow && it.positions.length) {
-      const { error: posErr } = await supabase.from('ticket_item_positions').insert(
-        it.positions.map((pos) => ({
-          ticket_item_id: itemRow.id,
-          position: pos.position,
-          product: pos.product,
-          price: pos.price,
-        })),
-      );
-      if (posErr) throw new Error(posErr.message);
-    }
-  }
-
-  if (p.payments.length) {
-    const { error: payErr } = await supabase.from('ticket_payments').insert(
-      p.payments.map((pay) => ({
-        ticket_id: ticketId,
-        type: pay.type,
-        method: pay.method,
-        amount: pay.amount,
-        paid_at: pay.paidAt,
-      })),
-    );
-    if (payErr) throw new Error(payErr.message);
-  }
+  const { error } = await supabase.rpc('save_ticket_children', {
+    p_ticket_id: ticketId,
+    p_items: p.items,
+    p_payments: p.payments,
+  });
+  if (error) throw new Error(error.message);
 }
 
 /**

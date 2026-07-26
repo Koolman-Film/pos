@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest';
 
-import { adminClient, assertNoError } from '../rls/_helpers';
+import { adminClient, assertNoError, createAuthUser, deleteAuthUserByEmail } from '../rls/_helpers';
 
 /**
  * `reset_permissions_to_defaults()` — the SQL function behind the Permissions
@@ -14,6 +14,9 @@ import { adminClient, assertNoError } from '../rls/_helpers';
  */
 
 const admin = adminClient();
+
+/** This file's own throwaway account, removed in afterAll. */
+const QA_EMAIL = 'qa-orphan@test.local';
 
 type PermRow = {
   role_id: string;
@@ -44,6 +47,7 @@ const reset = async () => {
 
 afterAll(async () => {
   // Leave the database as the seed had it, whatever these tests did.
+  await deleteAuthUserByEmail(admin, QA_EMAIL);
   await admin.from('roles').delete().eq('id', 'qa-temp-role');
   await reset();
 });
@@ -113,28 +117,34 @@ describe('reset_permissions_to_defaults', () => {
   });
 
   it('moves a user off a dropped custom role onto admin rather than orphaning them', async () => {
+    // Owns its own account rather than borrowing a seeded one. The three non-admin
+    // sample logins only exist after `npm run db:seed`, so a test that depended on
+    // one of them failed on a bare `db reset` — and failed with a null-deref that
+    // pointed nowhere near the cause. `app_users.id` references `auth.users`, so the
+    // fixture needs a real Auth user, same as the RLS suite.
     await admin.from('roles').insert({ id: 'qa-temp-role', name: 'บทบาททดสอบ', icon: 'fa-user' });
-
-    // Re-point a seeded account at the custom role, then reset.
-    const { data: user } = await admin
-      .from('app_users')
-      .select('id, role_id')
-      .eq('email', 'tech@finnixfilm.com')
-      .single();
-    const originalRole = user!.role_id;
-    await admin.from('app_users').update({ role_id: 'qa-temp-role' }).eq('id', user!.id);
+    await deleteAuthUserByEmail(admin, QA_EMAIL);
+    const authUser = await createAuthUser(admin, QA_EMAIL, 'qa-password-123');
+    const { error: insertErr } = await admin.from('app_users').insert({
+      id: authUser.id,
+      email: QA_EMAIL,
+      name: 'ผู้ใช้ทดสอบ',
+      role_id: 'qa-temp-role',
+      active: true,
+      sees_all_shops: false,
+    });
+    assertNoError('insert qa user on custom role', insertErr);
 
     await reset();
 
     const { data: after } = await admin
       .from('app_users')
       .select('role_id')
-      .eq('id', user!.id)
+      .eq('id', authUser.id)
       .single();
+    // The role it held is gone; app_users.role_id is NOT NULL, so it has to land
+    // somewhere, and the prototype's choice was admin.
     expect(after!.role_id).toBe('admin');
-
-    // Put the seeded account back where it belongs.
-    await admin.from('app_users').update({ role_id: originalRole }).eq('id', user!.id);
   });
 
   it('restores a renamed default role name and icon', async () => {

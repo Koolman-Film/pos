@@ -1058,6 +1058,21 @@ export type Database = {
       current_user_sees_all_shops: { Args: never; Returns: boolean }
       current_user_shops: { Args: never; Returns: string[] }
       reset_permissions_to_defaults: { Args: never; Returns: undefined }
+      save_order_children: {
+        Args: {
+          p_adjustments: Json
+          p_items: Json
+          p_order_id: string
+          p_payments: Json
+          p_returns: Json
+          p_saved_on: string
+        }
+        Returns: undefined
+      }
+      save_ticket_children: {
+        Args: { p_items: Json; p_payments: Json; p_ticket_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       permission_type: "nav" | "dashboard_widget" | "module_capability"
