@@ -49,12 +49,28 @@ Link the project, then set environment variables per environment:
 | ------------------------------- | ------------------- | ------------------------------------ |
 | `NEXT_PUBLIC_SUPABASE_URL`      | staging project URL | production project URL               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | staging anon key    | production anon key                  |
-| `SUPABASE_SERVICE_ROLE_KEY`     | staging service key | **only if a server action needs it** |
+| `SUPABASE_SERVICE_ROLE_KEY`     | staging service key | **required** (user provisioning)     |
 
-The service-role key bypasses RLS entirely. Today nothing in `app/` or `lib/`
-imports it — it is used only by `supabase/seed.ts` and the e2e helper, neither of
-which runs on Vercel. Prefer not setting it in production at all; if a future
-feature needs it, keep it server-only and never expose it as `NEXT_PUBLIC_*`.
+The service-role key bypasses RLS entirely, so keep it server-only and never
+expose it as `NEXT_PUBLIC_*`. It **is** now required in production: creating a
+login is an Auth Admin API call (`inviteUserByEmail`), which the RLS-bound
+client cannot make. It is read by `lib/supabase/admin.ts`, used by the
+`addUser` / `resendInvite` / `deleteUser` actions in
+`app/(app)/permissions/actions.ts` (all gated admin-only behind `authorize()`),
+plus `supabase/seed.ts` and the e2e helper.
+
+### Auth settings required by the invite flow
+
+In each hosted Supabase project → **Authentication → URL Configuration**:
+
+- **Site URL**: the deployed origin (e.g. `https://finnixpos.kool-man.com`).
+- **Redirect URLs** must include `https://<domain>/auth/callback**`.
+  Supabase silently **discards** a `redirectTo` that is not on this allow-list
+  and falls back to the Site URL — the invite email would still arrive, but drop
+  the invitee on the site root instead of the set-password page. Verified
+  locally: before allow-listing, `redirect_to` came back as the bare origin.
+- **SMTP** must be configured (Authentication → Emails), or invite mail is never
+  delivered on a hosted project. Local dev captures mail in Mailpit instead.
 
 ### 4. Domain and DNS
 
@@ -79,7 +95,9 @@ the domain is added.
 - [ ] `lib/types/database.ts` regenerated from the hosted project and diff-clean
 - [ ] Production Supabase has **no** seeded sample data and no shared password
 - [ ] Auth redirect URLs in the hosted projects include the Vercel domains
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` is absent from production unless deliberately needed
+- [ ] Auth redirect URLs also include `https://<domain>/auth/callback**` (invite flow)
+- [ ] SMTP is configured on each hosted project, or invite emails never send
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` is set (server-only) — required for user provisioning
 
 ## Readiness
 

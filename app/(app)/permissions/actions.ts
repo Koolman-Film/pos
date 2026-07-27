@@ -1,8 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 
 import { getSessionContext } from '@/lib/auth/session';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/types/database';
 import {
@@ -396,6 +398,129 @@ export async function deleteUser(id: string): Promise<ActionResult> {
   const { supabase } = await authorize();
   const { count } = await supabase.from('app_users').select('id', { count: 'exact', head: true });
   if ((count ?? 0) <= 1) return { ok: false, error: 'ต้องมีผู้ใช้งานอย่างน้อย 1 คนเสมอ' };
-  const { error } = await supabase.from('app_users').delete().eq('id', id);
+  // Delete the auth login too, mirroring the finance app. `app_users.id` is
+  // `references auth.users(id) on delete cascade`, so removing the auth user
+  // cascades to `app_users` and `user_shop_access`. Deleting only the profile
+  // row (as before) left an orphaned auth account, which then blocked
+  // re-inviting the same email ("already registered").
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(id);
   return error ? fail(error) : done();
+}
+
+// ---------- user provisioning (invite flow, mirrors the finance app) ----------
+
+/**
+ * Origin of the currently-deployed app, for the invite-email redirect URL.
+ * Read from request headers so it works on local dev, previews, and
+ * finnixpos.kool-man.com without an extra env var — same approach as finance.
+ */
+async function siteOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'finnixpos.kool-man.com';
+  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+/**
+ * Invite a new user by email. Creates the Supabase Auth login WITHOUT a password
+ * (they set one via the email link) plus the `app_users` profile row with the
+ * assigned role. Non-admin users get their first shop granted so they never
+ * start with zero shops — the admin can adjust shops immediately via the
+ * existing per-user controls. The invitee lands on /auth/callback → /auth/accept.
+ *
+ * This is the write the old add-user button lacked: creating a login is a
+ * service-role operation (`auth.admin.inviteUserByEmail`), which the ordinary
+ * RLS-bound client cannot do. Gated behind `authorize()` (admin only) like every
+ * other write in this module.
+ */
+export async function addUser(input: {
+  email: string;
+  name: string;
+  roleId: string;
+}): Promise<ActionResult> {
+  const { supabase } = await authorize();
+
+  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim();
+  const roleId = input.roleId;
+  if (!email || !name) return { ok: false, error: 'กรุณากรอกอีเมลและชื่อผู้ใช้งาน' };
+
+  // Validate the role exists (client sends a role id from the dropdown).
+  const { data: role } = await supabase.from('roles').select('id').eq('id', roleId).maybeSingle();
+  if (!role) return { ok: false, error: 'ไม่พบบทบาทที่เลือก' };
+
+  const admin = createAdminClient();
+  const origin = await siteOrigin();
+  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent('/auth/accept')}`;
+
+  const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+    data: { name },
+  });
+  if (inviteErr || !invited?.user) {
+    const msg = (inviteErr?.message ?? '').toLowerCase();
+    if (msg.includes('already') || msg.includes('registered')) {
+      return { ok: false, error: 'มีผู้ใช้อีเมลนี้แล้วในระบบ — หากต้องการเชิญใหม่ให้ลบออกก่อน' };
+    }
+    return { ok: false, error: inviteErr?.message ?? 'สร้างผู้ใช้ไม่สำเร็จ' };
+  }
+
+  const userId = invited.user.id;
+  const { error: profileErr } = await admin
+    .from('app_users')
+    .insert({ id: userId, email, name, role_id: roleId, active: true, sees_all_shops: false });
+  if (profileErr) {
+    // Roll back the auth user so we never leave an orphan login.
+    await admin.auth.admin.deleteUser(userId).catch(() => {});
+    return fail(profileErr);
+  }
+
+  // Admins see every shop by role; everyone else starts with the first shop so
+  // they aren't left with zero (matches the "never zero shops" invariant used
+  // by setUserAllShops / toggleUserShop above).
+  if (roleId !== 'admin') {
+    const { data: firstShop } = await admin
+      .from('shops')
+      .select('id')
+      .order('sort_order', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (firstShop) {
+      await admin.from('user_shop_access').insert({ user_id: userId, shop_id: firstShop.id });
+    }
+  }
+
+  return done();
+}
+
+/**
+ * Resend the invite (or a password-recovery link) for an existing user — for
+ * when the original email was lost or the 24h token expired. Mirrors finance:
+ * try the invite path first, fall back to password recovery once the account
+ * exists in auth.users. Both land on the same /auth/callback → /auth/accept flow.
+ */
+export async function resendInvite(userId: string): Promise<ActionResult> {
+  const { supabase } = await authorize();
+
+  const { data: user } = await supabase
+    .from('app_users')
+    .select('email')
+    .eq('id', userId)
+    .maybeSingle();
+  if (!user) return { ok: false, error: 'ไม่พบผู้ใช้' };
+
+  const admin = createAdminClient();
+  const origin = await siteOrigin();
+  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent('/auth/accept')}`;
+
+  const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(user.email, { redirectTo });
+  if (!inviteErr) return done();
+
+  const msg = inviteErr.message.toLowerCase();
+  if (msg.includes('already') || msg.includes('registered')) {
+    const { error: resetErr } = await admin.auth.resetPasswordForEmail(user.email, { redirectTo });
+    return resetErr ? { ok: false, error: `ส่งคำเชิญใหม่ไม่สำเร็จ: ${resetErr.message}` } : done();
+  }
+  return { ok: false, error: `ส่งคำเชิญใหม่ไม่สำเร็จ: ${inviteErr.message}` };
 }
