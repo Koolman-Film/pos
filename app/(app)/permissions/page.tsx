@@ -16,6 +16,7 @@ import { createClient } from '@/lib/supabase/server';
 import {
   addRole,
   addStatus,
+  addUser,
   addWsStatus,
   deleteRole,
   deleteStatus,
@@ -24,6 +25,7 @@ import {
   moveStatus,
   renameRole,
   renameWsStatus,
+  resendInvite,
   resetPermissionsToDefaults,
   setDashboardPermission,
   setModulePermission,
@@ -158,6 +160,8 @@ export default async function PermissionsPage() {
       onSetUserAllShops={setUserAllShops}
       onToggleUserShop={toggleUserShop}
       onDeleteUser={deleteUser}
+      onAddUser={addUser}
+      onResendInvite={resendInvite}
     />
   );
 }

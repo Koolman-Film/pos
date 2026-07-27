@@ -49,7 +49,14 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && !request.nextUrl.pathname.startsWith('/login')) {
+  // Paths reachable WITHOUT a session. `/auth/*` carries the Supabase email-link
+  // flow (invite / password-reset callback + the set-password page): the invitee
+  // has no session cookie until the callback exchanges their code, so bouncing
+  // these to /login would break user provisioning entirely.
+  const pathname = request.nextUrl.pathname;
+  const isPublicPath = pathname.startsWith('/login') || pathname.startsWith('/auth');
+
+  if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);

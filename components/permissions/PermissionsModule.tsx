@@ -71,6 +71,8 @@ export type PermissionsModuleProps = {
   onSetUserAllShops?: (id: string, all: boolean) => Maybe;
   onToggleUserShop?: (id: string, shopId: string) => Maybe;
   onDeleteUser?: (id: string) => Maybe;
+  onAddUser?: (input: { email: string; name: string; roleId: string }) => Maybe;
+  onResendInvite?: (id: string) => Maybe;
 };
 
 function ToggleCell({
@@ -136,6 +138,8 @@ export function PermissionsModule({
   onSetUserAllShops,
   onToggleUserShop,
   onDeleteUser,
+  onAddUser,
+  onResendInvite,
 }: PermissionsModuleProps) {
   const [, startTransition] = useTransition();
 
@@ -163,10 +167,23 @@ export function PermissionsModule({
       window.alert('มีอีเมลนี้ในระบบแล้ว');
       return;
     }
-    // Creating a login requires provisioning a Supabase Auth account (service
-    // role), which a capability-scoped Server Action cannot do; that path is
-    // owned by the seed/invite flow. Existing users are fully editable below.
-    window.alert('การเพิ่มผู้ใช้ใหม่ต้องสร้างบัญชีเข้าสู่ระบบผ่านผู้ดูแลระบบก่อน');
+    // Sends a Supabase invite email; the invitee sets their password via the
+    // link (/auth/callback → /auth/accept). Mirrors the finance app's flow.
+    startTransition(async () => {
+      const res = await onAddUser?.({ email, name, roleId: newUserRole });
+      if (res && typeof res === 'object' && 'ok' in res && res.ok === false) {
+        window.alert(res.error);
+        return;
+      }
+      setNewUserEmail('');
+      setNewUserName('');
+      window.alert('ส่งคำเชิญไปที่อีเมลแล้ว — ผู้ใช้จะตั้งรหัสผ่านผ่านลิงก์ในอีเมลเพื่อเริ่มใช้งาน');
+    });
+  }
+
+  function resendInvite(id: string, email: string) {
+    if (!window.confirm(`ส่งคำเชิญ/ลิงก์ตั้งรหัสผ่านใหม่ไปที่ ${email}?`)) return;
+    run(onResendInvite?.(id));
   }
 
   // ----- statuses -----
@@ -388,6 +405,15 @@ export function PermissionsModule({
                   }}
                 >
                   <i className={`fa-solid ${u.active ? 'fa-toggle-on' : 'fa-toggle-off'}`}></i>
+                </button>
+                <button
+                  onClick={() => resendInvite(u.id, u.email)}
+                  aria-label={`ส่งคำเชิญใหม่ให้ ${u.name}`}
+                  title="ส่งคำเชิญ/ลิงก์ตั้งรหัสผ่านใหม่"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
+                  style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
+                >
+                  <i className="fa-solid fa-paper-plane"></i>
                 </button>
                 <button
                   onClick={() => deleteUser(u.id)}
