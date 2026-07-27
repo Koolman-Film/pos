@@ -45,11 +45,11 @@ and bounces them to login with `no_profile`.
 
 Link the project, then set environment variables per environment:
 
-| Variable                        | Preview / staging   | Production                           |
-| ------------------------------- | ------------------- | ------------------------------------ |
-| `NEXT_PUBLIC_SUPABASE_URL`      | staging project URL | production project URL               |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | staging anon key    | production anon key                  |
-| `SUPABASE_SERVICE_ROLE_KEY`     | staging service key | **required** (user provisioning)     |
+| Variable                        | Preview / staging   | Production                       |
+| ------------------------------- | ------------------- | -------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | staging project URL | production project URL           |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | staging anon key    | production anon key              |
+| `SUPABASE_SERVICE_ROLE_KEY`     | staging service key | **required** (user provisioning) |
 
 The service-role key bypasses RLS entirely, so keep it server-only and never
 expose it as `NEXT_PUBLIC_*`. It **is** now required in production: creating a
