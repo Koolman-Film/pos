@@ -26,6 +26,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_credentials: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
   no_profile: 'ไม่พบอีเมลนี้ในระบบ กรุณาติดต่อแอดมิน',
   inactive: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อแอดมิน',
+  // Emitted by /auth/accept when the invite/recovery link is expired or already
+  // used, so the session was never established. Without an entry here the page
+  // renders a blank error and the invitee gets no guidance at all.
+  invite_expired: 'ลิงก์ตั้งรหัสผ่านหมดอายุหรือถูกใช้ไปแล้ว กรุณาขอลิงก์ใหม่จากแอดมิน',
 };
 
 export default async function LoginPage({
