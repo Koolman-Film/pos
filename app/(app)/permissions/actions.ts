@@ -40,6 +40,10 @@ import {
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+/** `linked: true` = an existing Koolman login was granted POS access (no email
+ * sent); `false` = a new account was invited by email. See `addUser`. */
+export type AddUserResult = { ok: true; linked: boolean } | { ok: false; error: string };
+
 const PERMISSION_TYPES = ['nav', 'dashboard_widget', 'module_capability'] as const;
 type PermissionType = (typeof PERMISSION_TYPES)[number];
 
@@ -59,7 +63,10 @@ function done(): ActionResult {
   return { ok: true };
 }
 
-function fail(error: unknown): ActionResult {
+// Returns the error variant specifically (not the whole union) so it stays
+// assignable to result types that add fields to the success case, e.g.
+// `AddUserResult`.
+function fail(error: unknown): { ok: false; error: string } {
   const message = error instanceof Error ? error.message : String(error);
   return { ok: false, error: message };
 }
@@ -394,17 +401,21 @@ export async function toggleUserShop(id: string, shopId: string): Promise<Action
   return iErr ? fail(iErr) : done();
 }
 
+/**
+ * Remove a user's POS access.
+ *
+ * SHARED AUTH — this database is shared with the Koolman finance app: `pos` and
+ * `public` are two schemas in ONE Supabase project, so there is a single
+ * `auth.users` table behind both. Every POS user today is also a finance user.
+ * Therefore this deletes ONLY the `pos.app_users` profile (which cascades to
+ * `user_shop_access`) and must NEVER call `auth.admin.deleteUser` — destroying
+ * the shared login would lock the person out of the finance app as well.
+ */
 export async function deleteUser(id: string): Promise<ActionResult> {
   const { supabase } = await authorize();
   const { count } = await supabase.from('app_users').select('id', { count: 'exact', head: true });
   if ((count ?? 0) <= 1) return { ok: false, error: 'ต้องมีผู้ใช้งานอย่างน้อย 1 คนเสมอ' };
-  // Delete the auth login too, mirroring the finance app. `app_users.id` is
-  // `references auth.users(id) on delete cascade`, so removing the auth user
-  // cascades to `app_users` and `user_shop_access`. Deleting only the profile
-  // row (as before) left an orphaned auth account, which then blocked
-  // re-inviting the same email ("already registered").
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.deleteUser(id);
+  const { error } = await supabase.from('app_users').delete().eq('id', id);
   return error ? fail(error) : done();
 }
 
@@ -422,23 +433,46 @@ async function siteOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
+/** Find an existing Supabase Auth account by email (pages the admin list). */
+async function findAuthUserByEmail(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+): Promise<{ id: string } | null> {
+  for (let page = 1; page <= 20; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    const hit = data.users.find((u) => u.email?.toLowerCase() === email);
+    if (hit) return { id: hit.id };
+    if (data.users.length < 200) return null;
+  }
+  return null;
+}
+
 /**
- * Invite a new user by email. Creates the Supabase Auth login WITHOUT a password
- * (they set one via the email link) plus the `app_users` profile row with the
- * assigned role. Non-admin users get their first shop granted so they never
- * start with zero shops — the admin can adjust shops immediately via the
- * existing per-user controls. The invitee lands on /auth/callback → /auth/accept.
+ * Give someone access to the POS app.
  *
- * This is the write the old add-user button lacked: creating a login is a
- * service-role operation (`auth.admin.inviteUserByEmail`), which the ordinary
- * RLS-bound client cannot do. Gated behind `authorize()` (admin only) like every
- * other write in this module.
+ * SHARED AUTH — `pos` and finance's `public` are two schemas in ONE Supabase
+ * project, so a single `auth.users` table backs both apps. That produces two
+ * distinct cases, and conflating them is dangerous:
+ *
+ *  1. **The person already has a Koolman login** (they use the finance app).
+ *     This is the common case — every current POS user is also a finance user.
+ *     We simply LINK: insert a `pos.app_users` profile pointing at their
+ *     existing auth id. No invite, no email, no new password — they sign in
+ *     with the credentials they already have. Calling `inviteUserByEmail` here
+ *     would fail with "already registered", and telling the admin to "delete
+ *     them first" would destroy that person's finance access.
+ *  2. **Brand-new person** — no auth account anywhere. Then we invite by email
+ *     and they set a password via /auth/callback → /auth/accept.
+ *
+ * Non-admins get their first shop granted so they never start with zero shops.
+ * Gated behind `authorize()` (admin only) like every other write here.
  */
 export async function addUser(input: {
   email: string;
   name: string;
   roleId: string;
-}): Promise<ActionResult> {
+}): Promise<AddUserResult> {
   const { supabase } = await authorize();
 
   const email = input.email.trim().toLowerCase();
@@ -451,28 +485,47 @@ export async function addUser(input: {
   if (!role) return { ok: false, error: 'ไม่พบบทบาทที่เลือก' };
 
   const admin = createAdminClient();
-  const origin = await siteOrigin();
-  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent('/auth/accept')}`;
 
-  const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo,
-    data: { name },
-  });
-  if (inviteErr || !invited?.user) {
-    const msg = (inviteErr?.message ?? '').toLowerCase();
-    if (msg.includes('already') || msg.includes('registered')) {
-      return { ok: false, error: 'มีผู้ใช้อีเมลนี้แล้วในระบบ — หากต้องการเชิญใหม่ให้ลบออกก่อน' };
+  // Already has a POS profile? True duplicate.
+  const { data: dupe } = await admin
+    .from('app_users')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+  if (dupe) return { ok: false, error: 'มีอีเมลนี้ในระบบแล้ว' };
+
+  let userId: string;
+  let linkedExisting = false;
+  try {
+    const existing = await findAuthUserByEmail(admin, email);
+    if (existing) {
+      // Case 1 — link the existing Koolman login. No invite sent.
+      userId = existing.id;
+      linkedExisting = true;
+    } else {
+      // Case 2 — brand-new person: invite by email so they can set a password.
+      const origin = await siteOrigin();
+      const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent('/auth/accept')}`;
+      const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
+        redirectTo,
+        data: { name },
+      });
+      if (inviteErr || !invited?.user) {
+        return { ok: false, error: inviteErr?.message ?? 'ส่งคำเชิญไม่สำเร็จ' };
+      }
+      userId = invited.user.id;
     }
-    return { ok: false, error: inviteErr?.message ?? 'สร้างผู้ใช้ไม่สำเร็จ' };
+  } catch (err) {
+    return fail(err);
   }
 
-  const userId = invited.user.id;
   const { error: profileErr } = await admin
     .from('app_users')
     .insert({ id: userId, email, name, role_id: roleId, active: true, sees_all_shops: false });
   if (profileErr) {
-    // Roll back the auth user so we never leave an orphan login.
-    await admin.auth.admin.deleteUser(userId).catch(() => {});
+    // Roll back ONLY an auth account we just created. Never delete a
+    // pre-existing login — it belongs to the finance app too.
+    if (!linkedExisting) await admin.auth.admin.deleteUser(userId).catch(() => {});
     return fail(profileErr);
   }
 
@@ -491,7 +544,10 @@ export async function addUser(input: {
     }
   }
 
-  return done();
+  revalidatePath('/permissions');
+  // `linked` tells the UI which message to show: an existing Koolman login was
+  // granted access (no email sent), or a genuine invite is on its way.
+  return { ok: true, linked: linkedExisting };
 }
 
 /**
