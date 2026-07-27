@@ -71,7 +71,11 @@ export type PermissionsModuleProps = {
   onSetUserAllShops?: (id: string, all: boolean) => Maybe;
   onToggleUserShop?: (id: string, shopId: string) => Maybe;
   onDeleteUser?: (id: string) => Maybe;
-  onAddUser?: (input: { email: string; name: string; roleId: string }) => Maybe;
+  onAddUser?: (input: {
+    email: string;
+    name: string;
+    roleId: string;
+  }) => void | Promise<{ ok: true; linked: boolean } | { ok: false; error: string } | void>;
   onResendInvite?: (id: string) => Maybe;
 };
 
@@ -167,8 +171,9 @@ export function PermissionsModule({
       window.alert('มีอีเมลนี้ในระบบแล้ว');
       return;
     }
-    // Sends a Supabase invite email; the invitee sets their password via the
-    // link (/auth/callback → /auth/accept). Mirrors the finance app's flow.
+    // Two outcomes, because the login is shared with the Koolman finance app:
+    // an existing Koolman account is simply granted access (no email), or a
+    // brand-new person is invited by email to set a password.
     startTransition(async () => {
       const res = await onAddUser?.({ email, name, roleId: newUserRole });
       if (res && typeof res === 'object' && 'ok' in res && res.ok === false) {
@@ -177,7 +182,12 @@ export function PermissionsModule({
       }
       setNewUserEmail('');
       setNewUserName('');
-      window.alert('ส่งคำเชิญไปที่อีเมลแล้ว — ผู้ใช้จะตั้งรหัสผ่านผ่านลิงก์ในอีเมลเพื่อเริ่มใช้งาน');
+      const linked = res && typeof res === 'object' && 'linked' in res && res.linked;
+      window.alert(
+        linked
+          ? 'เพิ่มผู้ใช้งานแล้ว — บัญชีนี้มีอยู่ในระบบ Koolman อยู่แล้ว เข้าสู่ระบบด้วยรหัสผ่านเดิมได้เลย'
+          : 'ส่งคำเชิญไปที่อีเมลแล้ว — ผู้ใช้จะตั้งรหัสผ่านผ่านลิงก์ในอีเมลเพื่อเริ่มใช้งาน',
+      );
     });
   }
 
