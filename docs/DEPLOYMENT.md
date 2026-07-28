@@ -123,6 +123,23 @@ the domain is added.
 - [ ] SMTP configured **if** you need to invite people with no Koolman login
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` is set (server-only) — required for user provisioning
 - [ ] Nothing in POS calls `auth.admin.deleteUser` — the login is shared with finance
+- [ ] `vercel.json` pins `"regions": ["hnd1"]` — see below, do not drop this
+
+### Function region must stay in Tokyo (`hnd1`)
+
+`vercel.json` pins `"regions": ["hnd1"]`. Without it Vercel defaults to `iad1`
+(US East) while Supabase is in `ap-northeast-1` (Tokyo), so every auth/DB call
+crosses the Pacific twice. An authenticated page load makes roughly five
+_sequential_ round trips — `proxy.ts`'s `getUser` (which runs on every request),
+then `resolveSessionContext`'s `getUser`, its `app_users` lookup, its
+`shops`/`role_permissions` pair, then the page's own batch — so the default cost
+about 750ms of pure network wait per page, on top of the user's own leg to
+Virginia. Diagnosed from `x-vercel-id: sin1::iad1::…` (entered at the Singapore
+edge, executed in Virginia).
+
+Tokyo beats Singapore here even though the users are in Thailand: the DB round
+trips are paid ~5x per page while the user leg is paid once. The Koolman finance
+app pins `hnd1` for the same reason and shares this database.
 
 ## Readiness
 
