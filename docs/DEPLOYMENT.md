@@ -129,17 +129,29 @@ the domain is added.
 
 `vercel.json` pins `"regions": ["hnd1"]`. Without it Vercel defaults to `iad1`
 (US East) while Supabase is in `ap-northeast-1` (Tokyo), so every auth/DB call
-crosses the Pacific twice. An authenticated page load makes roughly five
-_sequential_ round trips — `proxy.ts`'s `getUser` (which runs on every request),
-then `resolveSessionContext`'s `getUser`, its `app_users` lookup, its
-`shops`/`role_permissions` pair, then the page's own batch — so the default cost
-about 750ms of pure network wait per page, on top of the user's own leg to
-Virginia. Diagnosed from `x-vercel-id: sin1::iad1::…` (entered at the Singapore
-edge, executed in Virginia).
+crosses the Pacific twice — and an authenticated page load makes roughly five
+_sequential_ round trips (`proxy.ts`'s `getUser` on every request, then
+`resolveSessionContext`'s `getUser` → `app_users` → `shops`/`role_permissions`,
+then the page's own batch). Diagnose the region from the `x-vercel-id` header,
+which reads `<edge>::<function>::<id>`.
 
-Tokyo beats Singapore here even though the users are in Thailand: the DB round
-trips are paid ~5x per page while the user leg is paid once. The Koolman finance
-app pins `hnd1` for the same reason and shares this database.
+Measured round trip to the database from each candidate region (full method,
+results and caveats in [REGION-BENCHMARK.md](./REGION-BENCHMARK.md)):
+
+| Function region              | DB round trip | ×5 per page |
+| ---------------------------- | ------------- | ----------- |
+| **`hnd1` Tokyo — in use**    | **23.5 ms**   | **~118 ms** |
+| `sin1` Singapore             | 90.3 ms       | ~452 ms     |
+| `hkg1` Hong Kong             | 102.4 ms      | ~512 ms     |
+| `icn1` Seoul                 | 127.2 ms      | ~636 ms     |
+| `bom1` Mumbai                | 430.3 ms      | ~2,150 ms   |
+| `iad1` US East — old default | 654.6 ms      | ~3,270 ms   |
+
+Tokyo beats Singapore even though the users are in Thailand: the DB leg is paid
+~5x per page while the user leg is paid once, and from Thailand the two Supabase
+regions are only ~7 ms apart anyway. The Koolman finance app pins `hnd1` for the
+same reason and shares this database. Moving the database to Singapore would gain
+~10 ms and require migrating a live DB the finance app depends on — don't.
 
 ## Readiness
 
