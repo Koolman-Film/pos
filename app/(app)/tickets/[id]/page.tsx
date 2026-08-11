@@ -28,6 +28,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       capabilities={{
         'list.createNew': session.canDo('list.createNew'),
         'list.printSheet': session.canDo('list.printSheet'),
+        'options.manage': session.canDo('options.manage'),
         'list.delete': session.canDo('list.delete'),
       }}
       currentUserName={session.name}

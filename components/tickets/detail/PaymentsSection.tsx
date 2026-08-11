@@ -11,6 +11,7 @@ export function PaymentsSection({
   paymentMethods,
   setPaymentMethods,
   addPayment,
+  removePayment,
   updatePayment,
   total,
   paid,
@@ -19,6 +20,8 @@ export function PaymentsSection({
   paymentMethods: string[];
   setPaymentMethods: (v: string[]) => void;
   addPayment: () => void;
+  /** Drops the row entirely — see `removePayment` in TicketDetail for why. */
+  removePayment?: (idx: number) => void;
   updatePayment: (idx: number, key: keyof TicketPayment, val: unknown) => void;
   total: number;
   paid: number;
@@ -64,6 +67,23 @@ export function PaymentsSection({
               onChange={(e) => updatePayment(idx, 'amount', e.target.value)}
               className="field text-xs px-2.5 py-1.5 w-24"
             />
+            {removePayment && (
+              <button
+                onClick={() => {
+                  // Only confirm once there is something to lose; an empty row
+                  // added by mistake should go away on the first click.
+                  const hasData = Number(p.amount || 0) > 0 || (p.attachments?.length ?? 0) > 0;
+                  if (hasData && !window.confirm('ลบรายการรับเงินนี้ออกจากใบงาน?')) return;
+                  removePayment(idx);
+                }}
+                aria-label={`ลบรายการรับเงินที่ ${idx + 1}`}
+                title="ลบรายการรับเงินนี้"
+                className="text-xs px-2 rounded-lg"
+                style={{ color: '#B23A48' }}
+              >
+                <i className="fa-solid fa-trash"></i>
+              </button>
+            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <label

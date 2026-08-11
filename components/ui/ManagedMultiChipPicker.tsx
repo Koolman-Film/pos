@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 
-/** Ported from reference/v0.4/finnix-film.html:1238-1269 (managed multi-select chip picker). */
+import { useCanManageOptions } from './optionManage';
+
+/**
+ * Ported from reference/v0.4/finnix-film.html:1238-1269 (managed multi-select
+ * chip picker). Adding and removing entries is admin-only (`options.manage`);
+ * ticking the existing ones is not.
+ */
 export function ManagedMultiChipPicker({
   values,
   onChange,
@@ -14,6 +20,7 @@ export function ManagedMultiChipPicker({
   options: string[];
   setOptions: (opts: string[]) => void;
 }) {
+  const canManage = useCanManageOptions();
   const [manage, setManage] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState('');
@@ -49,7 +56,7 @@ export function ManagedMultiChipPicker({
           >
             {o}
           </button>
-          {manage && (
+          {canManage && manage && (
             <button
               onClick={() => removeOption(o)}
               aria-label={`ลบ ${o}`}
@@ -61,7 +68,7 @@ export function ManagedMultiChipPicker({
           )}
         </div>
       ))}
-      {adding ? (
+      {canManage && adding ? (
         <div className="flex gap-1 items-center">
           <input
             autoFocus
@@ -84,23 +91,27 @@ export function ManagedMultiChipPicker({
           </button>
         </div>
       ) : (
+        canManage && (
+          <button
+            onClick={() => setAdding(true)}
+            aria-label="เพิ่มตัวเลือกใหม่"
+            className="text-xs w-7 h-7 rounded-full flex items-center justify-center"
+            style={{ border: '1px dashed var(--line-strong)', color: 'var(--ink-soft)' }}
+          >
+            <i className="fa-solid fa-plus"></i>
+          </button>
+        )
+      )}
+      {canManage && (
         <button
-          onClick={() => setAdding(true)}
-          aria-label="เพิ่มตัวเลือกใหม่"
+          onClick={() => setManage(!manage)}
+          aria-label="จัดการตัวเลือก"
           className="text-xs w-7 h-7 rounded-full flex items-center justify-center"
-          style={{ border: '1px dashed var(--line-strong)', color: 'var(--ink-soft)' }}
+          style={{ color: manage ? 'var(--primary)' : 'var(--ink-faint)' }}
         >
-          <i className="fa-solid fa-plus"></i>
+          <i className="fa-solid fa-gear"></i>
         </button>
       )}
-      <button
-        onClick={() => setManage(!manage)}
-        aria-label="จัดการตัวเลือก"
-        className="text-xs w-7 h-7 rounded-full flex items-center justify-center"
-        style={{ color: manage ? 'var(--primary)' : 'var(--ink-faint)' }}
-      >
-        <i className="fa-solid fa-gear"></i>
-      </button>
     </div>
   );
 }

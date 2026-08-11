@@ -74,6 +74,28 @@ const emboss: CSSProperties = {
   fontWeight: 'bold',
 };
 
+// The per-position work table on the installation sheet. Cells the technician
+// WRITES IN are taller and left blank on purpose — a printed line he has to
+// squeeze numbers onto is the complaint this table replaces.
+const cellHead: CSSProperties = {
+  border: '1px solid #666',
+  padding: '3px 6px',
+  fontSize: 10,
+  fontWeight: 'bold',
+  textAlign: 'left',
+  whiteSpace: 'nowrap',
+};
+const cellBody: CSSProperties = {
+  border: '1px solid #666',
+  padding: '5px 6px',
+  verticalAlign: 'middle',
+};
+const cellWrite: CSSProperties = {
+  border: '1px solid #666',
+  padding: '5px 6px',
+  height: 26,
+};
+
 /**
  * The physical work-order / sales / offsite / financial-document sheets.
  * Ported from the `.print-area` portals inside TicketDetail
@@ -260,17 +282,19 @@ export function PrintJobSheet({
             {t.items
               .filter((i) => i.sold && i.category === cat)
               .map((i, idx) => {
+                // ONE ROW PER POSITION, not one per product.
+                //
+                // The sheet used to group the positions by product — "บานหน้า,
+                // คู่หน้า, คู่หลัง, บานตาย, บานหลัง  3M60  ขนาด ____ ตัด ____" —
+                // which gives the technician a single blank line for five
+                // panels he measures and cuts separately. The trial run asked
+                // for the numbers per position, so each position gets its own
+                // line and its own boxes to write in, with the product repeated
+                // only when it changes.
+                const isFilm = i.category === 'ฟิล์มกรองแสง' || i.category === 'ฟิล์มกันรอย';
                 let rows: { label: string | null; product: string }[];
                 if (i.positions && i.positions.length) {
-                  const grouped: Record<string, string[]> = {};
-                  i.positions.forEach((p) => {
-                    if (!grouped[p.product]) grouped[p.product] = [];
-                    grouped[p.product].push(p.position);
-                  });
-                  rows = Object.entries(grouped).map(([product, labels]) => ({
-                    label: labels.join(', '),
-                    product,
-                  }));
+                  rows = i.positions.map((p) => ({ label: p.position, product: p.product }));
                 } else {
                   rows = [{ label: null, product: i.sold }];
                 }
@@ -289,73 +313,70 @@ export function PrintJobSheet({
                     >
                       {i.category}
                     </p>
-                    {rows.map((r, ri) => {
-                      const stockMatch = stock.find((s) => s.name === r.product);
-                      const short = stockMatch?.shortName || r.product;
-                      return (
-                        <div
-                          key={ri}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 10,
-                            marginBottom: 8,
-                            paddingLeft: 12,
-                          }}
-                        >
-                          {r.label && <span style={emboss}>{r.label}</span>}
-                          <span style={{ fontSize: 18, fontWeight: 'bold' }}>{short}</span>
-                          <span style={{ fontSize: 11, color: '#777' }}>({r.product})</span>
-                          <span
-                            style={{
-                              marginLeft: 'auto',
-                              fontSize: 11,
-                              color: '#444',
-                              whiteSpace: 'nowrap',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
-                            {(i.category === 'ฟิล์มกรองแสง' || i.category === 'ฟิล์มกันรอย') && (
-                              <>
-                                ขนาด
-                                <span
-                                  style={{
-                                    display: 'inline-block',
-                                    borderBottom: '1px solid #999',
-                                    width: 120,
-                                  }}
-                                >
-                                  &nbsp;
-                                </span>
-                                &nbsp;ตัด
-                                <span
-                                  style={{
-                                    display: 'inline-block',
-                                    borderBottom: '1px solid #999',
-                                    width: 120,
-                                  }}
-                                >
-                                  &nbsp;
-                                </span>
-                                &nbsp;
-                              </>
-                            )}
-                            ใช้จริง
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                borderBottom: '1px solid #999',
-                                width: 30,
-                              }}
-                            >
+                    <table
+                      style={{
+                        width: '100%',
+                        borderCollapse: 'collapse',
+                        fontSize: 12,
+                        marginLeft: 4,
+                      }}
+                    >
+                      <thead>
+                        <tr style={{ background: '#F1EDE7' }}>
+                          <th style={{ ...cellHead, width: '22%' }}>ตำแหน่ง</th>
+                          <th style={{ ...cellHead, width: '30%' }}>สินค้า</th>
+                          {isFilm && <th style={{ ...cellHead, width: 46 }}>จำนวน</th>}
+                          {isFilm && <th style={cellHead}>ขนาดที่วัด (กว้าง × ยาว)</th>}
+                          {isFilm && <th style={cellHead}>ตัด</th>}
+                          <th style={{ ...cellHead, width: 70 }}>ใช้จริง</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((r, ri) => {
+                          const stockMatch = stock.find((s) => s.name === r.product);
+                          const short = stockMatch?.shortName || r.product;
+                          // The product only earns a line of its own when it
+                          // changes; repeating "3M60" five times is noise the
+                          // technician has to read past.
+                          const sameAsAbove = ri > 0 && rows[ri - 1].product === r.product;
+                          return (
+                            <tr key={ri}>
+                              <td style={{ ...cellBody, fontWeight: 'bold' }}>{r.label ?? '—'}</td>
+                              <td style={cellBody}>
+                                {sameAsAbove ? (
+                                  <span style={{ color: '#999' }}>&#8243;</span>
+                                ) : (
+                                  <>
+                                    <span style={{ fontSize: 15, fontWeight: 'bold' }}>
+                                      {short}
+                                    </span>
+                                    {stockMatch?.shortName && (
+                                      <span style={{ fontSize: 10, color: '#777', marginLeft: 4 }}>
+                                        ({r.product})
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </td>
+                              {isFilm && <td style={cellWrite}>&nbsp;</td>}
+                              {isFilm && <td style={cellWrite}>&nbsp;</td>}
+                              {isFilm && <td style={cellWrite}>&nbsp;</td>}
+                              <td style={cellWrite}>&nbsp;</td>
+                            </tr>
+                          );
+                        })}
+                        {isFilm && (
+                          <tr>
+                            <td colSpan={3} style={{ ...cellBody, textAlign: 'right' }}>
+                              รวมใช้จริง (เมตร)
+                            </td>
+                            <td colSpan={3} style={cellWrite}>
                               &nbsp;
-                            </span>
-                          </span>
-                        </div>
-                      );
-                    })}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 );
               })}

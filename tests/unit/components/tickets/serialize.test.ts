@@ -155,3 +155,28 @@ describe('serializeTicket — the rest of the item payload', () => {
     expect(payload.pickupDate).toBe('2026-07-24T17:00:00.000Z');
   });
 });
+
+describe('serializeTicket — สินค้าที่สนใจ (cheer-up baseline)', () => {
+  it('carries the interested product and its price into the payload', () => {
+    // Until migration 0015 these two never left the form, so reopening a saved
+    // ticket showed an empty picker and lost the cheer-up comparison with it.
+    const t = baseTicket({
+      items: [itemWith({ interested: 'ฟิล์ม 3M CRM 40%', interestedPrice: 1700 })],
+    } as unknown as Partial<Ticket>);
+    expect(firstItem(t).interested).toBe('ฟิล์ม 3M CRM 40%');
+    expect(firstItem(t).interestedPrice).toBe(1700);
+  });
+
+  it('coerces the string an <input type=number> produces', () => {
+    const t = baseTicket({
+      items: [itemWith({ interested: 'A', interestedPrice: '1700' })],
+    } as unknown as Partial<Ticket>);
+    expect(firstItem(t).interestedPrice).toBe(1700);
+  });
+
+  it('sends an empty baseline when none was chosen', () => {
+    const t = baseTicket({ items: [itemWith()] } as unknown as Partial<Ticket>);
+    expect(firstItem(t).interested).toBe('');
+    expect(firstItem(t).interestedPrice).toBe(0);
+  });
+});

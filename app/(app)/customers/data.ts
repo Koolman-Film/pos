@@ -101,6 +101,9 @@ export async function loadCustomers(): Promise<CustomerRow[]> {
         status: t.status,
         dropOff: t.dropOff,
         total: t.total,
+        brand: t.brand,
+        model: t.model,
+        plate: t.plate,
       })),
     };
   });

@@ -140,6 +140,7 @@ export default async function StockPage() {
     'stock.withdraw': session.canDo('stock.withdraw'),
     'stock.editDelete': session.canDo('stock.editDelete'),
     'stock.export': session.canDo('stock.export'),
+    'options.manage': session.canDo('options.manage'),
   };
 
   return (

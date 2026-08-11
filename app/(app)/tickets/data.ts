@@ -279,6 +279,8 @@ type DetailRow = {
     booked_price: number;
     sold: string;
     sold_price: number;
+    interested: string | null;
+    interested_price: number | null;
     discount_type: string | null;
     discount_value: number | null;
     actual_qty: Record<string, number> | null;
@@ -294,7 +296,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     .select(
       'id, shop_id, customer_name, phone, plate, car_type, brand, model, color, service_type, status, ' +
         'booking_channel, tech_by_category, drop_off_date, pickup_date, extras, ' +
-        'ticket_items(id, category, booked, booked_price, sold, sold_price, discount_type, discount_value, actual_qty, ' +
+        'ticket_items(id, category, booked, booked_price, sold, sold_price, interested, interested_price, discount_type, discount_value, actual_qty, ' +
         'ticket_item_positions(position, product, price)), ' +
         'ticket_payments(type, method, amount, paid_at)',
     )
@@ -336,6 +338,10 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
       bookedPrice: Number(i.booked_price || 0),
       sold: i.sold,
       soldPrice: Number(i.sold_price || 0),
+      interested: i.interested ?? '',
+      // Left blank rather than 0 when nothing was chosen, so the price box shows
+      // its placeholder instead of a misleading zero.
+      interestedPrice: i.interested ? Number(i.interested_price || 0) : '',
       discountType: (i.discount_type as 'percent' | 'amount' | null) ?? null,
       discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
       positions: (i.ticket_item_positions ?? []).map((p) => ({

@@ -298,7 +298,13 @@ export async function updateOptionList(
   listKey: OptionListName,
   values: string[],
 ): Promise<{ ok: boolean; error?: string }> {
-  await getSessionContext(); // C2: authenticate before mutating
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  // These lists are shared by every shop and every ticket, so extending one is
+  // an administrative act, not part of filling in a job. The pickers hide their
+  // add/remove controls without this capability; this is the actual gate.
+  if (!session.canDo('options.manage')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขรายการตัวเลือก (เฉพาะแอดมิน)' };
+  }
   if (!OPTION_LISTS.includes(listKey)) return { ok: false, error: 'invalid list' };
   const supabase = await createClient();
   try {

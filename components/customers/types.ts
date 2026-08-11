@@ -14,6 +14,13 @@ export type CustomerTicket = {
   status: string;
   dropOff: Date | null;
   total: number;
+  /**
+   * Which vehicle the job was for. A customer with several cars has several
+   * jobs that otherwise read identically, so the history is unusable without it.
+   */
+  brand: string;
+  model: string;
+  plate: string;
 };
 
 export type CustomerRow = {

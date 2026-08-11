@@ -36,6 +36,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
     'wholesale.priceApproval': session.canDo('wholesale.priceApproval'),
     'wholesale.badDebt': session.canDo('wholesale.badDebt'),
     'wholesale.export': session.canDo('wholesale.export'),
+    'options.manage': session.canDo('options.manage'),
   };
 
   return (

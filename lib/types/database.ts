@@ -767,6 +767,8 @@ export type Database = {
           discount_type: string | null
           discount_value: number | null
           id: number
+          interested: string
+          interested_price: number
           sold: string
           sold_price: number
           ticket_id: string
@@ -779,6 +781,8 @@ export type Database = {
           discount_type?: string | null
           discount_value?: number | null
           id?: never
+          interested?: string
+          interested_price?: number
           sold?: string
           sold_price?: number
           ticket_id: string
@@ -791,6 +795,8 @@ export type Database = {
           discount_type?: string | null
           discount_value?: number | null
           id?: never
+          interested?: string
+          interested_price?: number
           sold?: string
           sold_price?: number
           ticket_id?: string

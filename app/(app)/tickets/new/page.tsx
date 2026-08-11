@@ -44,6 +44,7 @@ export default async function NewTicketPage({
       capabilities={{
         'list.createNew': session.canDo('list.createNew'),
         'list.printSheet': session.canDo('list.printSheet'),
+        'options.manage': session.canDo('options.manage'),
       }}
       currentUserName={session.name}
       initialOptions={registries.options}

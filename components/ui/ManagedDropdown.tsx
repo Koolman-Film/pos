@@ -2,7 +2,17 @@
 
 import { useState } from 'react';
 
-/** Ported from reference/v0.4/finnix-film.html:1150-1183 (managed dropdown, add/remove options inline). */
+import { useCanManageOptions } from './optionManage';
+
+/**
+ * Ported from reference/v0.4/finnix-film.html:1150-1183 (managed dropdown,
+ * add/remove options inline).
+ *
+ * The inline "+ เพิ่มตัวเลือกใหม่..." row and the delete button are admin-only
+ * (`options.manage`). The prototype let anyone extend these lists and the trial
+ * run showed where that leads — the time-slot list filled up with typos and
+ * duplicates. Everyone can still SELECT from the list.
+ */
 export function ManagedDropdown({
   value,
   onChange,
@@ -16,6 +26,7 @@ export function ManagedDropdown({
   setOptions: (opts: string[]) => void;
   placeholder?: string;
 }) {
+  const canManage = useCanManageOptions();
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState('');
 
@@ -84,9 +95,9 @@ export function ManagedDropdown({
             {o}
           </option>
         ))}
-        <option value="__add__">+ เพิ่มตัวเลือกใหม่...</option>
+        {canManage && <option value="__add__">+ เพิ่มตัวเลือกใหม่...</option>}
       </select>
-      {value && (
+      {canManage && value && (
         <button
           onClick={removeCurrent}
           title="ลบตัวเลือกนี้ออกจากระบบ"

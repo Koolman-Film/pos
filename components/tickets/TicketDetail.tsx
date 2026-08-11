@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
+import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
@@ -356,6 +357,15 @@ export function TicketDetail({
       ],
     });
   }
+  /**
+   * Remove a payment row. The form had no way to do this: a row added by
+   * mistake stayed on the ticket as a 0-baht entry forever, and the only bin
+   * icon on the row belonged to the payment-method dropdown (it deletes the
+   * METHOD from the system-wide list, which is not what anyone wanted there).
+   */
+  function removePayment(idx: number) {
+    setT({ ...t, payments: t.payments.filter((_, i) => i !== idx) });
+  }
   function updatePayment(idx: number, key: keyof TicketPayment, val: unknown) {
     const payments = [...t.payments];
     payments[idx] = { ...payments[idx], [key]: val };
@@ -404,349 +414,353 @@ export function TicketDetail({
   const paid = t.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
   return (
-    <div className="max-w-2xl fade-page">
-      <button
-        onClick={() => {
-          if (
-            confirmDiscardIfDirty(
-              isDirty,
-              'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
+    <OptionManageProvider canManage={canDo('options.manage')}>
+      <div className="max-w-2xl fade-page">
+        <button
+          onClick={() => {
+            if (
+              confirmDiscardIfDirty(
+                isDirty,
+                'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
+              )
             )
-          )
-            router.push('/tickets');
-        }}
-        className="text-sm mb-4 flex items-center gap-2 font-medium"
-        style={{ color: 'var(--ink-soft)' }}
-      >
-        <i className="fa-solid fa-arrow-left"></i>กลับไปรายการใบงาน
-      </button>
-      <div className="card p-5 sm:p-7">
-        <div className="flex items-start justify-between mb-1">
-          <p
-            className="text-xs font-semibold flex items-center gap-1.5"
-            style={{ color: 'var(--primary)' }}
-          >
-            <i className="fa-solid fa-store"></i>
-            {shopName(t.shop)}
-          </p>
-          <select
-            value={t.status}
-            aria-label="สถานะใบงาน"
-            onChange={(e) => changeStatus(e.target.value)}
-            className="text-sm font-bold px-3 py-1.5 rounded-full border-none cursor-pointer"
-            style={{
-              background: getStatus(statuses, t.status).bg,
-              color: getStatus(statuses, t.status).text,
-            }}
-          >
-            {statuses.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.key}
-              </option>
-            ))}
-          </select>
-        </div>
-        <p className="text-lg font-bold mb-5">{isNew ? 'สร้างใบงานใหม่' : `ใบงาน #${t.id}`}</p>
-
-        <VehicleInfoSection
-          t={t}
-          field={field}
-          bookingChannels={options.booking_channels}
-          setBookingChannels={opt('booking_channels')}
-          serviceTypes={options.service_types}
-          setServiceTypes={opt('service_types')}
-          carTypes={options.car_types}
-          setCarTypes={opt('car_types')}
-          carBrands={options.car_brands}
-          setCarBrands={opt('car_brands')}
-          retailCustomers={retailCustomers}
-          setRetailCustomers={setRetailCustomers}
-          onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
-          onModelChange={onModelChange}
-          commitModelRegistry={commitModelRegistry}
-        />
-
-        <div className="mb-5">
-          <label className="text-xs font-medium block mb-1" style={{ color: 'var(--ink-soft)' }}>
-            หมายเหตุ
-          </label>
-          <textarea
-            value={t.notes || ''}
-            onChange={(e) => field('notes', e.target.value)}
-            placeholder="ข้อมูลสำคัญที่ต้องการบันทึกไว้..."
-            rows={2}
-            className="field w-full text-sm px-3 py-2"
-            style={{ resize: 'vertical' }}
-          />
-        </div>
-
-        <ItemsSection
-          t={t}
-          stock={stock}
-          productCategories={productCategories}
-          filmPositions={options.film_positions}
-          setFilmPositions={opt('film_positions')}
-          wrapPositions={options.wrap_positions}
-          setWrapPositions={opt('wrap_positions')}
-          serviceItems={options.service_items}
-          setServiceItems={opt('service_items')}
-          addItem={addItem}
-          removeItem={removeItem}
-          updateItem={updateItem}
-          updateItemFields={updateItemFields}
-          updateFilmPositions={updateFilmPositions}
-          lookupPrice={lookupPrice}
-          lookupFilmPrice={lookupFilmPrice}
-          commitPrice={commitPrice}
-        />
-
-        <TechSection
-          t={t}
-          field={field}
-          technicians={options.technicians}
-          setTechnicians={opt('technicians')}
-          updateActualQty={updateActualQty}
-          confirmInstall={confirmInstall}
-          shareQcAlbum={shareQcAlbum}
-          shopName={shopName}
-        />
-
-        <ExtrasSection
-          t={t}
-          extraOptions={options.extra_options}
-          setExtraOptions={opt('extra_options')}
-          slideTypes={options.slide_types}
-          stock={stock}
-          toggleExtra={toggleExtra}
-          updateExtraDetail={updateExtraDetail}
-          setSlideType={setSlideType}
-          updateSlideLeg={updateSlideLeg}
-          shareLink={shareLink}
-        />
-
-        <PaymentsSection
-          t={t}
-          paymentMethods={options.payment_methods}
-          setPaymentMethods={opt('payment_methods')}
-          addPayment={addPayment}
-          updatePayment={updatePayment}
-          total={total}
-          paid={paid}
-        />
-
-        {saveError && (
-          <p
-            className="text-sm mb-3 px-3 py-2 rounded-lg"
-            style={{ background: '#FBEAEC', color: '#B23A48' }}
-            role="alert"
-          >
-            <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
-            {saveError}
-          </p>
-        )}
-        <div className="flex gap-3">
-          <button
-            onClick={() => router.push('/tickets')}
-            className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
-          >
-            ยกเลิก
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-            style={{ opacity: saving ? 0.7 : 1 }}
-          >
-            <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
-            {saving ? 'กำลังบันทึก...' : 'บันทึกใบงาน'}
-          </button>
-        </div>
-
-        {!isNew && t.items.some((i) => i.sold) && canDo('list.printSheet') && (
-          <div className="flex gap-3 mt-3">
-            <button
-              onClick={() => doPrint('job')}
-              className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              router.push('/tickets');
+          }}
+          className="text-sm mb-4 flex items-center gap-2 font-medium"
+          style={{ color: 'var(--ink-soft)' }}
+        >
+          <i className="fa-solid fa-arrow-left"></i>กลับไปรายการใบงาน
+        </button>
+        <div className="card p-5 sm:p-7">
+          <div className="flex items-start justify-between mb-1">
+            <p
+              className="text-xs font-semibold flex items-center gap-1.5"
+              style={{ color: 'var(--primary)' }}
             >
-              <i className="fa-solid fa-print"></i> ใบงานติดตั้ง
+              <i className="fa-solid fa-store"></i>
+              {shopName(t.shop)}
+            </p>
+            <select
+              value={t.status}
+              aria-label="สถานะใบงาน"
+              onChange={(e) => changeStatus(e.target.value)}
+              className="text-sm font-bold px-3 py-1.5 rounded-full border-none cursor-pointer"
+              style={{
+                background: getStatus(statuses, t.status).bg,
+                color: getStatus(statuses, t.status).text,
+              }}
+            >
+              {statuses.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.key}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-lg font-bold mb-5">{isNew ? 'สร้างใบงานใหม่' : `ใบงาน #${t.id}`}</p>
+
+          <VehicleInfoSection
+            t={t}
+            field={field}
+            bookingChannels={options.booking_channels}
+            setBookingChannels={opt('booking_channels')}
+            serviceTypes={options.service_types}
+            setServiceTypes={opt('service_types')}
+            carTypes={options.car_types}
+            setCarTypes={opt('car_types')}
+            carBrands={options.car_brands}
+            setCarBrands={opt('car_brands')}
+            retailCustomers={retailCustomers}
+            setRetailCustomers={setRetailCustomers}
+            onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
+            onModelChange={onModelChange}
+            commitModelRegistry={commitModelRegistry}
+          />
+
+          <div className="mb-5">
+            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--ink-soft)' }}>
+              หมายเหตุ
+            </label>
+            <textarea
+              value={t.notes || ''}
+              onChange={(e) => field('notes', e.target.value)}
+              placeholder="ข้อมูลสำคัญที่ต้องการบันทึกไว้..."
+              rows={2}
+              className="field w-full text-sm px-3 py-2"
+              style={{ resize: 'vertical' }}
+            />
+          </div>
+
+          <ItemsSection
+            t={t}
+            stock={stock}
+            productCategories={productCategories}
+            filmPositions={options.film_positions}
+            setFilmPositions={opt('film_positions')}
+            wrapPositions={options.wrap_positions}
+            setWrapPositions={opt('wrap_positions')}
+            serviceItems={options.service_items}
+            setServiceItems={opt('service_items')}
+            addItem={addItem}
+            removeItem={removeItem}
+            updateItem={updateItem}
+            updateItemFields={updateItemFields}
+            updateFilmPositions={updateFilmPositions}
+            lookupPrice={lookupPrice}
+            lookupFilmPrice={lookupFilmPrice}
+            commitPrice={commitPrice}
+          />
+
+          <TechSection
+            t={t}
+            field={field}
+            technicians={options.technicians}
+            setTechnicians={opt('technicians')}
+            updateActualQty={updateActualQty}
+            confirmInstall={confirmInstall}
+            shareQcAlbum={shareQcAlbum}
+            shopName={shopName}
+          />
+
+          <ExtrasSection
+            t={t}
+            extraOptions={options.extra_options}
+            setExtraOptions={opt('extra_options')}
+            slideTypes={options.slide_types}
+            stock={stock}
+            toggleExtra={toggleExtra}
+            updateExtraDetail={updateExtraDetail}
+            setSlideType={setSlideType}
+            updateSlideLeg={updateSlideLeg}
+            shareLink={shareLink}
+          />
+
+          <PaymentsSection
+            t={t}
+            paymentMethods={options.payment_methods}
+            setPaymentMethods={opt('payment_methods')}
+            addPayment={addPayment}
+            removePayment={removePayment}
+            updatePayment={updatePayment}
+            total={total}
+            paid={paid}
+          />
+
+          {saveError && (
+            <p
+              className="text-sm mb-3 px-3 py-2 rounded-lg"
+              style={{ background: '#FBEAEC', color: '#B23A48' }}
+              role="alert"
+            >
+              <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
+              {saveError}
+            </p>
+          )}
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push('/tickets')}
+              className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
+            >
+              ยกเลิก
             </button>
             <button
-              onClick={() => doPrint('sale')}
-              className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              onClick={save}
+              disabled={saving}
+              className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              style={{ opacity: saving ? 0.7 : 1 }}
             >
-              <i className="fa-solid fa-print"></i> ใบงานขาย
+              <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
+              {saving ? 'กำลังบันทึก...' : 'บันทึกใบงาน'}
             </button>
           </div>
-        )}
-        {!isNew &&
-          t.items.some((i) => i.sold) &&
-          canDo('list.printSheet') &&
-          t.extras?.['นอกสถานที่']?.checked && (
+
+          {!isNew && t.items.some((i) => i.sold) && canDo('list.printSheet') && (
+            <div className="flex gap-3 mt-3">
+              <button
+                onClick={() => doPrint('job')}
+                className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-print"></i> ใบงานติดตั้ง
+              </button>
+              <button
+                onClick={() => doPrint('sale')}
+                className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-print"></i> ใบงานขาย
+              </button>
+            </div>
+          )}
+          {!isNew &&
+            t.items.some((i) => i.sold) &&
+            canDo('list.printSheet') &&
+            t.extras?.['นอกสถานที่']?.checked && (
+              <button
+                onClick={() => doPrint('offsite')}
+                className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
+              </button>
+            )}
+          {!isNew && canDo('list.delete') && deleteAction && (
             <button
-              onClick={() => doPrint('offsite')}
+              onClick={remove}
+              disabled={deleting}
               className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              style={{ color: '#B23A48', borderColor: '#B23A48', opacity: deleting ? 0.7 : 1 }}
             >
-              <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
+              <i className={`fa-solid ${deleting ? 'fa-spinner fa-spin' : 'fa-trash'}`}></i>
+              {deleting ? 'กำลังลบ...' : 'ลบใบงาน'}
             </button>
           )}
-        {!isNew && canDo('list.delete') && deleteAction && (
-          <button
-            onClick={remove}
-            disabled={deleting}
-            className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-            style={{ color: '#B23A48', borderColor: '#B23A48', opacity: deleting ? 0.7 : 1 }}
-          >
-            <i className={`fa-solid ${deleting ? 'fa-spinner fa-spin' : 'fa-trash'}`}></i>
-            {deleting ? 'กำลังลบ...' : 'ลบใบงาน'}
-          </button>
-        )}
-        {!isNew && (
-          <div
-            className="rounded-2xl p-4 mt-4"
-            style={{ background: '#EAF1FB', border: '1.5px solid #2563EB' }}
-          >
-            <p className="text-xs font-semibold mb-2" style={{ color: '#1D4ED8' }}>
-              <i className="fa-solid fa-file-invoice mr-1.5"></i>ออกเอกสารทางการเงิน
-            </p>
-            <div className="flex gap-1.5 mb-2.5">
-              {['ใบเสนอราคา', 'ใบกำกับภาษี/ใบเสร็จรับเงิน', 'ใบเสร็จรับเงิน'].map((dt) => (
-                <button
-                  key={dt}
-                  onClick={() => changeDocType(dt)}
-                  className="text-xs px-2.5 py-1.5 rounded-full font-semibold flex-1"
-                  style={{
-                    background: docType === dt ? '#2563EB' : '#fff',
-                    color: docType === dt ? '#fff' : '#1D4ED8',
-                  }}
-                >
-                  {dt}
-                </button>
-              ))}
-            </div>
-            <div className="mb-2.5">
-              <label className="text-xs" style={{ color: '#1D4ED8' }}>
-                ชื่อลูกค้าในเอกสาร
-              </label>
-              <input
-                value={buyerName}
-                onChange={(e) => setBuyerName(e.target.value)}
-                placeholder={t.customer}
-                className="field w-full text-xs px-2.5 py-1.5"
-              />
-            </div>
-            {docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน' && (
-              <div className="mb-2.5 rounded-lg p-2.5" style={{ background: '#fff' }}>
-                <p className="text-xs font-medium mb-2" style={{ color: '#1D4ED8' }}>
-                  ข้อมูลนิติบุคคล
-                </p>
-                {corporateBuyers.length > 0 && (
-                  <select
-                    onChange={(e) => {
-                      const b = corporateBuyers.find((x) => x.name === e.target.value);
-                      if (b) {
-                        setBuyerName(b.name);
-                        setBuyerAddress(b.address);
-                        setBuyerTaxId(b.taxId);
-                      }
+          {!isNew && (
+            <div
+              className="rounded-2xl p-4 mt-4"
+              style={{ background: '#EAF1FB', border: '1.5px solid #2563EB' }}
+            >
+              <p className="text-xs font-semibold mb-2" style={{ color: '#1D4ED8' }}>
+                <i className="fa-solid fa-file-invoice mr-1.5"></i>ออกเอกสารทางการเงิน
+              </p>
+              <div className="flex gap-1.5 mb-2.5">
+                {['ใบเสนอราคา', 'ใบกำกับภาษี/ใบเสร็จรับเงิน', 'ใบเสร็จรับเงิน'].map((dt) => (
+                  <button
+                    key={dt}
+                    onClick={() => changeDocType(dt)}
+                    className="text-xs px-2.5 py-1.5 rounded-full font-semibold flex-1"
+                    style={{
+                      background: docType === dt ? '#2563EB' : '#fff',
+                      color: docType === dt ? '#fff' : '#1D4ED8',
                     }}
-                    defaultValue=""
-                    className="field w-full text-xs px-2.5 py-1.5 mb-2"
                   >
-                    <option value="" disabled>
-                      เลือกจากที่บันทึกไว้...
-                    </option>
-                    {corporateBuyers.map((b) => (
-                      <option key={b.name} value={b.name}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <input
-                  value={buyerAddress}
-                  onChange={(e) => setBuyerAddress(e.target.value)}
-                  placeholder="ที่อยู่นิติบุคคล"
-                  className="field w-full text-xs px-2.5 py-1.5 mb-2"
-                />
-                <input
-                  value={buyerTaxId}
-                  onChange={(e) => setBuyerTaxId(e.target.value)}
-                  placeholder="เลขผู้เสียภาษี 13 หลัก"
-                  className="field w-full text-xs px-2.5 py-1.5 mb-2"
-                />
-                <button
-                  onClick={() => {
-                    if (!buyerName.trim()) return;
-                    setCorporateBuyers((prev) => {
-                      const idx = prev.findIndex((x) => x.name === buyerName);
-                      const entry = { name: buyerName, address: buyerAddress, taxId: buyerTaxId };
-                      if (idx >= 0) {
-                        const copy = [...prev];
-                        copy[idx] = entry;
-                        return copy;
-                      }
-                      return [...prev, entry];
-                    });
-                  }}
-                  className="btn-outline w-full text-xs py-1.5 rounded-lg"
-                  style={{ borderColor: '#2563EB', color: '#1D4ED8' }}
-                >
-                  <i className="fa-solid fa-floppy-disk mr-1.5"></i>บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป
-                </button>
+                    {dt}
+                  </button>
+                ))}
               </div>
-            )}
-            <label
-              className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
-              style={{ color: '#1D4ED8' }}
-            >
-              <input
-                type="checkbox"
-                checked={showCompanyInfo}
-                onChange={(e) => setShowCompanyInfo(e.target.checked)}
-                className="w-3.5 h-3.5"
-              />
-              แสดงชื่อนิติบุคคล/เลขผู้เสียภาษีของร้าน
-            </label>
-            <label
-              className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
-              style={{ color: '#1D4ED8' }}
-            >
-              <input
-                type="checkbox"
-                checked={showDisclaimer}
-                onChange={(e) => setShowDisclaimer(e.target.checked)}
-                className="w-3.5 h-3.5"
-              />
-              แสดงข้อความแจ้งเตือนตรวจเช็ครอบคัน
-            </label>
-            <button
-              onClick={() => doPrint('doc')}
-              className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
-              style={{ background: '#2563EB', color: '#fff' }}
-            >
-              <i className="fa-solid fa-print"></i> ออก{docType}
-            </button>
-          </div>
-        )}
-      </div>
+              <div className="mb-2.5">
+                <label className="text-xs" style={{ color: '#1D4ED8' }}>
+                  ชื่อลูกค้าในเอกสาร
+                </label>
+                <input
+                  value={buyerName}
+                  onChange={(e) => setBuyerName(e.target.value)}
+                  placeholder={t.customer}
+                  className="field w-full text-xs px-2.5 py-1.5"
+                />
+              </div>
+              {docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน' && (
+                <div className="mb-2.5 rounded-lg p-2.5" style={{ background: '#fff' }}>
+                  <p className="text-xs font-medium mb-2" style={{ color: '#1D4ED8' }}>
+                    ข้อมูลนิติบุคคล
+                  </p>
+                  {corporateBuyers.length > 0 && (
+                    <select
+                      onChange={(e) => {
+                        const b = corporateBuyers.find((x) => x.name === e.target.value);
+                        if (b) {
+                          setBuyerName(b.name);
+                          setBuyerAddress(b.address);
+                          setBuyerTaxId(b.taxId);
+                        }
+                      }}
+                      defaultValue=""
+                      className="field w-full text-xs px-2.5 py-1.5 mb-2"
+                    >
+                      <option value="" disabled>
+                        เลือกจากที่บันทึกไว้...
+                      </option>
+                      {corporateBuyers.map((b) => (
+                        <option key={b.name} value={b.name}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    value={buyerAddress}
+                    onChange={(e) => setBuyerAddress(e.target.value)}
+                    placeholder="ที่อยู่นิติบุคคล"
+                    className="field w-full text-xs px-2.5 py-1.5 mb-2"
+                  />
+                  <input
+                    value={buyerTaxId}
+                    onChange={(e) => setBuyerTaxId(e.target.value)}
+                    placeholder="เลขผู้เสียภาษี 13 หลัก"
+                    className="field w-full text-xs px-2.5 py-1.5 mb-2"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!buyerName.trim()) return;
+                      setCorporateBuyers((prev) => {
+                        const idx = prev.findIndex((x) => x.name === buyerName);
+                        const entry = { name: buyerName, address: buyerAddress, taxId: buyerTaxId };
+                        if (idx >= 0) {
+                          const copy = [...prev];
+                          copy[idx] = entry;
+                          return copy;
+                        }
+                        return [...prev, entry];
+                      });
+                    }}
+                    className="btn-outline w-full text-xs py-1.5 rounded-lg"
+                    style={{ borderColor: '#2563EB', color: '#1D4ED8' }}
+                  >
+                    <i className="fa-solid fa-floppy-disk mr-1.5"></i>
+                    บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป
+                  </button>
+                </div>
+              )}
+              <label
+                className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
+                style={{ color: '#1D4ED8' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showCompanyInfo}
+                  onChange={(e) => setShowCompanyInfo(e.target.checked)}
+                  className="w-3.5 h-3.5"
+                />
+                แสดงชื่อนิติบุคคล/เลขผู้เสียภาษีของร้าน
+              </label>
+              <label
+                className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
+                style={{ color: '#1D4ED8' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showDisclaimer}
+                  onChange={(e) => setShowDisclaimer(e.target.checked)}
+                  className="w-3.5 h-3.5"
+                />
+                แสดงข้อความแจ้งเตือนตรวจเช็ครอบคัน
+              </label>
+              <button
+                onClick={() => doPrint('doc')}
+                className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
+                style={{ background: '#2563EB', color: '#fff' }}
+              >
+                <i className="fa-solid fa-print"></i> ออก{docType}
+              </button>
+            </div>
+          )}
+        </div>
 
-      <PrintJobSheet
-        t={t}
-        printMode={printMode}
-        currentUserName={currentUserName}
-        shopName={shopName}
-        shopInfo={shopInfo}
-        stock={stock}
-        extraOptions={options.extra_options}
-        total={total}
-        paid={paid}
-        docType={docType}
-        buyerName={buyerName}
-        buyerTaxId={buyerTaxId}
-        buyerAddress={buyerAddress}
-        showCompanyInfo={showCompanyInfo}
-        showDisclaimer={showDisclaimer}
-      />
-    </div>
+        <PrintJobSheet
+          t={t}
+          printMode={printMode}
+          currentUserName={currentUserName}
+          shopName={shopName}
+          shopInfo={shopInfo}
+          stock={stock}
+          extraOptions={options.extra_options}
+          total={total}
+          paid={paid}
+          docType={docType}
+          buyerName={buyerName}
+          buyerTaxId={buyerTaxId}
+          buyerAddress={buyerAddress}
+          showCompanyInfo={showCompanyInfo}
+          showDisclaimer={showDisclaimer}
+        />
+      </div>
+    </OptionManageProvider>
   );
 }

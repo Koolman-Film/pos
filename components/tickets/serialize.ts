@@ -52,6 +52,10 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
       bookedPrice: Number(i.bookedPrice || 0),
       sold: i.sold || '',
       soldPrice: Number(i.soldPrice || 0),
+      // The cheer-up baseline. Dropped here until migration 0015, which is why
+      // สินค้าที่สนใจ came back empty every time a ticket was reopened.
+      interested: i.interested || '',
+      interestedPrice: Number(i.interestedPrice || 0),
       discountType: i.discountType ?? null,
       discountValue:
         i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : null,

@@ -168,6 +168,9 @@ export type TicketSavePayload = {
     bookedPrice: number;
     sold: string;
     soldPrice: number;
+    /** สินค้าที่สนใจ — the cheer-up baseline (`ticket_items.interested`). */
+    interested: string;
+    interestedPrice: number;
     discountType: DiscountType;
     discountValue: number | null;
     positions: { position: string; product: string; price: number }[];

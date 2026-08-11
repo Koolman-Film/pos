@@ -11,6 +11,7 @@ import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { OptionManageProvider } from '@/components/ui/optionManage';
 import { StatusPill } from '@/components/ui/StatusPill';
 import type { Shop } from '@/components/ui/PeriodShopFilter';
 
@@ -140,6 +141,7 @@ export function AccountingModule({
   canAddExpense,
   canTopupCash,
   canExport,
+  canManageOptions,
   addExpenseAction,
   topupCashAction,
   updateExpenseAction,
@@ -157,6 +159,8 @@ export function AccountingModule({
   canAddExpense?: boolean;
   canTopupCash?: boolean;
   canExport?: boolean;
+  /** `options.manage` — may this caller add/remove หมวดค่าใช้จ่าย / จ่ายจาก entries. */
+  canManageOptions?: boolean;
   addExpenseAction?: (input: NewExpenseInput) => Promise<void>;
   topupCashAction?: (input: TopupInput) => Promise<void>;
   updateExpenseAction?: (input: UpdateExpenseInput) => Promise<void>;
@@ -170,6 +174,7 @@ export function AccountingModule({
   const allowAdd = canAddExpense ?? canDo?.('accounting.addExpense') ?? false;
   const allowTopup = canTopupCash ?? canDo?.('accounting.topupCash') ?? false;
   const allowExport = canExport ?? canDo?.('accounting.export') ?? false;
+  const allowManageOptions = canManageOptions ?? canDo?.('options.manage') ?? false;
 
   const firstShop = accessibleShops[0]?.id || '';
   const shopName = (id: string) => accessibleShops.find((s) => s.id === id)?.name || id;
@@ -434,348 +439,404 @@ export function AccountingModule({
   }
 
   return (
-    <div className="fade-page">
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
-        <h1 className="text-xl font-bold">บัญชี / ค่าใช้จ่าย</h1>
-        <div className="flex gap-2 flex-wrap">
-          {allowTopup && (
-            <button
-              onClick={() => {
-                setShowTopup(!showTopup);
-                setShowAdd(false);
-              }}
-              className={`text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2 ${
-                showTopup ? 'btn-primary' : 'btn-outline'
-              }`}
-            >
-              <i className="fa-solid fa-wallet"></i>เติมเงินสดย่อย
-            </button>
-          )}
-          {allowAdd && (
-            <button
-              onClick={() => {
-                setShowAdd(!showAdd);
-                setShowTopup(false);
-              }}
-              className={`text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2 ${
-                showAdd ? 'btn-primary' : 'btn-outline'
-              }`}
-            >
-              <i className="fa-solid fa-plus"></i>เพิ่มรายการ
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center justify-end mb-4 flex-wrap gap-2">
-        <select
-          value={shopFilter}
-          aria-label="กรองตามสาขา"
-          onChange={(e) => setShopFilter(e.target.value)}
-          className="field text-sm px-3 py-2"
-        >
-          {canSeeAllShops && <option value="all">ทุกสาขา</option>}
-          {accessibleShops.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={categoryFilter}
-          aria-label="กรองตามกลุ่มค่าใช้จ่าย"
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="field text-sm px-3 py-2"
-        >
-          <option value="all">ทุกกลุ่มค่าใช้จ่าย</option>
-          {expenseCategories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          aria-label="กรองตามสถานะ"
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="field text-sm px-3 py-2"
-        >
-          <option value="all">ทุกสถานะ</option>
-          <option value="จ่ายแล้ว">จ่ายแล้ว</option>
-          <option value="รอจ่าย">รอจ่าย</option>
-        </select>
-        {allowExport && (
-          <div className="flex gap-2">
-            <button
-              onClick={exportExcel}
-              className="btn-outline text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1.5"
-            >
-              <i className="fa-solid fa-file-excel" style={{ color: '#1D6F42' }}></i>Excel
-            </button>
-            <button
-              onClick={exportPDF}
-              className="btn-outline text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1.5"
-            >
-              <i className="fa-solid fa-file-pdf" style={{ color: '#C0392B' }}></i>PDF
-            </button>
+    <OptionManageProvider canManage={allowManageOptions}>
+      <div className="fade-page">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+          <h1 className="text-xl font-bold">บัญชี / ค่าใช้จ่าย</h1>
+          <div className="flex gap-2 flex-wrap">
+            {allowTopup && (
+              <button
+                onClick={() => {
+                  setShowTopup(!showTopup);
+                  setShowAdd(false);
+                }}
+                className={`text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2 ${
+                  showTopup ? 'btn-primary' : 'btn-outline'
+                }`}
+              >
+                <i className="fa-solid fa-wallet"></i>เติมเงินสดย่อย
+              </button>
+            )}
+            {allowAdd && (
+              <button
+                onClick={() => {
+                  setShowAdd(!showAdd);
+                  setShowTopup(false);
+                }}
+                className={`text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2 ${
+                  showAdd ? 'btn-primary' : 'btn-outline'
+                }`}
+              >
+                <i className="fa-solid fa-plus"></i>เพิ่มรายการ
+              </button>
+            )}
           </div>
-        )}
-      </div>
-      <div className="card p-3 mb-5 flex flex-wrap items-center gap-2">
-        <div
-          className="flex rounded-xl overflow-hidden"
-          style={{ border: '1.5px solid var(--line)' }}
-        >
-          {(
-            [
-              ['today', 'วันนี้'],
-              ['month', 'รายเดือน'],
-              ['year', 'รายปี'],
-              ['range', 'ช่วงเวลา'],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setPeriod(key)}
-              className="text-xs px-3 py-2 font-semibold"
-              style={{
-                background: period === key ? 'var(--primary)' : 'transparent',
-                color: period === key ? '#fff' : 'var(--ink-soft)',
-              }}
-            >
-              {label}
-            </button>
-          ))}
         </div>
-        {period === 'today' && (
-          <span
-            className="text-xs px-3 py-2 rounded-lg font-medium"
-            style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
-          >
-            <i className="fa-regular fa-calendar mr-1.5"></i>
-            {new Date().toLocaleDateString('th-TH', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
-          </span>
-        )}
-        {period === 'month' && (
-          <input
-            type="month"
-            value={periodValue}
-            onChange={(e) => setPeriodValue(e.target.value)}
-            className="field text-sm px-3 py-2"
-          />
-        )}
-        {period === 'year' && (
+        <div className="flex items-center justify-end mb-4 flex-wrap gap-2">
           <select
-            value={periodValue}
-            aria-label="เลือกปี"
-            onChange={(e) => setPeriodValue(e.target.value)}
+            value={shopFilter}
+            aria-label="กรองตามสาขา"
+            onChange={(e) => setShopFilter(e.target.value)}
             className="field text-sm px-3 py-2"
           >
-            {[2569, 2568, 2567].map((y) => (
-              <option key={y} value={y}>
-                {y}
+            {canSeeAllShops && <option value="all">ทุกสาขา</option>}
+            {accessibleShops.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
               </option>
             ))}
           </select>
-        )}
-        {period === 'range' && (
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={rangeStart}
-              onChange={(e) => setRangeStart(e.target.value)}
-              className="field text-sm px-3 py-2"
-            />
-            <i
-              className="fa-solid fa-arrow-right text-xs"
-              style={{ color: 'var(--ink-faint)' }}
-            ></i>
-            <input
-              type="date"
-              value={rangeEnd}
-              onChange={(e) => setRangeEnd(e.target.value)}
-              className="field text-sm px-3 py-2"
-            />
-          </div>
-        )}
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-        <div className="card p-4">
-          <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-            จ่ายแล้ว
-          </p>
-          <p className="text-xl font-bold mt-1">{fmt(paidTotal)}</p>
-        </div>
-        <div className="card p-4" style={{ background: '#FBF1DA', borderColor: 'transparent' }}>
-          <p className="text-xs" style={{ color: '#8A5A12' }}>
-            รอจ่าย
-          </p>
-          <p className="text-xl font-bold mt-1" style={{ color: '#8A5A12' }}>
-            {fmt(pendingTotal)}
-          </p>
-        </div>
-        <div
-          onClick={() => setShowCashDetail(!showCashDetail)}
-          className="card p-4 cursor-pointer card-hover"
-          style={{ background: 'var(--primary-soft)', borderColor: 'transparent' }}
-        >
-          <div className="flex items-start justify-between">
-            <p className="text-xs" style={{ color: 'var(--primary)' }}>
-              เงินสดย่อยคงเหลือ
-            </p>
-            <i
-              className={`fa-solid fa-chevron-${showCashDetail ? 'up' : 'down'} text-xs`}
-              style={{ color: 'var(--primary)', opacity: 0.6 }}
-            ></i>
-          </div>
-          <p className="text-xl font-bold mt-1" style={{ color: 'var(--primary)' }}>
-            {fmt(cashBalance)}
-          </p>
-          <p className="text-[11px] mt-1" style={{ color: 'var(--primary)', opacity: 0.7 }}>
-            เติมแล้ว {fmt(cashTopups)} &minus; จ่ายไป {fmt(cashSpent)}
-          </p>
-        </div>
-      </div>
-      {showCashDetail && (
-        <div className="card p-5 mb-4 fade-page">
-          <p className="text-sm font-semibold mb-3">
-            รายการที่จ่ายจากเงินสดย่อย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
-          </p>
-          <div
-            className="card p-3 mb-4 flex flex-wrap items-center gap-2"
-            style={{ background: 'var(--paper)' }}
+          <select
+            value={categoryFilter}
+            aria-label="กรองตามกลุ่มค่าใช้จ่าย"
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="field text-sm px-3 py-2"
           >
-            <div
-              className="flex rounded-xl overflow-hidden"
-              style={{ border: '1.5px solid var(--line)' }}
-            >
-              {(
-                [
-                  ['today', 'วันนี้'],
-                  ['month', 'รายเดือน'],
-                  ['year', 'รายปี'],
-                  ['range', 'ช่วงเวลา'],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setCashPeriod(key)}
-                  className="text-xs px-3 py-2 font-semibold"
-                  style={{
-                    background: cashPeriod === key ? 'var(--primary)' : 'transparent',
-                    color: cashPeriod === key ? '#fff' : 'var(--ink-soft)',
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {cashPeriod === 'today' && (
-              <span
-                className="text-xs px-3 py-2 rounded-lg font-medium"
-                style={{ background: 'var(--surface)', color: 'var(--ink-soft)' }}
+            <option value="all">ทุกกลุ่มค่าใช้จ่าย</option>
+            {expenseCategories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            aria-label="กรองตามสถานะ"
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="field text-sm px-3 py-2"
+          >
+            <option value="all">ทุกสถานะ</option>
+            <option value="จ่ายแล้ว">จ่ายแล้ว</option>
+            <option value="รอจ่าย">รอจ่าย</option>
+          </select>
+          {allowExport && (
+            <div className="flex gap-2">
+              <button
+                onClick={exportExcel}
+                className="btn-outline text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1.5"
               >
-                <i className="fa-regular fa-calendar mr-1.5"></i>
-                {new Date().toLocaleDateString('th-TH', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                })}
-              </span>
-            )}
-            {cashPeriod === 'month' && (
-              <input
-                type="month"
-                value={cashPeriodValue}
-                onChange={(e) => setCashPeriodValue(e.target.value)}
-                className="field text-sm px-3 py-2"
-              />
-            )}
-            {cashPeriod === 'year' && (
-              <select
-                value={cashPeriodValue}
-                aria-label="เลือกปีของเงินสดย่อย"
-                onChange={(e) => setCashPeriodValue(e.target.value)}
-                className="field text-sm px-3 py-2"
+                <i className="fa-solid fa-file-excel" style={{ color: '#1D6F42' }}></i>Excel
+              </button>
+              <button
+                onClick={exportPDF}
+                className="btn-outline text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1.5"
               >
-                {[2569, 2568, 2567].map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            )}
-            {cashPeriod === 'range' && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={cashRangeStart}
-                  onChange={(e) => setCashRangeStart(e.target.value)}
-                  className="field text-sm px-3 py-2"
-                />
-                <i
-                  className="fa-solid fa-arrow-right text-xs"
-                  style={{ color: 'var(--ink-faint)' }}
-                ></i>
-                <input
-                  type="date"
-                  value={cashRangeEnd}
-                  onChange={(e) => setCashRangeEnd(e.target.value)}
-                  className="field text-sm px-3 py-2"
-                />
-              </div>
-            )}
-          </div>
-          {cashDetailItems.length === 0 ? (
-            <p className="text-sm py-6 text-center" style={{ color: 'var(--ink-faint)' }}>
-              ไม่มีรายการที่จ่ายจากเงินสดย่อยในช่วงเวลานี้
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {cashDetailItems.map((e) => (
-                <div
-                  key={e.id}
-                  className="flex items-center justify-between py-2"
-                  style={{ borderBottom: '1px solid var(--line)' }}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{e.desc}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
-                      {e.category} &middot; {e.date}
-                    </p>
-                  </div>
-                  <span className="text-sm font-semibold flex-shrink-0">{fmt(e.amount)}</span>
-                </div>
-              ))}
-              <div
-                className="flex justify-between pt-2 text-sm font-bold"
-                style={{ borderTop: '1.5px solid var(--line-strong)' }}
-              >
-                <span>ยอดรวม</span>
-                <span>{fmt(cashDetailTotal)}</span>
-              </div>
+                <i className="fa-solid fa-file-pdf" style={{ color: '#C0392B' }}></i>PDF
+              </button>
             </div>
           )}
         </div>
-      )}
-      {showTopup && (
-        <div className="card p-5 mb-4 fade-page">
-          <p className="text-sm font-semibold mb-3">
-            เติมเงินสดย่อย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div className="card p-3 mb-5 flex flex-wrap items-center gap-2">
+          <div
+            className="flex rounded-xl overflow-hidden"
+            style={{ border: '1.5px solid var(--line)' }}
+          >
+            {(
+              [
+                ['today', 'วันนี้'],
+                ['month', 'รายเดือน'],
+                ['year', 'รายปี'],
+                ['range', 'ช่วงเวลา'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setPeriod(key)}
+                className="text-xs px-3 py-2 font-semibold"
+                style={{
+                  background: period === key ? 'var(--primary)' : 'transparent',
+                  color: period === key ? '#fff' : 'var(--ink-soft)',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {period === 'today' && (
+            <span
+              className="text-xs px-3 py-2 rounded-lg font-medium"
+              style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
+            >
+              <i className="fa-regular fa-calendar mr-1.5"></i>
+              {new Date().toLocaleDateString('th-TH', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </span>
+          )}
+          {period === 'month' && (
+            <input
+              type="month"
+              value={periodValue}
+              onChange={(e) => setPeriodValue(e.target.value)}
+              className="field text-sm px-3 py-2"
+            />
+          )}
+          {period === 'year' && (
+            <select
+              value={periodValue}
+              aria-label="เลือกปี"
+              onChange={(e) => setPeriodValue(e.target.value)}
+              className="field text-sm px-3 py-2"
+            >
+              {[2569, 2568, 2567].map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          )}
+          {period === 'range' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={rangeStart}
+                onChange={(e) => setRangeStart(e.target.value)}
+                className="field text-sm px-3 py-2"
+              />
+              <i
+                className="fa-solid fa-arrow-right text-xs"
+                style={{ color: 'var(--ink-faint)' }}
+              ></i>
+              <input
+                type="date"
+                value={rangeEnd}
+                onChange={(e) => setRangeEnd(e.target.value)}
+                className="field text-sm px-3 py-2"
+              />
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <div className="card p-4">
+            <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              จ่ายแล้ว
+            </p>
+            <p className="text-xl font-bold mt-1">{fmt(paidTotal)}</p>
+          </div>
+          <div className="card p-4" style={{ background: '#FBF1DA', borderColor: 'transparent' }}>
+            <p className="text-xs" style={{ color: '#8A5A12' }}>
+              รอจ่าย
+            </p>
+            <p className="text-xl font-bold mt-1" style={{ color: '#8A5A12' }}>
+              {fmt(pendingTotal)}
+            </p>
+          </div>
+          <div
+            onClick={() => setShowCashDetail(!showCashDetail)}
+            className="card p-4 cursor-pointer card-hover"
+            style={{ background: 'var(--primary-soft)', borderColor: 'transparent' }}
+          >
+            <div className="flex items-start justify-between">
+              <p className="text-xs" style={{ color: 'var(--primary)' }}>
+                เงินสดย่อยคงเหลือ
+              </p>
+              <i
+                className={`fa-solid fa-chevron-${showCashDetail ? 'up' : 'down'} text-xs`}
+                style={{ color: 'var(--primary)', opacity: 0.6 }}
+              ></i>
+            </div>
+            <p className="text-xl font-bold mt-1" style={{ color: 'var(--primary)' }}>
+              {fmt(cashBalance)}
+            </p>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--primary)', opacity: 0.7 }}>
+              เติมแล้ว {fmt(cashTopups)} &minus; จ่ายไป {fmt(cashSpent)}
+            </p>
+          </div>
+        </div>
+        {showCashDetail && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-3">
+              รายการที่จ่ายจากเงินสดย่อย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
+            </p>
+            <div
+              className="card p-3 mb-4 flex flex-wrap items-center gap-2"
+              style={{ background: 'var(--paper)' }}
+            >
+              <div
+                className="flex rounded-xl overflow-hidden"
+                style={{ border: '1.5px solid var(--line)' }}
+              >
+                {(
+                  [
+                    ['today', 'วันนี้'],
+                    ['month', 'รายเดือน'],
+                    ['year', 'รายปี'],
+                    ['range', 'ช่วงเวลา'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setCashPeriod(key)}
+                    className="text-xs px-3 py-2 font-semibold"
+                    style={{
+                      background: cashPeriod === key ? 'var(--primary)' : 'transparent',
+                      color: cashPeriod === key ? '#fff' : 'var(--ink-soft)',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {cashPeriod === 'today' && (
+                <span
+                  className="text-xs px-3 py-2 rounded-lg font-medium"
+                  style={{ background: 'var(--surface)', color: 'var(--ink-soft)' }}
+                >
+                  <i className="fa-regular fa-calendar mr-1.5"></i>
+                  {new Date().toLocaleDateString('th-TH', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </span>
+              )}
+              {cashPeriod === 'month' && (
+                <input
+                  type="month"
+                  value={cashPeriodValue}
+                  onChange={(e) => setCashPeriodValue(e.target.value)}
+                  className="field text-sm px-3 py-2"
+                />
+              )}
+              {cashPeriod === 'year' && (
+                <select
+                  value={cashPeriodValue}
+                  aria-label="เลือกปีของเงินสดย่อย"
+                  onChange={(e) => setCashPeriodValue(e.target.value)}
+                  className="field text-sm px-3 py-2"
+                >
+                  {[2569, 2568, 2567].map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {cashPeriod === 'range' && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={cashRangeStart}
+                    onChange={(e) => setCashRangeStart(e.target.value)}
+                    className="field text-sm px-3 py-2"
+                  />
+                  <i
+                    className="fa-solid fa-arrow-right text-xs"
+                    style={{ color: 'var(--ink-faint)' }}
+                  ></i>
+                  <input
+                    type="date"
+                    value={cashRangeEnd}
+                    onChange={(e) => setCashRangeEnd(e.target.value)}
+                    className="field text-sm px-3 py-2"
+                  />
+                </div>
+              )}
+            </div>
+            {cashDetailItems.length === 0 ? (
+              <p className="text-sm py-6 text-center" style={{ color: 'var(--ink-faint)' }}>
+                ไม่มีรายการที่จ่ายจากเงินสดย่อยในช่วงเวลานี้
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {cashDetailItems.map((e) => (
+                  <div
+                    key={e.id}
+                    className="flex items-center justify-between py-2"
+                    style={{ borderBottom: '1px solid var(--line)' }}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{e.desc}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
+                        {e.category} &middot; {e.date}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold flex-shrink-0">{fmt(e.amount)}</span>
+                  </div>
+                ))}
+                <div
+                  className="flex justify-between pt-2 text-sm font-bold"
+                  style={{ borderTop: '1.5px solid var(--line-strong)' }}
+                >
+                  <span>ยอดรวม</span>
+                  <span>{fmt(cashDetailTotal)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {showTopup && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-3">
+              เติมเงินสดย่อย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+              {shopFilter === 'all' && (
+                <div className="sm:col-span-2">
+                  <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                    สาขา
+                  </label>
+                  <select
+                    value={topup.shop}
+                    aria-label="สาขาที่เติมเงินสดย่อย"
+                    onChange={(e) => setTopup({ ...topup, shop: e.target.value })}
+                    className="field w-full text-sm px-3 py-2"
+                  >
+                    {accessibleShops.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  จำนวนเงินที่เติม
+                </label>
+                <input
+                  type="number"
+                  value={topup.amount}
+                  onChange={(e) => setTopup({ ...topup, amount: e.target.value })}
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  หมายเหตุ
+                </label>
+                <input
+                  value={topup.note}
+                  onChange={(e) => setTopup({ ...topup, note: e.target.value })}
+                  placeholder="เช่น อนุมัติโดยแอดมิน"
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
+            </div>
+            <button
+              onClick={addTopup}
+              className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold"
+            >
+              บันทึกการเติมเงิน
+            </button>
+          </div>
+        )}
+        {showAdd && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-3">
+              เพิ่มรายการค่าใช้จ่าย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
+            </p>
             {shopFilter === 'all' && (
-              <div className="sm:col-span-2">
+              <div className="mb-3">
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   สาขา
                 </label>
                 <select
-                  value={topup.shop}
-                  aria-label="สาขาที่เติมเงินสดย่อย"
-                  onChange={(e) => setTopup({ ...topup, shop: e.target.value })}
+                  value={ex.shop}
+                  aria-label="สาขาของค่าใช้จ่าย"
+                  onChange={(e) => setEx({ ...ex, shop: e.target.value })}
                   className="field w-full text-sm px-3 py-2"
                 >
                   {accessibleShops.map((s) => (
@@ -786,464 +847,416 @@ export function AccountingModule({
                 </select>
               </div>
             )}
-            <div>
-              <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                จำนวนเงินที่เติม
-              </label>
-              <input
-                type="number"
-                value={topup.amount}
-                onChange={(e) => setTopup({ ...topup, amount: e.target.value })}
-                className="field w-full text-sm px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                หมายเหตุ
-              </label>
-              <input
-                value={topup.note}
-                onChange={(e) => setTopup({ ...topup, note: e.target.value })}
-                placeholder="เช่น อนุมัติโดยแอดมิน"
-                className="field w-full text-sm px-3 py-2"
-              />
-            </div>
-          </div>
-          <button
-            onClick={addTopup}
-            className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold"
-          >
-            บันทึกการเติมเงิน
-          </button>
-        </div>
-      )}
-      {showAdd && (
-        <div className="card p-5 mb-4 fade-page">
-          <p className="text-sm font-semibold mb-3">
-            เพิ่มรายการค่าใช้จ่าย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
-          </p>
-          {shopFilter === 'all' && (
-            <div className="mb-3">
-              <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                สาขา
-              </label>
-              <select
-                value={ex.shop}
-                aria-label="สาขาของค่าใช้จ่าย"
-                onChange={(e) => setEx({ ...ex, shop: e.target.value })}
-                className="field w-full text-sm px-3 py-2"
-              >
-                {accessibleShops.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="flex flex-col gap-3 mb-3">
-            {ex.lines.map((l, idx) => (
-              <div key={idx} className="rounded-xl p-3" style={{ border: '1px solid var(--line)' }}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
-                    รายการที่ {idx + 1}
-                  </p>
-                  {ex.lines.length > 1 && (
-                    <button
-                      onClick={() => removeExLine(idx)}
-                      className="text-xs px-2 py-1 rounded-lg flex items-center gap-1"
-                      style={{ color: '#B23A48' }}
-                    >
-                      <i className="fa-solid fa-trash"></i>ลบ
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="sm:col-span-2">
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      รายละเอียด
-                    </label>
-                    <input
-                      value={l.desc}
-                      onChange={(e) => updateExLine(idx, 'desc', e.target.value)}
-                      className="field w-full text-sm px-3 py-2"
-                    />
+            <div className="flex flex-col gap-3 mb-3">
+              {ex.lines.map((l, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-xl p-3"
+                  style={{ border: '1px solid var(--line)' }}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
+                      รายการที่ {idx + 1}
+                    </p>
+                    {ex.lines.length > 1 && (
+                      <button
+                        onClick={() => removeExLine(idx)}
+                        className="text-xs px-2 py-1 rounded-lg flex items-center gap-1"
+                        style={{ color: '#B23A48' }}
+                      >
+                        <i className="fa-solid fa-trash"></i>ลบ
+                      </button>
+                    )}
                   </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      กลุ่มค่าใช้จ่าย
-                    </label>
-                    <ManagedDropdown
-                      value={l.category}
-                      onChange={(v) => updateExLine(idx, 'category', v)}
-                      options={expenseCategories}
-                      setOptions={setExpenseCategories}
-                      placeholder="เลือกกลุ่มค่าใช้จ่าย..."
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      ยอดเงิน
-                    </label>
-                    <input
-                      type="number"
-                      value={l.amount}
-                      onChange={(e) => updateExLine(idx, 'amount', e.target.value)}
-                      className="field w-full text-sm px-3 py-2"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="sm:col-span-2">
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        รายละเอียด
+                      </label>
+                      <input
+                        value={l.desc}
+                        onChange={(e) => updateExLine(idx, 'desc', e.target.value)}
+                        className="field w-full text-sm px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        กลุ่มค่าใช้จ่าย
+                      </label>
+                      <ManagedDropdown
+                        value={l.category}
+                        onChange={(v) => updateExLine(idx, 'category', v)}
+                        options={expenseCategories}
+                        setOptions={setExpenseCategories}
+                        placeholder="เลือกกลุ่มค่าใช้จ่าย..."
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        ยอดเงิน
+                      </label>
+                      <input
+                        type="number"
+                        value={l.amount}
+                        onChange={(e) => updateExLine(idx, 'amount', e.target.value)}
+                        className="field w-full text-sm px-3 py-2"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-          <button
-            onClick={addExLine}
-            className="btn-outline w-full text-sm rounded-xl py-2 mb-3 flex items-center justify-center gap-2"
-          >
-            <i className="fa-solid fa-plus"></i>เพิ่มอีกรายการ
-          </button>
-          <div className="flex justify-between text-sm mb-3 px-1">
-            <span style={{ color: 'var(--ink-soft)' }}>
-              ยอดรวมทั้งหมด ({ex.lines.length} รายการ)
-            </span>
-            <span className="font-semibold" style={{ color: 'var(--primary)' }}>
-              {fmt(exLinesTotal)}
-            </span>
-          </div>
-          <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
-            <i className="fa-solid fa-circle-info mr-1"></i>ทุกรายการด้านบนใช้ &quot;จ่ายจาก&quot;
-            &quot;สถานะ&quot; และไฟล์แนบเดียวกันตามที่กรอกด้านล่าง
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                จ่ายจาก
-              </label>
-              <ManagedDropdown
-                value={ex.source}
-                onChange={(v) => setEx({ ...ex, source: v })}
-                options={paymentSources}
-                setOptions={setPaymentSources}
-                placeholder="เลือกแหล่งจ่ายเงิน..."
-              />
+              ))}
             </div>
-            <div>
-              <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                สถานะ
-              </label>
-              <select
-                value={ex.status}
-                aria-label="สถานะการจ่าย"
-                onChange={(e) => setEx({ ...ex, status: e.target.value })}
-                className="field w-full text-sm px-3 py-2"
-              >
-                <option>จ่ายแล้ว</option>
-                <option>รอจ่าย</option>
-              </select>
+            <button
+              onClick={addExLine}
+              className="btn-outline w-full text-sm rounded-xl py-2 mb-3 flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-plus"></i>เพิ่มอีกรายการ
+            </button>
+            <div className="flex justify-between text-sm mb-3 px-1">
+              <span style={{ color: 'var(--ink-soft)' }}>
+                ยอดรวมทั้งหมด ({ex.lines.length} รายการ)
+              </span>
+              <span className="font-semibold" style={{ color: 'var(--primary)' }}>
+                {fmt(exLinesTotal)}
+              </span>
             </div>
-            <div className="sm:col-span-2">
-              <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                แนบไฟล์หลักฐานการจ่าย (ใบเสร็จ/สลิป, เลือกได้หลายไฟล์)
-              </label>
-              <div className="field flex items-center gap-2 px-3 py-2 mt-1">
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  multiple
-                  aria-label="แนบไฟล์หลักฐานการจ่าย"
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length) setExFiles((prev) => [...prev, ...files]);
-                    e.target.value = '';
-                  }}
-                  className="text-xs flex-1"
+            <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
+              <i className="fa-solid fa-circle-info mr-1"></i>ทุกรายการด้านบนใช้ &quot;จ่ายจาก&quot;
+              &quot;สถานะ&quot; และไฟล์แนบเดียวกันตามที่กรอกด้านล่าง
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  จ่ายจาก
+                </label>
+                <ManagedDropdown
+                  value={ex.source}
+                  onChange={(v) => setEx({ ...ex, source: v })}
+                  options={paymentSources}
+                  setOptions={setPaymentSources}
+                  placeholder="เลือกแหล่งจ่ายเงิน..."
                 />
               </div>
-              {exFiles.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {exFiles.map((file, fi) => (
-                    <span
-                      key={`${file.name}-${fi}`}
-                      className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                      style={{ background: 'var(--paper)', color: 'var(--primary)' }}
-                    >
-                      <i className="fa-solid fa-paperclip"></i>
-                      {file.name}
-                      <button
-                        type="button"
-                        aria-label={`เอา ${file.name} ออก`}
-                        style={{ color: '#B23A48' }}
-                        onClick={() => setExFiles((prev) => prev.filter((_, fi2) => fi2 !== fi))}
-                      >
-                        <i className="fa-solid fa-xmark"></i>
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          {addError && (
-            <p
-              className="text-sm mb-3 px-3 py-2 rounded-lg"
-              style={{ background: '#FBEAEC', color: '#B23A48' }}
-              role="alert"
-            >
-              <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
-              {addError}
-            </p>
-          )}
-          <button
-            onClick={addExpense}
-            disabled={isPending}
-            className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold"
-            style={{ opacity: isPending ? 0.7 : 1 }}
-          >
-            {isPending && exFiles.length > 0 ? 'กำลังอัปโหลดไฟล์แนบ...' : 'บันทึกข้อมูล'}
-            {!isPending && ex.lines.length > 1
-              ? ` (${ex.lines.length} รายการ, รวม ${fmt(exLinesTotal)})`
-              : ''}
-          </button>
-        </div>
-      )}
-      <div className="card p-5 sm:p-6">
-        <p className="text-sm font-semibold mb-3">รายการค่าใช้จ่าย</p>
-        <div className="flex flex-col gap-2">
-          {shopExpenses.map((e) =>
-            editingExId === e.id && editExForm ? (
-              <div
-                key={e.id}
-                className="rounded-2xl p-3.5 mb-2"
-                style={{ border: '1px solid var(--primary)', background: 'var(--primary-soft)' }}
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-                  <input
-                    value={editExForm.desc}
-                    onChange={(e2) => setEditExForm({ ...editExForm, desc: e2.target.value })}
-                    placeholder="รายละเอียด"
-                    className="field text-sm px-2.5 py-1.5 sm:col-span-2"
-                  />
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      กลุ่มค่าใช้จ่าย
-                    </label>
-                    <ManagedDropdown
-                      value={editExForm.category}
-                      onChange={(v) => setEditExForm({ ...editExForm, category: v })}
-                      options={expenseCategories}
-                      setOptions={setExpenseCategories}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      จ่ายจาก
-                    </label>
-                    <ManagedDropdown
-                      value={editExForm.source}
-                      onChange={(v) => setEditExForm({ ...editExForm, source: v })}
-                      options={paymentSources}
-                      setOptions={setPaymentSources}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      ยอดเงิน
-                    </label>
-                    <input
-                      type="number"
-                      value={editExForm.amount}
-                      onChange={(e2) =>
-                        setEditExForm({ ...editExForm, amount: Number(e2.target.value) })
-                      }
-                      className="field text-sm px-2.5 py-1.5 w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      สถานะ
-                    </label>
-                    <select
-                      value={editExForm.status}
-                      aria-label="แก้ไขสถานะการจ่าย"
-                      onChange={(e2) => setEditExForm({ ...editExForm, status: e2.target.value })}
-                      className="field text-sm px-2.5 py-1.5 w-full"
-                    >
-                      <option>จ่ายแล้ว</option>
-                      <option>รอจ่าย</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      วันที่
-                    </label>
-                    <input
-                      type="date"
-                      value={
-                        editExForm.dateObj
-                          ? new Date(editExForm.dateObj).toISOString().slice(0, 10)
-                          : ''
-                      }
-                      onChange={(e2) => {
-                        const d = e2.target.value ? new Date(e2.target.value + 'T00:00:00') : null;
-                        setEditExForm({
-                          ...editExForm,
-                          dateObj: d,
-                          date: d ? fmtThaiDate(d) : '-',
-                        });
-                      }}
-                      className="field text-sm px-2.5 py-1.5 w-full"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setEditingExId(null);
-                      setEditExForm(null);
-                    }}
-                    className="btn-outline flex-1 rounded-lg py-1.5 text-xs"
-                  >
-                    ยกเลิก
-                  </button>
-                  <button
-                    onClick={saveEditExpense}
-                    className="btn-primary flex-1 rounded-lg py-1.5 text-xs font-semibold"
-                  >
-                    บันทึก
-                  </button>
-                </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  สถานะ
+                </label>
+                <select
+                  value={ex.status}
+                  aria-label="สถานะการจ่าย"
+                  onChange={(e) => setEx({ ...ex, status: e.target.value })}
+                  className="field w-full text-sm px-3 py-2"
+                >
+                  <option>จ่ายแล้ว</option>
+                  <option>รอจ่าย</option>
+                </select>
               </div>
-            ) : (
-              <div
-                key={e.id}
-                className="group flex items-center justify-between py-2.5"
-                style={{ borderBottom: '1px solid var(--line)' }}
+              <div className="sm:col-span-2">
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  แนบไฟล์หลักฐานการจ่าย (ใบเสร็จ/สลิป, เลือกได้หลายไฟล์)
+                </label>
+                <div className="field flex items-center gap-2 px-3 py-2 mt-1">
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    multiple
+                    aria-label="แนบไฟล์หลักฐานการจ่าย"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length) setExFiles((prev) => [...prev, ...files]);
+                      e.target.value = '';
+                    }}
+                    className="text-xs flex-1"
+                  />
+                </div>
+                {exFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {exFiles.map((file, fi) => (
+                      <span
+                        key={`${file.name}-${fi}`}
+                        className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                        style={{ background: 'var(--paper)', color: 'var(--primary)' }}
+                      >
+                        <i className="fa-solid fa-paperclip"></i>
+                        {file.name}
+                        <button
+                          type="button"
+                          aria-label={`เอา ${file.name} ออก`}
+                          style={{ color: '#B23A48' }}
+                          onClick={() => setExFiles((prev) => prev.filter((_, fi2) => fi2 !== fi))}
+                        >
+                          <i className="fa-solid fa-xmark"></i>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            {addError && (
+              <p
+                className="text-sm mb-3 px-3 py-2 rounded-lg"
+                style={{ background: '#FBEAEC', color: '#B23A48' }}
+                role="alert"
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{e.desc}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
-                    {e.category} &middot; {e.source} &middot; {e.date}
-                  </p>
-                  {/*
+                <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
+                {addError}
+              </p>
+            )}
+            <button
+              onClick={addExpense}
+              disabled={isPending}
+              className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold"
+              style={{ opacity: isPending ? 0.7 : 1 }}
+            >
+              {isPending && exFiles.length > 0 ? 'กำลังอัปโหลดไฟล์แนบ...' : 'บันทึกข้อมูล'}
+              {!isPending && ex.lines.length > 1
+                ? ` (${ex.lines.length} รายการ, รวม ${fmt(exLinesTotal)})`
+                : ''}
+            </button>
+          </div>
+        )}
+        <div className="card p-5 sm:p-6">
+          <p className="text-sm font-semibold mb-3">รายการค่าใช้จ่าย</p>
+          <div className="flex flex-col gap-2">
+            {shopExpenses.map((e) =>
+              editingExId === e.id && editExForm ? (
+                <div
+                  key={e.id}
+                  className="rounded-2xl p-3.5 mb-2"
+                  style={{ border: '1px solid var(--primary)', background: 'var(--primary-soft)' }}
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                    <input
+                      value={editExForm.desc}
+                      onChange={(e2) => setEditExForm({ ...editExForm, desc: e2.target.value })}
+                      placeholder="รายละเอียด"
+                      className="field text-sm px-2.5 py-1.5 sm:col-span-2"
+                    />
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        กลุ่มค่าใช้จ่าย
+                      </label>
+                      <ManagedDropdown
+                        value={editExForm.category}
+                        onChange={(v) => setEditExForm({ ...editExForm, category: v })}
+                        options={expenseCategories}
+                        setOptions={setExpenseCategories}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        จ่ายจาก
+                      </label>
+                      <ManagedDropdown
+                        value={editExForm.source}
+                        onChange={(v) => setEditExForm({ ...editExForm, source: v })}
+                        options={paymentSources}
+                        setOptions={setPaymentSources}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        ยอดเงิน
+                      </label>
+                      <input
+                        type="number"
+                        value={editExForm.amount}
+                        onChange={(e2) =>
+                          setEditExForm({ ...editExForm, amount: Number(e2.target.value) })
+                        }
+                        className="field text-sm px-2.5 py-1.5 w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        สถานะ
+                      </label>
+                      <select
+                        value={editExForm.status}
+                        aria-label="แก้ไขสถานะการจ่าย"
+                        onChange={(e2) => setEditExForm({ ...editExForm, status: e2.target.value })}
+                        className="field text-sm px-2.5 py-1.5 w-full"
+                      >
+                        <option>จ่ายแล้ว</option>
+                        <option>รอจ่าย</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        วันที่
+                      </label>
+                      <input
+                        type="date"
+                        value={
+                          editExForm.dateObj
+                            ? new Date(editExForm.dateObj).toISOString().slice(0, 10)
+                            : ''
+                        }
+                        onChange={(e2) => {
+                          const d = e2.target.value
+                            ? new Date(e2.target.value + 'T00:00:00')
+                            : null;
+                          setEditExForm({
+                            ...editExForm,
+                            dateObj: d,
+                            date: d ? fmtThaiDate(d) : '-',
+                          });
+                        }}
+                        className="field text-sm px-2.5 py-1.5 w-full"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingExId(null);
+                        setEditExForm(null);
+                      }}
+                      className="btn-outline flex-1 rounded-lg py-1.5 text-xs"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      onClick={saveEditExpense}
+                      className="btn-primary flex-1 rounded-lg py-1.5 text-xs font-semibold"
+                    >
+                      บันทึก
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  key={e.id}
+                  className="group flex items-center justify-between py-2.5"
+                  style={{ borderBottom: '1px solid var(--line)' }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{e.desc}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
+                      {e.category} &middot; {e.source} &middot; {e.date}
+                    </p>
+                    {/*
                     The bucket is private, so each chip fetches a short-lived
                     signed URL on click rather than rendering a link the browser
                     could not follow (and that would leak if copied).
                   */}
-                  {e.attachments && e.attachments.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {e.attachments.map((a) => (
+                    {e.attachments && e.attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {e.attachments.map((a) => (
+                          <button
+                            key={a.id}
+                            onClick={() => openAttachment(a)}
+                            disabled={openingPath === a.path}
+                            className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                            style={{ background: 'var(--paper)', color: 'var(--primary)' }}
+                            title={`เปิด ${a.fileName}`}
+                          >
+                            <i
+                              className={`fa-solid ${
+                                openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
+                              }`}
+                            ></i>
+                            <span className="truncate" style={{ maxWidth: 160 }}>
+                              {a.fileName}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right flex-shrink-0 flex items-center gap-2">
+                    <span className="text-sm font-semibold">{fmt(e.amount)}</span>
+                    <StatusPill
+                      label={e.status}
+                      colorMap={{
+                        จ่ายแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
+                        รอจ่าย: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
+                      }}
+                    />
+                    {allowAdd && (
+                      <div className="flex items-center gap-1 row-action">
                         <button
-                          key={a.id}
-                          onClick={() => openAttachment(a)}
-                          disabled={openingPath === a.path}
-                          className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                          onClick={() => startEditExpense(e)}
+                          aria-label={`แก้ไขรายการ ${e.desc}`}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
                           style={{ background: 'var(--paper)', color: 'var(--primary)' }}
-                          title={`เปิด ${a.fileName}`}
                         >
-                          <i
-                            className={`fa-solid ${
-                              openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
-                            }`}
-                          ></i>
-                          <span className="truncate" style={{ maxWidth: 160 }}>
-                            {a.fileName}
-                          </span>
+                          <i className="fa-solid fa-pen"></i>
                         </button>
-                      ))}
-                    </div>
-                  )}
+                        <button
+                          onClick={() => deleteExpense(e.id)}
+                          aria-label={`ลบรายการ ${e.desc}`}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
+                          style={{ background: 'var(--paper)', color: '#B23A48' }}
+                        >
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right flex-shrink-0 flex items-center gap-2">
-                  <span className="text-sm font-semibold">{fmt(e.amount)}</span>
-                  <StatusPill
-                    label={e.status}
-                    colorMap={{
-                      จ่ายแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
-                      รอจ่าย: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
-                    }}
-                  />
-                  {allowAdd && (
-                    <div className="flex items-center gap-1 row-action">
-                      <button
-                        onClick={() => startEditExpense(e)}
-                        aria-label={`แก้ไขรายการ ${e.desc}`}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
-                        style={{ background: 'var(--paper)', color: 'var(--primary)' }}
-                      >
-                        <i className="fa-solid fa-pen"></i>
-                      </button>
-                      <button
-                        onClick={() => deleteExpense(e.id)}
-                        aria-label={`ลบรายการ ${e.desc}`}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
-                        style={{ background: 'var(--paper)', color: '#B23A48' }}
-                      >
-                        <i className="fa-solid fa-trash"></i>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ),
-          )}
+              ),
+            )}
+          </div>
         </div>
-      </div>
-      {/* See WholesaleList: `typeof document` is false on the server and true on
+        {/* See WholesaleList: `typeof document` is false on the server and true on
           the first client render, which is a hydration mismatch. */}
-      {mounted &&
-        createPortal(
-          <div className="print-area">
-            <h2>
-              รายการค่าใช้จ่าย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
-              {categoryFilter !== 'all' ? ' · ' + categoryFilter : ''}
-              {period === 'today'
-                ? ' · ' + fmtThaiDate(new Date())
-                : period === 'month'
-                  ? ' · เดือน ' + periodValue
-                  : period === 'year'
-                    ? ' · ปี ' + periodValue
-                    : period === 'range'
-                      ? ' · ' + rangeStart + ' ถึง ' + rangeEnd
-                      : ''}
-            </h2>
-            <p>วันที่พิมพ์: {new Date().toLocaleDateString('th-TH')}</p>
-            {exportGroups.map((g) => (
-              <div key={g.shopId} style={{ marginBottom: 16 }}>
-                <h3>{shopName(g.shopId)}</h3>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>วันที่</th>
-                      <th>กลุ่มค่าใช้จ่าย</th>
-                      <th>รายละเอียด</th>
-                      <th>จ่ายจาก</th>
-                      <th>สถานะ</th>
-                      <th style={{ textAlign: 'right' }}>ยอดเงิน</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {g.items.map((e) => (
-                      <tr key={e.id}>
-                        <td>{e.date}</td>
-                        <td>{e.category}</td>
-                        <td>{e.desc}</td>
-                        <td>{e.source}</td>
-                        <td>{e.status}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(e.amount)}</td>
+        {mounted &&
+          createPortal(
+            <div className="print-area">
+              <h2>
+                รายการค่าใช้จ่าย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
+                {categoryFilter !== 'all' ? ' · ' + categoryFilter : ''}
+                {period === 'today'
+                  ? ' · ' + fmtThaiDate(new Date())
+                  : period === 'month'
+                    ? ' · เดือน ' + periodValue
+                    : period === 'year'
+                      ? ' · ปี ' + periodValue
+                      : period === 'range'
+                        ? ' · ' + rangeStart + ' ถึง ' + rangeEnd
+                        : ''}
+              </h2>
+              <p>วันที่พิมพ์: {new Date().toLocaleDateString('th-TH')}</p>
+              {exportGroups.map((g) => (
+                <div key={g.shopId} style={{ marginBottom: 16 }}>
+                  <h3>{shopName(g.shopId)}</h3>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>วันที่</th>
+                        <th>กลุ่มค่าใช้จ่าย</th>
+                        <th>รายละเอียด</th>
+                        <th>จ่ายจาก</th>
+                        <th>สถานะ</th>
+                        <th style={{ textAlign: 'right' }}>ยอดเงิน</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-            <p style={{ textAlign: 'right' }}>
-              <strong>
-                ยอดรวม: {fmt(shopExpenses.reduce((s, e) => s + Number(e.amount), 0))} บาท
-              </strong>
-            </p>
-          </div>,
-          document.body,
-        )}
-    </div>
+                    </thead>
+                    <tbody>
+                      {g.items.map((e) => (
+                        <tr key={e.id}>
+                          <td>{e.date}</td>
+                          <td>{e.category}</td>
+                          <td>{e.desc}</td>
+                          <td>{e.source}</td>
+                          <td>{e.status}</td>
+                          <td style={{ textAlign: 'right' }}>{fmt(e.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+              <p style={{ textAlign: 'right' }}>
+                <strong>
+                  ยอดรวม: {fmt(shopExpenses.reduce((s, e) => s + Number(e.amount), 0))} บาท
+                </strong>
+              </p>
+            </div>,
+            document.body,
+          )}
+      </div>
+    </OptionManageProvider>
   );
 }

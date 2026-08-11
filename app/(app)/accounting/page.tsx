@@ -107,6 +107,7 @@ export default async function AccountingPage() {
       canAddExpense={session.canDo('accounting.addExpense')}
       canTopupCash={session.canDo('accounting.topupCash')}
       canExport={session.canDo('accounting.export')}
+      canManageOptions={session.canDo('options.manage')}
       addExpenseAction={addExpense}
       topupCashAction={topupCash}
       updateExpenseAction={updateExpense}

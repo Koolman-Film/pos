@@ -84,6 +84,10 @@ export const MODULE_CAPABILITIES: LabeledKey[] = [
   { key: 'list.delete', label: 'ใบงานติดตั้ง: ลบใบงาน (ลงถังขยะ)' },
   { key: 'list.restore', label: 'ใบงานติดตั้ง: ดูถังขยะและกู้คืนใบงาน' },
   { key: 'customers.edit', label: 'ทะเบียนลูกค้า: เพิ่ม/แก้ไข/ลบลูกค้า' },
+  {
+    key: 'options.manage',
+    label: 'ทุกโมดูล: เพิ่ม/ลบตัวเลือกในรายการ (จองผ่าน, ประเภทรถ, ตำแหน่งติดตั้ง ฯลฯ)',
+  },
   { key: 'wholesale.createNew', label: 'ขายส่ง: สร้าง PO ใหม่' },
   { key: 'wholesale.priceApproval', label: 'ขายส่ง: อนุมัติ/ปฏิเสธราคา' },
   { key: 'wholesale.badDebt', label: 'ขายส่ง: แจ้งตัดหนี้สูญ' },

@@ -278,8 +278,22 @@ export function CustomersModule({
                     className="flex items-center justify-between gap-2 py-2 px-3 rounded-xl mb-1.5"
                     style={{ background: 'var(--paper)' }}
                   >
-                    <span className="text-xs font-medium truncate">
-                      #{t.id} &middot; {shopName(t.shop)} &middot; {fmtThaiDate(t.dropOff)}
+                    <span className="min-w-0">
+                      {/*
+                        The car comes first: a customer with two vehicles has two
+                        otherwise identical rows, and "which car was this?" is the
+                        question being asked when someone opens this list.
+                      */}
+                      <span className="text-xs font-semibold block truncate">
+                        {[t.brand, t.model].filter(Boolean).join(' ') || 'ไม่ระบุรถ'}
+                        {t.plate ? ` · ${t.plate}` : ''}
+                      </span>
+                      <span
+                        className="text-[10px] block truncate"
+                        style={{ color: 'var(--ink-faint)' }}
+                      >
+                        #{t.id} &middot; {shopName(t.shop)} &middot; {fmtThaiDate(t.dropOff)}
+                      </span>
                     </span>
                     <span className="flex items-center gap-2 flex-shrink-0">
                       <Badge status={t.status} statuses={statuses} />
