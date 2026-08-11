@@ -21,7 +21,15 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
  * changes.
  */
 
-export type ProductOption = { id: number | string; name: string; shortName?: string };
+export type ProductOption = {
+  id: number | string;
+  name: string;
+  shortName?: string;
+  /** Right-hand hint, e.g. "คงเหลือ 18" or "ไม่มีในสาขานี้". */
+  note?: string;
+  /** Dims the row — used for products this shop does not stock. */
+  muted?: boolean;
+};
 
 /** `ชื่อย่อ · ชื่อเต็ม`, or just the name when there is no short name. */
 export function productDisplay(p: { name: string; shortName?: string }): string {
@@ -167,16 +175,24 @@ export function ProductPicker({
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setActive(i)}
               onClick={() => choose(o.name)}
-              className="px-3 py-2 text-xs cursor-pointer"
+              className="px-3 py-2 text-xs cursor-pointer flex items-baseline gap-2"
               style={{
                 background:
                   i === active ? 'var(--paper)' : o.name === value ? 'var(--paper)' : 'transparent',
                 fontWeight: o.name === value ? 600 : 400,
+                opacity: o.muted ? 0.7 : 1,
               }}
             >
-              {o.shortName && <span className="font-semibold">{o.shortName}</span>}
-              {o.shortName && <span style={{ color: 'var(--ink-faint)' }}> · </span>}
-              <span style={{ color: o.shortName ? 'var(--ink-soft)' : undefined }}>{o.name}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {o.shortName && <span className="font-semibold">{o.shortName}</span>}
+                {o.shortName && <span style={{ color: 'var(--ink-faint)' }}> · </span>}
+                <span style={{ color: o.shortName ? 'var(--ink-soft)' : undefined }}>{o.name}</span>
+              </span>
+              {o.note && (
+                <span className="flex-shrink-0" style={{ color: 'var(--ink-faint)' }}>
+                  {o.note}
+                </span>
+              )}
             </li>
           ))}
         </ul>

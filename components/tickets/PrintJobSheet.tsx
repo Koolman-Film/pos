@@ -323,11 +323,10 @@ export function PrintJobSheet({
                     >
                       <thead>
                         <tr style={{ background: '#F1EDE7' }}>
-                          <th style={{ ...cellHead, width: '22%' }}>ตำแหน่ง</th>
-                          <th style={{ ...cellHead, width: '30%' }}>สินค้า</th>
-                          {isFilm && <th style={{ ...cellHead, width: 46 }}>จำนวน</th>}
+                          <th style={{ ...cellHead, width: '18%' }}>ตำแหน่ง</th>
+                          <th style={{ ...cellHead, width: '26%' }}>สินค้า</th>
                           {isFilm && <th style={cellHead}>ขนาดที่วัด (กว้าง × ยาว)</th>}
-                          {isFilm && <th style={cellHead}>ตัด</th>}
+                          {isFilm && <th style={{ ...cellHead, width: '20%' }}>ตัด</th>}
                           <th style={{ ...cellHead, width: 70 }}>ใช้จริง</th>
                         </tr>
                       </thead>
@@ -360,19 +359,18 @@ export function PrintJobSheet({
                               </td>
                               {isFilm && <td style={cellWrite}>&nbsp;</td>}
                               {isFilm && <td style={cellWrite}>&nbsp;</td>}
-                              {isFilm && <td style={cellWrite}>&nbsp;</td>}
                               <td style={cellWrite}>&nbsp;</td>
                             </tr>
                           );
                         })}
                         {isFilm && (
                           <tr>
-                            <td colSpan={3} style={{ ...cellBody, textAlign: 'right' }}>
-                              รวมใช้จริง (เมตร)
+                            {/* Spans everything except ใช้จริง, so the total box
+                                sits directly under the column it totals. */}
+                            <td colSpan={4} style={{ ...cellBody, textAlign: 'right' }}>
+                              รวมใช้จริง
                             </td>
-                            <td colSpan={3} style={cellWrite}>
-                              &nbsp;
-                            </td>
+                            <td style={cellWrite}>&nbsp;</td>
                           </tr>
                         )}
                       </tbody>
@@ -876,21 +874,52 @@ export function PrintJobSheet({
               {/*
                 The figure alone does not say what it was measured against, so
                 each baseline product is listed with its price — short name
-                first, the same way the item rows above read.
+                first, the same way the item rows above read, and grouped under
+                its category so a ticket carrying film AND audio does not read as
+                one undifferentiated list.
               */}
-              {t.items
-                .filter((i) => i.interested)
-                .map((i, ci) => {
-                  const stockMatch = stock.find((s) => s.name === i.interested);
-                  const short = stockMatch?.shortName || i.interested;
-                  return (
-                    <p key={ci} style={{ margin: '2px 0 0', fontSize: 10, color: '#999' }}>
-                      จาก <b>{short}</b>
-                      {stockMatch?.shortName ? ` (${i.interested})` : ''} &middot;{' '}
-                      {fmt(Number(i.interestedPrice || 0))}
-                    </p>
+              {[...new Set(t.items.filter((i) => i.interested).map((i) => i.category))].map(
+                (cat) => {
+                  const rows = t.items.filter((i) => i.interested && i.category === cat);
+                  const catDiff = rows.reduce(
+                    (s, i) => s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0)),
+                    0,
                   );
-                })}
+                  return (
+                    <div key={cat} style={{ marginTop: 3 }}>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 11,
+                          color: '#8A5A12',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>{cat || 'ไม่ระบุชนิดสินค้า'}</span>
+                        <span>
+                          {catDiff >= 0 ? '+' : ''}
+                          {fmt(catDiff)}
+                        </span>
+                      </p>
+                      {rows.map((i, ci) => {
+                        const stockMatch = stock.find((s) => s.name === i.interested);
+                        const short = stockMatch?.shortName || i.interested;
+                        return (
+                          <p
+                            key={ci}
+                            style={{ margin: '1px 0 0 10px', fontSize: 10, color: '#999' }}
+                          >
+                            จาก <b>{short}</b>
+                            {stockMatch?.shortName ? ` (${i.interested})` : ''} &middot;{' '}
+                            {fmt(Number(i.interestedPrice || 0))}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  );
+                },
+              )}
             </div>
           )}
         </div>

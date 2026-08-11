@@ -885,6 +885,7 @@ export type Database = {
           customer_name: string
           deleted_at: string | null
           deleted_by: string | null
+          locked: boolean
           drop_off_date: string
           extras: Json
           id: string
@@ -907,6 +908,7 @@ export type Database = {
           customer_name: string
           deleted_at?: string | null
           deleted_by?: string | null
+          locked?: boolean
           drop_off_date: string
           extras?: Json
           id: string
@@ -929,6 +931,7 @@ export type Database = {
           customer_name?: string
           deleted_at?: string | null
           deleted_by?: string | null
+          locked?: boolean
           drop_off_date?: string
           extras?: Json
           id?: string

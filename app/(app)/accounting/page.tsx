@@ -9,6 +9,8 @@ import { createClient } from '@/lib/supabase/server';
 
 import {
   addExpense,
+  addExpenseAttachments,
+  deleteExpenseAttachment,
   deleteExpense,
   exportExpenses,
   getExpenseAttachmentUrl,
@@ -37,7 +39,8 @@ type ExpenseRow = {
   status: string;
   paid_at: string | null;
   due_at: string | null;
-  expense_attachments: { id: number; file_name: string; storage_path: string }[] | null;
+  expense_attachments:
+    { id: number; file_name: string; storage_path: string; mime_type: string | null }[] | null;
 };
 
 export default async function AccountingPage() {
@@ -51,7 +54,7 @@ export default async function AccountingPage() {
         .from('expenses')
         .select(
           'id, shop_id, description, category, source, amount, status, paid_at, due_at, ' +
-            'expense_attachments(id, file_name, storage_path)',
+            'expense_attachments(id, file_name, storage_path, mime_type)',
         )
         .order('id', { ascending: false }),
       supabase.from('petty_cash').select('id, shop_id, type, amount, note, entry_at'),
@@ -79,6 +82,7 @@ export default async function AccountingPage() {
       id: a.id,
       fileName: a.file_name,
       path: a.storage_path,
+      mimeType: a.mime_type ?? '',
     })),
   }));
 
@@ -114,6 +118,8 @@ export default async function AccountingPage() {
       deleteExpenseAction={deleteExpense}
       exportAction={exportExpenses}
       attachmentUrlAction={getExpenseAttachmentUrl}
+      attachAction={addExpenseAttachments}
+      detachAction={deleteExpenseAttachment}
       accessibleShops={accessibleShops}
       canSeeAllShops={session.seesAllShops}
     />

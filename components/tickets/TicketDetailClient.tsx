@@ -40,6 +40,7 @@ export function TicketDetailClient({
   saveAction,
   optionAction,
   deleteAction,
+  unlockAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -61,6 +62,7 @@ export function TicketDetailClient({
     values: string[],
   ) => Promise<{ ok: boolean; error?: string }>;
   deleteAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
+  unlockAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -82,6 +84,7 @@ export function TicketDetailClient({
       saveAction={saveAction}
       optionAction={optionAction}
       deleteAction={deleteAction}
+      unlockAction={unlockAction}
     />
   );
 }

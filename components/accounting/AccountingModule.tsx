@@ -6,7 +6,7 @@ import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import { createPortal } from 'react-dom';
 
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
-import { currentMonthValue, daysAgoValue, todayValue } from '@/lib/domain/now';
+import { currentMonthValue, dateInputValue, daysAgoValue, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
@@ -82,13 +82,24 @@ export type UploadedAttachment = {
 };
 
 /** An attachment as it comes back for display. */
-export type ExpenseAttachment = { id: number; fileName: string; path: string };
+export type ExpenseAttachment = {
+  id: number;
+  fileName: string;
+  path: string;
+  /** Drives the preview: an image renders inline, anything else in a frame. */
+  mimeType?: string;
+};
 
 /** Payload handed to the add-expense Server Action. `shop` is already a concrete id. */
 export type NewExpenseInput = {
   shop: string;
   source: string;
   status: string;
+  /**
+   * `YYYY-MM-DD`, local. Becomes `paid_at` for a จ่ายแล้ว expense and `due_at`
+   * for a รอจ่าย one — the two dates the module already displays.
+   */
+  date?: string;
   lines: { desc: string; category: string; amount: number }[];
   /** Receipts shared by every line in this submission, as the panel states. */
   attachments?: UploadedAttachment[];
@@ -148,6 +159,8 @@ export function AccountingModule({
   deleteExpenseAction,
   exportAction,
   attachmentUrlAction,
+  attachAction,
+  detachAction,
   accessibleShops = [],
   canSeeAllShops = true,
 }: {
@@ -168,6 +181,12 @@ export function AccountingModule({
   exportAction?: (payload: ExportPayload) => Promise<{ fileName: string; base64: string } | null>;
   /** Mints a short-lived signed URL for a stored receipt. */
   attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
+  /** Registers newly uploaded receipts on an existing expense (edit row). */
+  attachAction?: (
+    expenseId: number,
+    attachments: UploadedAttachment[],
+  ) => Promise<{ ok: boolean; error?: string }>;
+  detachAction?: (attachmentId: number) => Promise<{ ok: boolean; error?: string }>;
   accessibleShops?: Shop[];
   canSeeAllShops?: boolean;
 }) {
@@ -200,6 +219,10 @@ export function AccountingModule({
     shop: firstShop,
     source: '',
     status: 'จ่ายแล้ว',
+    // Today, editable. Expenses are routinely entered a day or two after the
+    // money moved, and the action used to stamp `now()` with no way to say
+    // otherwise — so a Monday entry for Friday's fuel landed on Monday.
+    date: todayValue(),
     lines: [{ desc: '', category: '', amount: 0 }] as ExpenseLine[],
   });
   const emptyTopup = () => ({ shop: firstShop, amount: 0 as number | string, note: '' });
@@ -210,6 +233,11 @@ export function AccountingModule({
   const [exFiles, setExFiles] = useState<File[]>([]);
   const [addError, setAddError] = useState<string | null>(null);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    url: string;
+    fileName: string;
+    mimeType: string;
+  } | null>(null);
   const [topup, setTopup] = useState(emptyTopup);
   const isExDirty =
     showAdd && (JSON.stringify(ex) !== JSON.stringify(emptyEx()) || exFiles.length > 0);
@@ -323,10 +351,14 @@ export function AccountingModule({
    * caller's `accounting.addExpense` on the way in.
    */
   async function uploadExpenseFiles(shop: string): Promise<UploadedAttachment[]> {
-    if (exFiles.length === 0) return [];
+    return uploadFiles(shop, exFiles);
+  }
+
+  async function uploadFiles(shop: string, files: File[]): Promise<UploadedAttachment[]> {
+    if (files.length === 0) return [];
     const supabase = createSupabaseClient();
     const uploaded: UploadedAttachment[] = [];
-    for (const file of exFiles) {
+    for (const file of files) {
       // Storage keys are ASCII-safe; the original name is kept in the row, so a
       // Thai filename still displays correctly.
       const safeName = file.name.replace(/[^\w.-]+/g, '_').slice(-80);
@@ -357,6 +389,7 @@ export function AccountingModule({
           shop: targetShop,
           source: ex.source,
           status: ex.status,
+          date: ex.date,
           lines,
           attachments,
         });
@@ -370,9 +403,12 @@ export function AccountingModule({
   }
 
   /**
-   * Open a stored receipt. The bucket is private, so the URL is minted per click
-   * by a Server Action and expires in a minute — long enough to open the tab,
-   * short enough that a copied link is not a leak.
+   * Open a stored receipt IN PLACE. The bucket is private, so the URL is minted
+   * per click by a Server Action and expires in a minute; it then feeds a
+   * preview overlay rather than a download — checking a slip against a figure is
+   * a two-second glance, and a tab-per-receipt (or a Downloads folder full of
+   * `20.pdf`) was the wrong shape for it. The overlay still offers "เปิดแท็บใหม่"
+   * for anyone who does want the file.
    */
   function openAttachment(a: ExpenseAttachment) {
     if (!attachmentUrlAction) return;
@@ -380,10 +416,34 @@ export function AccountingModule({
     startTransition(async () => {
       try {
         const res = await attachmentUrlAction(a.path);
-        if (res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
+        if (res.url) setPreview({ url: res.url, fileName: a.fileName, mimeType: a.mimeType ?? '' });
       } finally {
         setOpeningPath(null);
       }
+    });
+  }
+
+  /** Upload receipts onto an expense that already exists (the edit row). */
+  async function attachToExpense(expenseId: number, shop: string, files: File[]) {
+    if (!attachAction || files.length === 0) return;
+    setAddError(null);
+    try {
+      const uploaded = await uploadFiles(shop, files);
+      const res = await attachAction(expenseId, uploaded);
+      if (!res.ok) setAddError(res.error || 'แนบไฟล์ไม่สำเร็จ');
+      // No refresh call: the action revalidates /accounting, and Next re-renders
+      // the route on its own once a Server Action invoked from a client returns.
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : 'แนบไฟล์ไม่สำเร็จ');
+    }
+  }
+
+  function removeAttachment(a: ExpenseAttachment) {
+    if (!detachAction) return;
+    if (!window.confirm(`ลบไฟล์แนบ "${a.fileName}" ออกจากรายการนี้?`)) return;
+    startTransition(async () => {
+      const res = await detachAction(a.id);
+      if (!res.ok) setAddError(res.error || 'ลบไฟล์แนบไม่สำเร็จ');
     });
   }
 
@@ -423,7 +483,9 @@ export function AccountingModule({
         source: form.source,
         amount: Number(form.amount),
         status: form.status,
-        paidAt: form.dateObj ? new Date(form.dateObj).toISOString() : null,
+        // `expenses.paid_at` is a DATE. Sending a UTC timestamp made Postgres
+        // cast it back one day in Asia/Bangkok — pick 1 Aug, store 31 Jul.
+        paidAt: dateInputValue(form.dateObj) || null,
       });
       setEditingExId(null);
       setEditExForm(null);
@@ -951,6 +1013,18 @@ export function AccountingModule({
                   <option>รอจ่าย</option>
                 </select>
               </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  {ex.status === 'จ่ายแล้ว' ? 'วันที่จ่าย' : 'กำหนดจ่าย'}
+                </label>
+                <input
+                  type="date"
+                  value={ex.date}
+                  aria-label={ex.status === 'จ่ายแล้ว' ? 'วันที่จ่าย' : 'กำหนดจ่าย'}
+                  onChange={(e) => setEx({ ...ex, date: e.target.value })}
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
               <div className="sm:col-span-2">
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   แนบไฟล์หลักฐานการจ่าย (ใบเสร็จ/สลิป, เลือกได้หลายไฟล์)
@@ -1088,11 +1162,8 @@ export function AccountingModule({
                       </label>
                       <input
                         type="date"
-                        value={
-                          editExForm.dateObj
-                            ? new Date(editExForm.dateObj).toISOString().slice(0, 10)
-                            : ''
-                        }
+                        aria-label="วันที่ของรายการค่าใช้จ่าย"
+                        value={dateInputValue(editExForm.dateObj)}
                         onChange={(e2) => {
                           const d = e2.target.value
                             ? new Date(e2.target.value + 'T00:00:00')
@@ -1106,6 +1177,68 @@ export function AccountingModule({
                         className="field text-sm px-2.5 py-1.5 w-full"
                       />
                     </div>
+                  </div>
+                  {/*
+                    Receipts, in the edit row. Opening a saved expense used to
+                    show no attachments at all and offer no way to add one, so a
+                    slip that arrived after the entry had nowhere to go.
+                  */}
+                  <div className="mb-2">
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ไฟล์แนบ
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mt-1 mb-1.5">
+                      {(e.attachments ?? []).length === 0 && (
+                        <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                          ยังไม่มีไฟล์แนบ
+                        </span>
+                      )}
+                      {(e.attachments ?? []).map((a) => (
+                        <span
+                          key={a.id}
+                          className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                          style={{ background: 'var(--surface)', color: 'var(--primary)' }}
+                        >
+                          <button
+                            onClick={() => openAttachment(a)}
+                            className="flex items-center gap-1.5"
+                            title={`ดู ${a.fileName}`}
+                          >
+                            <i
+                              className={`fa-solid ${
+                                openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
+                              }`}
+                            ></i>
+                            <span className="truncate" style={{ maxWidth: 160 }}>
+                              {a.fileName}
+                            </span>
+                          </button>
+                          {detachAction && (
+                            <button
+                              onClick={() => removeAttachment(a)}
+                              aria-label={`ลบไฟล์แนบ ${a.fileName}`}
+                              style={{ color: '#B23A48' }}
+                            >
+                              <i className="fa-solid fa-xmark"></i>
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                    {attachAction && (
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        multiple
+                        aria-label="แนบไฟล์เพิ่มในรายการนี้"
+                        className="text-xs"
+                        onChange={(e2) => {
+                          const files = Array.from(e2.target.files || []);
+                          e2.target.value = '';
+                          if (files.length) void attachToExpense(e.id, e.shop, files);
+                        }}
+                      />
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -1253,6 +1386,95 @@ export function AccountingModule({
                   ยอดรวม: {fmt(shopExpenses.reduce((s, e) => s + Number(e.amount), 0))} บาท
                 </strong>
               </p>
+            </div>,
+            document.body,
+          )}
+
+        {/*
+          Receipt preview. Portaled to <body> so it is not clipped by the card it
+          was opened from, and closed by the backdrop, the ✕ or Escape. The URL
+          is the one-minute signed link — it is never persisted anywhere.
+        */}
+        {preview &&
+          mounted &&
+          createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`ไฟล์แนบ ${preview.fileName}`}
+              onClick={() => setPreview(null)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setPreview(null);
+              }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              style={{ background: 'rgba(0,0,0,.6)' }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="rounded-2xl overflow-hidden flex flex-col"
+                style={{
+                  background: 'var(--surface)',
+                  maxWidth: 900,
+                  width: '100%',
+                  height: '90vh',
+                }}
+              >
+                <div
+                  className="flex items-center justify-between gap-3 px-4 py-2.5"
+                  style={{ borderBottom: '1px solid var(--line)' }}
+                >
+                  <p className="text-sm font-semibold truncate">{preview.fileName}</p>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <a
+                      href={preview.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-outline text-xs px-3 py-1.5 rounded-lg font-medium"
+                    >
+                      เปิดแท็บใหม่
+                    </a>
+                    <button
+                      onClick={() => setPreview(null)}
+                      aria-label="ปิดหน้าต่างดูไฟล์แนบ"
+                      className="btn-outline text-xs px-3 py-1.5 rounded-lg font-medium"
+                    >
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto" style={{ background: '#333' }}>
+                  {/* A PDF needs a frame; anything else is shown as an image, which
+                      is what a phone photo of a slip always is. */}
+                  {/\.pdf$/i.test(preview.fileName) || preview.mimeType === 'application/pdf' ? (
+                    <object
+                      data={preview.url}
+                      type="application/pdf"
+                      style={{ width: '100%', height: '100%' }}
+                    >
+                      {/* Shown only when the browser has no built-in PDF viewer,
+                          so a receipt is never a dead end. */}
+                      <div className="p-6 text-center text-sm" style={{ color: '#fff' }}>
+                        <p className="mb-3">เบราว์เซอร์นี้เปิด PDF ในหน้าต่างนี้ไม่ได้</p>
+                        <a
+                          href={preview.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-primary px-4 py-2 rounded-xl font-semibold"
+                        >
+                          เปิด {preview.fileName} ในแท็บใหม่
+                        </a>
+                      </div>
+                    </object>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={preview.url}
+                      alt={preview.fileName}
+                      style={{ display: 'block', margin: '0 auto', maxWidth: '100%' }}
+                    />
+                  )}
+                </div>
+              </div>
             </div>,
             document.body,
           )}

@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { TicketDetailClient } from '@/components/tickets/TicketDetailClient';
 import { getSessionContext } from '@/lib/auth/session';
 
-import { deleteTicket, saveTicket, updateOptionList } from '../actions';
+import { deleteTicket, saveTicket, unlockTicket, updateOptionList } from '../actions';
 import { loadDetailRegistries, loadShops, loadStatuses, loadTicket } from '../data';
 
 export default async function TicketDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +30,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
         'list.printSheet': session.canDo('list.printSheet'),
         'options.manage': session.canDo('options.manage'),
         'list.delete': session.canDo('list.delete'),
+        'list.unlock': session.canDo('list.unlock'),
       }}
       currentUserName={session.name}
       initialOptions={registries.options}
@@ -43,6 +44,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       saveAction={saveTicket}
       optionAction={updateOptionList}
       deleteAction={deleteTicket}
+      unlockAction={unlockTicket}
     />
   );
 }

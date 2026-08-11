@@ -477,7 +477,14 @@ export function Dashboard({
               ยังไม่มีนัดหมายในช่วงนี้
             </p>
           )}
-          <div className="flex flex-col max-h-72 overflow-y-auto scrollbar-thin">
+          {/*
+            Nothing here truncates any more. The card is one third of a row, and
+            a booking reads "คุณ ปรีชา · Toyota vios · ถัง 123456 / ฟิล์มกรองแสง" —
+            on one line that clipped mid-plate, which is the half of the line
+            that tells the technician which car is coming. Each field gets its
+            own line and wraps; the taller list scrolls.
+          */}
+          <div className="flex flex-col max-h-[26rem] overflow-y-auto scrollbar-thin">
             {groupUpcoming(upcoming).map((day) => (
               <div key={day.key} className="mb-2">
                 <p className="text-xs font-bold mt-2 mb-1.5" style={{ color: 'var(--primary)' }}>
@@ -492,16 +499,18 @@ export function Dashboard({
                       <Link
                         key={t.id}
                         href={`/tickets/${t.id}`}
-                        className="flex items-center justify-between gap-2 cursor-pointer py-2 pl-2"
+                        className="flex items-start justify-between gap-2 cursor-pointer py-2 pl-2"
                         style={{ borderTop: i === 0 ? 'none' : '1px solid var(--line)' }}
                       >
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {t.customer} &middot; {t.brand} {t.model} &middot; {t.plate}
+                          <p className="text-sm font-semibold break-words">{t.customer}</p>
+                          <p className="text-xs mt-0.5 break-words" style={{ color: 'var(--ink)' }}>
+                            {[t.brand, t.model].filter(Boolean).join(' ')}
+                            {t.plate ? ` · ${t.plate}` : ''}
                           </p>
                           {t.categories.length > 0 && (
                             <p
-                              className="text-xs truncate mt-0.5"
+                              className="text-xs break-words mt-0.5"
                               style={{ color: 'var(--ink-faint)' }}
                             >
                               {t.categories.join(', ')}
@@ -509,7 +518,7 @@ export function Dashboard({
                           )}
                         </div>
                         <span
-                          className="row-action text-xs flex-shrink-0"
+                          className="row-action text-xs flex-shrink-0 mt-1"
                           style={{ color: 'var(--primary)' }}
                         >
                           <i className="fa-solid fa-chevron-right"></i>

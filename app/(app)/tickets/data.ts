@@ -272,6 +272,7 @@ type DetailRow = {
   drop_off_date: string;
   pickup_date: string;
   extras: Record<string, unknown> | null;
+  locked: boolean | null;
   ticket_items: {
     id: number;
     category: string;
@@ -295,7 +296,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     .from('tickets')
     .select(
       'id, shop_id, customer_name, phone, plate, car_type, brand, model, color, service_type, status, ' +
-        'booking_channel, tech_by_category, drop_off_date, pickup_date, extras, ' +
+        'booking_channel, tech_by_category, drop_off_date, pickup_date, extras, locked, ' +
         'ticket_items(id, category, booked, booked_price, sold, sold_price, interested, interested_price, discount_type, discount_value, actual_qty, ' +
         'ticket_item_positions(position, product, price)), ' +
         'ticket_payments(type, method, amount, paid_at)',
@@ -332,6 +333,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     qcPhotos: meta.qcPhotos ?? [],
     installConfirmed: !!meta.installConfirmed,
     installConfirmedAt: meta.installConfirmedAt ?? '',
+    locked: !!t.locked,
     items: (t.ticket_items ?? []).map((i) => ({
       category: i.category,
       booked: i.booked,

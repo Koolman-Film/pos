@@ -60,17 +60,23 @@ export function ItemsSection({
   );
 
   // The cheer-up figure on its own says how much the upsell was worth but not
-  // what it was FROM, so the trial run asked for the booked product's name and
-  // price next to it. One row per item the customer actually booked something on.
+  // what it was FROM, so the booked product's name and price sit next to it —
+  // GROUPED BY CATEGORY, because a ticket carrying film and audio produced a
+  // flat list of rows with no way to tell which upsell belonged to which job.
   const cheerRows = t.items
     .filter((i) => i.booked || Number(i.bookedPrice || 0) > 0)
     .map((i) => ({
+      category: i.category || 'ไม่ระบุชนิดสินค้า',
       booked: productDisplayFor(i.booked, stock) || 'ไม่ได้ระบุสินค้าที่จอง',
       bookedPrice: Number(i.bookedPrice || 0),
       sold: productDisplayFor(i.sold, stock) || 'ยังไม่ได้เลือกสินค้าที่ขาย',
       soldPrice: Number(i.soldPrice || 0),
       diff: Number(i.soldPrice || 0) - Number(i.bookedPrice || 0),
     }));
+  const cheerByCategory = [...new Set(cheerRows.map((r) => r.category))].map((category) => {
+    const rows = cheerRows.filter((r) => r.category === category);
+    return { category, rows, total: rows.reduce((s, r) => s + r.diff, 0) };
+  });
 
   return (
     <div className="mb-5">
@@ -94,34 +100,63 @@ export function ItemsSection({
           </span>
         )}
       </div>
-      {cheerRows.length > 0 && (
+      {cheerByCategory.length > 0 && (
         <div className="rounded-xl p-2.5 mb-3" style={{ background: 'var(--paper)' }}>
-          {cheerRows.map((r, i) => (
-            <div key={i} className="text-xs py-0.5">
-              <div className="flex justify-between gap-2">
-                <span style={{ color: 'var(--ink-soft)' }}>
-                  จอง {r.booked} &middot; {fmt(r.bookedPrice)}
-                </span>
-                <span
-                  className="font-semibold flex-shrink-0"
-                  style={{ color: r.diff >= 0 ? '#4C7A3E' : '#B23A48' }}
-                >
-                  {r.diff >= 0 ? '+' : ''}
-                  {fmt(r.diff)}
+          {cheerByCategory.map((group) => (
+            <div key={group.category} className="mb-2 last:mb-0">
+              <div className="flex justify-between gap-2 text-xs font-semibold mb-0.5">
+                <span style={{ color: 'var(--primary)' }}>{group.category}</span>
+                <span style={{ color: group.total >= 0 ? '#4C7A3E' : '#B23A48' }}>
+                  {group.total >= 0 ? '+' : ''}
+                  {fmt(group.total)}
                 </span>
               </div>
-              <div style={{ color: 'var(--ink-faint)' }}>
-                ขาย {r.sold} &middot; {fmt(r.soldPrice)}
-              </div>
+              {group.rows.map((r, i) => (
+                <div key={i} className="text-xs py-0.5 pl-2">
+                  <div className="flex justify-between gap-2">
+                    <span style={{ color: 'var(--ink-soft)' }}>
+                      จอง {r.booked} &middot; {fmt(r.bookedPrice)}
+                    </span>
+                    <span
+                      className="flex-shrink-0"
+                      style={{ color: r.diff >= 0 ? '#4C7A3E' : '#B23A48' }}
+                    >
+                      {r.diff >= 0 ? '+' : ''}
+                      {fmt(r.diff)}
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--ink-faint)' }}>
+                    ขาย {r.sold} &middot; {fmt(r.soldPrice)}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>
       )}
       {t.items.map((it, idx) => {
+        // EVERY product in the category is selectable, not just this shop's.
+        //
+        // The old rule showed only `s.shop === t.shop`, and fell back to the
+        // full list only when this shop stocked nothing in the category at all.
+        // A product another branch carries was therefore invisible — which is
+        // what "สินค้าบางชนิดไม่แสดงให้เลือก" was. The shop's own stock still
+        // comes first and carries its remaining count; the rest follow, dimmed
+        // and labelled, because selling one means ordering it in.
         const inShop = stock.filter((s) => s.category === it.category && s.shop === t.shop);
-        const productOptions = inShop.length
-          ? inShop
-          : stock.filter((s) => s.category === it.category);
+        const elsewhere = stock.filter(
+          (s) =>
+            s.category === it.category &&
+            s.shop !== t.shop &&
+            !inShop.some((own) => own.name === s.name),
+        );
+        const seen = new Set<string>();
+        const productOptions = [
+          ...inShop.map((s) => ({ ...s, note: `คงเหลือ ${s.qty}` })),
+          ...elsewhere
+            .filter((s) => (seen.has(s.name) ? false : (seen.add(s.name), true)))
+            .map((s) => ({ ...s, note: 'ไม่มีในสาขานี้', muted: true })),
+        ];
         const usesPositions = it.category === 'ฟิล์มกรองแสง' || it.category === 'ฟิล์มกันรอย';
         const isService = it.category === 'งานบริการ';
         const positionOptions = it.category === 'ฟิล์มกรองแสง' ? filmPositions : wrapPositions;
@@ -290,6 +325,15 @@ export function ItemsSection({
               </div>
             ) : (
               <>
+                {/*
+                  Both rows below were unlabelled: once a product was chosen the
+                  placeholder disappeared and the ticket showed two identical
+                  pairs of boxes, the lower one holding a different number for
+                  the same product. Saying which is which is the whole fix.
+                */}
+                <label className="text-xs block mb-1" style={{ color: 'var(--ink-soft)' }}>
+                  สินค้าที่ขายจริง / ราคาที่ขาย
+                </label>
                 <div className="grid grid-cols-2 gap-2">
                   {isService ? (
                     <ManagedDropdown
@@ -341,25 +385,33 @@ export function ItemsSection({
                   </p>
                 )}
                 {!isService && (
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <ProductPicker
-                      value={it.booked}
-                      label="สินค้าที่จองไว้"
-                      placeholder={it.category ? 'สินค้าที่จอง...' : '-'}
-                      emptyLabel="ไม่ระบุ"
-                      options={productOptions}
-                      disabled={!it.category}
-                      className="field w-full text-xs px-2.5 py-1.5"
-                      onChange={(prodName) => updateItem(idx, 'booked', prodName)}
-                    />
-                    <input
-                      type="number"
-                      placeholder="ราคาที่จอง"
-                      value={it.bookedPrice}
-                      onChange={(e) => updateItem(idx, 'bookedPrice', e.target.value)}
-                      className="field text-xs px-2.5 py-1.5"
-                      style={{ color: 'var(--ink-soft)' }}
-                    />
+                  <div className="mt-2">
+                    <label className="text-xs block mb-1" style={{ color: 'var(--ink-soft)' }}>
+                      สินค้าที่จองไว้ตอนแรก / ราคาที่จอง{' '}
+                      <span style={{ color: 'var(--ink-faint)' }}>
+                        (ไม่บังคับ — ใช้คิดส่วนต่างเชียร์ขาย)
+                      </span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <ProductPicker
+                        value={it.booked}
+                        label="สินค้าที่จองไว้"
+                        placeholder={it.category ? 'สินค้าที่จอง...' : '-'}
+                        emptyLabel="ไม่ระบุ"
+                        options={productOptions}
+                        disabled={!it.category}
+                        className="field w-full text-xs px-2.5 py-1.5"
+                        onChange={(prodName) => updateItem(idx, 'booked', prodName)}
+                      />
+                      <input
+                        type="number"
+                        placeholder="ราคาที่จอง"
+                        value={it.bookedPrice}
+                        onChange={(e) => updateItem(idx, 'bookedPrice', e.target.value)}
+                        className="field text-xs px-2.5 py-1.5"
+                        style={{ color: 'var(--ink-soft)' }}
+                      />
+                    </div>
                   </div>
                 )}
               </>

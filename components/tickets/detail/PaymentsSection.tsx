@@ -1,6 +1,5 @@
 'use client';
 
-import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { fmt } from '@/lib/domain/format';
 
 import type { Ticket, TicketPayment } from '../types';
@@ -9,7 +8,6 @@ import type { Ticket, TicketPayment } from '../types';
 export function PaymentsSection({
   t,
   paymentMethods,
-  setPaymentMethods,
   addPayment,
   removePayment,
   updatePayment,
@@ -17,8 +15,8 @@ export function PaymentsSection({
   paid,
 }: {
   t: Ticket;
+  /** The shop's ช่องทางการชำระเงิน from จัดการสิทธิ์ (falls back to the global list). */
   paymentMethods: string[];
-  setPaymentMethods: (v: string[]) => void;
   addPayment: () => void;
   /** Drops the row entirely — see `removePayment` in TicketDetail for why. */
   removePayment?: (idx: number) => void;
@@ -52,13 +50,37 @@ export function PaymentsSection({
               <option>ชำระเต็มจำนวน</option>
             </select>
             <div className="flex-1">
-              <ManagedDropdown
+              {/*
+                A plain select, not a ManagedDropdown: the channels are set per
+                shop in จัดการสิทธิ์ → ข้อมูลนิติบุคคลของสาขา, and Book งาน is not
+                the place to invent new ones. A method already saved on this
+                payment stays selectable even if it has since been removed from
+                the shop's list, so an old ticket still reads correctly.
+              */}
+              <select
                 value={p.method}
-                onChange={(v) => updatePayment(idx, 'method', v)}
-                options={paymentMethods}
-                setOptions={setPaymentMethods}
-                placeholder="เลือกวิธีชำระ..."
-              />
+                aria-label={`วิธีชำระเงินรายการที่ ${idx + 1}`}
+                onChange={(e) => updatePayment(idx, 'method', e.target.value)}
+                className="field w-full text-xs px-2.5 py-1.5"
+              >
+                <option value="" disabled>
+                  เลือกวิธีชำระ...
+                </option>
+                {(p.method && !paymentMethods.includes(p.method)
+                  ? [p.method, ...paymentMethods]
+                  : paymentMethods
+                ).map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              {paymentMethods.length === 0 && (
+                <p className="text-xs mt-1" style={{ color: '#B23A48' }}>
+                  ยังไม่ได้ตั้งช่องทางการชำระเงินของสาขานี้ — ตั้งได้ที่ จัดการสิทธิ์ &rarr;
+                  ข้อมูลนิติบุคคลของสาขา
+                </p>
+              )}
             </div>
             <input
               type="number"

@@ -62,6 +62,7 @@ export function TicketDetail({
   saveAction,
   optionAction,
   deleteAction,
+  unlockAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -84,6 +85,8 @@ export function TicketDetail({
   ) => Promise<{ ok: boolean; error?: string }>;
   /** Soft-delete action; omitted (or without `list.delete`) hides the button. */
   deleteAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Reopens a closed ticket; shown only to a `list.unlock` holder. */
+  unlockAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
@@ -112,7 +115,26 @@ export function TicketDetail({
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Frozen record. `initialTicket.locked` rather than `t.locked` on purpose: the
+  // flag is not something the form edits, and reading it from the draft would
+  // let a stray field() call appear to unlock the ticket on screen.
+  const locked = !isNew && !!initialTicket.locked;
+
+  async function unlock() {
+    if (!unlockAction) return;
+    setSaveError(null);
+    setUnlocking(true);
+    const result = await unlockAction(t.id);
+    setUnlocking(false);
+    if (!result.ok) {
+      setSaveError(result.error || 'ปลดล็อกไม่สำเร็จ');
+      return;
+    }
+    router.refresh();
+  }
 
   // Financial-document + print state.
   const [docType, setDocType] = useState('ใบเสร็จรับเงิน');
@@ -125,6 +147,16 @@ export function TicketDetail({
 
   const productCategories = options.product_categories;
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? id;
+
+  /**
+   * วิธีชำระเงิน comes from the shop's ช่องทางการชำระเงิน, set in จัดการสิทธิ์ →
+   * ข้อมูลนิติบุคคลของสาขา — the same list that prints on its invoices. The
+   * global `payment_methods` option list is the fallback for a shop that has not
+   * filled its channels in yet, because a dropdown with nothing in it would make
+   * recording a payment impossible.
+   */
+  const shopChannels = (shopInfo[t.shop]?.paymentChannels ?? []).filter(Boolean);
+  const paymentMethodOptions = shopChannels.length > 0 ? shopChannels : options.payment_methods;
 
   function changeDocType(dt: string) {
     setDocType(dt);
@@ -459,92 +491,133 @@ export function TicketDetail({
           </div>
           <p className="text-lg font-bold mb-5">{isNew ? 'สร้างใบงานใหม่' : `ใบงาน #${t.id}`}</p>
 
-          <VehicleInfoSection
-            t={t}
-            field={field}
-            bookingChannels={options.booking_channels}
-            setBookingChannels={opt('booking_channels')}
-            serviceTypes={options.service_types}
-            setServiceTypes={opt('service_types')}
-            carTypes={options.car_types}
-            setCarTypes={opt('car_types')}
-            carBrands={options.car_brands}
-            setCarBrands={opt('car_brands')}
-            retailCustomers={retailCustomers}
-            setRetailCustomers={setRetailCustomers}
-            onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
-            onModelChange={onModelChange}
-            commitModelRegistry={commitModelRegistry}
-          />
+          {/*
+            A closed ticket (ส่งมอบแล้ว + ชำระครบ) is what commission, revenue and
+            any later dispute are read from, so it is frozen. The fields below
+            stay visible — this is still the record of the job — but nothing in
+            them can be changed or saved until an admin reopens it.
+          */}
+          {locked && (
+            <div
+              className="rounded-2xl p-4 mb-5"
+              style={{ background: '#F1EDE7', border: '1.5px solid #B5AAA1' }}
+            >
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <i className="fa-solid fa-lock"></i>ใบงานนี้ปิดงานแล้ว — ล็อกไม่ให้แก้ไข
+              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                ส่งมอบงานและชำระเงินครบแล้ว
+                ข้อมูลจึงถูกล็อกไว้เพื่อไม่ให้ยอดขายและค่าคอมมิชชั่นเปลี่ยนย้อนหลัง
+                {canDo('list.unlock')
+                  ? ' — กดปลดล็อกด้านล่างเพื่อแก้ไข แล้วระบบจะล็อกกลับเองเมื่อบันทึก'
+                  : ' หากต้องแก้ไขกรุณาแจ้งแอดมิน'}
+              </p>
+              {canDo('list.unlock') && unlockAction && (
+                <button
+                  onClick={unlock}
+                  disabled={unlocking}
+                  className="btn-outline mt-3 rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2"
+                  style={{ opacity: unlocking ? 0.7 : 1 }}
+                >
+                  <i
+                    className={`fa-solid ${unlocking ? 'fa-spinner fa-spin' : 'fa-lock-open'}`}
+                  ></i>
+                  {unlocking ? 'กำลังปลดล็อก...' : 'ปลดล็อกเพื่อแก้ไข'}
+                </button>
+              )}
+            </div>
+          )}
 
-          <div className="mb-5">
-            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--ink-soft)' }}>
-              หมายเหตุ
-            </label>
-            <textarea
-              value={t.notes || ''}
-              onChange={(e) => field('notes', e.target.value)}
-              placeholder="ข้อมูลสำคัญที่ต้องการบันทึกไว้..."
-              rows={2}
-              className="field w-full text-sm px-3 py-2"
-              style={{ resize: 'vertical' }}
+          {/*
+            One guard around every editable section instead of a `disabled` on
+            each of the ~40 controls inside them: the sections stay readable, the
+            status dropdown above stays usable for nothing (it is covered too),
+            and there is no field left behind when a new one is added.
+          */}
+          <div
+            style={
+              locked ? { pointerEvents: 'none', opacity: 0.65, userSelect: 'text' } : undefined
+            }
+            aria-disabled={locked || undefined}
+          >
+            <VehicleInfoSection
+              t={t}
+              field={field}
+              bookingChannels={options.booking_channels}
+              setBookingChannels={opt('booking_channels')}
+              serviceTypes={options.service_types}
+              setServiceTypes={opt('service_types')}
+              carTypes={options.car_types}
+              setCarTypes={opt('car_types')}
+              carBrands={options.car_brands}
+              setCarBrands={opt('car_brands')}
+              retailCustomers={retailCustomers}
+              setRetailCustomers={setRetailCustomers}
+              onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
+              onModelChange={onModelChange}
+              commitModelRegistry={commitModelRegistry}
+            />
+
+            <div className="mb-5">
+              <label
+                className="text-xs font-medium block mb-1"
+                style={{ color: 'var(--ink-soft)' }}
+              >
+                หมายเหตุ
+              </label>
+              <textarea
+                value={t.notes || ''}
+                onChange={(e) => field('notes', e.target.value)}
+                placeholder="ข้อมูลสำคัญที่ต้องการบันทึกไว้..."
+                rows={2}
+                className="field w-full text-sm px-3 py-2"
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+
+            <ItemsSection
+              t={t}
+              stock={stock}
+              productCategories={productCategories}
+              filmPositions={options.film_positions}
+              setFilmPositions={opt('film_positions')}
+              wrapPositions={options.wrap_positions}
+              setWrapPositions={opt('wrap_positions')}
+              serviceItems={options.service_items}
+              setServiceItems={opt('service_items')}
+              addItem={addItem}
+              removeItem={removeItem}
+              updateItem={updateItem}
+              updateItemFields={updateItemFields}
+              updateFilmPositions={updateFilmPositions}
+              lookupPrice={lookupPrice}
+              lookupFilmPrice={lookupFilmPrice}
+              commitPrice={commitPrice}
+            />
+
+            <ExtrasSection
+              t={t}
+              extraOptions={options.extra_options}
+              setExtraOptions={opt('extra_options')}
+              slideTypes={options.slide_types}
+              stock={stock}
+              toggleExtra={toggleExtra}
+              updateExtraDetail={updateExtraDetail}
+              setSlideType={setSlideType}
+              updateSlideLeg={updateSlideLeg}
+              shareLink={shareLink}
+            />
+
+            <PaymentsSection
+              t={t}
+              paymentMethods={paymentMethodOptions}
+              addPayment={addPayment}
+              removePayment={removePayment}
+              updatePayment={updatePayment}
+              total={total}
+              paid={paid}
             />
           </div>
-
-          <ItemsSection
-            t={t}
-            stock={stock}
-            productCategories={productCategories}
-            filmPositions={options.film_positions}
-            setFilmPositions={opt('film_positions')}
-            wrapPositions={options.wrap_positions}
-            setWrapPositions={opt('wrap_positions')}
-            serviceItems={options.service_items}
-            setServiceItems={opt('service_items')}
-            addItem={addItem}
-            removeItem={removeItem}
-            updateItem={updateItem}
-            updateItemFields={updateItemFields}
-            updateFilmPositions={updateFilmPositions}
-            lookupPrice={lookupPrice}
-            lookupFilmPrice={lookupFilmPrice}
-            commitPrice={commitPrice}
-          />
-
-          <TechSection
-            t={t}
-            field={field}
-            technicians={options.technicians}
-            setTechnicians={opt('technicians')}
-            updateActualQty={updateActualQty}
-            confirmInstall={confirmInstall}
-            shareQcAlbum={shareQcAlbum}
-            shopName={shopName}
-          />
-
-          <ExtrasSection
-            t={t}
-            extraOptions={options.extra_options}
-            setExtraOptions={opt('extra_options')}
-            slideTypes={options.slide_types}
-            stock={stock}
-            toggleExtra={toggleExtra}
-            updateExtraDetail={updateExtraDetail}
-            setSlideType={setSlideType}
-            updateSlideLeg={updateSlideLeg}
-            shareLink={shareLink}
-          />
-
-          <PaymentsSection
-            t={t}
-            paymentMethods={options.payment_methods}
-            setPaymentMethods={opt('payment_methods')}
-            addPayment={addPayment}
-            removePayment={removePayment}
-            updatePayment={updatePayment}
-            total={total}
-            paid={paid}
-          />
 
           {saveError && (
             <p
@@ -561,17 +634,21 @@ export function TicketDetail({
               onClick={() => router.push('/tickets')}
               className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
             >
-              ยกเลิก
+              {locked ? 'กลับไปรายการใบงาน' : 'ยกเลิก'}
             </button>
-            <button
-              onClick={save}
-              disabled={saving}
-              className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-              style={{ opacity: saving ? 0.7 : 1 }}
-            >
-              <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
-              {saving ? 'กำลังบันทึก...' : 'บันทึกใบงาน'}
-            </button>
+            {/* Saving a locked ticket would be refused by the database anyway;
+                not offering the button is the honest version of that. */}
+            {!locked && (
+              <button
+                onClick={save}
+                disabled={saving}
+                className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                style={{ opacity: saving ? 0.7 : 1 }}
+              >
+                <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
+                {saving ? 'กำลังบันทึก...' : 'บันทึกใบงาน'}
+              </button>
+            )}
           </div>
 
           {!isNew && t.items.some((i) => i.sold) && canDo('list.printSheet') && (
@@ -601,7 +678,7 @@ export function TicketDetail({
                 <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
               </button>
             )}
-          {!isNew && canDo('list.delete') && deleteAction && (
+          {!isNew && !locked && canDo('list.delete') && deleteAction && (
             <button
               onClick={remove}
               disabled={deleting}
@@ -741,6 +818,33 @@ export function TicketDetail({
               </button>
             </div>
           )}
+          {/*
+            ข้อมูลของช่าง sits at the very bottom, below the financial-document
+            block. The ticket is filled top-to-bottom by whoever is with the
+            customer — vehicle, products, extras, money, paperwork — and the
+            technician block (QC photos, install confirmation, actual
+            quantities) is worked on later, usually by someone else. Several
+            roles open this screen; none of them should have to scroll past a
+            section that is not theirs.
+          */}
+          <div
+            style={
+              locked ? { pointerEvents: 'none', opacity: 0.65, userSelect: 'text' } : undefined
+            }
+            aria-disabled={locked || undefined}
+          >
+            <TechSection
+              t={t}
+              stock={stock}
+              field={field}
+              technicians={options.technicians}
+              setTechnicians={opt('technicians')}
+              updateActualQty={updateActualQty}
+              confirmInstall={confirmInstall}
+              shareQcAlbum={shareQcAlbum}
+              shopName={shopName}
+            />
+          </div>
         </div>
 
         <PrintJobSheet

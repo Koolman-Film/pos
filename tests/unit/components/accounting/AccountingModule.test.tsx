@@ -170,7 +170,7 @@ describe('AccountingModule totals', () => {
 });
 
 describe('AccountingModule attachments', () => {
-  it('lists a stored receipt and opens it through a signed URL, not a raw path', async () => {
+  it('previews a stored receipt in place, through a signed URL rather than a download', async () => {
     const user = userEvent.setup();
     const attachmentUrlAction = vi.fn(async () => ({ url: 'https://signed.example/slip.jpg' }));
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
@@ -201,11 +201,23 @@ describe('AccountingModule attachments', () => {
     await user.click(chip);
 
     expect(attachmentUrlAction).toHaveBeenCalledWith('cm/abc-slip.jpg');
-    expect(open).toHaveBeenCalledWith(
+
+    // The receipt opens INSIDE the page — no new tab, no file on disk.
+    const dialog = await screen.findByRole('dialog', { name: /สลิปโอน\.jpg/ });
+    expect(within(dialog).getByAltText('สลิปโอน.jpg')).toHaveAttribute(
+      'src',
       'https://signed.example/slip.jpg',
-      '_blank',
-      'noopener,noreferrer',
     );
+    expect(open).not.toHaveBeenCalled();
+
+    // …but the escape hatch is there for anyone who does want the file.
+    expect(within(dialog).getByText('เปิดแท็บใหม่')).toHaveAttribute(
+      'href',
+      'https://signed.example/slip.jpg',
+    );
+
+    await user.click(within(dialog).getByLabelText('ปิดหน้าต่างดูไฟล์แนบ'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     open.mockRestore();
   });
 

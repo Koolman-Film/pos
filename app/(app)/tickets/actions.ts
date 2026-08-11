@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
+import { ticketPaid, ticketTotal } from '@/lib/domain/tickets';
 import type { Database } from '@/lib/types/database';
 
 // Addressed through Database['pos'] rather than the generated TablesInsert/
@@ -201,6 +202,28 @@ export async function createTicket(p: TicketSavePayload): Promise<SaveResult> {
   }
 }
 
+/**
+ * Is this ticket a closed record — ส่งมอบแล้ว and paid in full?
+ *
+ * Evaluated here rather than in SQL because `lib/domain/tickets.ts` already owns
+ * the percent/amount discount maths; a second copy in a trigger would be free to
+ * disagree with the totals the rest of the app shows. Migration 0017 enforces
+ * the resulting flag, which is the part that has to be un-walk-around-able.
+ */
+function shouldLock(p: TicketSavePayload): boolean {
+  if (p.status !== 'ส่งมอบแล้ว') return false;
+  const forTotals = {
+    items: p.items.map((i) => ({
+      soldPrice: i.soldPrice,
+      discountType: (i.discountType ?? undefined) as 'percent' | 'amount' | undefined,
+      discountValue: i.discountValue ?? undefined,
+    })),
+    payments: p.payments.map((pay) => ({ amount: pay.amount })),
+  };
+  const total = ticketTotal(forTotals);
+  return total > 0 && ticketPaid(forTotals) >= total;
+}
+
 export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
   // Editing an existing ticket is not separately capability-gated in the
   // prototype; authentication (via getSessionContext) plus RLS shop-scoping is
@@ -219,6 +242,15 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
     if (error) throw new Error(error.message);
     await writeTicketChildren(supabase, p.id, p);
     await syncTicketStock(supabase, p.id, p, before, session.name);
+    // Closing the ticket is the LAST thing that happens, after the children are
+    // written — `save_ticket_children` refuses to touch a locked ticket, so
+    // setting the flag any earlier would block the same save that sets it.
+    if (shouldLock(p)) {
+      await supabase
+        .from('tickets')
+        .update({ locked: true } as unknown as TicketUpdate)
+        .eq('id', p.id);
+    }
     revalidatePath('/tickets');
     revalidatePath(`/tickets/${p.id}`);
     return { ok: true, id: p.id };
@@ -269,6 +301,25 @@ export async function deleteTicket(ticketId: string): Promise<{ ok: boolean; err
   revalidatePath('/tickets');
   revalidatePath(`/tickets/${ticketId}`);
   revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+/**
+ * ปลดล็อกใบงาน — reopen a closed ticket for editing, gated on `list.unlock`
+ * (admin). The ticket re-locks by itself on the next save if it still qualifies,
+ * so this is "let me fix this one thing", not a permanent switch.
+ */
+export async function unlockTicket(ticketId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('list.unlock')) return { ok: false, error: 'ไม่มีสิทธิ์ปลดล็อกใบงาน' };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('tickets')
+    .update({ locked: false } as unknown as TicketUpdate)
+    .eq('id', ticketId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  revalidatePath(`/tickets/${ticketId}`);
   return { ok: true };
 }
 

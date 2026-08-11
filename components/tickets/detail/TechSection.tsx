@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 
-import type { Ticket } from '../types';
+import type { StockRow, Ticket } from '../types';
 
 const labelCls = 'text-xs font-medium block mb-1';
 
@@ -22,6 +22,7 @@ export function TechSection({
   confirmInstall,
   shareQcAlbum,
   shopName,
+  stock = [],
 }: {
   t: Ticket;
   field: (key: keyof Ticket, value: unknown) => void;
@@ -31,10 +32,20 @@ export function TechSection({
   confirmInstall: () => void;
   shareQcAlbum: () => void;
   shopName: (id: string) => string;
+  /** Used only to show each product short-name-first, as everywhere else. */
+  stock?: StockRow[];
 }) {
   const [showQcPreview, setShowQcPreview] = useState(false);
 
-  const qcCategories = [...new Set(t.items.filter((i) => i.sold).map((i) => i.category))].filter(
+  /**
+   * An item counts as "has something on it" when a product was sold OR when its
+   * positions carry products — a film item's `sold` is a summary line built from
+   * the positions, so it is never the product itself.
+   */
+  const isFilled = (i: Ticket['items'][number]) =>
+    !!i.sold || !!(i.positions && i.positions.some((p) => p.product));
+
+  const qcCategories = [...new Set(t.items.filter(isFilled).map((i) => i.category))].filter(
     (c) => c === 'ฟิล์มกรองแสง' || c === 'ฟิล์มกันรอย',
   );
   const showInstallConfirm = !!(t.qcPhotos && t.qcPhotos.length > 0) && qcCategories.length > 0;
@@ -234,8 +245,8 @@ export function TechSection({
           )}
         </div>
       )}
-      {[...new Set(t.items.filter((i) => i.sold).map((i) => i.category))].map((cat) => {
-        const catItems = t.items.filter((i) => i.sold && i.category === cat);
+      {[...new Set(t.items.filter(isFilled).map((i) => i.category))].map((cat) => {
+        const catItems = t.items.filter((i) => isFilled(i) && i.category === cat);
         const techList = (t.techByCategory && t.techByCategory[cat]) || [];
         return (
           <div key={cat} className="mb-3 rounded-xl p-3" style={{ background: 'var(--paper)' }}>
@@ -253,41 +264,81 @@ export function TechSection({
                 setOptions={setTechnicians}
               />
             </div>
-            {t.status !== 'จองแล้ว' && cat !== 'งานบริการ' && (
+            {cat !== 'งานบริการ' && (
               <div>
                 <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
                   จำนวนสินค้าที่ใช้จริง
                 </label>
+                {/*
+                  This field used to be hidden until the ticket left "จองแล้ว",
+                  which is why the technician could not find it on a booked job.
+                  It is always available now, so the consequence has to be said
+                  out loud instead: what is typed here moves real stock the
+                  moment the ticket is saved.
+                */}
+                <p
+                  className="text-xs mb-2 px-2.5 py-1.5 rounded-lg flex items-start gap-1.5"
+                  style={{ background: '#FBF1DA', color: '#8A5A12' }}
+                >
+                  <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                  <span>
+                    ตัวเลขที่กรอกจะ<b>ตัดสต็อกจริงทันทีที่กดบันทึกใบงาน</b> —
+                    กรอกเมื่อใช้ของแล้วเท่านั้น หากแก้ตัวเลขภายหลัง ระบบจะปรับสต็อกตามส่วนต่างให้เอง
+                  </span>
+                </p>
                 {catItems.map((it) => {
                   const realIdx = t.items.indexOf(it);
-                  const products =
-                    it.positions && it.positions.length
-                      ? [...new Set(it.positions.map((p) => p.product).filter(Boolean))]
-                      : [it.sold];
-                  return products.map((prod) => (
-                    <div
-                      key={realIdx + '-' + prod}
-                      className="flex items-center justify-between gap-2 mb-2"
-                    >
-                      <span
-                        className="text-xs truncate flex-1"
-                        style={{ color: 'var(--ink-soft)' }}
+                  // A film item keeps its products in `positions`, and its `sold`
+                  // is a summary line ("บานหน้า: …, คู่หน้า: …"), not a product —
+                  // so the rows have to come from the positions, one per DISTINCT
+                  // product, with the positions it covers listed beside it.
+                  const withPositions = it.positions && it.positions.length > 0;
+                  const products = withPositions
+                    ? [...new Set(it.positions!.map((p) => p.product).filter(Boolean))]
+                    : [it.sold].filter(Boolean);
+                  return products.map((prod) => {
+                    const stockMatch = stock.find((s) => s.name === prod);
+                    const covers = withPositions
+                      ? it
+                          .positions!.filter((p) => p.product === prod)
+                          .map((p) => p.position)
+                          .join(', ')
+                      : '';
+                    return (
+                      <div
+                        key={realIdx + '-' + prod}
+                        className="flex items-center justify-between gap-2 mb-2"
                       >
-                        {prod}
-                      </span>
-                      <input
-                        type="number"
-                        placeholder="จำนวน"
-                        // Every product row has an identical placeholder, so the
-                        // product name is what makes this control identifiable —
-                        // to a screen reader and to a test.
-                        aria-label={`จำนวนที่ใช้จริง ${prod}`}
-                        value={(it.actualQtyMap && it.actualQtyMap[prod]) || ''}
-                        onChange={(e) => updateActualQty(realIdx, prod, e.target.value)}
-                        className="field text-xs px-2.5 py-1.5 w-24"
-                      />
-                    </div>
-                  ));
+                        <span
+                          className="text-xs min-w-0 flex-1"
+                          style={{ color: 'var(--ink-soft)' }}
+                        >
+                          <span
+                            className="block truncate font-medium"
+                            style={{ color: 'var(--ink)' }}
+                          >
+                            {stockMatch?.shortName ? `${stockMatch.shortName} · ${prod}` : prod}
+                          </span>
+                          {covers && (
+                            <span className="block truncate" style={{ color: 'var(--ink-faint)' }}>
+                              {covers}
+                            </span>
+                          )}
+                        </span>
+                        <input
+                          type="number"
+                          placeholder="จำนวน"
+                          // Every product row has an identical placeholder, so the
+                          // product name is what makes this control identifiable —
+                          // to a screen reader and to a test.
+                          aria-label={`จำนวนที่ใช้จริง ${prod}`}
+                          value={(it.actualQtyMap && it.actualQtyMap[prod]) || ''}
+                          onChange={(e) => updateActualQty(realIdx, prod, e.target.value)}
+                          className="field text-xs px-2.5 py-1.5 w-24 flex-shrink-0"
+                        />
+                      </div>
+                    );
+                  });
                 })}
               </div>
             )}

@@ -64,6 +64,11 @@ export type Ticket = {
   statusHistory?: StatusHistoryEntry[];
   installConfirmed?: boolean;
   installConfirmedAt?: string;
+  /**
+   * Closed record — ส่งมอบแล้ว and paid in full (migration 0017). Read-only in
+   * the form; only a `list.unlock` holder can reopen it.
+   */
+  locked?: boolean;
 };
 
 // Row shapes the list receives (a projection of the ticket for the list view).

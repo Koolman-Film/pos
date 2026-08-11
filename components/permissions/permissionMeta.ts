@@ -83,6 +83,7 @@ export const MODULE_CAPABILITIES: LabeledKey[] = [
   { key: 'list.printSheet', label: 'ใบงานติดตั้ง: พิมพ์ใบงานสำหรับช่าง' },
   { key: 'list.delete', label: 'ใบงานติดตั้ง: ลบใบงาน (ลงถังขยะ)' },
   { key: 'list.restore', label: 'ใบงานติดตั้ง: ดูถังขยะและกู้คืนใบงาน' },
+  { key: 'list.unlock', label: 'ใบงานติดตั้ง: ปลดล็อกใบงานที่ปิดงานแล้วเพื่อแก้ไข' },
   { key: 'customers.edit', label: 'ทะเบียนลูกค้า: เพิ่ม/แก้ไข/ลบลูกค้า' },
   {
     key: 'options.manage',
