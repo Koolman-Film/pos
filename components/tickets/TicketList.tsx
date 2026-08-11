@@ -59,17 +59,26 @@ export function TicketList({
     return isInPeriod(dateObj, period, periodValue, rangeStart, rangeEnd);
   }
 
-  let visible = tickets;
-  if (shopFilter !== 'all') visible = visible.filter((t) => t.shop === shopFilter);
-  if (statusFilter !== 'all') visible = visible.filter((t) => t.status === statusFilter);
-  if (customerFilter !== 'all') visible = visible.filter((t) => t.customer === customerFilter);
+  /**
+   * Everything the caller has narrowed to EXCEPT the status filter — shop,
+   * customer, search and period. The status chips count over this, so each
+   * number answers "how many would I get if I clicked here" and the totals
+   * describe the same set of tickets the list below is showing. They used to be
+   * counted over every loaded ticket, so switching the period left the chips
+   * reporting one figure and the list another.
+   */
+  let scoped = tickets;
+  if (shopFilter !== 'all') scoped = scoped.filter((t) => t.shop === shopFilter);
+  if (customerFilter !== 'all') scoped = scoped.filter((t) => t.customer === customerFilter);
   if (search.trim()) {
     const q = search.trim().toLowerCase();
-    visible = visible.filter(
+    scoped = scoped.filter(
       (t) => t.customer.toLowerCase().includes(q) || t.plate.toLowerCase().includes(q),
     );
   }
-  visible = visible.filter((t) => inSelectedPeriod(t.dropOffDateObj));
+  scoped = scoped.filter((t) => inSelectedPeriod(t.dropOffDateObj));
+
+  const visible = statusFilter === 'all' ? scoped : scoped.filter((t) => t.status === statusFilter);
 
   const customerOptions = [
     ...new Set(
@@ -125,19 +134,26 @@ export function TicketList({
   }
 
   const statusCounts: Record<string, number> = {};
-  tickets.forEach((t) => {
+  scoped.forEach((t) => {
     statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
   });
+
+  /**
+   * One chip per status IN THE STATUSES TABLE, in its configured order.
+   *
+   * These used to be four hard-coded prototype keys, so a shop that renamed or
+   * added statuses got chips for things it no longer used ("รอชำระ" counting a
+   * `ค้างชำระ` status that had been replaced) and none at all for the ones it
+   * did. The dashboard's status bars already read the live table, which is why
+   * the two screens disagreed; both sides now come from the same list.
+   */
   const chips = [
-    { key: 'all', label: 'ทั้งหมด', count: tickets.length },
-    {
-      key: 'กำลัง QC ก่อนติดตั้ง',
-      label: 'รอ QC',
-      count: statusCounts['กำลัง QC ก่อนติดตั้ง'] || 0,
-    },
-    { key: 'กำลังติดตั้ง', label: 'กำลังติดตั้ง', count: statusCounts['กำลังติดตั้ง'] || 0 },
-    { key: 'รอส่งมอบ', label: 'รอส่งมอบ', count: statusCounts['รอส่งมอบ'] || 0 },
-    { key: 'ค้างชำระ', label: 'รอชำระ', count: statusCounts['ค้างชำระ'] || 0 },
+    { key: 'all', label: 'ทั้งหมด', count: scoped.length },
+    ...statuses.map((s) => ({
+      key: s.key,
+      label: s.short || s.key,
+      count: statusCounts[s.key] || 0,
+    })),
   ];
 
   return (
