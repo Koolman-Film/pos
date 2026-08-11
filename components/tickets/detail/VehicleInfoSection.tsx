@@ -21,8 +21,6 @@ export function VehicleInfoSection({
   setCarTypes,
   carBrands,
   setCarBrands,
-  timeSlots,
-  setTimeSlots,
   retailCustomers,
   setRetailCustomers,
   onSelectCustomer,
@@ -39,8 +37,6 @@ export function VehicleInfoSection({
   setCarTypes: (v: string[]) => void;
   carBrands: string[];
   setCarBrands: (v: string[]) => void;
-  timeSlots: string[];
-  setTimeSlots: (v: string[]) => void;
   retailCustomers: RetailCustomer[];
   setRetailCustomers: (v: RetailCustomer[]) => void;
   onSelectCustomer: (c: { name: string; phone: string }) => void;
@@ -64,8 +60,6 @@ export function VehicleInfoSection({
             label="วันที่รับรถ"
             value={t.dropOffDateObj}
             onChange={(v) => field('dropOffDateObj', v)}
-            timeSlots={timeSlots}
-            setTimeSlots={setTimeSlots}
           />
         </div>
         <div>
@@ -76,8 +70,6 @@ export function VehicleInfoSection({
             label="วันที่ส่งงาน"
             value={t.pickupDateObj}
             onChange={(v) => field('pickupDateObj', v)}
-            timeSlots={timeSlots}
-            setTimeSlots={setTimeSlots}
           />
         </div>
       </div>

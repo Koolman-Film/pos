@@ -22,6 +22,7 @@ export default async function TicketsPage() {
       capabilities={{
         'list.createNew': session.canDo('list.createNew'),
         'list.printSheet': session.canDo('list.printSheet'),
+        'list.restore': session.canDo('list.restore'),
       }}
     />
   );

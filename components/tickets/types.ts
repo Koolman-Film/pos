@@ -85,6 +85,9 @@ export type TicketListRow = {
   dropOffDateObj?: Date | null;
   pickupDateObj?: Date | null;
   techByCategory?: Record<string, string[]>;
+  /** Set only on rows from the bin (`loadDeletedTicketList`). */
+  deletedAt?: Date | null;
+  deletedByName?: string;
 };
 
 export type Shop = { id: string; name: string };

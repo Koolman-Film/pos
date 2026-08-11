@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { Badge, getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
+import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { ticketTotal } from '@/lib/domain/tickets';
 
@@ -49,35 +50,13 @@ export function TicketList({
   );
   const [customerFilter, setCustomerFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [period, setPeriod] = useState('today');
+  const [period, setPeriod] = useState<string>(DEFAULT_PERIOD);
   const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());
 
   function inSelectedPeriod(dateObj: Date | null | undefined) {
-    if (!dateObj) return true;
-    const d = new Date(dateObj);
-    d.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (period === 'today') return d.getTime() === today.getTime();
-    if (period === 'month') {
-      const [y, m] = (periodValue || '').split('-').map(Number);
-      return y && m ? d.getFullYear() === y && d.getMonth() === m - 1 : true;
-    }
-    if (period === 'year') {
-      const rawY = Number(periodValue);
-      const y = rawY && rawY > 2400 ? rawY - 543 : today.getFullYear();
-      return d.getFullYear() === y;
-    }
-    if (period === 'range') {
-      const s = rangeStart ? new Date(rangeStart) : null;
-      const e = rangeEnd ? new Date(rangeEnd) : null;
-      if (s) s.setHours(0, 0, 0, 0);
-      if (e) e.setHours(23, 59, 59, 999);
-      return (!s || d >= s) && (!e || d <= e);
-    }
-    return true;
+    return isInPeriod(dateObj, period, periodValue, rangeStart, rangeEnd);
   }
 
   let visible = tickets;
@@ -165,14 +144,25 @@ export function TicketList({
     <div className="fade-page">
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <h1 className="text-xl font-bold">Book งาน</h1>
-        {canDo('list.createNew') && (
-          <Link
-            href="/tickets/new"
-            className="btn-primary text-sm px-4 py-2 rounded-xl font-semibold hidden sm:flex items-center gap-2"
-          >
-            <i className="fa-solid fa-plus"></i>สร้างใหม่
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Only roles that may restore see the bin at all. */}
+          {canDo('list.restore') && (
+            <Link
+              href="/tickets/trash"
+              className="btn-outline text-sm px-4 py-2 rounded-xl font-medium flex items-center gap-2"
+            >
+              <i className="fa-solid fa-trash-can"></i>ถังขยะ
+            </Link>
+          )}
+          {canDo('list.createNew') && (
+            <Link
+              href="/tickets/new"
+              className="btn-primary text-sm px-4 py-2 rounded-xl font-semibold hidden sm:flex items-center gap-2"
+            >
+              <i className="fa-solid fa-plus"></i>สร้างใหม่
+            </Link>
+          )}
+        </div>
       </div>
       <div className="card p-3 mb-4 flex flex-wrap items-center gap-2">
         <div

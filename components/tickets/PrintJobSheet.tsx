@@ -852,13 +852,24 @@ export function PrintJobSheet({
                   })()}
                 </span>
               </div>
-              <p style={{ margin: '2px 0 0', fontSize: 10, color: '#999' }}>
-                จาก{' '}
-                {t.items
-                  .filter((i) => i.interested)
-                  .map((i) => i.interested)
-                  .join(', ')}
-              </p>
+              {/*
+                The figure alone does not say what it was measured against, so
+                each baseline product is listed with its price — short name
+                first, the same way the item rows above read.
+              */}
+              {t.items
+                .filter((i) => i.interested)
+                .map((i, ci) => {
+                  const stockMatch = stock.find((s) => s.name === i.interested);
+                  const short = stockMatch?.shortName || i.interested;
+                  return (
+                    <p key={ci} style={{ margin: '2px 0 0', fontSize: 10, color: '#999' }}>
+                      จาก <b>{short}</b>
+                      {stockMatch?.shortName ? ` (${i.interested})` : ''} &middot;{' '}
+                      {fmt(Number(i.interestedPrice || 0))}
+                    </p>
+                  );
+                })}
             </div>
           )}
         </div>

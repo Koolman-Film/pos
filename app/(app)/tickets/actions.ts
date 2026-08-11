@@ -246,6 +246,50 @@ export async function updateTicketStatus(ticketId: string, newStatus: string): P
 }
 
 /**
+ * ลบใบงาน — a soft delete (migration 0013). The row keeps its job number and all
+ * its children; it simply stops appearing in the lists. `list.restore` holders
+ * see it in the bin and can put it back.
+ *
+ * The capability is re-checked here per C2 AND enforced by a trigger in the
+ * database, because `tickets_rw` lets any shop member update the row.
+ */
+export async function deleteTicket(ticketId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('list.delete')) return { ok: false, error: 'ไม่มีสิทธิ์ลบใบงาน' };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('tickets')
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: session.userId,
+    } as unknown as TicketUpdate)
+    .eq('id', ticketId)
+    .is('deleted_at', null);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  revalidatePath(`/tickets/${ticketId}`);
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+/** กู้คืนใบงาน — the other half of `deleteTicket`, gated on `list.restore`. */
+export async function restoreTicket(ticketId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('list.restore')) return { ok: false, error: 'ไม่มีสิทธิ์กู้คืนใบงาน' };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('tickets')
+    .update({ deleted_at: null, deleted_by: null } as unknown as TicketUpdate)
+    .eq('id', ticketId)
+    .not('deleted_at', 'is', null);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  revalidatePath(`/tickets/${ticketId}`);
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+/**
  * Persist an admin-managed option list (the `Managed*` pickers' `setOptions`).
  * Full-list replace for a `list_key`: the picker owns the complete value list.
  * Only shop-global lists (shop_id null) are managed here, matching the seed.

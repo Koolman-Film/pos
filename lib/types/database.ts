@@ -147,6 +147,54 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_attachments: {
+        Row: {
+          expense_id: number
+          file_name: string
+          id: number
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          expense_id: number
+          file_name: string
+          id?: never
+          mime_type?: string
+          size_bytes?: number
+          storage_path: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          expense_id?: number
+          file_name?: string
+          id?: never
+          mime_type?: string
+          size_bytes?: number
+          storage_path?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_attachments_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_attachments_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount: number
@@ -829,6 +877,8 @@ export type Database = {
           color: string
           created_at: string
           customer_name: string
+          deleted_at: string | null
+          deleted_by: string | null
           drop_off_date: string
           extras: Json
           id: string
@@ -849,6 +899,8 @@ export type Database = {
           color?: string
           created_at?: string
           customer_name: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           drop_off_date: string
           extras?: Json
           id: string
@@ -869,6 +921,8 @@ export type Database = {
           color?: string
           created_at?: string
           customer_name?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           drop_off_date?: string
           extras?: Json
           id?: string
@@ -883,6 +937,13 @@ export type Database = {
           tech_by_category?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "tickets_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tickets_retail_customer_id_fkey"
             columns: ["retail_customer_id"]

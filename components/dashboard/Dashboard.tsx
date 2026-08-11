@@ -68,9 +68,6 @@ export type DashboardProps = {
   revenue: number;
   totalExpenses: number;
   cashBalance: number;
-  cashTopups?: number;
-  cashSpent?: number;
-  outstanding?: number;
   arItems: ARItem[];
   apItems: APItem[];
   shopBreakdown: ShopBreakdown[];
@@ -81,6 +78,12 @@ export type DashboardProps = {
   calendarTickets?: CalendarTicket[];
   shopFilter?: string;
   filter?: ReactNode;
+  /**
+   * Sub-heading under the title, describing the window the numbers cover
+   * (`periodCaption`). Defaults to today's date for callers that render the
+   * dashboard without a period filter.
+   */
+  caption?: string;
   /** Live `statuses` config (labels, pill colours, dots). Falls back to none. */
   statuses?: StatusConfig[];
   /** Total jobs in scope — the big number above the status bars. */
@@ -100,9 +103,6 @@ export function Dashboard({
   revenue,
   totalExpenses,
   cashBalance,
-  cashTopups = 0,
-  cashSpent = 0,
-  outstanding = 0,
   arItems,
   apItems,
   shopBreakdown,
@@ -113,6 +113,11 @@ export function Dashboard({
   calendarTickets = [],
   shopFilter = 'all',
   filter,
+  caption = `สรุปข้อมูลวันนี้ · ${new Date().toLocaleDateString('th-TH', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })}`,
   statuses = [],
   totalJobs = 0,
   statusTotals = [],
@@ -134,12 +139,7 @@ export function Dashboard({
         <div>
           <h1 className="text-xl font-bold">ภาพรวมธุรกิจ</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--ink-soft)' }}>
-            สรุปข้อมูลวันนี้ &middot;{' '}
-            {new Date().toLocaleDateString('th-TH', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
+            {caption}
           </p>
         </div>
       </div>
@@ -233,6 +233,14 @@ export function Dashboard({
           </div>
         )}
 
+        {/*
+          The balance is the whole card. The prototype also stacked three
+          sub-lines under it — เติมแล้ว, จ่ายไป and ค้างชำระจากลูกค้า — which the
+          trial run asked to drop: the first two are the Accounting module's job
+          (it shows the same two legs under its own petty-cash card, where they
+          can be acted on), and the third repeats what the ลูกหนี้ · ยอดค้างรับ
+          card below already lists per customer.
+        */}
         {hasDashboardWidget('pettycash') && (
           <div
             className="card p-5"
@@ -248,15 +256,6 @@ export function Dashboard({
             </p>
             <p className="text-sm mt-0.5" style={{ color: 'var(--primary)', opacity: 0.8 }}>
               เงินสดย่อยคงเหลือ
-            </p>
-            <p className="text-xs mt-4" style={{ color: 'var(--primary)', opacity: 0.7 }}>
-              เติมแล้ว {fmt(cashTopups)}
-            </p>
-            <p className="text-xs mt-1" style={{ color: 'var(--primary)', opacity: 0.7 }}>
-              จ่ายไป {fmt(cashSpent)}
-            </p>
-            <p className="text-xs mt-1" style={{ color: 'var(--primary)', opacity: 0.7 }}>
-              ค้างชำระจากลูกค้า {fmt(outstanding)}
             </p>
           </div>
         )}

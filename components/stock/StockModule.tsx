@@ -350,6 +350,9 @@ export function StockModule({
   const [branchFilter, setBranchFilter] = useState('all');
   const [catFilter, setCatFilter] = useState('all');
   const [nameFilterSel, setNameFilterSel] = useState('all');
+  // "ต่ำกว่าขั้นต่ำ" — the ใกล้หมด card counts these but there was no way to list
+  // them, so restocking meant scrolling the whole catalogue looking for red rows.
+  const [levelFilter, setLevelFilter] = useState<'all' | 'low'>('all');
 
   const visible = shopFilter === 'all' ? stock : stock.filter((s) => s.shop === shopFilter);
   const visibleWithdrawals =
@@ -366,6 +369,7 @@ export function StockModule({
   const filtered = catScoped.filter(
     (s) =>
       (nameFilterSel === 'all' || s.name === nameFilterSel) &&
+      (levelFilter === 'all' || s.qty < s.min) &&
       (!searchQ ||
         s.name.toLowerCase().includes(searchQ) ||
         (s.shortName || '').toLowerCase().includes(searchQ) ||
@@ -1209,6 +1213,16 @@ export function StockModule({
                   {n}
                 </option>
               ))}
+            </select>
+            <select
+              value={levelFilter}
+              aria-label="กรองตามระดับสต็อก"
+              onChange={(e) => setLevelFilter(e.target.value as 'all' | 'low')}
+              className="field text-xs px-2.5 py-2 rounded-lg"
+              style={levelFilter === 'low' ? { color: '#B23A48', fontWeight: 600 } : undefined}
+            >
+              <option value="all">ทุกระดับสต็อก</option>
+              <option value="low">ต่ำกว่าขั้นต่ำ</option>
             </select>
             {can('stock.export') && (
               <div className="flex gap-2">

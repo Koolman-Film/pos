@@ -2,7 +2,8 @@ import { Suspense } from 'react';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
-import { ticketTotal, ticketPaid } from '@/lib/domain/tickets';
+import { ticketTotal } from '@/lib/domain/tickets';
+import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import type {
@@ -54,6 +55,9 @@ export default async function DashboardPage({
       .select(
         'id, shop_id, customer_name, plate, brand, model, service_type, status, drop_off_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
       )
+      // Soft-deleted tickets (migration 0013) are out of every figure on this
+      // screen — revenue, job counts, the calendar and the bookings window.
+      .is('deleted_at', null)
       .order('drop_off_date', { ascending: false }),
     supabase
       .from('orders')
@@ -89,15 +93,23 @@ export default async function DashboardPage({
     requestedShop === 'all' || session.accessibleShopIds.includes(requestedShop)
       ? requestedShop || defaultShop
       : defaultShop;
-  const period = getStr('period') || 'today';
+  const period = getStr('period') || DEFAULT_PERIOD;
   const now = new Date();
+  // `pv` carries a month (`YYYY-MM`) or a Buddhist-era year depending on the
+  // mode, and switching mode leaves the other mode's value behind in the URL.
+  // Take it only when it is the right shape for the current mode, so the month
+  // picker and the year list always show a value they actually offer.
+  const requestedPeriodValue = getStr('pv');
   const periodValue =
-    getStr('pv') ||
-    (period === 'year'
-      ? String(now.getFullYear() + 543)
+    period === 'year'
+      ? /^\d{4}$/.test(requestedPeriodValue)
+        ? requestedPeriodValue
+        : String(now.getFullYear() + 543)
       : period === 'month'
-        ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-        : '');
+        ? /^\d{4}-\d{2}$/.test(requestedPeriodValue)
+          ? requestedPeriodValue
+          : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        : '';
   const rangeStart = getStr('rs');
   const rangeEnd = getStr('re');
 
@@ -165,19 +177,30 @@ export default async function DashboardPage({
 
   // ---- Aggregate (same output as the prototype's inline client math) ----
   const inShop = (shop: string) => shopFilter === 'all' || shop === shopFilter;
-  const visibleTickets = tickets.filter((t) => inShop(t.shop));
+  // The period control used to move only the trend chart; the stat cards read
+  // every row the caller could see, whatever the filter said. They now go
+  // through the same window as every other module (`lib/domain/period.ts`),
+  // attributing a ticket to its drop-off date and an expense to its paid date —
+  // the same two dates `buildTrend` plots.
+  const inPeriod = (d: Date | null) => isInPeriod(d, period, periodValue, rangeStart, rangeEnd);
+
+  // Shop-scoped but period-independent: the 7-day booking window and the
+  // receivables/payables lists are "as of now" figures, not period totals.
+  const shopTickets = tickets.filter((t) => inShop(t.shop));
+  const visibleTickets = shopTickets.filter((t) => inPeriod(t.dropOff));
 
   const arItems = computeReceivables(tickets, orders, customers, shopFilter);
   const apItems = computePayables(expenses, shopFilter);
 
   const revenue = visibleTickets.reduce((s, t) => s + ticketTotal(t), 0);
-  const outstanding = visibleTickets.reduce(
-    (s, t) => s + Math.max(ticketTotal(t) - ticketPaid(t), 0),
-    0,
-  );
 
-  const paidExpenses = expenses.filter((e) => inShop(e.shop) && e.status === 'จ่ายแล้ว');
+  const paidExpenses = expenses.filter(
+    (e) => inShop(e.shop) && e.status === 'จ่ายแล้ว' && inPeriod(e.paidAt),
+  );
   const totalExpenses = paidExpenses.reduce((s, e) => s + e.amount, 0);
+  // Petty cash is a running balance, not a period total: `petty_cash` rows carry
+  // no date to window on, and a month-scoped "cash on hand" would be wrong. Both
+  // legs therefore stay all-time.
   const cashTopups = (pettyRows ?? [])
     .filter((p) => inShop(p.shop_id) && p.type === 'เติมเงิน')
     .reduce((s, p) => s + num(p.amount), 0);
@@ -188,7 +211,7 @@ export default async function DashboardPage({
 
   const shopBreakdown = accessibleShops.map((s) => ({
     name: s.name,
-    count: tickets.filter((t) => t.shop === s.id).length,
+    count: tickets.filter((t) => t.shop === s.id && inPeriod(t.dropOff)).length,
   }));
 
   const expenseCategories = [...new Set(paidExpenses.map((e) => e.category))];
@@ -253,7 +276,9 @@ export default async function DashboardPage({
   windowEnd.setDate(windowEnd.getDate() + 7);
   windowEnd.setHours(23, 59, 59, 999);
 
-  const upcoming: UpcomingTicket[] = visibleTickets
+  // Period-independent on purpose: this card is the next seven days, which the
+  // selected month/year has no say over.
+  const upcoming: UpcomingTicket[] = shopTickets
     .filter((t) => t.dropOff && t.dropOff >= windowStart && t.dropOff <= windowEnd)
     .sort((a, b) => (a.dropOff as Date).getTime() - (b.dropOff as Date).getTime())
     .map((t) => ({
@@ -307,9 +332,6 @@ export default async function DashboardPage({
       revenue={revenue}
       totalExpenses={totalExpenses}
       cashBalance={cashBalance}
-      cashTopups={cashTopups}
-      cashSpent={cashSpent}
-      outstanding={outstanding}
       arItems={arItems}
       apItems={apItems}
       shopBreakdown={shopBreakdown}
@@ -319,6 +341,7 @@ export default async function DashboardPage({
       trend={trend}
       calendarTickets={calendarTickets}
       shopFilter={shopFilter}
+      caption={periodCaption(period, periodValue, rangeStart, rangeEnd, now)}
       statuses={statuses}
       totalJobs={visibleTickets.length}
       statusTotals={statusTotals}

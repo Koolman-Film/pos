@@ -48,10 +48,47 @@ export async function addExpense(input: NewExpenseInput): Promise<void> {
     }));
   if (rows.length === 0) return;
 
-  const { error } = await supabase.from('expenses').insert(rows);
+  const { data: inserted, error } = await supabase.from('expenses').insert(rows).select('id');
   if (error) throw error;
 
+  // The panel states that every line in one submission shares the same receipts,
+  // so each new expense gets its own row pointing at the same stored object. The
+  // files themselves were uploaded by the browser straight to the private bucket
+  // (migration 0014) — only their paths travel through this action.
+  const attachments = input.attachments ?? [];
+  if (attachments.length > 0 && inserted && inserted.length > 0) {
+    const attachmentRows = inserted.flatMap((e) =>
+      attachments.map((a) => ({
+        expense_id: e.id,
+        storage_path: a.path,
+        file_name: a.fileName,
+        mime_type: a.mimeType || '',
+        size_bytes: Math.round(a.size || 0),
+        uploaded_by: session.userId,
+      })),
+    );
+    const { error: attachErr } = await supabase.from('expense_attachments').insert(attachmentRows);
+    if (attachErr) throw attachErr;
+  }
+
   revalidatePath('/accounting');
+}
+
+/**
+ * A one-minute signed URL for a stored receipt. The bucket is private, so this
+ * is the only way to open one; the caller is re-checked here (C2) and storage
+ * RLS checks the same nav permission again when the URL is redeemed.
+ */
+export async function getExpenseAttachmentUrl(
+  path: string,
+): Promise<{ url?: string; error?: string }> {
+  await getSessionContext();
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage
+    .from('expense-attachments')
+    .createSignedUrl(path, 60);
+  if (error) return { error: error.message };
+  return { url: data?.signedUrl };
 }
 
 export async function topupCash(input: TopupInput): Promise<void> {
@@ -97,8 +134,24 @@ export async function deleteExpense(id: number): Promise<void> {
   if (!session.canDo('accounting.addExpense')) throw new Error('forbidden');
 
   const supabase = await createClient();
+
+  // `expense_attachments` cascades with the expense, but the objects in the
+  // bucket do not — without this they would linger unreachable, since nothing
+  // outside that table records their paths.
+  const { data: attachments } = await supabase
+    .from('expense_attachments')
+    .select('storage_path')
+    .eq('expense_id', id);
+  const paths = (attachments ?? []).map((a) => a.storage_path);
+
   const { error } = await supabase.from('expenses').delete().eq('id', id);
   if (error) throw error;
+
+  if (paths.length > 0) {
+    // A failure here leaves an orphaned object, not a broken expense list, so it
+    // must not undo the delete the user asked for.
+    await supabase.storage.from('expense-attachments').remove(paths);
+  }
 
   revalidatePath('/accounting');
 }

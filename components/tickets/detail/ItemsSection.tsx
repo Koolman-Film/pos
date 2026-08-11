@@ -2,6 +2,7 @@
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
+import { ProductPicker, productDisplayFor } from '@/components/ui/ProductPicker';
 import { fmt } from '@/lib/domain/format';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
@@ -58,6 +59,19 @@ export function ItemsSection({
     0,
   );
 
+  // The cheer-up figure on its own says how much the upsell was worth but not
+  // what it was FROM, so the trial run asked for the booked product's name and
+  // price next to it. One row per item the customer actually booked something on.
+  const cheerRows = t.items
+    .filter((i) => i.booked || Number(i.bookedPrice || 0) > 0)
+    .map((i) => ({
+      booked: productDisplayFor(i.booked, stock) || 'ไม่ได้ระบุสินค้าที่จอง',
+      bookedPrice: Number(i.bookedPrice || 0),
+      sold: productDisplayFor(i.sold, stock) || 'ยังไม่ได้เลือกสินค้าที่ขาย',
+      soldPrice: Number(i.soldPrice || 0),
+      diff: Number(i.soldPrice || 0) - Number(i.bookedPrice || 0),
+    }));
+
   return (
     <div className="mb-5">
       <div className="flex justify-between items-center mb-3">
@@ -80,6 +94,29 @@ export function ItemsSection({
           </span>
         )}
       </div>
+      {cheerRows.length > 0 && (
+        <div className="rounded-xl p-2.5 mb-3" style={{ background: 'var(--paper)' }}>
+          {cheerRows.map((r, i) => (
+            <div key={i} className="text-xs py-0.5">
+              <div className="flex justify-between gap-2">
+                <span style={{ color: 'var(--ink-soft)' }}>
+                  จอง {r.booked} &middot; {fmt(r.bookedPrice)}
+                </span>
+                <span
+                  className="font-semibold flex-shrink-0"
+                  style={{ color: r.diff >= 0 ? '#4C7A3E' : '#B23A48' }}
+                >
+                  {r.diff >= 0 ? '+' : ''}
+                  {fmt(r.diff)}
+                </span>
+              </div>
+              <div style={{ color: 'var(--ink-faint)' }}>
+                ขาย {r.sold} &middot; {fmt(r.soldPrice)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {t.items.map((it, idx) => {
         const inShop = stock.filter((s) => s.category === it.category && s.shop === t.shop);
         const productOptions = inShop.length
@@ -134,11 +171,14 @@ export function ItemsSection({
                   สินค้าที่สนใจ (ไม่บังคับ — ใช้เทียบ cheer-up)
                 </label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
-                  <select
+                  <ProductPicker
                     value={it.interested || ''}
-                    aria-label="สินค้าที่ลูกค้าสนใจ"
-                    onChange={(e) => {
-                      const prodName = e.target.value;
+                    label="สินค้าที่ลูกค้าสนใจ"
+                    placeholder="ไม่ระบุ"
+                    emptyLabel="ไม่ระบุ"
+                    options={productOptions}
+                    className="field w-full text-xs px-2.5 py-1.5"
+                    onChange={(prodName) => {
                       const p = productOptions.find((x) => x.name === prodName);
                       const fallback = p ? p.sellPrice || p.cost * 2 : 0;
                       updateItemFields(idx, {
@@ -146,16 +186,7 @@ export function ItemsSection({
                         interestedPrice: prodName ? lookupPrice(prodName, fallback) : '',
                       });
                     }}
-                    className="field text-xs px-2.5 py-1.5"
-                  >
-                    <option value="">ไม่ระบุ</option>
-                    {productOptions.map((p) => (
-                      <option key={p.id} value={p.name}>
-                        {p.name}
-                        {p.shortName ? ` (${p.shortName})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <input
                     type="number"
                     placeholder="ราคา"
@@ -222,11 +253,13 @@ export function ItemsSection({
                       {p.position} <span style={{ color: '#B23A48' }}>*</span>
                     </p>
                     <div className="grid grid-cols-2 gap-2">
-                      <select
+                      <ProductPicker
                         value={p.product}
-                        aria-label="สินค้าประจำตำแหน่ง"
-                        onChange={(e) => {
-                          const prodName = e.target.value;
+                        label={`สินค้าประจำตำแหน่ง ${p.position}`}
+                        placeholder="เลือกสินค้า..."
+                        options={productOptions}
+                        className="field w-full text-xs px-2.5 py-1.5"
+                        onChange={(prodName) => {
                           const match = productOptions.find((x) => x.name === prodName);
                           const fallback = match ? match.sellPrice || match.cost * 2 : 0;
                           const price = lookupFilmPrice(
@@ -239,16 +272,7 @@ export function ItemsSection({
                           positions[pIdx] = { ...positions[pIdx], product: prodName, price };
                           updateFilmPositions(idx, positions);
                         }}
-                        className="field text-xs px-2.5 py-1.5"
-                      >
-                        <option value="">เลือกสินค้า...</option>
-                        {productOptions.map((pr) => (
-                          <option key={pr.id} value={pr.name}>
-                            {pr.name}
-                            {pr.shortName ? ` (${pr.shortName})` : ''}
-                          </option>
-                        ))}
-                      </select>
+                      />
                       <input
                         type="number"
                         placeholder="ราคา"
@@ -281,11 +305,14 @@ export function ItemsSection({
                       placeholder="เลือกบริการ..."
                     />
                   ) : (
-                    <select
+                    <ProductPicker
                       value={it.sold}
-                      aria-label="สินค้าที่ขายจริง"
-                      onChange={(e) => {
-                        const prodName = e.target.value;
+                      label="สินค้าที่ขายจริง"
+                      placeholder={it.category ? 'สินค้าที่ขาย...' : 'เลือกชนิดสินค้าก่อน'}
+                      options={productOptions}
+                      disabled={!it.category}
+                      className="field w-full text-sm px-3 py-2 font-medium"
+                      onChange={(prodName) => {
                         const p = productOptions.find((x) => x.name === prodName);
                         const fallback = p ? p.sellPrice || p.cost * 2 : 0;
                         updateItemFields(idx, {
@@ -293,19 +320,7 @@ export function ItemsSection({
                           soldPrice: lookupPrice(prodName, fallback),
                         });
                       }}
-                      disabled={!it.category}
-                      className="field text-sm px-3 py-2 font-medium"
-                    >
-                      <option value="">
-                        {it.category ? 'สินค้าที่ขาย...' : 'เลือกชนิดสินค้าก่อน'}
-                      </option>
-                      {productOptions.map((p) => (
-                        <option key={p.id} value={p.name}>
-                          {p.name}
-                          {p.shortName ? ` (${p.shortName})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   )}
                   <input
                     type="number"
@@ -327,22 +342,16 @@ export function ItemsSection({
                 )}
                 {!isService && (
                   <div className="grid grid-cols-2 gap-2 mt-2">
-                    <select
+                    <ProductPicker
                       value={it.booked}
-                      aria-label="สินค้าที่จองไว้"
-                      onChange={(e) => updateItem(idx, 'booked', e.target.value)}
+                      label="สินค้าที่จองไว้"
+                      placeholder={it.category ? 'สินค้าที่จอง...' : '-'}
+                      emptyLabel="ไม่ระบุ"
+                      options={productOptions}
                       disabled={!it.category}
-                      className="field text-xs px-2.5 py-1.5"
-                      style={{ color: 'var(--ink-soft)' }}
-                    >
-                      <option value="">{it.category ? 'สินค้าที่จอง...' : '-'}</option>
-                      {productOptions.map((p) => (
-                        <option key={p.id} value={p.name}>
-                          {p.name}
-                          {p.shortName ? ` (${p.shortName})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      className="field w-full text-xs px-2.5 py-1.5"
+                      onChange={(prodName) => updateItem(idx, 'booked', prodName)}
+                    />
                     <input
                       type="number"
                       placeholder="ราคาที่จอง"

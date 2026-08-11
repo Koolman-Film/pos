@@ -39,6 +39,7 @@ export function TicketDetailClient({
   shopInfo,
   saveAction,
   optionAction,
+  deleteAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -59,6 +60,7 @@ export function TicketDetailClient({
     listKey: OptionListName,
     values: string[],
   ) => Promise<{ ok: boolean; error?: string }>;
+  deleteAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -79,6 +81,7 @@ export function TicketDetailClient({
       shopInfo={shopInfo}
       saveAction={saveAction}
       optionAction={optionAction}
+      deleteAction={deleteAction}
     />
   );
 }

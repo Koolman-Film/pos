@@ -60,6 +60,7 @@ export function TicketDetail({
   shopInfo,
   saveAction,
   optionAction,
+  deleteAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -80,6 +81,8 @@ export function TicketDetail({
     listKey: OptionListName,
     values: string[],
   ) => Promise<{ ok: boolean; error?: string }>;
+  /** Soft-delete action; omitted (or without `list.delete`) hides the button. */
+  deleteAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
@@ -107,6 +110,7 @@ export function TicketDetail({
   const [corporateBuyers, setCorporateBuyers] = useState<CorporateBuyer[]>(initialCorporateBuyers);
 
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Financial-document + print state.
@@ -147,6 +151,40 @@ export function TicketDetail({
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
       setSaving(false);
+    }
+  }
+
+  /**
+   * ลบใบงาน. Soft delete, so the confirmation says where the ticket goes rather
+   * than warning that it is gone forever — an admin can pull it back out of the
+   * bin. The unsaved-changes guard is cleared first, otherwise leaving the page
+   * right after deleting prompts to save a ticket that no longer shows anywhere.
+   */
+  async function remove() {
+    if (!deleteAction) return;
+    if (
+      !window.confirm(
+        `ลบใบงาน #${t.id} ของ ${t.customer || 'ลูกค้า'}?\n\n` +
+          'ใบงานจะถูกย้ายไปถังขยะ ไม่แสดงในรายการและไม่ถูกนับในแดชบอร์ดอีก ' +
+          'แอดมินกู้คืนได้ภายหลัง (สต็อกที่ตัดไปแล้วจะไม่ถูกคืนอัตโนมัติ)',
+      )
+    )
+      return;
+    setSaveError(null);
+    setDeleting(true);
+    try {
+      const result = await deleteAction(t.id);
+      if (!result.ok) {
+        setSaveError(result.error || 'ลบใบงานไม่สำเร็จ');
+        setDeleting(false);
+        return;
+      }
+      window.__hasUnsavedFormChanges = false;
+      router.push('/tickets');
+      router.refresh();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'ลบใบงานไม่สำเร็จ');
+      setDeleting(false);
     }
   }
 
@@ -421,8 +459,6 @@ export function TicketDetail({
           setCarTypes={opt('car_types')}
           carBrands={options.car_brands}
           setCarBrands={opt('car_brands')}
-          timeSlots={options.time_slots}
-          setTimeSlots={opt('time_slots')}
           retailCustomers={retailCustomers}
           setRetailCustomers={setRetailCustomers}
           onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
@@ -480,8 +516,6 @@ export function TicketDetail({
           extraOptions={options.extra_options}
           setExtraOptions={opt('extra_options')}
           slideTypes={options.slide_types}
-          timeSlots={options.time_slots}
-          setTimeSlots={opt('time_slots')}
           stock={stock}
           toggleExtra={toggleExtra}
           updateExtraDetail={updateExtraDetail}
@@ -555,6 +589,17 @@ export function TicketDetail({
               <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
             </button>
           )}
+        {!isNew && canDo('list.delete') && deleteAction && (
+          <button
+            onClick={remove}
+            disabled={deleting}
+            className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+            style={{ color: '#B23A48', borderColor: '#B23A48', opacity: deleting ? 0.7 : 1 }}
+          >
+            <i className={`fa-solid ${deleting ? 'fa-spinner fa-spin' : 'fa-trash'}`}></i>
+            {deleting ? 'กำลังลบ...' : 'ลบใบงาน'}
+          </button>
+        )}
         {!isNew && (
           <div
             className="rounded-2xl p-4 mt-4"

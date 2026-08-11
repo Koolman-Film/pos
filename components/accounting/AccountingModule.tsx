@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import { createPortal } from 'react-dom';
 
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, todayValue } from '@/lib/domain/now';
+import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
@@ -35,8 +38,11 @@ import type { Shop } from '@/components/ui/PeriodShopFilter';
  *     with `xlsx` on the server, returning base64 the client downloads. PDF
  *     export stays `window.print()` (pure client DOM, nothing to authorize).
  *   - StatusPill receives the prototype's KEYED colour map (correction C1).
- *   - `attachments` are display-only in the add form: the `expenses` table has no
- *     attachments column, so they are not persisted (flagged for the plan owner).
+ *   - `attachments` are real files: the browser uploads each receipt straight to
+ *     the private `expense-attachments` bucket and the Server Action registers
+ *     the paths in `expense_attachments` (migration 0014). They were previously
+ *     display-only — the table had no column and pressing บันทึก dropped them,
+ *     which the trial run reported as "ไม่แสดงไฟล์แนบ".
  */
 
 /** An expense row flattened for display (prototype shape). */
@@ -51,7 +57,7 @@ export type ExpenseView = {
   date?: string;
   dateObj?: Date | string | null;
   due?: string;
-  attachments?: string[];
+  attachments?: ExpenseAttachment[];
 };
 
 /** A petty-cash entry flattened for display (prototype shape). */
@@ -64,12 +70,27 @@ export type PettyCashView = {
   note?: string;
 };
 
+/** A receipt already uploaded to the private bucket, ready to be registered. */
+export type UploadedAttachment = {
+  /** Key within the `expense-attachments` bucket. */
+  path: string;
+  /** The original filename, kept for display (storage keys are ASCII-safe). */
+  fileName: string;
+  mimeType: string;
+  size: number;
+};
+
+/** An attachment as it comes back for display. */
+export type ExpenseAttachment = { id: number; fileName: string; path: string };
+
 /** Payload handed to the add-expense Server Action. `shop` is already a concrete id. */
 export type NewExpenseInput = {
   shop: string;
   source: string;
   status: string;
   lines: { desc: string; category: string; amount: number }[];
+  /** Receipts shared by every line in this submission, as the panel states. */
+  attachments?: UploadedAttachment[];
 };
 
 /** Payload handed to the top-up Server Action. */
@@ -110,38 +131,6 @@ function downloadBase64(base64: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-function isInPeriod(
-  dateObj: Date | string | null | undefined,
-  per: string,
-  perVal: string,
-  rStart: string,
-  rEnd: string,
-): boolean {
-  if (!dateObj) return true;
-  const d = new Date(dateObj);
-  d.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (per === 'today') return d.getTime() === today.getTime();
-  if (per === 'month') {
-    const [y, m] = (perVal || '').split('-').map(Number);
-    return y && m ? d.getFullYear() === y && d.getMonth() === m - 1 : true;
-  }
-  if (per === 'year') {
-    const rawY = Number(perVal);
-    const y = rawY && rawY > 2400 ? rawY - 543 : today.getFullYear();
-    return d.getFullYear() === y;
-  }
-  if (per === 'range') {
-    const s = rStart ? new Date(rStart) : null;
-    const e = rEnd ? new Date(rEnd) : null;
-    if (s) s.setHours(0, 0, 0, 0);
-    if (e) e.setHours(23, 59, 59, 999);
-    return (!s || d >= s) && (!e || d <= e);
-  }
-  return true;
-}
-
 export function AccountingModule({
   expenses,
   pettyCash,
@@ -156,6 +145,7 @@ export function AccountingModule({
   updateExpenseAction,
   deleteExpenseAction,
   exportAction,
+  attachmentUrlAction,
   accessibleShops = [],
   canSeeAllShops = true,
 }: {
@@ -172,6 +162,8 @@ export function AccountingModule({
   updateExpenseAction?: (input: UpdateExpenseInput) => Promise<void>;
   deleteExpenseAction?: (id: number) => Promise<void>;
   exportAction?: (payload: ExportPayload) => Promise<{ fileName: string; base64: string } | null>;
+  /** Mints a short-lived signed URL for a stored receipt. */
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
   accessibleShops?: Shop[];
   canSeeAllShops?: boolean;
 }) {
@@ -184,7 +176,7 @@ export function AccountingModule({
 
   const [expenseCategories, setExpenseCategories] = useState<string[]>(expenseCategoriesProp);
   const [paymentSources, setPaymentSources] = useState<string[]>(paymentSourcesProp);
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
 
   // Gates the body-level print portal below; document does not exist during SSR.
   const mounted = useIsMounted();
@@ -194,7 +186,7 @@ export function AccountingModule({
   const [shopFilter, setShopFilter] = useState(accessibleShops[0]?.id || 'all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [period, setPeriod] = useState('today');
+  const [period, setPeriod] = useState<string>(DEFAULT_PERIOD);
   const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());
@@ -203,13 +195,19 @@ export function AccountingModule({
     shop: firstShop,
     source: '',
     status: 'จ่ายแล้ว',
-    attachments: [] as string[],
     lines: [{ desc: '', category: '', amount: 0 }] as ExpenseLine[],
   });
   const emptyTopup = () => ({ shop: firstShop, amount: 0 as number | string, note: '' });
   const [ex, setEx] = useState(emptyEx);
+  // The chosen receipts, held outside `ex` because a File does not survive the
+  // JSON round-trip the dirty check uses — it would stringify to `{}` and every
+  // attachment would look identical to the pristine form.
+  const [exFiles, setExFiles] = useState<File[]>([]);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [topup, setTopup] = useState(emptyTopup);
-  const isExDirty = showAdd && JSON.stringify(ex) !== JSON.stringify(emptyEx());
+  const isExDirty =
+    showAdd && (JSON.stringify(ex) !== JSON.stringify(emptyEx()) || exFiles.length > 0);
   const isTopupDirty = showTopup && JSON.stringify(topup) !== JSON.stringify(emptyTopup());
   useUnsavedChangesGuard(
     isExDirty || isTopupDirty,
@@ -221,7 +219,7 @@ export function AccountingModule({
   }
 
   const [showCashDetail, setShowCashDetail] = useState(false);
-  const [cashPeriod, setCashPeriod] = useState('today');
+  const [cashPeriod, setCashPeriod] = useState<string>(DEFAULT_PERIOD);
   const [cashPeriodValue, setCashPeriodValue] = useState(() => currentMonthValue());
   const [cashRangeStart, setCashRangeStart] = useState(() => daysAgoValue(6));
   const [cashRangeEnd, setCashRangeEnd] = useState(() => todayValue());
@@ -309,6 +307,34 @@ export function AccountingModule({
   }
   const exLinesTotal = ex.lines.reduce((s, l) => s + Number(l.amount || 0), 0);
 
+  /**
+   * Uploads the chosen receipts to the private bucket and returns what the
+   * Server Action needs to register them.
+   *
+   * The upload happens from the browser rather than through the Server Action:
+   * a Server Action body is capped (1 MB by default) and a phone photo of a slip
+   * routinely exceeds that, so the file goes straight to storage and only its
+   * path travels through the action. Storage RLS (migration 0014) re-checks the
+   * caller's `accounting.addExpense` on the way in.
+   */
+  async function uploadExpenseFiles(shop: string): Promise<UploadedAttachment[]> {
+    if (exFiles.length === 0) return [];
+    const supabase = createSupabaseClient();
+    const uploaded: UploadedAttachment[] = [];
+    for (const file of exFiles) {
+      // Storage keys are ASCII-safe; the original name is kept in the row, so a
+      // Thai filename still displays correctly.
+      const safeName = file.name.replace(/[^\w.-]+/g, '_').slice(-80);
+      const path = `${shop}/${crypto.randomUUID()}-${safeName}`;
+      const { error } = await supabase.storage
+        .from('expense-attachments')
+        .upload(path, file, { contentType: file.type || 'application/octet-stream' });
+      if (error) throw new Error(`อัปโหลด "${file.name}" ไม่สำเร็จ — ${error.message}`);
+      uploaded.push({ path, fileName: file.name, mimeType: file.type, size: file.size });
+    }
+    return uploaded;
+  }
+
   function addExpense() {
     if (!addExpenseAction) return;
     const targetShop = shopFilter === 'all' ? ex.shop : shopFilter;
@@ -316,10 +342,43 @@ export function AccountingModule({
       .filter((l) => l.desc.trim() || l.category || Number(l.amount) > 0)
       .map((l) => ({ desc: l.desc, category: l.category, amount: Number(l.amount || 0) }));
     if (lines.length === 0) return;
+    setAddError(null);
     startTransition(async () => {
-      await addExpenseAction({ shop: targetShop, source: ex.source, status: ex.status, lines });
-      setShowAdd(false);
-      setEx(emptyEx());
+      try {
+        // Upload first: if a file fails, nothing has been written yet and the
+        // user still has the form in front of them.
+        const attachments = await uploadExpenseFiles(targetShop);
+        await addExpenseAction({
+          shop: targetShop,
+          source: ex.source,
+          status: ex.status,
+          lines,
+          attachments,
+        });
+        setShowAdd(false);
+        setEx(emptyEx());
+        setExFiles([]);
+      } catch (e) {
+        setAddError(e instanceof Error ? e.message : 'บันทึกค่าใช้จ่ายไม่สำเร็จ');
+      }
+    });
+  }
+
+  /**
+   * Open a stored receipt. The bucket is private, so the URL is minted per click
+   * by a Server Action and expires in a minute — long enough to open the tab,
+   * short enough that a copied link is not a leak.
+   */
+  function openAttachment(a: ExpenseAttachment) {
+    if (!attachmentUrlAction) return;
+    setOpeningPath(a.path);
+    startTransition(async () => {
+      try {
+        const res = await attachmentUrlAction(a.path);
+        if (res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
+      } finally {
+        setOpeningPath(null);
+      }
     });
   }
 
@@ -891,50 +950,59 @@ export function AccountingModule({
                   type="file"
                   accept="image/*,.pdf"
                   multiple
+                  aria-label="แนบไฟล์หลักฐานการจ่าย"
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
-                    if (files.length)
-                      setEx({
-                        ...ex,
-                        attachments: [...(ex.attachments || []), ...files.map((f) => f.name)],
-                      });
+                    if (files.length) setExFiles((prev) => [...prev, ...files]);
                     e.target.value = '';
                   }}
                   className="text-xs flex-1"
                 />
               </div>
-              {(ex.attachments || []).length > 0 && (
+              {exFiles.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {ex.attachments.map((fn, fi) => (
+                  {exFiles.map((file, fi) => (
                     <span
-                      key={fi}
+                      key={`${file.name}-${fi}`}
                       className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
                       style={{ background: 'var(--paper)', color: 'var(--primary)' }}
                     >
                       <i className="fa-solid fa-paperclip"></i>
-                      {fn}
-                      <i
-                        className="fa-solid fa-xmark cursor-pointer"
+                      {file.name}
+                      <button
+                        type="button"
+                        aria-label={`เอา ${file.name} ออก`}
                         style={{ color: '#B23A48' }}
-                        onClick={() =>
-                          setEx({
-                            ...ex,
-                            attachments: ex.attachments.filter((_, fi2) => fi2 !== fi),
-                          })
-                        }
-                      ></i>
+                        onClick={() => setExFiles((prev) => prev.filter((_, fi2) => fi2 !== fi))}
+                      >
+                        <i className="fa-solid fa-xmark"></i>
+                      </button>
                     </span>
                   ))}
                 </div>
               )}
             </div>
           </div>
+          {addError && (
+            <p
+              className="text-sm mb-3 px-3 py-2 rounded-lg"
+              style={{ background: '#FBEAEC', color: '#B23A48' }}
+              role="alert"
+            >
+              <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
+              {addError}
+            </p>
+          )}
           <button
             onClick={addExpense}
+            disabled={isPending}
             className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold"
+            style={{ opacity: isPending ? 0.7 : 1 }}
           >
-            บันทึกข้อมูล
-            {ex.lines.length > 1 ? ` (${ex.lines.length} รายการ, รวม ${fmt(exLinesTotal)})` : ''}
+            {isPending && exFiles.length > 0 ? 'กำลังอัปโหลดไฟล์แนบ...' : 'บันทึกข้อมูล'}
+            {!isPending && ex.lines.length > 1
+              ? ` (${ex.lines.length} รายการ, รวม ${fmt(exLinesTotal)})`
+              : ''}
           </button>
         </div>
       )}
@@ -1052,19 +1120,38 @@ export function AccountingModule({
                 style={{ borderBottom: '1px solid var(--line)' }}
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium truncate flex items-center gap-2">
-                    {e.desc}
-                    {e.attachments && e.attachments.length > 0 && (
-                      <i
-                        className="fa-solid fa-paperclip text-xs"
-                        style={{ color: 'var(--ink-faint)' }}
-                        title={e.attachments.join(', ')}
-                      ></i>
-                    )}
-                  </p>
+                  <p className="text-sm font-medium truncate">{e.desc}</p>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
                     {e.category} &middot; {e.source} &middot; {e.date}
                   </p>
+                  {/*
+                    The bucket is private, so each chip fetches a short-lived
+                    signed URL on click rather than rendering a link the browser
+                    could not follow (and that would leak if copied).
+                  */}
+                  {e.attachments && e.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {e.attachments.map((a) => (
+                        <button
+                          key={a.id}
+                          onClick={() => openAttachment(a)}
+                          disabled={openingPath === a.path}
+                          className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                          style={{ background: 'var(--paper)', color: 'var(--primary)' }}
+                          title={`เปิด ${a.fileName}`}
+                        >
+                          <i
+                            className={`fa-solid ${
+                              openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
+                            }`}
+                          ></i>
+                          <span className="truncate" style={{ maxWidth: 160 }}>
+                            {a.fileName}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right flex-shrink-0 flex items-center gap-2">
                   <span className="text-sm font-semibold">{fmt(e.amount)}</span>

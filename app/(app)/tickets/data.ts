@@ -68,17 +68,23 @@ type ListRow = {
     discount_value: number | null;
   }[];
   ticket_payments: { amount: number }[];
+  deleted_at: string | null;
+  deleted_by: string | null;
 };
+
+const LIST_SELECT =
+  'id, shop_id, customer_name, plate, status, tech_by_category, drop_off_date, pickup_date, deleted_at, deleted_by, ' +
+  'ticket_items(category, sold_price, discount_type, discount_value), ticket_payments(amount)';
 
 export async function loadTicketList(): Promise<TicketListRow[]> {
   const supabase = await createClient();
   // RLS scopes rows to the caller's shops — this is the real backstop.
   const { data } = await supabase
     .from('tickets')
-    .select(
-      'id, shop_id, customer_name, plate, status, tech_by_category, drop_off_date, pickup_date, ' +
-        'ticket_items(category, sold_price, discount_type, discount_value), ticket_payments(amount)',
-    )
+    .select(LIST_SELECT)
+    // Soft-deleted tickets (migration 0013) live on in the table but are gone
+    // from every list; the bin below is the only place they surface.
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   return ((data ?? []) as unknown as ListRow[]).map((t) => ({
@@ -97,6 +103,45 @@ export async function loadTicketList(): Promise<TicketListRow[]> {
     dropOffDateObj: t.drop_off_date ? new Date(t.drop_off_date) : null,
     pickupDateObj: t.pickup_date ? new Date(t.pickup_date) : null,
     techByCategory: (t.tech_by_category as Record<string, string[]>) || {},
+  }));
+}
+
+/**
+ * The bin: tickets flagged by `deleteTicket`, newest deletion first. Only ever
+ * rendered for a caller holding `list.restore`, and RLS still scopes the rows to
+ * their shops. `deleted_by` is resolved to a name here rather than embedded, so
+ * a ticket whose deleter has since been removed still lists.
+ */
+export async function loadDeletedTicketList(): Promise<TicketListRow[]> {
+  const supabase = await createClient();
+  const [{ data }, { data: users }] = await Promise.all([
+    supabase
+      .from('tickets')
+      .select(LIST_SELECT)
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false }),
+    supabase.from('app_users').select('id, name'),
+  ]);
+  const nameById = new Map((users ?? []).map((u) => [u.id, u.name]));
+
+  return ((data ?? []) as unknown as ListRow[]).map((t) => ({
+    id: t.id,
+    shop: t.shop_id,
+    customer: t.customer_name,
+    plate: t.plate,
+    status: t.status,
+    items: (t.ticket_items ?? []).map((i) => ({
+      category: i.category,
+      soldPrice: Number(i.sold_price || 0),
+      discountType: (i.discount_type as 'percent' | 'amount' | null) || undefined,
+      discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
+    })),
+    payments: (t.ticket_payments ?? []).map((p) => ({ amount: Number(p.amount || 0) })),
+    dropOffDateObj: t.drop_off_date ? new Date(t.drop_off_date) : null,
+    pickupDateObj: t.pickup_date ? new Date(t.pickup_date) : null,
+    techByCategory: (t.tech_by_category as Record<string, string[]>) || {},
+    deletedAt: t.deleted_at ? new Date(t.deleted_at) : null,
+    deletedByName: t.deleted_by ? (nameById.get(t.deleted_by) ?? '') : '',
   }));
 }
 

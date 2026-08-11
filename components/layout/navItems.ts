@@ -24,6 +24,7 @@ export type NavItem = {
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'dashboard', label: 'แดชบอร์ด', icon: 'fa-gauge-high', href: '/dashboard' },
   { id: 'list', label: 'Book งาน', icon: 'fa-clipboard-list', href: '/tickets' },
+  { id: 'customers', label: 'ทะเบียนลูกค้า', icon: 'fa-address-book', href: '/customers' },
   { id: 'wholesale', label: 'ขายส่ง', icon: 'fa-truck-fast', href: '/wholesale' },
   { id: 'stock', label: 'สต็อกสินค้า', icon: 'fa-boxes-stacked', href: '/stock' },
   { id: 'commission', label: 'ค่าคอมมิชชั่น', icon: 'fa-percent', href: '/commission' },

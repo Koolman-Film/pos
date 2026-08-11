@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 
 import { fmt } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, todayValue } from '@/lib/domain/now';
+import { DEFAULT_PERIOD } from '@/lib/domain/period';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 import { StatusPill } from '@/components/ui/StatusPill';
 
@@ -71,7 +72,7 @@ export function CommissionModule({
   const [shopFilter, setShopFilter] = useState(
     canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
   );
-  const [period, setPeriod] = useState('today');
+  const [period, setPeriod] = useState<string>(DEFAULT_PERIOD);
   const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());

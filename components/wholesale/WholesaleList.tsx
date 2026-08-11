@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
 import { fmt } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
+import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { orderTotal, orderPaid } from '@/lib/domain/orders';
 
@@ -69,7 +70,7 @@ export function WholesaleList({
   const [shopFilter, setShopFilter] = useState(
     canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
   );
-  const [period, setPeriod] = useState('today');
+  const [period, setPeriod] = useState<string>(DEFAULT_PERIOD);
   const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());
@@ -80,6 +81,11 @@ export function WholesaleList({
   if (shopFilter !== 'all') visible = visible.filter((o) => o.shop === shopFilter);
   if (productFilter !== 'all')
     visible = visible.filter((o) => o.items.some((it) => it.name === productFilter));
+  // The period bar was rendered but never consulted, so every PO showed
+  // regardless of the selected window. POs are dated by `orders.created_at`.
+  visible = visible.filter((o) =>
+    isInPeriod(o.createdAt, period, periodValue, rangeStart, rangeEnd),
+  );
 
   const productScoped = list.filter(
     (o) =>
