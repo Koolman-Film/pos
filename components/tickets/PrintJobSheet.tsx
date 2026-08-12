@@ -67,6 +67,17 @@ export const QC_CHECKLIST_SECTIONS: { title: string; items: string[] }[] = [
 ];
 
 /**
+ * The solid bars on the financial document — the title band, the table header
+ * and the ยอดรวมสุทธิ bar.
+ *
+ * The shop's red, the same `--primary` the save button carries in light mode,
+ * written as a literal on purpose: a printed sheet must not change colour with
+ * the app's theme, and the CSS variable flips to a lighter red in dark mode.
+ * `.doc-table th` in app/globals.css carries the same value.
+ */
+const DOC_ACCENT = '#7A2333';
+
+/**
  * "มัดจำ" reads as a noun on its own; the printed line wants the act of paying
  * it. The other two types are already phrased that way ("ชำระส่วนที่เหลือ"), so
  * only the ones that are not get the verb.
@@ -1382,7 +1393,7 @@ export function PrintJobSheet({
           fontSize: strong ? 13 : 12,
           fontWeight: strong ? 'bold' : 'normal',
           padding: strong ? '6px 10px' : '3px 10px',
-          background: strong ? '#211A18' : 'transparent',
+          background: strong ? DOC_ACCENT : 'transparent',
           color: strong ? '#fff' : undefined,
           borderRadius: strong ? 4 : 0,
         }}
@@ -1401,7 +1412,7 @@ export function PrintJobSheet({
               receipt findable in a stack of them. */}
           <div
             style={{
-              background: '#211A18',
+              background: DOC_ACCENT,
               color: '#fff',
               borderRadius: 6,
               padding: '10px 16px',
@@ -1413,10 +1424,16 @@ export function PrintJobSheet({
             <p style={{ margin: 0, fontSize: 20, fontWeight: 'bold', letterSpacing: 0.5 }}>
               {docType}
             </p>
-            <p style={{ margin: '2px 0 0', fontSize: 11 }}>
+            {/* Own line each, under the title. Run together on one line they
+                read as a single reference and the eye has to split them; the
+                number is what gets quoted on the phone. */}
+            <p style={{ margin: '4px 0 0', fontSize: 12 }}>
               {/* The ticket id already carries the shop — JT-CM-00216. Prefixing
                   t.shop again printed RCT-CM-CM-00216 on every document. */}
-              เลขที่ {docPrefix}-{t.id.replace('JT-', '')} &middot; วันที่ {fmtThaiDate(new Date())}
+              เลขที่เอกสาร: {docPrefix}-{t.id.replace('JT-', '')}
+            </p>
+            <p style={{ margin: '1px 0 0', fontSize: 12 }}>
+              วันที่เอกสาร: {fmtThaiDate(new Date())}
             </p>
           </div>
 
