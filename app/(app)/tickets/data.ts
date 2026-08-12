@@ -249,6 +249,8 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
 
 type ExtraMeta = {
   notes?: string;
+  notesByCategory?: Record<string, string>;
+  wrapOptions?: string[];
   createdBy?: string;
   qcPhotos?: string[];
   installConfirmed?: boolean;
@@ -335,6 +337,8 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     pickupDateObj: new Date(t.pickup_date),
     extras: extras as Ticket['extras'],
     notes: meta.notes ?? '',
+    notesByCategory: meta.notesByCategory ?? {},
+    wrapOptions: meta.wrapOptions ?? [],
     createdBy: meta.createdBy ?? '',
     qcPhotos: meta.qcPhotos ?? [],
     installConfirmed: !!meta.installConfirmed,
@@ -394,6 +398,8 @@ export function blankTicket(shop: string): Ticket {
     payments: [],
     extras: {},
     notes: '',
+    notesByCategory: {},
+    wrapOptions: [],
     qcPhotos: [],
   };
 }

@@ -180,3 +180,66 @@ describe('serializeTicket — สินค้าที่สนใจ (cheer-up 
     expect(firstItem(t).interestedPrice).toBe(0);
   });
 });
+
+/**
+ * หมายเหตุแยกตามชนิดสินค้า and the ฟิล์มกันรอย tick list ride in the `extras`
+ * jsonb under `__meta`, the same escape hatch `notes` and `qcPhotos` already
+ * use. Nothing else on the round trip would notice if they were dropped here,
+ * which is exactly how สินค้าที่สนใจ went missing for a whole trial run.
+ */
+const meta = (t: Ticket) =>
+  serializeTicket(t, false).extras.__meta as {
+    notesByCategory: Record<string, string>;
+    wrapOptions: string[];
+  };
+
+describe('serializeTicket — per-category notes and wrap options', () => {
+  it('carries a note written against one ชนิดสินค้า', () => {
+    const t = baseTicket({
+      notesByCategory: { ฟิล์มกรองแสง: 'ลูกค้าขอเข้มพิเศษบานหน้า' },
+    } as unknown as Partial<Ticket>);
+    expect(meta(t).notesByCategory).toEqual({ ฟิล์มกรองแสง: 'ลูกค้าขอเข้มพิเศษบานหน้า' });
+  });
+
+  it('drops a note that was typed and then cleared', () => {
+    const t = baseTicket({
+      notesByCategory: { ฟิล์มกรองแสง: '   ', เครื่องเสียง: 'ถอดลำโพงเดิมเก็บไว้' },
+    } as unknown as Partial<Ticket>);
+    expect(meta(t).notesByCategory).toEqual({ เครื่องเสียง: 'ถอดลำโพงเดิมเก็บไว้' });
+  });
+
+  it('carries the ticked Option / รายการแถม entries', () => {
+    const t = baseTicket({
+      wrapOptions: ['แถม หน้าจอ', 'แกะ โลโก้'],
+    } as unknown as Partial<Ticket>);
+    expect(meta(t).wrapOptions).toEqual(['แถม หน้าจอ', 'แกะ โลโก้']);
+  });
+
+  it('sends empty containers rather than undefined for a ticket with neither', () => {
+    expect(meta(baseTicket()).notesByCategory).toEqual({});
+    expect(meta(baseTicket()).wrapOptions).toEqual([]);
+  });
+});
+
+describe('serializeTicket — payment dates', () => {
+  it('keeps the stored date instead of walking it back a day', () => {
+    // `new Date(d + 'T00:00:00').toISOString()` reports local midnight in UTC,
+    // which in Asia/Bangkok is 17:00 the day before — so every save moved each
+    // payment one day earlier. Same defect the accounting dates had.
+    const t = baseTicket({
+      payments: [{ type: 'มัดจำ', method: 'เงินสด', amount: 1000, date: '2026-08-13' }],
+    } as unknown as Partial<Ticket>);
+    expect(serializeTicket(t, false).payments[0].paidAt).toBe('2026-08-13');
+  });
+
+  it('falls back to the local today, not the UTC one', () => {
+    const t = baseTicket({
+      payments: [{ type: 'มัดจำ', method: 'เงินสด', amount: 1000, date: '' }],
+    } as unknown as Partial<Ticket>);
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    expect(serializeTicket(t, false).payments[0].paidAt).toBe(
+      `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
+    );
+  });
+});

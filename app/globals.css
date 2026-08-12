@@ -209,6 +209,19 @@ body {
     color: #211a18 !important;
     opacity: 1 !important;
   }
+  /*
+    The rule above deliberately flattens the sheet to ink, so a colour printer
+    and a mono one produce the same document — an inline `color` on the element
+    itself cannot survive it. `.print-gain` is the one exception the shop asked
+    for: the cheer-up figure is money the upsell earned and has to read as a
+    gain, not as one more line of what the customer owes. Two classes beat the
+    `.print-area *` above on specificity, so no !important arms race is needed
+    beyond the one already here.
+  */
+  .print-area .print-gain,
+  .print-area .print-gain * {
+    color: #2f7a4f !important;
+  }
   .print-area table {
     width: 100%;
     border-collapse: collapse;

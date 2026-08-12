@@ -7,6 +7,8 @@ import { fmt, fmtThaiDate, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
+import { WRAP_CATEGORY, WRAP_OPTIONS } from './wrapOptions';
+
 import type { ShopInfo, StockRow, Ticket } from './types';
 
 export type PrintMode = 'job' | 'sale' | 'offsite' | 'doc' | null;
@@ -62,6 +64,22 @@ export const QC_CHECKLIST_SECTIONS: { title: string; items: string[] }[] = [
   },
   { title: 'สภาพภายในรถ', items: ['เพดานรถ', 'คอนโซลรถ', 'เบาะรถ', 'แผงข้าง'] },
   { title: 'สภาพภายนอกรถ', items: ['สภาพรอบคัน', 'กระจกบานหน้า-หลัง', 'กระจกบานข้าง'] },
+];
+
+/**
+ * The ภายในตัวรถ grid on the ใบเช็ครถ — the interior parts a wrap job touches.
+ *
+ * Both columns were wrong in the port: "Piano Black" (the trim finish) had been
+ * transcribed as "Pino Black", and the left column repeated กาบประตูหน้าซ้าย on
+ * all four rows, so the technician had one door trim listed four times and the
+ * other three not at all.
+ */
+const WRAP_INTERIOR_PARTS: [string, string][] = [
+  ['หน้าจอ', 'Piano Black'],
+  ['กาบประตูหน้าซ้าย', 'ที่เก็บของด้านหลัง'],
+  ['กาบประตูหน้าขวา', 'หน้าปัดรถยนต์'],
+  ['กาบประตูหลังซ้าย', 'แผงเกียร์'],
+  ['กาบประตูหลังขวา', 'ช่องเก็บของกลาง'],
 ];
 
 const emboss: CSSProperties = {
@@ -151,6 +169,11 @@ export function PrintJobSheet({
   const categories = [...new Set(t.items.filter((i) => i.sold).map((i) => i.category))];
   const filledExtras = extraOptions.filter((name) => t.extras?.[name]?.checked);
   const info = shopInfo[t.shop] || {};
+  const paidMethods = [
+    ...new Set(
+      t.payments.filter((p) => Number(p.amount || 0) > 0 && p.method).map((p) => p.method),
+    ),
+  ];
 
   function extrasBlock(gap: number) {
     if (filledExtras.length === 0) return null;
@@ -195,6 +218,122 @@ export function PrintJobSheet({
             </p>
           );
         })}
+      </div>
+    );
+  }
+
+  /**
+   * หมายเหตุ, printed big enough to be read across a workbench.
+   *
+   * `category` scopes it to one ใบงานติดตั้ง page: that page shows the ticket's
+   * general note plus the note written for THAT ชนิดสินค้า. Passing null (the
+   * sale and offsite sheets, which cover the whole job) prints the general note
+   * and every category note under its own heading.
+   */
+  function notesBlock(category: string | null) {
+    const general = (t.notes || '').trim();
+    const perCategory = Object.entries(t.notesByCategory || {})
+      .filter(([cat, note]) => (category ? cat === category : true) && note && note.trim())
+      .map(([cat, note]) => [cat, note.trim()] as const);
+    if (!general && perCategory.length === 0) return null;
+
+    return (
+      <div
+        style={{
+          border: '1.5px solid #333',
+          borderRadius: 6,
+          padding: '8px 12px',
+          marginBottom: 12,
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 12, fontWeight: 'bold', color: '#555' }}>หมายเหตุ</p>
+        {general && (
+          <p
+            style={{
+              margin: '3px 0 0',
+              fontSize: 16,
+              fontWeight: 'bold',
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {general}
+          </p>
+        )}
+        {perCategory.map(([cat, note]) => (
+          <p
+            key={cat}
+            style={{
+              margin: '4px 0 0',
+              fontSize: 16,
+              fontWeight: 'bold',
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {/* The heading is only useful where more than one job's note can
+                appear — on its own installation page it is already implied. */}
+            {!category && <span style={{ fontSize: 12, color: '#555' }}>{cat}: </span>}
+            {note}
+          </p>
+        ))}
+      </div>
+    );
+  }
+
+  /** Option / รายการแถม — the paper form's tick row, ticked from the ticket. */
+  function wrapOptionsBlock() {
+    const selected = new Set(t.wrapOptions ?? []);
+    return (
+      <div
+        style={{
+          border: '1px solid #666',
+          borderRadius: 6,
+          padding: '8px 10px',
+          marginBottom: 12,
+          display: 'flex',
+          gap: 10,
+          alignItems: 'flex-start',
+        }}
+      >
+        <span style={{ fontSize: 12, fontWeight: 'bold', whiteSpace: 'nowrap', paddingTop: 1 }}>
+          Option / รายการแถม :
+        </span>
+        <div
+          style={{
+            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '5px 10px',
+          }}
+        >
+          {WRAP_OPTIONS.map((name) => (
+            <span
+              key={name}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}
+            >
+              {/* Every box prints, ticked or not: the sheet is still the paper
+                  form the technician can mark up if something changes on site. */}
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 14,
+                  height: 14,
+                  border: '1.5px solid #333',
+                  borderRadius: 2,
+                  textAlign: 'center',
+                  lineHeight: '12px',
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                  flexShrink: 0,
+                }}
+              >
+                {selected.has(name) ? '✓' : ' '}
+              </span>
+              <span style={selected.has(name) ? { fontWeight: 'bold' } : undefined}>{name}</span>
+            </span>
+          ))}
+        </div>
       </div>
     );
   }
@@ -379,11 +518,8 @@ export function PrintJobSheet({
                 );
               })}
             <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-            {t.notes && (
-              <p style={{ fontSize: 12, margin: '0 0 10px' }}>
-                <b>หมายเหตุ:</b> {t.notes}
-              </p>
-            )}
+            {cat === WRAP_CATEGORY && wrapOptionsBlock()}
+            {notesBlock(cat)}
             {extrasBlock(16)}
             <p
               style={{
@@ -593,26 +729,12 @@ export function PrintJobSheet({
                 </p>
                 <table style={{ fontSize: 10 }}>
                   <tbody>
-                    <tr>
-                      <td>หน้าจอ</td>
-                      <td>Pino Black</td>
-                    </tr>
-                    <tr>
-                      <td>กาบประตูหน้าซ้าย</td>
-                      <td>ที่เก็บของด้านหลัง</td>
-                    </tr>
-                    <tr>
-                      <td>กาบประตูหน้าซ้าย</td>
-                      <td>หน้าปัดรถยนต์</td>
-                    </tr>
-                    <tr>
-                      <td>กาบประตูหน้าซ้าย</td>
-                      <td>แผงเกียร์</td>
-                    </tr>
-                    <tr>
-                      <td>กาบประตูหน้าซ้าย</td>
-                      <td>ช่องเก็บของกลาง</td>
-                    </tr>
+                    {WRAP_INTERIOR_PARTS.map(([left, right]) => (
+                      <tr key={left}>
+                        <td>{left}</td>
+                        <td>{right}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -658,6 +780,7 @@ export function PrintJobSheet({
                 </table>
               </div>
             </div>
+            {wrapOptionsBlock()}
             <p style={{ fontSize: 11, marginTop: 20 }}>
               ลงชื่อ................................ผู้ตรวจสอบก่อนติดตั้ง
             </p>
@@ -671,20 +794,46 @@ export function PrintJobSheet({
         <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานขาย</h1>
         <div style={{ textAlign: 'right', marginBottom: 16 }}>
           <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
-          <p
+          {/*
+            Both ends of the job, in the order they happen. Only the delivery
+            date was printed, so the sheet never said when the car came in — and
+            "how long have you had my car" is the question the counter fields.
+            The delivery date keeps the emphasis; it is still the one the
+            customer is here about.
+          */}
+          <div
             style={{
-              margin: 0,
-              display: 'inline-block',
-              fontSize: 17,
-              fontWeight: 'bold',
-              border: '2px solid #D8A83A',
-              borderRadius: 6,
-              padding: '4px 12px',
-              background: '#FFF7DD',
+              display: 'flex',
+              gap: 8,
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              flexWrap: 'wrap',
             }}
           >
-            วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
-          </p>
+            <span
+              style={{
+                fontSize: 14,
+                fontWeight: 'bold',
+                border: '1.5px solid #666',
+                borderRadius: 6,
+                padding: '4px 10px',
+              }}
+            >
+              วันที่รับงาน: {fmtThaiDate(t.dropOffDateObj)}
+            </span>
+            <span
+              style={{
+                fontSize: 17,
+                fontWeight: 'bold',
+                border: '2px solid #D8A83A',
+                borderRadius: 6,
+                padding: '4px 12px',
+                background: '#FFF7DD',
+              }}
+            >
+              วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
+            </span>
+          </div>
           <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
           <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
             บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
@@ -819,10 +968,46 @@ export function PrintJobSheet({
             <span>ยอดสุทธิ</span>
             <span>{fmt(total)}</span>
           </div>
+          {/*
+            The methods the money actually came in by. A customer looking at
+            "ชำระแล้ว 5,000" had no way to tell a cash deposit from a transfer,
+            which is exactly what the shop gets asked about later. Rows with no
+            amount on them are ignored — an empty payment row is not a channel.
+          */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span>ชำระแล้ว</span>
+            <span>
+              ชำระแล้ว
+              {paidMethods.length > 0 && (
+                <span style={{ color: '#666', marginLeft: 6 }}>({paidMethods.join(', ')})</span>
+              )}
+            </span>
             <span>{fmt(paid)}</span>
           </div>
+          {t.payments.filter((p) => Number(p.amount || 0) > 0).length > 1 && (
+            // More than one receipt: the single "ชำระแล้ว" figure hides how it
+            // was split, so each one is listed with its type, method and date.
+            <div style={{ margin: '0 0 8px 12px' }}>
+              {t.payments
+                .filter((p) => Number(p.amount || 0) > 0)
+                .map((p, pi) => (
+                  <div
+                    key={pi}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: 11,
+                      color: '#666',
+                    }}
+                  >
+                    <span>
+                      {p.type || 'รับชำระ'} &middot; {p.method || '-'}
+                      {p.date ? ` · ${fmtThaiDate(new Date(p.date))}` : ''}
+                    </span>
+                    <span>{fmt(Number(p.amount || 0))}</span>
+                  </div>
+                ))}
+            </div>
+          )}
           {total - paid <= 0 ? (
             <div
               style={{
@@ -855,8 +1040,15 @@ export function PrintJobSheet({
             </div>
           )}
           {t.items.some((i) => i.interested) && (
+            // Green, the same colour a gain carries everywhere else in the app.
+            // `print-gain` rather than an inline colour: @media print flattens
+            // every colour inside .print-area to ink, so an inline value here
+            // would look right on screen and print black (see app/globals.css).
             <div style={{ marginTop: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8A5A12' }}>
+              <div
+                className="print-gain"
+                style={{ display: 'flex', justifyContent: 'space-between', color: '#2F7A4F' }}
+              >
                 <span>ส่วนต่างเชียร์ขาย (Cheer-up)</span>
                 <span>
                   {(() => {
@@ -888,10 +1080,11 @@ export function PrintJobSheet({
                   return (
                     <div key={cat} style={{ marginTop: 3 }}>
                       <p
+                        className="print-gain"
                         style={{
                           margin: 0,
                           fontSize: 11,
-                          color: '#8A5A12',
+                          color: '#2F7A4F',
                           display: 'flex',
                           justifyContent: 'space-between',
                         }}
@@ -924,11 +1117,8 @@ export function PrintJobSheet({
           )}
         </div>
         <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-        {t.notes && (
-          <p style={{ fontSize: 12, margin: '0 0 10px' }}>
-            <b>หมายเหตุ:</b> {t.notes}
-          </p>
-        )}
+        {categories.includes(WRAP_CATEGORY) && wrapOptionsBlock()}
+        {notesBlock(null)}
         {extrasBlock(16)}
         <div style={{ display: 'flex', gap: 12 }}>
           <div
@@ -1060,11 +1250,7 @@ export function PrintJobSheet({
             )}
           </div>
         )}
-        {t.notes && (
-          <p style={{ fontSize: 12, margin: '0 0 10px' }}>
-            <b>หมายเหตุ:</b> {t.notes}
-          </p>
-        )}
+        {notesBlock(null)}
         <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
         {t.items
           .filter((i) => i.sold)

@@ -12,9 +12,12 @@ import { PrintJobSheet, type PrintMode } from './PrintJobSheet';
 import { serializeTicket } from './serialize';
 import { ExtrasSection } from './detail/ExtrasSection';
 import { ItemsSection } from './detail/ItemsSection';
+import { NotesSection } from './detail/NotesSection';
 import { PaymentsSection } from './detail/PaymentsSection';
 import { TechSection } from './detail/TechSection';
 import { VehicleInfoSection } from './detail/VehicleInfoSection';
+import { WrapOptionsSection } from './detail/WrapOptionsSection';
+import { WRAP_CATEGORY } from './wrapOptions';
 import type {
   CarModel,
   CorporateBuyer,
@@ -226,6 +229,10 @@ export function TicketDetail({
 
   function field(key: keyof Ticket, value: unknown) {
     setT({ ...t, [key]: value });
+  }
+  /** หมายเหตุของชนิดสินค้าหนึ่ง — prints only on that category's ใบงานติดตั้ง. */
+  function setCategoryNote(category: string, value: string) {
+    setT({ ...t, notesByCategory: { ...(t.notesByCategory || {}), [category]: value } });
   }
   function changeStatus(newStatus: string) {
     setT({
@@ -561,23 +568,6 @@ export function TicketDetail({
               commitModelRegistry={commitModelRegistry}
             />
 
-            <div className="mb-5">
-              <label
-                className="text-xs font-medium block mb-1"
-                style={{ color: 'var(--ink-soft)' }}
-              >
-                หมายเหตุ
-              </label>
-              <textarea
-                value={t.notes || ''}
-                onChange={(e) => field('notes', e.target.value)}
-                placeholder="ข้อมูลสำคัญที่ต้องการบันทึกไว้..."
-                rows={2}
-                className="field w-full text-sm px-3 py-2"
-                style={{ resize: 'vertical' }}
-              />
-            </div>
-
             <ItemsSection
               t={t}
               stock={stock}
@@ -596,6 +586,25 @@ export function TicketDetail({
               lookupPrice={lookupPrice}
               lookupFilmPrice={lookupFilmPrice}
               commitPrice={commitPrice}
+            />
+
+            {/*
+              Both blocks sit BELOW the products on purpose: the per-category
+              notes and the wrap tick-list only mean anything once the ชนิดสินค้า
+              on the ticket are known, and a note box that appears above the item
+              you just added is a box nobody scrolls back up to.
+            */}
+            {t.items.some((i) => i.category === WRAP_CATEGORY) && (
+              <WrapOptionsSection
+                selected={t.wrapOptions ?? []}
+                onChange={(next) => field('wrapOptions', next)}
+              />
+            )}
+
+            <NotesSection
+              t={t}
+              setNote={(v) => field('notes', v)}
+              setCategoryNote={setCategoryNote}
             />
 
             <ExtrasSection

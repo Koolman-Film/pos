@@ -59,6 +59,21 @@ export type Ticket = {
   items: TicketItem[];
   payments: TicketPayment[];
   notes?: string;
+  /**
+   * หมายเหตุแยกตามชนิดสินค้า — keyed by `TicketItem.category`.
+   *
+   * ใบงานติดตั้ง prints one page per category, so a single ticket-wide note put
+   * the film instructions on the audio page and vice versa. This is the note
+   * that belongs to one category's page; `notes` stays the ticket-wide one and
+   * prints on every sheet.
+   */
+  notesByCategory?: Record<string, string>;
+  /**
+   * งานฟิล์มกันรอย — the ticked entries of the paper form's "Option / รายการแถม"
+   * row (see WRAP_OPTIONS). Values, not flags, so an option the shop later
+   * renames does not silently un-tick every old ticket.
+   */
+  wrapOptions?: string[];
   qcPhotos?: string[];
   createdBy?: string;
   statusHistory?: StatusHistoryEntry[];
