@@ -179,6 +179,83 @@ body {
 .print-area {
   display: none;
 }
+
+/*
+  Everything below styles the printed sheet. It sits OUTSIDE `@media print` on
+  purpose: `.print-area` is hidden on screen, so these rules cost nothing there,
+  and `fitPrintPages()` (lib/print/fitToPage.ts) needs the sheet to lay out at
+  its printed typography while it measures. Only the rules that swap what is
+  visible — and `@page` itself — belong in the media query.
+*/
+.print-area,
+.print-area * {
+  color: #211a18 !important;
+  opacity: 1 !important;
+}
+/*
+  The rule above deliberately flattens the sheet to ink, so a colour printer and
+  a mono one produce the same document — an inline `color` on the element itself
+  cannot survive it. These are the exceptions:
+
+  - `.print-gain`: the cheer-up TOTAL, the one figure the shop wants to jump
+    out. Its breakdown stays in ink.
+  - `.doc-band` / `.doc-total`: white text on the financial document's dark
+    bars, which would otherwise print black on black.
+
+  Two classes beat the `.print-area *` above on specificity, so no !important
+  arms race is needed beyond the one already here.
+*/
+.print-area .print-gain,
+.print-area .print-gain * {
+  color: #2f7a4f !important;
+}
+.print-area .doc-band,
+.print-area .doc-band *,
+.print-area .doc-total,
+.print-area .doc-total * {
+  color: #fff !important;
+}
+.print-area table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.print-area th,
+.print-area td {
+  border: 1px solid #ccc;
+  padding: 6px 8px;
+  text-align: left;
+}
+.print-area table.compact-table {
+  font-size: 9px;
+}
+.print-area table.compact-table th,
+.print-area table.compact-table td {
+  padding: 1.5px 4px;
+  line-height: 1.2;
+}
+.print-area th {
+  background: #f2f2f2 !important;
+}
+.print-area table.doc-table th {
+  background: #211a18 !important;
+  color: #fff !important;
+}
+
+/*
+  Off-screen at exactly the printed content width (A4 210mm less the 1cm side
+  margins), so a page block can be measured before the print dialog opens. Never
+  visible: it is removed again in the same synchronous call.
+*/
+.print-area.print-measuring {
+  display: block !important;
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 190mm;
+  background: #fff;
+}
+
 @media print {
   @page {
     size: A4;
@@ -203,45 +280,9 @@ body {
     display: block !important;
     width: auto;
     background: #fff;
-  }
-  .print-area,
-  .print-area * {
-    color: #211a18 !important;
-    opacity: 1 !important;
-  }
-  /*
-    The rule above deliberately flattens the sheet to ink, so a colour printer
-    and a mono one produce the same document — an inline `color` on the element
-    itself cannot survive it. `.print-gain` is the one exception the shop asked
-    for: the cheer-up figure is money the upsell earned and has to read as a
-    gain, not as one more line of what the customer owes. Two classes beat the
-    `.print-area *` above on specificity, so no !important arms race is needed
-    beyond the one already here.
-  */
-  .print-area .print-gain,
-  .print-area .print-gain * {
-    color: #2f7a4f !important;
-  }
-  .print-area table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-  }
-  .print-area th,
-  .print-area td {
-    border: 1px solid #ccc;
-    padding: 6px 8px;
-    text-align: left;
-  }
-  .print-area table.compact-table {
-    font-size: 9px;
-  }
-  .print-area table.compact-table th,
-  .print-area table.compact-table td {
-    padding: 1.5px 4px;
-    line-height: 1.2;
-  }
-  .print-area th {
-    background: #f2f2f2 !important;
+    /* Without this the dark title band and table headers print as white paper,
+       taking their white text with them. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

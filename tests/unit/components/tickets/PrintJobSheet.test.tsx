@@ -79,19 +79,21 @@ describe('ใบงานขาย', () => {
     expect(screen.getByText(/วันที่ส่งงาน:/)).toBeInTheDocument();
   });
 
-  it('names the channels the money came in by', () => {
+  it('itemises each receipt with what it was and how it arrived', () => {
     const t = makeTicket({
       items: [item()],
       payments: [
-        { type: 'มัดจำ', method: 'เงินสด', amount: 5000, date: '2026-08-12' },
-        { type: 'ชำระส่วนที่เหลือ', method: 'โอนเงิน', amount: 5000, date: '2026-08-14' },
+        { type: 'มัดจำ', method: 'โอนเงิน', amount: 3000, date: '2026-08-12' },
+        { type: 'ชำระส่วนที่เหลือ', method: 'เงินสด', amount: 10000, date: '2026-08-14' },
       ],
     });
     renderSheet(t);
-    expect(screen.getByText('(เงินสด, โอนเงิน)')).toBeInTheDocument();
+    // "มัดจำ" gains the verb; "ชำระส่วนที่เหลือ" already has one.
+    expect(screen.getByText(/ชำระมัดจำ \(โอนเงิน\)/)).toBeInTheDocument();
+    expect(screen.getByText(/ชำระส่วนที่เหลือ \(เงินสด\)/)).toBeInTheDocument();
   });
 
-  it('ignores an empty payment row when listing the channels', () => {
+  it('leaves an empty payment row off the sheet', () => {
     const t = makeTicket({
       items: [item()],
       payments: [
@@ -100,16 +102,25 @@ describe('ใบงานขาย', () => {
       ],
     });
     renderSheet(t);
-    expect(screen.getByText('(เงินสด)')).toBeInTheDocument();
+    expect(screen.getByText(/ชำระมัดจำ \(เงินสด\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/ชำระมัดจำ \(โอนเงิน\)/)).not.toBeInTheDocument();
   });
 
-  it('prints the cheer-up difference in green, not the colour of a debt', () => {
+  it('greens the cheer-up TOTAL and leaves its breakdown in ink', () => {
     const t = makeTicket({
       items: [item({ interested: 'TPU กันรอยเกรดมาตรฐาน', interestedPrice: 22000 })],
     });
     renderSheet(t);
-    const row = screen.getByText('ส่วนต่างเชียร์ขาย (Cheer-up)').parentElement!;
-    expect(row).toHaveStyle({ color: '#2F7A4F' });
+
+    // `print-gain` is what survives the @media print colour flattening — an
+    // inline colour alone would print black (see app/globals.css).
+    const total = screen.getByText('ส่วนต่างเชียร์ขาย (Cheer-up)').parentElement!;
+    expect(total).toHaveClass('print-gain');
+    expect(total).toHaveStyle({ color: '#2F7A4F' });
+
+    // The per-category row under it is detail, not a second highlight.
+    const categoryRow = screen.getByText('ฟิล์มกันรอย', { selector: 'span' }).parentElement!;
+    expect(categoryRow).not.toHaveClass('print-gain');
   });
 
   it('collects every category note under the ticket-wide one', () => {

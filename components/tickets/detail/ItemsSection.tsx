@@ -54,40 +54,38 @@ export function ItemsSection({
   ) => number;
   commitPrice: (product: string, price: number | string) => void;
 }) {
-  const upsell = t.items.reduce(
-    (s, i) => s + (Number(i.soldPrice || 0) - Number(i.bookedPrice || 0)),
+  // สินค้าที่สนใจ is the one baseline the cheer-up is measured against. It used
+  // to be `booked` here and `interested` on the printed sheet, off two separate
+  // pairs of boxes — so the ticket and its own ใบงานขาย could disagree about
+  // how much the upsell was worth. One source, both places.
+  const cheerItems = t.items.filter((i) => i.interested || Number(i.interestedPrice || 0) > 0);
+  const upsell = cheerItems.reduce(
+    (s, i) => s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0)),
     0,
   );
 
-  // The cheer-up figure on its own says how much the upsell was worth but not
-  // what it was FROM, so the booked product's name and price sit next to it —
-  // GROUPED BY CATEGORY, because a ticket carrying film and audio produced a
-  // flat list of rows with no way to tell which upsell belonged to which job.
-  const cheerRows = t.items
-    .filter((i) => i.booked || Number(i.bookedPrice || 0) > 0)
-    .map((i) => ({
-      category: i.category || 'ไม่ระบุชนิดสินค้า',
-      booked: productDisplayFor(i.booked, stock) || 'ไม่ได้ระบุสินค้าที่จอง',
-      bookedPrice: Number(i.bookedPrice || 0),
-      sold: productDisplayFor(i.sold, stock) || 'ยังไม่ได้เลือกสินค้าที่ขาย',
-      soldPrice: Number(i.soldPrice || 0),
-      diff: Number(i.soldPrice || 0) - Number(i.bookedPrice || 0),
-    }));
+  // The figure on its own says how much the upsell was worth but not what it
+  // was FROM, so the baseline product's name and price sit next to it — GROUPED
+  // BY CATEGORY, because a ticket carrying film and audio produced a flat list
+  // of rows with no way to tell which upsell belonged to which job.
+  const cheerRows = cheerItems.map((i) => ({
+    category: i.category || 'ไม่ระบุชนิดสินค้า',
+    booked: productDisplayFor(i.interested || '', stock) || 'ไม่ได้ระบุสินค้าที่สนใจ',
+    bookedPrice: Number(i.interestedPrice || 0),
+    sold: productDisplayFor(i.sold, stock) || 'ยังไม่ได้เลือกสินค้าที่ขาย',
+    soldPrice: Number(i.soldPrice || 0),
+    diff: Number(i.soldPrice || 0) - Number(i.interestedPrice || 0),
+  }));
   const cheerByCategory = [...new Set(cheerRows.map((r) => r.category))].map((category) => {
     const rows = cheerRows.filter((r) => r.category === category);
     return { category, rows, total: rows.reduce((s, r) => s + r.diff, 0) };
   });
 
+  // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
-    <div className="mb-5">
-      <div className="flex justify-between items-center mb-3">
-        <p
-          className="text-xs font-medium flex items-center gap-1.5"
-          style={{ color: 'var(--ink-soft)' }}
-        >
-          <i className="fa-solid fa-bag-shopping"></i>สินค้า/การติดตั้ง ({t.items.length})
-        </p>
-        {upsell !== 0 && (
+    <div className="mb-1">
+      {upsell !== 0 && (
+        <div className="flex justify-end mb-3">
           <span
             className="text-xs px-2.5 py-1 rounded-full font-semibold"
             style={{
@@ -98,8 +96,8 @@ export function ItemsSection({
             ส่วนต่างเชียร์ขาย {upsell >= 0 ? '+' : ''}
             {fmt(upsell)}
           </span>
-        )}
-      </div>
+        </div>
+      )}
       {cheerByCategory.length > 0 && (
         <div className="rounded-xl p-2.5 mb-3" style={{ background: 'var(--paper)' }}>
           {cheerByCategory.map((group) => (
@@ -115,7 +113,7 @@ export function ItemsSection({
                 <div key={i} className="text-xs py-0.5 pl-2">
                   <div className="flex justify-between gap-2">
                     <span style={{ color: 'var(--ink-soft)' }}>
-                      จอง {r.booked} &middot; {fmt(r.bookedPrice)}
+                      สนใจ {r.booked} &middot; {fmt(r.bookedPrice)}
                     </span>
                     <span
                       className="flex-shrink-0"
@@ -201,8 +199,21 @@ export function ItemsSection({
               </button>
             </div>
             {it.category && (
-              <div className="mb-3 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
-                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              /*
+                สินค้าที่สนใจ is the only baseline now (the duplicate
+                "สินค้าที่จองไว้ตอนแรก" pair below it is gone), so it gets a
+                surface of its own: two unlabelled pairs of boxes holding
+                different prices for the same product is what made this section
+                hard to read in the first place.
+              */
+              <div
+                className="rounded-xl p-2.5 mb-3"
+                style={{ background: '#FFF7E8', border: '1px dashed #D8A83A' }}
+              >
+                <label className="text-xs font-semibold" style={{ color: '#8A5A12' }}>
+                  {/* Wording unchanged from what staff already know — the box,
+                      the star and the colour are what make it findable now. */}
+                  <i className="fa-solid fa-star mr-1.5"></i>
                   สินค้าที่สนใจ (ไม่บังคับ — ใช้เทียบ cheer-up)
                 </label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
@@ -384,36 +395,14 @@ export function ItemsSection({
                     &rarr; &quot;เพิ่มสินค้า&quot; ก่อน
                   </p>
                 )}
-                {!isService && (
-                  <div className="mt-2">
-                    <label className="text-xs block mb-1" style={{ color: 'var(--ink-soft)' }}>
-                      สินค้าที่จองไว้ตอนแรก / ราคาที่จอง{' '}
-                      <span style={{ color: 'var(--ink-faint)' }}>
-                        (ไม่บังคับ — ใช้คิดส่วนต่างเชียร์ขาย)
-                      </span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <ProductPicker
-                        value={it.booked}
-                        label="สินค้าที่จองไว้"
-                        placeholder={it.category ? 'สินค้าที่จอง...' : '-'}
-                        emptyLabel="ไม่ระบุ"
-                        options={productOptions}
-                        disabled={!it.category}
-                        className="field w-full text-xs px-2.5 py-1.5"
-                        onChange={(prodName) => updateItem(idx, 'booked', prodName)}
-                      />
-                      <input
-                        type="number"
-                        placeholder="ราคาที่จอง"
-                        value={it.bookedPrice}
-                        onChange={(e) => updateItem(idx, 'bookedPrice', e.target.value)}
-                        className="field text-xs px-2.5 py-1.5"
-                        style={{ color: 'var(--ink-soft)' }}
-                      />
-                    </div>
-                  </div>
-                )}
+                {/*
+                  "สินค้าที่จองไว้ตอนแรก / ราคาที่จอง" used to sit here. It asked
+                  the same question as สินค้าที่สนใจ above and fed a second
+                  cheer-up figure that could disagree with it, so the ticket
+                  showed two different answers to "how much did we make on the
+                  upsell". The column stays in the database — old tickets keep
+                  what they recorded — but nothing writes it any more.
+                */}
               </>
             )}
             {it.sold && (

@@ -32,14 +32,9 @@ export function PaymentsSection({
   total: number;
   paid: number;
 }) {
+  // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
-    <div className="pt-5 mb-5" style={{ borderTop: '1px solid var(--line)' }}>
-      <p
-        className="text-xs font-medium mb-3 flex items-center gap-1.5"
-        style={{ color: 'var(--ink-soft)' }}
-      >
-        <i className="fa-solid fa-money-bill-wave"></i>การชำระเงิน
-      </p>
+    <div>
       {t.payments.map((p, idx) => (
         <div
           key={idx}

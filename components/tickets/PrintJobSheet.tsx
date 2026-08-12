@@ -67,6 +67,17 @@ export const QC_CHECKLIST_SECTIONS: { title: string; items: string[] }[] = [
 ];
 
 /**
+ * "มัดจำ" reads as a noun on its own; the printed line wants the act of paying
+ * it. The other two types are already phrased that way ("ชำระส่วนที่เหลือ"), so
+ * only the ones that are not get the verb.
+ */
+function paymentLabel(type: string): string {
+  const label = (type || '').trim();
+  if (!label) return 'รับชำระ';
+  return label.startsWith('ชำระ') ? label : `ชำระ${label}`;
+}
+
+/**
  * The ภายในตัวรถ grid on the ใบเช็ครถ — the interior parts a wrap job touches.
  *
  * Both columns were wrong in the port: "Piano Black" (the trim finish) had been
@@ -169,11 +180,7 @@ export function PrintJobSheet({
   const categories = [...new Set(t.items.filter((i) => i.sold).map((i) => i.category))];
   const filledExtras = extraOptions.filter((name) => t.extras?.[name]?.checked);
   const info = shopInfo[t.shop] || {};
-  const paidMethods = [
-    ...new Set(
-      t.payments.filter((p) => Number(p.amount || 0) > 0 && p.method).map((p) => p.method),
-    ),
-  ];
+  const receivedPayments = t.payments.filter((p) => Number(p.amount || 0) > 0);
 
   function extrasBlock(gap: number) {
     if (filledExtras.length === 0) return null;
@@ -344,7 +351,11 @@ export function PrintJobSheet({
     content = (
       <div className="print-area">
         {categories.map((cat, catIdx) => (
-          <div key={cat} style={catIdx > 0 ? { pageBreakBefore: 'always' } : {}}>
+          <div
+            key={cat}
+            className="print-page"
+            style={catIdx > 0 ? { pageBreakBefore: 'always' } : {}}
+          >
             <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานติดตั้ง</h1>
             <div style={{ textAlign: 'right', marginBottom: 16 }}>
               <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
@@ -615,7 +626,7 @@ export function PrintJobSheet({
           </div>
         ))}
         {categories.includes('ฟิล์มกรองแสง') && (
-          <div style={{ pageBreakBefore: 'always' }}>
+          <div className="print-page" style={{ pageBreakBefore: 'always' }}>
             <h2 style={{ textAlign: 'center', marginBottom: 10, fontSize: 16 }}>
               ใบตรวจเช็คสภาพก่อนติดตั้ง (ฟิล์มกรองแสง)
             </h2>
@@ -666,7 +677,7 @@ export function PrintJobSheet({
           </div>
         )}
         {categories.includes('ฟิล์มกันรอย') && (
-          <div style={{ pageBreakBefore: 'always' }}>
+          <div className="print-page" style={{ pageBreakBefore: 'always' }}>
             <h2 style={{ textAlign: 'center', marginBottom: 12 }}>ใบเช็ครถ (ฟิล์มกันรอย / WRAP)</h2>
             <div style={{ fontSize: 11, marginBottom: 10 }}>
               <span>
@@ -791,362 +802,354 @@ export function PrintJobSheet({
   } else if (printMode === 'sale') {
     content = (
       <div className="print-area">
-        <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานขาย</h1>
-        <div style={{ textAlign: 'right', marginBottom: 16 }}>
-          <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
-          {/*
+        {/* One page block, so fitPrintPages() can shrink it to A4 when a ticket
+            carries enough products and notes to spill onto a second sheet. */}
+        <div className="print-page">
+          <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานขาย</h1>
+          <div style={{ textAlign: 'right', marginBottom: 16 }}>
+            <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
+            {/*
             Both ends of the job, in the order they happen. Only the delivery
             date was printed, so the sheet never said when the car came in — and
             "how long have you had my car" is the question the counter fields.
             The delivery date keeps the emphasis; it is still the one the
             customer is here about.
           */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 'bold',
+                  border: '1.5px solid #666',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                }}
+              >
+                วันที่รับงาน: {fmtThaiDate(t.dropOffDateObj)}
+              </span>
+              <span
+                style={{
+                  fontSize: 17,
+                  fontWeight: 'bold',
+                  border: '2px solid #D8A83A',
+                  borderRadius: 6,
+                  padding: '4px 12px',
+                  background: '#FFF7DD',
+                }}
+              >
+                วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
+              </span>
+            </div>
+            <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
+            <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
+              บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
+            </p>
+          </div>
+          <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>{shopName(t.shop)}</p>
           <div
             style={{
               display: 'flex',
-              gap: 8,
-              justifyContent: 'flex-end',
-              alignItems: 'center',
               flexWrap: 'wrap',
+              gap: '4px 28px',
+              fontSize: 13,
+              marginBottom: 8,
             }}
           >
-            <span
-              style={{
-                fontSize: 14,
-                fontWeight: 'bold',
-                border: '1.5px solid #666',
-                borderRadius: 6,
-                padding: '4px 10px',
-              }}
-            >
-              วันที่รับงาน: {fmtThaiDate(t.dropOffDateObj)}
-            </span>
-            <span
-              style={{
-                fontSize: 17,
-                fontWeight: 'bold',
-                border: '2px solid #D8A83A',
-                borderRadius: 6,
-                padding: '4px 12px',
-                background: '#FFF7DD',
-              }}
-            >
-              วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
-            </span>
-          </div>
-          <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
-          <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
-            บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
-          </p>
-        </div>
-        <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>{shopName(t.shop)}</p>
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '4px 28px',
-            fontSize: 13,
-            marginBottom: 8,
-          }}
-        >
-          <span>
-            ชื่อลูกค้า: <b>{t.customer}</b>
-          </span>
-          <span>
-            เบอร์โทร: <b>{t.phone}</b>
-          </span>
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '4px 22px',
-            fontSize: 13,
-            marginBottom: 10,
-          }}
-        >
-          <span>
-            ยี่ห้อรถ: <b>{t.brand}</b>
-          </span>
-          <span>
-            รุ่นรถ: <b>{t.model}</b>
-          </span>
-          <span>
-            สีรถ: <b>{t.color}</b>
-          </span>
-          <span>
-            ทะเบียนรถ/เลขถัง: <b>{t.plate}</b>
-          </span>
-          <span>
-            ประเภทรถ: <b>{t.carType}</b>
-          </span>
-        </div>
-        <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-        {t.items
-          .filter((i) => i.sold)
-          .map((i, idx) => {
-            let rows: { label: string | null; product: string }[];
-            if (i.positions && i.positions.length) {
-              const grouped: Record<string, string[]> = {};
-              i.positions.forEach((p) => {
-                if (!grouped[p.product]) grouped[p.product] = [];
-                grouped[p.product].push(p.position);
-              });
-              rows = Object.entries(grouped).map(([product, labels]) => ({
-                label: labels.join(', '),
-                product,
-              }));
-            } else {
-              rows = [{ label: null, product: i.sold }];
-            }
-            return (
-              <div key={idx} style={{ marginBottom: 16 }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline',
-                    marginBottom: 10,
-                  }}
-                >
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 17,
-                      fontWeight: 900,
-                      letterSpacing: 0.3,
-                      borderBottom: '2px solid #333',
-                      display: 'inline-block',
-                      paddingBottom: 2,
-                    }}
-                  >
-                    {i.category}
-                  </p>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 11, color: '#666' }}>
-                      ช่าง:{' '}
-                      <b>
-                        {t.techByCategory &&
-                        t.techByCategory[i.category] &&
-                        t.techByCategory[i.category].length
-                          ? t.techByCategory[i.category].join(', ')
-                          : '-'}
-                      </b>
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 'bold', marginTop: 2 }}>
-                      ยอดรวม: {fmt(itemNetPrice(mapItem(i)))}
-                    </div>
-                  </div>
-                </div>
-                {rows.map((r, ri) => {
-                  const stockMatch = stock.find((s) => s.name === r.product);
-                  const short = stockMatch?.shortName || r.product;
-                  return (
-                    <div
-                      key={ri}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        marginBottom: 8,
-                        paddingLeft: 12,
-                      }}
-                    >
-                      {r.label && <span style={emboss}>{r.label}</span>}
-                      <span style={{ fontSize: 18, fontWeight: 'bold' }}>{short}</span>
-                      <span style={{ fontSize: 11, color: '#777' }}>({r.product})</span>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-        <div style={{ fontSize: 12, marginBottom: 16 }}>
-          <p style={{ fontWeight: 'bold', marginBottom: 6 }}>ข้อมูลการชำระเงิน</p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-            <span>ยอดสุทธิ</span>
-            <span>{fmt(total)}</span>
-          </div>
-          {/*
-            The methods the money actually came in by. A customer looking at
-            "ชำระแล้ว 5,000" had no way to tell a cash deposit from a transfer,
-            which is exactly what the shop gets asked about later. Rows with no
-            amount on them are ignored — an empty payment row is not a channel.
-          */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span>
-              ชำระแล้ว
-              {paidMethods.length > 0 && (
-                <span style={{ color: '#666', marginLeft: 6 }}>({paidMethods.join(', ')})</span>
-              )}
+              ชื่อลูกค้า: <b>{t.customer}</b>
             </span>
-            <span>{fmt(paid)}</span>
+            <span>
+              เบอร์โทร: <b>{t.phone}</b>
+            </span>
           </div>
-          {t.payments.filter((p) => Number(p.amount || 0) > 0).length > 1 && (
-            // More than one receipt: the single "ชำระแล้ว" figure hides how it
-            // was split, so each one is listed with its type, method and date.
-            <div style={{ margin: '0 0 8px 12px' }}>
-              {t.payments
-                .filter((p) => Number(p.amount || 0) > 0)
-                .map((p, pi) => (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '4px 22px',
+              fontSize: 13,
+              marginBottom: 10,
+            }}
+          >
+            <span>
+              ยี่ห้อรถ: <b>{t.brand}</b>
+            </span>
+            <span>
+              รุ่นรถ: <b>{t.model}</b>
+            </span>
+            <span>
+              สีรถ: <b>{t.color}</b>
+            </span>
+            <span>
+              ทะเบียนรถ/เลขถัง: <b>{t.plate}</b>
+            </span>
+            <span>
+              ประเภทรถ: <b>{t.carType}</b>
+            </span>
+          </div>
+          <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
+          {t.items
+            .filter((i) => i.sold)
+            .map((i, idx) => {
+              let rows: { label: string | null; product: string }[];
+              if (i.positions && i.positions.length) {
+                const grouped: Record<string, string[]> = {};
+                i.positions.forEach((p) => {
+                  if (!grouped[p.product]) grouped[p.product] = [];
+                  grouped[p.product].push(p.position);
+                });
+                rows = Object.entries(grouped).map(([product, labels]) => ({
+                  label: labels.join(', '),
+                  product,
+                }));
+              } else {
+                rows = [{ label: null, product: i.sold }];
+              }
+              return (
+                <div key={idx} style={{ marginBottom: 16 }}>
                   <div
-                    key={pi}
                     style={{
                       display: 'flex',
                       justifyContent: 'space-between',
-                      fontSize: 11,
-                      color: '#666',
+                      alignItems: 'baseline',
+                      marginBottom: 10,
                     }}
                   >
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 17,
+                        fontWeight: 900,
+                        letterSpacing: 0.3,
+                        borderBottom: '2px solid #333',
+                        display: 'inline-block',
+                        paddingBottom: 2,
+                      }}
+                    >
+                      {i.category}
+                    </p>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 11, color: '#666' }}>
+                        ช่าง:{' '}
+                        <b>
+                          {t.techByCategory &&
+                          t.techByCategory[i.category] &&
+                          t.techByCategory[i.category].length
+                            ? t.techByCategory[i.category].join(', ')
+                            : '-'}
+                        </b>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 'bold', marginTop: 2 }}>
+                        ยอดรวม: {fmt(itemNetPrice(mapItem(i)))}
+                      </div>
+                    </div>
+                  </div>
+                  {rows.map((r, ri) => {
+                    const stockMatch = stock.find((s) => s.name === r.product);
+                    const short = stockMatch?.shortName || r.product;
+                    return (
+                      <div
+                        key={ri}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          marginBottom: 8,
+                          paddingLeft: 12,
+                        }}
+                      >
+                        {r.label && <span style={emboss}>{r.label}</span>}
+                        <span style={{ fontSize: 18, fontWeight: 'bold' }}>{short}</span>
+                        <span style={{ fontSize: 11, color: '#777' }}>({r.product})</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
+          <div style={{ fontSize: 12, marginBottom: 16 }}>
+            <p style={{ fontWeight: 'bold', marginBottom: 6 }}>ข้อมูลการชำระเงิน</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+              <span>ยอดสุทธิ</span>
+              <span>{fmt(total)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+              <span>ชำระแล้ว</span>
+              <span>{fmt(paid)}</span>
+            </div>
+            {/*
+            Every receipt on its own line — "ชำระมัดจำ (โอนเงิน) 3,000.00" — not
+            just when there are several of them. A single figure says how much
+            arrived but not on what terms or through which channel, and that is
+            what the customer and the shop end up arguing about.
+          */}
+            {receivedPayments.length > 0 && (
+              <div style={{ margin: '0 0 8px 12px' }}>
+                {receivedPayments.map((p, pi) => (
+                  <div
+                    key={pi}
+                    style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}
+                  >
                     <span>
-                      {p.type || 'รับชำระ'} &middot; {p.method || '-'}
+                      {paymentLabel(p.type)}
+                      {p.method ? ` (${p.method})` : ''}
                       {p.date ? ` · ${fmtThaiDate(new Date(p.date))}` : ''}
                     </span>
                     <span>{fmt(Number(p.amount || 0))}</span>
                   </div>
                 ))}
-            </div>
-          )}
-          {total - paid <= 0 ? (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontWeight: 'bold',
-                color: '#2F7A4F',
-              }}
-            >
-              <span>ชำระครบแล้ว</span>
-              <span>-</span>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontWeight: 900,
-                fontSize: 20,
-                color: '#B23A48',
-                border: '3px solid #B23A48',
-                borderRadius: 8,
-                padding: '8px 14px',
-                background: '#FBEAEC',
-              }}
-            >
-              <span>ค้างชำระ</span>
-              <span>{fmt(total - paid)}</span>
-            </div>
-          )}
-          {t.items.some((i) => i.interested) && (
-            // Green, the same colour a gain carries everywhere else in the app.
-            // `print-gain` rather than an inline colour: @media print flattens
-            // every colour inside .print-area to ink, so an inline value here
-            // would look right on screen and print black (see app/globals.css).
-            <div style={{ marginTop: 8 }}>
-              <div
-                className="print-gain"
-                style={{ display: 'flex', justifyContent: 'space-between', color: '#2F7A4F' }}
-              >
-                <span>ส่วนต่างเชียร์ขาย (Cheer-up)</span>
-                <span>
-                  {(() => {
-                    const cu = t.items.reduce(
-                      (s, i) =>
-                        i.interested
-                          ? s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0))
-                          : s,
-                      0,
-                    );
-                    return (cu >= 0 ? '+' : '') + fmt(cu);
-                  })()}
-                </span>
               </div>
-              {/*
+            )}
+            {total - paid <= 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontWeight: 'bold',
+                  color: '#2F7A4F',
+                }}
+              >
+                <span>ชำระครบแล้ว</span>
+                <span>-</span>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontWeight: 900,
+                  fontSize: 20,
+                  color: '#B23A48',
+                  border: '3px solid #B23A48',
+                  borderRadius: 8,
+                  padding: '8px 14px',
+                  background: '#FBEAEC',
+                }}
+              >
+                <span>ค้างชำระ</span>
+                <span>{fmt(total - paid)}</span>
+              </div>
+            )}
+            {t.items.some((i) => i.interested) && (
+              // Only the TOTAL is green — it is the one number the shop wants to
+              // catch the eye. The breakdown under it is working shown, and in ink
+              // it reads as detail rather than as three more highlighted figures.
+              //
+              // `print-gain` rather than an inline colour: @media print flattens
+              // every colour inside .print-area to ink, so an inline value here
+              // would look right on screen and print black (see app/globals.css).
+              <div style={{ marginTop: 8 }}>
+                <div
+                  className="print-gain"
+                  style={{ display: 'flex', justifyContent: 'space-between', color: '#2F7A4F' }}
+                >
+                  <span>ส่วนต่างเชียร์ขาย (Cheer-up)</span>
+                  <span>
+                    {(() => {
+                      const cu = t.items.reduce(
+                        (s, i) =>
+                          i.interested
+                            ? s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0))
+                            : s,
+                        0,
+                      );
+                      return (cu >= 0 ? '+' : '') + fmt(cu);
+                    })()}
+                  </span>
+                </div>
+                {/*
                 The figure alone does not say what it was measured against, so
                 each baseline product is listed with its price — short name
                 first, the same way the item rows above read, and grouped under
                 its category so a ticket carrying film AND audio does not read as
                 one undifferentiated list.
               */}
-              {[...new Set(t.items.filter((i) => i.interested).map((i) => i.category))].map(
-                (cat) => {
-                  const rows = t.items.filter((i) => i.interested && i.category === cat);
-                  const catDiff = rows.reduce(
-                    (s, i) => s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0)),
-                    0,
-                  );
-                  return (
-                    <div key={cat} style={{ marginTop: 3 }}>
-                      <p
-                        className="print-gain"
-                        style={{
-                          margin: 0,
-                          fontSize: 11,
-                          color: '#2F7A4F',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                        }}
-                      >
-                        <span>{cat || 'ไม่ระบุชนิดสินค้า'}</span>
-                        <span>
-                          {catDiff >= 0 ? '+' : ''}
-                          {fmt(catDiff)}
-                        </span>
-                      </p>
-                      {rows.map((i, ci) => {
-                        const stockMatch = stock.find((s) => s.name === i.interested);
-                        const short = stockMatch?.shortName || i.interested;
-                        return (
-                          <p
-                            key={ci}
-                            style={{ margin: '1px 0 0 10px', fontSize: 10, color: '#999' }}
-                          >
-                            จาก <b>{short}</b>
-                            {stockMatch?.shortName ? ` (${i.interested})` : ''} &middot;{' '}
-                            {fmt(Number(i.interestedPrice || 0))}
-                          </p>
-                        );
-                      })}
-                    </div>
-                  );
-                },
-              )}
-            </div>
-          )}
-        </div>
-        <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-        {categories.includes(WRAP_CATEGORY) && wrapOptionsBlock()}
-        {notesBlock(null)}
-        {extrasBlock(16)}
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div
-            style={{ flex: 1, border: '1.5px solid #555', borderRadius: 6, padding: '10px 12px' }}
-          >
-            <p
-              style={{
-                margin: '0 0 8px',
-                fontWeight: 'bold',
-                fontSize: 13,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
+                {[...new Set(t.items.filter((i) => i.interested).map((i) => i.category))].map(
+                  (cat) => {
+                    const rows = t.items.filter((i) => i.interested && i.category === cat);
+                    const catDiff = rows.reduce(
+                      (s, i) => s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0)),
+                      0,
+                    );
+                    return (
+                      <div key={cat} style={{ marginTop: 3 }}>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 11,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <span>{cat || 'ไม่ระบุชนิดสินค้า'}</span>
+                          <span>
+                            {catDiff >= 0 ? '+' : ''}
+                            {fmt(catDiff)}
+                          </span>
+                        </p>
+                        {rows.map((i, ci) => {
+                          const stockMatch = stock.find((s) => s.name === i.interested);
+                          const short = stockMatch?.shortName || i.interested;
+                          return (
+                            <p
+                              key={ci}
+                              style={{ margin: '1px 0 0 10px', fontSize: 10, color: '#999' }}
+                            >
+                              จาก <b>{short}</b>
+                              {stockMatch?.shortName ? ` (${i.interested})` : ''} &middot;{' '}
+                              {fmt(Number(i.interestedPrice || 0))}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
+          {categories.includes(WRAP_CATEGORY) && wrapOptionsBlock()}
+          {notesBlock(null)}
+          {extrasBlock(16)}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div
+              style={{ flex: 1, border: '1.5px solid #555', borderRadius: 6, padding: '10px 12px' }}
             >
-              <span
+              <p
                 style={{
-                  display: 'inline-block',
-                  width: 16,
-                  height: 16,
-                  border: '2px solid #D8722A',
-                  borderRadius: 3,
-                  flexShrink: 0,
+                  margin: '0 0 8px',
+                  fontWeight: 'bold',
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
                 }}
-              ></span>
-              ส่งมอบงาน
-            </p>
-            <p style={{ margin: 0, fontSize: 11 }}>วันที่ ....................................</p>
+              >
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 16,
+                    height: 16,
+                    border: '2px solid #D8722A',
+                    borderRadius: 3,
+                    flexShrink: 0,
+                  }}
+                ></span>
+                ส่งมอบงาน
+              </p>
+              <p style={{ margin: 0, fontSize: 11 }}>วันที่ ....................................</p>
+            </div>
           </div>
         </div>
       </div>
@@ -1322,230 +1325,259 @@ export function PrintJobSheet({
       </div>
     );
   } else if (printMode === 'doc') {
-    const totalDiscount = t.items.reduce(
-      (s, i) => s + (Number(i.soldPrice || 0) - itemNetPrice(mapItem(i))),
-      0,
+    // Every row's price BEFORE its discount, so "ส่วนลดรวม" has something to be
+    // subtracted from — `total` is already net.
+    const grossTotal = t.items
+      .filter((i) => i.sold)
+      .reduce((s, i) => s + Number(i.soldPrice || 0), 0);
+    const totalDiscount = grossTotal - total;
+    const isTaxInvoice = docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+    const isQuotation = docType === 'ใบเสนอราคา';
+    const docPrefix = isQuotation ? 'QT' : isTaxInvoice ? 'INV' : 'RCT';
+    const issuerName = (showCompanyInfo && info.companyName) || shopName(t.shop);
+    // Tick boxes for the shop's own channels, ticked from what was actually
+    // received. A channel used once but since removed from the shop's list still
+    // shows, otherwise the document would claim money arrived by nothing.
+    const usedMethods = new Set(receivedPayments.map((p) => p.method).filter(Boolean));
+    const channels = [
+      ...new Set([...(info.paymentChannels ?? []).filter(Boolean), ...usedMethods]),
+    ];
+
+    // One row per product, with the positions it covers folded into a quantity.
+    const lines = t.items
+      .filter((i) => i.sold)
+      .flatMap((i) => {
+        if (i.positions && i.positions.length) {
+          const grouped: Record<string, { labels: string[]; price: number }> = {};
+          i.positions.forEach((p) => {
+            if (!grouped[p.product]) grouped[p.product] = { labels: [], price: 0 };
+            grouped[p.product].labels.push(p.position);
+            grouped[p.product].price += Number(p.price || 0);
+          });
+          return Object.entries(grouped).map(([product, g]) => ({
+            qty: g.labels.length,
+            category: i.category,
+            product,
+            detail: g.labels.join(', '),
+            amount: g.price,
+          }));
+        }
+        return [
+          {
+            qty: 1,
+            category: i.category,
+            product: i.sold,
+            detail: '',
+            amount: Number(i.soldPrice || 0),
+          },
+        ];
+      });
+
+    const totalRow = (label: string, value: string, strong = false) => (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 20,
+          fontSize: strong ? 13 : 12,
+          fontWeight: strong ? 'bold' : 'normal',
+          padding: strong ? '6px 10px' : '3px 10px',
+          background: strong ? '#211A18' : 'transparent',
+          color: strong ? '#fff' : undefined,
+          borderRadius: strong ? 4 : 0,
+        }}
+        className={strong ? 'doc-total' : undefined}
+      >
+        <span>{label}</span>
+        <span>{value}</span>
+      </div>
     );
+
     content = (
       <div className="print-area">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            marginBottom: 16,
-          }}
-        >
-          <div>
-            <h2 style={{ margin: 0 }}>
-              {(showCompanyInfo && info.companyName) || shopName(t.shop)}
-            </h2>
-            {showCompanyInfo && info.companyName && (
-              <p style={{ margin: '2px 0 0', fontSize: 12, color: '#333' }}>{shopName(t.shop)}</p>
-            )}
-            {(info.address || info.phone) && (
-              <p style={{ margin: '4px 0 0', fontSize: 11, color: '#555', maxWidth: 280 }}>
-                {info.address}
-                {info.phone ? ` โทร ${info.phone}` : ''}
-              </p>
-            )}
-            {showCompanyInfo && info.taxId && (
-              <p style={{ margin: '2px 0 0', fontSize: 11, color: '#555' }}>
-                เลขผู้เสียภาษี {info.taxId}
-              </p>
-            )}
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ margin: 0, fontSize: 12 }}>
-              เลขที่เอกสาร{' '}
-              {docType === 'ใบเสนอราคา'
-                ? 'QT'
-                : docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน'
-                  ? 'INV'
-                  : 'RCT'}
-              -{t.shop.toUpperCase()}-{t.id.replace('JT-', '')}
-            </p>
-            <h3 style={{ margin: '4px 0 0' }}>{docType}</h3>
-            <p style={{ fontSize: 12, margin: '2px 0 0' }}>
-              วันที่{' '}
-              {new Date().toLocaleDateString('th-TH', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
-            </p>
-          </div>
-        </div>
-        <table style={{ marginBottom: 12 }}>
-          <tbody>
-            <tr>
-              <th style={{ width: '1%', whiteSpace: 'nowrap' }}>ชื่อลูกค้า</th>
-              <td>{buyerName || t.customer}</td>
-            </tr>
-            {docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน' && (
-              <>
-                {buyerAddress && (
-                  <tr>
-                    <th style={{ width: '1%', whiteSpace: 'nowrap' }}>ที่อยู่ (นิติบุคคล)</th>
-                    <td>{buyerAddress}</td>
-                  </tr>
-                )}
-                {buyerTaxId && (
-                  <tr>
-                    <th style={{ width: '1%', whiteSpace: 'nowrap' }}>เลขผู้เสียภาษี</th>
-                    <td>{buyerTaxId}</td>
-                  </tr>
-                )}
-              </>
-            )}
-            <tr>
-              <th style={{ width: '1%', whiteSpace: 'nowrap' }}>&nbsp;</th>
-              <td>
-                {t.brand} {t.model} &middot; {t.plate}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <table style={{ marginBottom: 12 }}>
-          <thead>
-            <tr>
-              <th>รายการ</th>
-              <th style={{ width: 110, textAlign: 'right' }}>จำนวนเงิน</th>
-            </tr>
-          </thead>
-          <tbody>
-            {t.items
-              .filter((i) => i.sold)
-              .flatMap((i, idx) => {
-                if (i.positions && i.positions.length) {
-                  const grouped: Record<string, { labels: string[]; price: number }> = {};
-                  i.positions.forEach((p) => {
-                    if (!grouped[p.product]) grouped[p.product] = { labels: [], price: 0 };
-                    grouped[p.product].labels.push(p.position);
-                    grouped[p.product].price += Number(p.price || 0);
-                  });
-                  return Object.entries(grouped).map(([product, g], gi) => {
-                    const stockMatch = stock.find((s) => s.name === product);
-                    const short = stockMatch?.shortName || product;
-                    return (
-                      <tr key={idx + '-' + gi}>
-                        <td>
-                          {i.category} — {g.labels.join(', ')}: <b>{short}</b> ({product})
-                        </td>
-                        <td style={{ width: 110, textAlign: 'right' }}>{fmt(g.price)}</td>
-                      </tr>
-                    );
-                  });
-                }
-                const stockMatch = stock.find((s) => s.name === i.sold);
-                const short = stockMatch?.shortName || i.sold;
-                return [
-                  <tr key={idx}>
-                    <td>
-                      {i.category}: <b>{short}</b> ({i.sold})
-                    </td>
-                    <td style={{ width: 110, textAlign: 'right' }}>{fmt(Number(i.soldPrice))}</td>
-                  </tr>,
-                ];
-              })}
-          </tbody>
-        </table>
-        {totalDiscount > 0 ? (
+        <div className="print-page">
+          {/* The title band. The sample the shop brought in leads with the
+              document's name rather than the shop's, which is also what makes a
+              receipt findable in a stack of them. */}
           <div
             style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: 12,
-              color: '#B23A48',
-              marginBottom: 8,
+              background: '#211A18',
+              color: '#fff',
+              borderRadius: 6,
+              padding: '10px 16px',
+              marginBottom: 14,
+              textAlign: 'center',
             }}
+            className="doc-band"
           >
-            <span>ส่วนลดรวม</span>
-            <span>-{fmt(totalDiscount)}</span>
+            <p style={{ margin: 0, fontSize: 20, fontWeight: 'bold', letterSpacing: 0.5 }}>
+              {docType}
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: 11 }}>
+              {/* The ticket id already carries the shop — JT-CM-00216. Prefixing
+                  t.shop again printed RCT-CM-CM-00216 on every document. */}
+              เลขที่ {docPrefix}-{t.id.replace('JT-', '')} &middot; วันที่ {fmtThaiDate(new Date())}
+            </p>
           </div>
-        ) : null}
-        {docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน' ? (
-          <table style={{ marginBottom: 12 }}>
+
+          <div style={{ display: 'flex', gap: 20, marginBottom: 14, fontSize: 11 }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>ข้อมูลลูกค้า :</p>
+              <p style={{ margin: 0, fontWeight: 'bold' }}>{buyerName || t.customer}</p>
+              {isTaxInvoice && buyerAddress && <p style={{ margin: '2px 0 0' }}>{buyerAddress}</p>}
+              {isTaxInvoice && buyerTaxId && (
+                <p style={{ margin: '2px 0 0' }}>เลขผู้เสียภาษี {buyerTaxId}</p>
+              )}
+              {t.phone && <p style={{ margin: '2px 0 0' }}>โทร {t.phone}</p>}
+              <p style={{ margin: '2px 0 0' }}>
+                รถ: {t.brand} {t.model} &middot; {t.plate}
+              </p>
+            </div>
+            <div style={{ flex: 1, textAlign: 'right' }}>
+              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>
+                {isQuotation ? 'ผู้เสนอราคา :' : 'ผู้ออกใบเสร็จรับเงิน :'}
+              </p>
+              <p style={{ margin: 0, fontWeight: 'bold' }}>{issuerName}</p>
+              {showCompanyInfo && info.companyName && (
+                <p style={{ margin: '2px 0 0' }}>{shopName(t.shop)}</p>
+              )}
+              {info.address && <p style={{ margin: '2px 0 0' }}>{info.address}</p>}
+              {info.phone && <p style={{ margin: '2px 0 0' }}>โทร {info.phone}</p>}
+              {showCompanyInfo && info.taxId && (
+                <p style={{ margin: '2px 0 0' }}>เลขผู้เสียภาษี {info.taxId}</p>
+              )}
+            </div>
+          </div>
+
+          <table style={{ marginBottom: 12, fontSize: 11 }} className="doc-table">
+            <thead>
+              <tr>
+                <th style={{ width: 50, textAlign: 'center' }}>จำนวน</th>
+                <th>รายการ</th>
+                <th style={{ width: 100, textAlign: 'right' }}>ราคา</th>
+                <th style={{ width: 100, textAlign: 'right' }}>ยอดรวม</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr>
-                <th>มูลค่าก่อนภาษี</th>
-                <td style={{ width: 110, textAlign: 'right' }}>{fmt(total / 1.07)}</td>
-              </tr>
-              <tr>
-                <th>ภาษีมูลค่าเพิ่ม 7%</th>
-                <td style={{ width: 110, textAlign: 'right' }}>{fmt(total - total / 1.07)}</td>
-              </tr>
-              <tr>
-                <th style={{ fontWeight: 'bold' }}>ยอดรวมสุทธิ</th>
-                <td style={{ width: 110, fontWeight: 'bold', textAlign: 'right' }}>{fmt(total)}</td>
-              </tr>
-            </tbody>
-          </table>
-        ) : (
-          <table style={{ marginBottom: 12 }}>
-            <tbody>
-              <tr>
-                <th style={{ fontWeight: 'bold' }}>ยอดรวมสุทธิ</th>
-                <td style={{ width: 110, fontWeight: 'bold', textAlign: 'right' }}>{fmt(total)}</td>
-              </tr>
-            </tbody>
-          </table>
-        )}
-        <p style={{ textAlign: 'right', fontStyle: 'italic', margin: '0 0 16px', fontSize: 12 }}>
-          ( {thaiBahtText(total)} )
-        </p>
-        {docType !== 'ใบเสนอราคา' && (
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>รายละเอียดการชำระเงิน</p>
-            <table style={{ fontSize: 11 }}>
-              <tbody>
-                {t.payments.map((p, idx) => (
-                  <tr key={idx}>
-                    <td style={{ padding: '3px 6px' }}>
-                      {p.type} &middot; {p.method}
+              {lines.map((l, li) => {
+                const stockMatch = stock.find((s) => s.name === l.product);
+                const short = stockMatch?.shortName || l.product;
+                return (
+                  <tr key={li}>
+                    <td style={{ textAlign: 'center' }}>{l.qty}</td>
+                    <td>
+                      <b>{short}</b>
+                      {stockMatch?.shortName ? ` (${l.product})` : ''}
+                      <div style={{ fontSize: 10, color: '#555' }}>
+                        {l.category}
+                        {l.detail ? ` — ${l.detail}` : ''}
+                      </div>
                     </td>
-                    <td style={{ width: 110, textAlign: 'right', padding: '3px 6px' }}>
-                      {fmt(Number(p.amount))}
-                    </td>
+                    <td style={{ textAlign: 'right' }}>{fmt(l.amount / (l.qty || 1))}</td>
+                    <td style={{ textAlign: 'right' }}>{fmt(l.amount)}</td>
                   </tr>
-                ))}
-                <tr>
-                  <th style={{ padding: '3px 6px' }}>สถานะ</th>
-                  <td
-                    style={{
-                      width: 110,
-                      fontWeight: 'bold',
-                      textAlign: 'right',
-                      padding: '3px 6px',
-                    }}
-                  >
-                    {total - paid <= 0 ? 'ชำระครบแล้ว' : `คงเหลือ ${fmt(total - paid)}`}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+            <div style={{ width: 260 }}>
+              {totalDiscount > 0 && totalRow('ยอดรวม', fmt(grossTotal))}
+              {totalDiscount > 0 && totalRow('ส่วนลดรวม', `-${fmt(totalDiscount)}`)}
+              {isTaxInvoice && totalRow('มูลค่าก่อนภาษี', fmt(total / 1.07))}
+              {isTaxInvoice && totalRow('ภาษีมูลค่าเพิ่ม 7%', fmt(total - total / 1.07))}
+              {totalRow('ยอดรวมสุทธิ', fmt(total), true)}
+              <p
+                style={{
+                  margin: '4px 0 0',
+                  fontSize: 10,
+                  fontStyle: 'italic',
+                  textAlign: 'right',
+                  paddingRight: 10,
+                }}
+              >
+                ( {thaiBahtText(total)} )
+              </p>
+            </div>
           </div>
-        )}
-        {showDisclaimer && (
-          <p
-            style={{
-              fontSize: 10,
-              color: '#777',
-              lineHeight: 1.6,
-              marginBottom: 20,
-              borderTop: '1px solid #ddd',
-              paddingTop: 8,
-            }}
-          >
-            กรุณาตรวจเช็คบริเวณรอบรถของท่านทุกครั้งก่อนเข้าบริการ
-            หากท่านนำรถไปใช้แล้วเกิดความเสียหายบริเวณรอบรถทางร้านจะไม่รับผิดชอบใดๆทั้งสิ้น
-            ยกเว้นความเสียหายอยู่ในการรับประกันสินค้า
-          </p>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 44, fontSize: 12 }}>
-          <span>
-            ลงชื่อ..................... {docType === 'ใบเสนอราคา' ? 'ผู้เสนอราคา' : 'ผู้รับเงิน'}
-          </span>
+
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', marginBottom: 12 }}>
+            {!isQuotation && (
+              <div
+                style={{
+                  flex: 1,
+                  border: '1px solid #666',
+                  borderRadius: 6,
+                  padding: '8px 10px',
+                  fontSize: 11,
+                }}
+              >
+                <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>ช่องทางการชำระเงิน</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+                  {channels.map((m) => (
+                    <span key={m} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          width: 13,
+                          height: 13,
+                          border: '1.5px solid #333',
+                          borderRadius: 2,
+                          textAlign: 'center',
+                          lineHeight: '11px',
+                          fontSize: 11,
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        {usedMethods.has(m) ? '✓' : ' '}
+                      </span>
+                      {m}
+                    </span>
+                  ))}
+                </div>
+                {receivedPayments.length > 0 && (
+                  <p style={{ margin: '6px 0 0', fontSize: 10, fontWeight: 'bold' }}>
+                    รายละเอียดการชำระเงิน
+                  </p>
+                )}
+                {receivedPayments.map((p, pi) => (
+                  <p key={pi} style={{ margin: '2px 0 0', fontSize: 10, color: '#444' }}>
+                    {paymentLabel(p.type)} {fmt(Number(p.amount || 0))} บาท
+                    {p.method ? ` (${p.method})` : ''}
+                    {p.date ? ` · ${fmtThaiDate(new Date(p.date))}` : ''}
+                  </p>
+                ))}
+                <p style={{ margin: '5px 0 0', fontWeight: 'bold' }}>
+                  {total - paid <= 0 ? 'ชำระครบแล้ว' : `คงเหลือ ${fmt(total - paid)} บาท`}
+                </p>
+              </div>
+            )}
+            <div style={{ flex: 1, textAlign: 'center', fontSize: 11 }}>
+              <p style={{ margin: '0 0 26px' }}>
+                {isQuotation ? 'ผู้เสนอราคา' : 'ผู้รับเงินในนาม'} {issuerName}
+              </p>
+              <p style={{ margin: 0 }}>ลงชื่อ .............................................</p>
+              <p style={{ margin: '4px 0 0' }}>วันที่ {fmtThaiDate(new Date())}</p>
+            </div>
+          </div>
+
+          {showDisclaimer && (
+            <p
+              style={{
+                fontSize: 9,
+                color: '#777',
+                lineHeight: 1.5,
+                borderTop: '1px solid #ddd',
+                paddingTop: 6,
+                margin: 0,
+              }}
+            >
+              กรุณาตรวจเช็คบริเวณรอบรถของท่านทุกครั้งก่อนเข้าบริการ
+              หากท่านนำรถไปใช้แล้วเกิดความเสียหายบริเวณรอบรถทางร้านจะไม่รับผิดชอบใดๆทั้งสิ้น
+              ยกเว้นความเสียหายอยู่ในการรับประกันสินค้า
+            </p>
+          )}
         </div>
       </div>
     );

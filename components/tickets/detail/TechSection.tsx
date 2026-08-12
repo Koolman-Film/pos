@@ -55,18 +55,10 @@ export function TechSection({
   );
   const showInstallConfirm = !!(t.qcPhotos && t.qcPhotos.length > 0) && qcCategories.length > 0;
 
+  // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
-    <div className="mb-5 pt-5" style={{ borderTop: '1px solid var(--line)' }}>
-      <p
-        className="text-xs font-medium mb-3 flex items-center gap-1.5"
-        style={{ color: 'var(--ink-soft)' }}
-      >
-        <i className="fa-solid fa-user-gear"></i>ข้อมูลของช่าง{' '}
-        <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
-          (แยกตามชนิดสินค้า เพราะแต่ละชนิดใช้ช่างคนละคนและตัดสต็อกต่างกัน)
-        </span>
-      </p>
-      <div className="mb-3 rounded-xl p-3" style={{ background: 'var(--paper)' }}>
+    <div>
+      <div className="mb-3 rounded-xl p-3" style={{ background: '#fff' }}>
         <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
           <i className="fa-solid fa-camera mr-1"></i>QC ก่อนติดตั้ง
         </label>

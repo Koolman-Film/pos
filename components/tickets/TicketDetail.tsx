@@ -7,10 +7,12 @@ import { getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { itemNetPrice } from '@/lib/domain/tickets';
+import { fitPrintPages } from '@/lib/print/fitToPage';
 
 import { PrintJobSheet, type PrintMode } from './PrintJobSheet';
 import { serializeTicket } from './serialize';
 import { ExtrasSection } from './detail/ExtrasSection';
+import { FormSection, SECTION_TONES } from './detail/FormSection';
 import { ItemsSection } from './detail/ItemsSection';
 import { NotesSection } from './detail/NotesSection';
 import { PaymentsSection } from './detail/PaymentsSection';
@@ -170,7 +172,13 @@ export function TicketDetail({
   }
   function doPrint(mode: PrintMode) {
     setPrintMode(mode);
-    setTimeout(() => window.print(), 50);
+    setTimeout(() => {
+      // Shrink any page that would spill onto a second sheet, then print. The
+      // 50ms is the sheet's render; the measurement has to come after it and
+      // before the dialog, which is why both live here.
+      fitPrintPages();
+      window.print();
+    }, 50);
   }
 
   async function save() {
@@ -550,87 +558,105 @@ export function TicketDetail({
             }
             aria-disabled={locked || undefined}
           >
-            <VehicleInfoSection
-              t={t}
-              field={field}
-              bookingChannels={options.booking_channels}
-              setBookingChannels={opt('booking_channels')}
-              serviceTypes={options.service_types}
-              setServiceTypes={opt('service_types')}
-              carTypes={options.car_types}
-              setCarTypes={opt('car_types')}
-              carBrands={options.car_brands}
-              setCarBrands={opt('car_brands')}
-              retailCustomers={retailCustomers}
-              setRetailCustomers={setRetailCustomers}
-              onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
-              onModelChange={onModelChange}
-              commitModelRegistry={commitModelRegistry}
-            />
-
-            <ItemsSection
-              t={t}
-              stock={stock}
-              productCategories={productCategories}
-              filmPositions={options.film_positions}
-              setFilmPositions={opt('film_positions')}
-              wrapPositions={options.wrap_positions}
-              setWrapPositions={opt('wrap_positions')}
-              serviceItems={options.service_items}
-              setServiceItems={opt('service_items')}
-              addItem={addItem}
-              removeItem={removeItem}
-              updateItem={updateItem}
-              updateItemFields={updateItemFields}
-              updateFilmPositions={updateFilmPositions}
-              lookupPrice={lookupPrice}
-              lookupFilmPrice={lookupFilmPrice}
-              commitPrice={commitPrice}
-            />
-
-            {/*
-              Both blocks sit BELOW the products on purpose: the per-category
-              notes and the wrap tick-list only mean anything once the ชนิดสินค้า
-              on the ticket are known, and a note box that appears above the item
-              you just added is a box nobody scrolls back up to.
-            */}
-            {t.items.some((i) => i.category === WRAP_CATEGORY) && (
-              <WrapOptionsSection
-                selected={t.wrapOptions ?? []}
-                onChange={(next) => field('wrapOptions', next)}
+            <FormSection step={1} title="ข้อมูลงานและลูกค้า" icon="fa-car" tone={SECTION_TONES.job}>
+              <VehicleInfoSection
+                t={t}
+                field={field}
+                bookingChannels={options.booking_channels}
+                setBookingChannels={opt('booking_channels')}
+                serviceTypes={options.service_types}
+                setServiceTypes={opt('service_types')}
+                carTypes={options.car_types}
+                setCarTypes={opt('car_types')}
+                carBrands={options.car_brands}
+                setCarBrands={opt('car_brands')}
+                retailCustomers={retailCustomers}
+                setRetailCustomers={setRetailCustomers}
+                onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
+                onModelChange={onModelChange}
+                commitModelRegistry={commitModelRegistry}
               />
-            )}
+            </FormSection>
 
-            <NotesSection
-              t={t}
-              setNote={(v) => field('notes', v)}
-              setCategoryNote={setCategoryNote}
-            />
+            <FormSection
+              step={2}
+              title={`สินค้า/การติดตั้ง (${t.items.length})`}
+              icon="fa-bag-shopping"
+              tone={SECTION_TONES.items}
+            >
+              <ItemsSection
+                t={t}
+                stock={stock}
+                productCategories={productCategories}
+                filmPositions={options.film_positions}
+                setFilmPositions={opt('film_positions')}
+                wrapPositions={options.wrap_positions}
+                setWrapPositions={opt('wrap_positions')}
+                serviceItems={options.service_items}
+                setServiceItems={opt('service_items')}
+                addItem={addItem}
+                removeItem={removeItem}
+                updateItem={updateItem}
+                updateItemFields={updateItemFields}
+                updateFilmPositions={updateFilmPositions}
+                lookupPrice={lookupPrice}
+                lookupFilmPrice={lookupFilmPrice}
+                commitPrice={commitPrice}
+              />
 
-            <ExtrasSection
-              t={t}
-              extraOptions={options.extra_options}
-              setExtraOptions={opt('extra_options')}
-              slideTypes={options.slide_types}
-              stock={stock}
-              toggleExtra={toggleExtra}
-              updateExtraDetail={updateExtraDetail}
-              setSlideType={setSlideType}
-              updateSlideLeg={updateSlideLeg}
-              shareLink={shareLink}
-            />
+              {/*
+                These three sit BELOW the products on purpose: the wrap tick-list
+                and the per-category notes only mean anything once the ชนิดสินค้า
+                on the ticket are known, and a note box that appears above the
+                item you just added is a box nobody scrolls back up to.
+              */}
+              <div className="mt-4">
+                {t.items.some((i) => i.category === WRAP_CATEGORY) && (
+                  <WrapOptionsSection
+                    selected={t.wrapOptions ?? []}
+                    onChange={(next) => field('wrapOptions', next)}
+                  />
+                )}
 
-            <PaymentsSection
-              t={t}
-              shop={t.shop}
-              paymentMethods={paymentMethodOptions}
-              attachmentUrlAction={attachmentUrlAction}
-              addPayment={addPayment}
-              removePayment={removePayment}
-              updatePayment={updatePayment}
-              total={total}
-              paid={paid}
-            />
+                <NotesSection
+                  t={t}
+                  setNote={(v) => field('notes', v)}
+                  setCategoryNote={setCategoryNote}
+                />
+
+                <ExtrasSection
+                  t={t}
+                  extraOptions={options.extra_options}
+                  setExtraOptions={opt('extra_options')}
+                  slideTypes={options.slide_types}
+                  stock={stock}
+                  toggleExtra={toggleExtra}
+                  updateExtraDetail={updateExtraDetail}
+                  setSlideType={setSlideType}
+                  updateSlideLeg={updateSlideLeg}
+                  shareLink={shareLink}
+                />
+              </div>
+            </FormSection>
+
+            <FormSection
+              step={3}
+              title="การชำระเงิน"
+              icon="fa-money-bill-wave"
+              tone={SECTION_TONES.payment}
+            >
+              <PaymentsSection
+                t={t}
+                shop={t.shop}
+                paymentMethods={paymentMethodOptions}
+                attachmentUrlAction={attachmentUrlAction}
+                addPayment={addPayment}
+                removePayment={removePayment}
+                updatePayment={updatePayment}
+                total={total}
+                paid={paid}
+              />
+            </FormSection>
           </div>
 
           {saveError && (
@@ -704,13 +730,12 @@ export function TicketDetail({
             </button>
           )}
           {!isNew && (
-            <div
-              className="rounded-2xl p-4 mt-4"
-              style={{ background: '#EAF1FB', border: '1.5px solid #2563EB' }}
+            <FormSection
+              step={4}
+              title="ออกเอกสารทางการเงิน"
+              icon="fa-file-invoice"
+              tone={SECTION_TONES.document}
             >
-              <p className="text-xs font-semibold mb-2" style={{ color: '#1D4ED8' }}>
-                <i className="fa-solid fa-file-invoice mr-1.5"></i>ออกเอกสารทางการเงิน
-              </p>
               <div className="flex gap-1.5 mb-2.5">
                 {['ใบเสนอราคา', 'ใบกำกับภาษี/ใบเสร็จรับเงิน', 'ใบเสร็จรับเงิน'].map((dt) => (
                   <button
@@ -830,7 +855,7 @@ export function TicketDetail({
               >
                 <i className="fa-solid fa-print"></i> ออก{docType}
               </button>
-            </div>
+            </FormSection>
           )}
           {/*
             ข้อมูลของช่าง sits at the very bottom, below the financial-document
@@ -847,18 +872,26 @@ export function TicketDetail({
             }
             aria-disabled={locked || undefined}
           >
-            <TechSection
-              t={t}
-              stock={stock}
-              attachmentUrlAction={attachmentUrlAction}
-              field={field}
-              technicians={options.technicians}
-              setTechnicians={opt('technicians')}
-              updateActualQty={updateActualQty}
-              confirmInstall={confirmInstall}
-              shareQcAlbum={shareQcAlbum}
-              shopName={shopName}
-            />
+            <FormSection
+              step={5}
+              title="ข้อมูลของช่าง"
+              icon="fa-user-gear"
+              tone={SECTION_TONES.tech}
+              hint="(แยกตามชนิดสินค้า เพราะแต่ละชนิดใช้ช่างคนละคนและตัดสต็อกต่างกัน)"
+            >
+              <TechSection
+                t={t}
+                stock={stock}
+                attachmentUrlAction={attachmentUrlAction}
+                field={field}
+                technicians={options.technicians}
+                setTechnicians={opt('technicians')}
+                updateActualQty={updateActualQty}
+                confirmInstall={confirmInstall}
+                shareQcAlbum={shareQcAlbum}
+                shopName={shopName}
+              />
+            </FormSection>
           </div>
         </div>
 
