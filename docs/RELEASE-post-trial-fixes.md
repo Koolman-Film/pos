@@ -31,6 +31,15 @@ npx supabase link --project-ref <production-ref>
 npx supabase db push                     # applies 0012 … 0018 only
 ```
 
+### No CLI? Paste one file instead
+
+`supabase/release-0012-0018.sql` is the same seven migrations concatenated in
+order, with guards that make every statement safe to run twice. Open the project
+dashboard → SQL Editor → paste → Run. It records the versions in
+`supabase_migrations.schema_migrations` too, so a later `db push` skips them.
+
+Use this OR the CLI above, not both — though running both would be harmless.
+
 `supabase/config.toml` currently carries the LOCAL stack id
 (`project_id = "branch-porting-performance-e58d15"`); `link` rewrites it. Do not
 commit that rewrite unless you mean to.
