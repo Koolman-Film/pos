@@ -186,7 +186,14 @@ export type TicketSavePayload = {
      */
     actualQty: Record<string, number>;
   }[];
-  payments: { type: string; method: string; amount: number; paidAt: string }[];
+  payments: {
+    type: string;
+    method: string;
+    amount: number;
+    paidAt: string;
+    /** Storage paths in the `ticket-attachments` bucket (migration 0018). */
+    attachments: string[];
+  }[];
 };
 
 export const BRAND_TH: Record<string, string> = {

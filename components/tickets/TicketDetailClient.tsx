@@ -41,6 +41,7 @@ export function TicketDetailClient({
   optionAction,
   deleteAction,
   unlockAction,
+  attachmentUrlAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -63,6 +64,7 @@ export function TicketDetailClient({
   ) => Promise<{ ok: boolean; error?: string }>;
   deleteAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
   unlockAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -85,6 +87,7 @@ export function TicketDetailClient({
       optionAction={optionAction}
       deleteAction={deleteAction}
       unlockAction={unlockAction}
+      attachmentUrlAction={attachmentUrlAction}
     />
   );
 }

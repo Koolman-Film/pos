@@ -305,6 +305,25 @@ export async function deleteTicket(ticketId: string): Promise<{ ok: boolean; err
 }
 
 /**
+ * A one-minute signed URL for a slip or QC photo on a ticket.
+ *
+ * The `ticket-attachments` bucket is private (migration 0018), so this is the
+ * only way to open one. Authentication is re-checked here per C2 and storage
+ * RLS checks the `list` nav again when the URL is redeemed.
+ */
+export async function getTicketAttachmentUrl(
+  path: string,
+): Promise<{ url?: string; error?: string }> {
+  await getSessionContext();
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage
+    .from('ticket-attachments')
+    .createSignedUrl(path, 60);
+  if (error) return { error: error.message };
+  return { url: data?.signedUrl };
+}
+
+/**
  * ปลดล็อกใบงาน — reopen a closed ticket for editing, gated on `list.unlock`
  * (admin). The ticket re-locks by itself on the next save if it still qualifies,
  * so this is "let me fix this one thing", not a permanent switch.

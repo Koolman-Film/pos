@@ -3,7 +3,13 @@ import { notFound } from 'next/navigation';
 import { TicketDetailClient } from '@/components/tickets/TicketDetailClient';
 import { getSessionContext } from '@/lib/auth/session';
 
-import { deleteTicket, saveTicket, unlockTicket, updateOptionList } from '../actions';
+import {
+  deleteTicket,
+  getTicketAttachmentUrl,
+  saveTicket,
+  unlockTicket,
+  updateOptionList,
+} from '../actions';
 import { loadDetailRegistries, loadShops, loadStatuses, loadTicket } from '../data';
 
 export default async function TicketDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -45,6 +51,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       optionAction={updateOptionList}
       deleteAction={deleteTicket}
       unlockAction={unlockTicket}
+      attachmentUrlAction={getTicketAttachmentUrl}
     />
   );
 }

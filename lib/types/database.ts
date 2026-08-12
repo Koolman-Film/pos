@@ -814,6 +814,7 @@ export type Database = {
       ticket_payments: {
         Row: {
           amount: number
+          attachments: string[]
           id: number
           method: string
           paid_at: string
@@ -822,6 +823,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          attachments?: string[]
           id?: never
           method: string
           paid_at: string
@@ -830,6 +832,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          attachments?: string[]
           id?: never
           method?: string
           paid_at?: string

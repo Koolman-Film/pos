@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
-import { createClient as createSupabaseClient } from '@/lib/supabase/client';
+import { uploadAttachments } from '@/lib/storage/attachments';
 import { createPortal } from 'react-dom';
 
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
@@ -11,6 +11,7 @@ import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { FilePreview } from '@/components/ui/FilePreview';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { StatusPill } from '@/components/ui/StatusPill';
 import type { Shop } from '@/components/ui/PeriodShopFilter';
@@ -354,22 +355,9 @@ export function AccountingModule({
     return uploadFiles(shop, exFiles);
   }
 
+  /** Thin wrapper so both call sites name the bucket once. */
   async function uploadFiles(shop: string, files: File[]): Promise<UploadedAttachment[]> {
-    if (files.length === 0) return [];
-    const supabase = createSupabaseClient();
-    const uploaded: UploadedAttachment[] = [];
-    for (const file of files) {
-      // Storage keys are ASCII-safe; the original name is kept in the row, so a
-      // Thai filename still displays correctly.
-      const safeName = file.name.replace(/[^\w.-]+/g, '_').slice(-80);
-      const path = `${shop}/${crypto.randomUUID()}-${safeName}`;
-      const { error } = await supabase.storage
-        .from('expense-attachments')
-        .upload(path, file, { contentType: file.type || 'application/octet-stream' });
-      if (error) throw new Error(`อัปโหลด "${file.name}" ไม่สำเร็จ — ${error.message}`);
-      uploaded.push({ path, fileName: file.name, mimeType: file.type, size: file.size });
-    }
-    return uploaded;
+    return uploadAttachments('expense-attachments', shop, files);
   }
 
   function addExpense() {
@@ -1390,94 +1378,15 @@ export function AccountingModule({
             document.body,
           )}
 
-        {/*
-          Receipt preview. Portaled to <body> so it is not clipped by the card it
-          was opened from, and closed by the backdrop, the ✕ or Escape. The URL
-          is the one-minute signed link — it is never persisted anywhere.
-        */}
-        {preview &&
-          mounted &&
-          createPortal(
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label={`ไฟล์แนบ ${preview.fileName}`}
-              onClick={() => setPreview(null)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setPreview(null);
-              }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              style={{ background: 'rgba(0,0,0,.6)' }}
-            >
-              <div
-                onClick={(e) => e.stopPropagation()}
-                className="rounded-2xl overflow-hidden flex flex-col"
-                style={{
-                  background: 'var(--surface)',
-                  maxWidth: 900,
-                  width: '100%',
-                  height: '90vh',
-                }}
-              >
-                <div
-                  className="flex items-center justify-between gap-3 px-4 py-2.5"
-                  style={{ borderBottom: '1px solid var(--line)' }}
-                >
-                  <p className="text-sm font-semibold truncate">{preview.fileName}</p>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <a
-                      href={preview.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-outline text-xs px-3 py-1.5 rounded-lg font-medium"
-                    >
-                      เปิดแท็บใหม่
-                    </a>
-                    <button
-                      onClick={() => setPreview(null)}
-                      aria-label="ปิดหน้าต่างดูไฟล์แนบ"
-                      className="btn-outline text-xs px-3 py-1.5 rounded-lg font-medium"
-                    >
-                      <i className="fa-solid fa-xmark"></i>
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-auto" style={{ background: '#333' }}>
-                  {/* A PDF needs a frame; anything else is shown as an image, which
-                      is what a phone photo of a slip always is. */}
-                  {/\.pdf$/i.test(preview.fileName) || preview.mimeType === 'application/pdf' ? (
-                    <object
-                      data={preview.url}
-                      type="application/pdf"
-                      style={{ width: '100%', height: '100%' }}
-                    >
-                      {/* Shown only when the browser has no built-in PDF viewer,
-                          so a receipt is never a dead end. */}
-                      <div className="p-6 text-center text-sm" style={{ color: '#fff' }}>
-                        <p className="mb-3">เบราว์เซอร์นี้เปิด PDF ในหน้าต่างนี้ไม่ได้</p>
-                        <a
-                          href={preview.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn-primary px-4 py-2 rounded-xl font-semibold"
-                        >
-                          เปิด {preview.fileName} ในแท็บใหม่
-                        </a>
-                      </div>
-                    </object>
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={preview.url}
-                      alt={preview.fileName}
-                      style={{ display: 'block', margin: '0 auto', maxWidth: '100%' }}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )}
+        {/* Same viewer the ticket slips and QC photos use. */}
+        {preview && (
+          <FilePreview
+            url={preview.url}
+            fileName={preview.fileName}
+            mimeType={preview.mimeType}
+            onClose={() => setPreview(null)}
+          />
+        )}
       </div>
     </OptionManageProvider>
   );

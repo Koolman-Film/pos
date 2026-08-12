@@ -63,6 +63,7 @@ export function TicketDetail({
   optionAction,
   deleteAction,
   unlockAction,
+  attachmentUrlAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -87,6 +88,8 @@ export function TicketDetail({
   deleteAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
   /** Reopens a closed ticket; shown only to a `list.unlock` holder. */
   unlockAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Signed-URL minter for the slips and QC photos stored on this ticket. */
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
@@ -610,7 +613,9 @@ export function TicketDetail({
 
             <PaymentsSection
               t={t}
+              shop={t.shop}
               paymentMethods={paymentMethodOptions}
+              attachmentUrlAction={attachmentUrlAction}
               addPayment={addPayment}
               removePayment={removePayment}
               updatePayment={updatePayment}
@@ -836,6 +841,7 @@ export function TicketDetail({
             <TechSection
               t={t}
               stock={stock}
+              attachmentUrlAction={attachmentUrlAction}
               field={field}
               technicians={options.technicians}
               setTechnicians={opt('technicians')}

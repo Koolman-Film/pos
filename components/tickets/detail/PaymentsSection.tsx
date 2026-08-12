@@ -2,12 +2,16 @@
 
 import { fmt } from '@/lib/domain/format';
 
+import { AttachmentField } from './AttachmentField';
+
 import type { Ticket, TicketPayment } from '../types';
 
 /** การชำระเงิน. Ported from reference/v0.4/finnix-film.html:1861-1894. */
 export function PaymentsSection({
   t,
+  shop,
   paymentMethods,
+  attachmentUrlAction,
   addPayment,
   removePayment,
   updatePayment,
@@ -15,6 +19,10 @@ export function PaymentsSection({
   paid,
 }: {
   t: Ticket;
+  /** Bucket folder for uploads — the ticket's shop. */
+  shop: string;
+  /** Mints a signed URL so a stored slip can be previewed. */
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
   /** The shop's ช่องทางการชำระเงิน from จัดการสิทธิ์ (falls back to the global list). */
   paymentMethods: string[];
   addPayment: () => void;
@@ -107,55 +115,18 @@ export function PaymentsSection({
               </button>
             )}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label
-              className="text-xs flex items-center gap-1.5 flex-1 field px-2.5 py-1.5 cursor-pointer"
-              style={{ color: 'var(--ink-soft)' }}
-            >
-              <i className="fa-solid fa-paperclip"></i>
-              แนบสลิปโอนเงิน (เลือกได้หลายไฟล์)...
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  if (files.length)
-                    updatePayment(idx, 'attachments', [
-                      ...(p.attachments || []),
-                      ...files.map((f) => f.name),
-                    ]);
-                  e.target.value = '';
-                }}
-              />
-            </label>
-            {(p.attachments || []).length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {p.attachments!.map((fn, fi) => (
-                  <span
-                    key={fi}
-                    className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                    style={{ background: 'var(--paper)', color: '#4C7A3E' }}
-                  >
-                    <i className="fa-solid fa-circle-check"></i>
-                    {fn}
-                    <i
-                      className="fa-solid fa-xmark cursor-pointer"
-                      style={{ color: '#B23A48' }}
-                      onClick={() =>
-                        updatePayment(
-                          idx,
-                          'attachments',
-                          p.attachments!.filter((_, fi2) => fi2 !== fi),
-                        )
-                      }
-                    ></i>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          {/*
+            The slip is the shop's proof the transfer arrived, so it is a real
+            file now (migration 0018) rather than a filename that the save threw
+            away — `ticket_payments` had no column for it at all.
+          */}
+          <AttachmentField
+            label="แนบสลิปโอนเงิน (เลือกได้หลายไฟล์)..."
+            paths={p.attachments ?? []}
+            onChange={(next) => updatePayment(idx, 'attachments', next)}
+            folder={shop}
+            urlAction={attachmentUrlAction}
+          />
         </div>
       ))}
       <button

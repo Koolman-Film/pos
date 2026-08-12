@@ -4,6 +4,8 @@ import { useState } from 'react';
 
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 
+import { AttachmentField } from './AttachmentField';
+
 import type { StockRow, Ticket } from '../types';
 
 const labelCls = 'text-xs font-medium block mb-1';
@@ -23,6 +25,7 @@ export function TechSection({
   shareQcAlbum,
   shopName,
   stock = [],
+  attachmentUrlAction,
 }: {
   t: Ticket;
   field: (key: keyof Ticket, value: unknown) => void;
@@ -34,6 +37,8 @@ export function TechSection({
   shopName: (id: string) => string;
   /** Used only to show each product short-name-first, as everywhere else. */
   stock?: StockRow[];
+  /** Mints a signed URL so a stored QC photo can be previewed. */
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
 }) {
   const [showQcPreview, setShowQcPreview] = useState(false);
 
@@ -65,49 +70,23 @@ export function TechSection({
         <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
           <i className="fa-solid fa-camera mr-1"></i>QC ก่อนติดตั้ง
         </label>
-        <label
-          className="text-xs flex items-center gap-1.5 field px-2.5 py-1.5 cursor-pointer mt-1"
-          style={{ color: 'var(--ink-soft)' }}
-        >
-          <i className="fa-solid fa-camera"></i>
-          แนบรูป QC ก่อนติดตั้ง (เลือกได้หลายไฟล์)...
-          <input
-            type="file"
+        {/*
+          The QC photos are the record of what the car looked like before anyone
+          touched it — the shop's answer to "that scratch was not there". They
+          are real uploads now (migration 0018); the form used to keep only the
+          filenames, so the album it offered to share with the customer pointed
+          at nothing.
+        */}
+        <div className="mt-1">
+          <AttachmentField
+            label="แนบรูป QC ก่อนติดตั้ง (เลือกได้หลายไฟล์)..."
             accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              if (files.length)
-                field('qcPhotos', [...(t.qcPhotos || []), ...files.map((f) => f.name)]);
-              e.target.value = '';
-            }}
+            paths={t.qcPhotos ?? []}
+            onChange={(next) => field('qcPhotos', next)}
+            folder={t.shop}
+            urlAction={attachmentUrlAction}
           />
-        </label>
-        {(t.qcPhotos || []).length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {t.qcPhotos!.map((fn, fi) => (
-              <span
-                key={fi}
-                className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                style={{ background: '#fff', color: '#4C7A3E' }}
-              >
-                <i className="fa-solid fa-image"></i>
-                {fn}
-                <i
-                  className="fa-solid fa-xmark cursor-pointer"
-                  style={{ color: '#B23A48' }}
-                  onClick={() =>
-                    field(
-                      'qcPhotos',
-                      t.qcPhotos!.filter((_, fi2) => fi2 !== fi),
-                    )
-                  }
-                ></i>
-              </span>
-            ))}
-          </div>
-        )}
+        </div>
       </div>
       {showInstallConfirm && (
         <div

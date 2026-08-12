@@ -287,7 +287,13 @@ type DetailRow = {
     actual_qty: Record<string, number> | null;
     ticket_item_positions: { position: string; product: string; price: number }[];
   }[];
-  ticket_payments: { type: string; method: string; amount: number; paid_at: string | null }[];
+  ticket_payments: {
+    type: string;
+    method: string;
+    amount: number;
+    paid_at: string | null;
+    attachments: string[] | null;
+  }[];
 };
 
 export async function loadTicket(id: string): Promise<Ticket | null> {
@@ -299,7 +305,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
         'booking_channel, tech_by_category, drop_off_date, pickup_date, extras, locked, ' +
         'ticket_items(id, category, booked, booked_price, sold, sold_price, interested, interested_price, discount_type, discount_value, actual_qty, ' +
         'ticket_item_positions(position, product, price)), ' +
-        'ticket_payments(type, method, amount, paid_at)',
+        'ticket_payments(type, method, amount, paid_at, attachments)',
     )
     .eq('id', id)
     .maybeSingle();
@@ -361,7 +367,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
       method: p.method,
       amount: Number(p.amount || 0),
       date: p.paid_at ?? '',
-      attachments: [],
+      attachments: p.attachments ?? [],
     })),
   };
 }

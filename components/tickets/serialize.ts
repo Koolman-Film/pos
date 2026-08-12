@@ -78,6 +78,10 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
       method: p.method,
       amount: Number(p.amount || 0),
       paidAt: toISODate(p.date || '') || new Date().toISOString().slice(0, 10),
+      // Storage paths for the transfer slips (migration 0018). These were
+      // dropped here entirely — `ticket_payments` had no column for them — so a
+      // slip attached to a payment never survived the save.
+      attachments: (p.attachments ?? []).filter(Boolean),
     })),
   };
 }

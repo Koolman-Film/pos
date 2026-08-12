@@ -1,7 +1,6 @@
-# Release runbook — post-trial fixes (migrations 0012–0017)
+# Release runbook — post-trial fixes (migrations 0012–0018)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
-Commits: `8635f95`, `c67e9a3`, `2ccbb38`, `d3ff858`
 
 This is the batch that came out of the shop's trial run. [DEPLOYMENT.md](./DEPLOYMENT.md)
 is the first-launch runbook; this file only covers what shipping THIS batch to an
@@ -24,19 +23,19 @@ work FIRST (step 2) — the new code reads columns that do not exist yet, so a
 deploy that lands before the migrations will 500 on the ticket list, the
 dashboard and the accounting page.
 
-## 2. Database — six migrations
+## 2. Database — seven migrations
 
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0017 only
+npx supabase db push                     # applies 0012 … 0018 only
 ```
 
 `supabase/config.toml` currently carries the LOCAL stack id
 (`project_id = "branch-porting-performance-e58d15"`); `link` rewrites it. Do not
 commit that rewrite unless you mean to.
 
-What each one does. All six are additive — no column is dropped, no row is
+What each one does. All seven are additive — no column is dropped, no row is
 deleted, nothing is rewritten in place:
 
 | Migration                       | Change                                                                                                                                                                                                                                                                                        | Risk                                                            |
@@ -47,23 +46,27 @@ deleted, nothing is rewritten in place:
 | `0015_ticket_item_interested`   | `ticket_items.interested` / `interested_price`, and `save_ticket_children` writes them.                                                                                                                                                                                                       | Low                                                             |
 | `0016_option_manage_capability` | Capability `options.manage` (admin only). Replaces the reset function again.                                                                                                                                                                                                                  | Low                                                             |
 | `0017_ticket_lock`              | `tickets.locked`, a trigger, `save_ticket_children` refuses a locked ticket, capability `list.unlock`.                                                                                                                                                                                        | Low                                                             |
+| `0018_ticket_attachments`       | Private `ticket-attachments` storage bucket, `ticket_payments.attachments`, and `save_ticket_children` writes the slips.                                                                                                                                                                      | **Same storage caveat as 0014.**                                |
 
-### Storage caveat for 0014
+### Storage caveat for 0014 and 0018
 
-On a hosted project `storage.objects` is owned by `supabase_storage_admin`, not
-`postgres`, so `create policy … on storage.objects` can fail with
-`must be owner of table objects`. If `db push` stops there, create the three
-policies from the dashboard (Storage → Policies → `expense-attachments`) with the
-same bodies as the migration, or run them as the owner:
+Both migrations create policies on `storage.objects`, which on a hosted project
+is owned by `supabase_storage_admin` rather than `postgres` — so
+`create policy … on storage.objects` can fail with
+`must be owner of table objects`. If `db push` stops there, create those policies
+from the dashboard (Storage → Policies, on `expense-attachments` and
+`ticket-attachments`) with the same bodies as the migration, or run them as the
+owner:
 
 ```sql
 set role supabase_storage_admin;
--- the three create policy statements from 0014
+-- the create policy statements from 0014 (three) and 0018 (three)
 reset role;
 ```
 
-Without them the bucket is unreadable: the receipt preview will fail to open even
-though the upload succeeded.
+Without them the buckets are unreadable: uploads still succeed, but every
+receipt, slip and QC photo fails to open — which is the same "ไม่แสดงไฟล์แนบ"
+this release exists to fix.
 
 ### After the push
 
@@ -89,6 +92,9 @@ In this order, as an admin:
    file. This exercises the bucket, the RLS policies and the signed URL together.
 5. **A ticket** — open one, check the product picker searches by short name, then
    set a ticket to ส่งมอบแล้ว with full payment and confirm it locks.
+6. **A ticket's files** — attach a slip to a payment row and a QC photo, save,
+   reopen, and preview both. Same three moving parts as step 4 but against the
+   `ticket-attachments` bucket, which has its own policies.
 
 ## 4. Known follow-ups, not blockers
 
@@ -111,6 +117,10 @@ In this order, as an admin:
   ticket form is reordered and the installation sheet is now a table, so most
   images differ. Regenerate with `npm run test:e2e:update-snapshots` (it resets
   the LOCAL database — it does not touch anything hosted).
+- **Wholesale PO attachments are still filenames.** The same defect the ticket
+  slips had; deliberately left for now, since nobody reported it during the
+  trial. `components/wholesale/WholesaleDetail.tsx` is the one remaining caller
+  that stores `File.name`.
 - **No RLS/e2e coverage yet** for `expense_attachments`, the soft-delete columns,
   `ticket_items.interested` or the lock trigger. The lock trigger was proved by
   hand against a real database, inside a transaction that was rolled back.
