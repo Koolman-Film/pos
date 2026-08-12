@@ -1454,9 +1454,15 @@ export function PrintJobSheet({
               <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>
                 {isQuotation ? 'ผู้เสนอราคา :' : 'ผู้ออกใบเสร็จรับเงิน :'}
               </p>
-              <p style={{ margin: 0, fontWeight: 'bold' }}>{issuerName}</p>
+              {/*
+                Branch first, legal entity under it. The customer knows the shop
+                by its branch — it is the name on the door and on the phone — and
+                the นิติบุคคล line is there because the tax id below belongs to
+                it, not because anyone looks the document up by it.
+              */}
+              <p style={{ margin: 0, fontWeight: 'bold' }}>{shopName(t.shop)}</p>
               {showCompanyInfo && info.companyName && (
-                <p style={{ margin: '2px 0 0' }}>{shopName(t.shop)}</p>
+                <p style={{ margin: '2px 0 0' }}>{info.companyName}</p>
               )}
               {info.address && <p style={{ margin: '2px 0 0' }}>{info.address}</p>}
               {info.phone && <p style={{ margin: '2px 0 0' }}>โทร {info.phone}</p>}
