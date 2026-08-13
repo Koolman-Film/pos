@@ -37,15 +37,24 @@ In this order, from the dashboard → SQL Editor. Each is guarded so that runnin
 it twice changes nothing, and each records its versions in
 `supabase_migrations.schema_migrations` so a later `db push` skips them.
 
-| Order | File                             | Needs                                      |
-| ----- | -------------------------------- | ------------------------------------------ |
-| 1     | `supabase/release-0012-0018.sql` | a normal connection                        |
-| 2     | `supabase/storage-policies.sql`  | **owner of `storage.objects`** — see below |
-| 3     | `supabase/release-0019.sql`      | a normal connection                        |
+| Order | File                                          | Needs                                      |
+| ----- | --------------------------------------------- | ------------------------------------------ |
+| 1     | `supabase/release-0012-0018.sql`              | a normal connection                        |
+| 2     | `supabase/storage-policies.sql`               | **owner of `storage.objects`** — see below |
+| 3     | `supabase/release-0019.sql`                   | a normal connection                        |
+| 4     | `supabase/repair-categories-and-services.sql` | a normal connection                        |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all three in order
+already been handed over. If nothing has been run yet, running all four in order
 is still correct.
+
+Step 4 is a one-time DATA repair, not schema. It folds every ชนิดสินค้า that
+products actually use into `product_categories` (so a product whose category was
+never on the list can be sold again), and moves the `service_items` list into
+`stock` as งานบริการ products for every shop — Book งาน picks product names from
+stock only now, so a service that is not a stock row cannot be selected. Read
+`supabase/check-orphan-categories.sql` first; it is read-only and tells you what
+step 4 is about to change.
 
 Use these OR the CLI above, not both — though running both would be harmless.
 

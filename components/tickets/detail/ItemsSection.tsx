@@ -1,6 +1,5 @@
 'use client';
 
-import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 import { ProductPicker, productDisplayFor } from '@/components/ui/ProductPicker';
 import { fmt } from '@/lib/domain/format';
@@ -20,8 +19,6 @@ export function ItemsSection({
   setFilmPositions,
   wrapPositions,
   setWrapPositions,
-  serviceItems,
-  setServiceItems,
   addItem,
   removeItem,
   updateItem,
@@ -38,8 +35,6 @@ export function ItemsSection({
   setFilmPositions: (v: string[]) => void;
   wrapPositions: string[];
   setWrapPositions: (v: string[]) => void;
-  serviceItems: string[];
-  setServiceItems: (v: string[]) => void;
   addItem: () => void;
   removeItem: (idx: number) => void;
   updateItem: (idx: number, key: keyof TicketItem, val: unknown) => void;
@@ -156,7 +151,6 @@ export function ItemsSection({
             .map((s) => ({ ...s, note: 'ไม่มีในสาขานี้', muted: true })),
         ];
         const usesPositions = it.category === 'ฟิล์มกรองแสง' || it.category === 'ฟิล์มกันรอย';
-        const isService = it.category === 'งานบริการ';
         const positionOptions = it.category === 'ฟิล์มกรองแสง' ? filmPositions : wrapPositions;
         const setPositionOptions =
           it.category === 'ฟิล์มกรองแสง' ? setFilmPositions : setWrapPositions;
@@ -358,37 +352,32 @@ export function ItemsSection({
                   สินค้าที่ขายจริง / ราคาที่ขาย
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {isService ? (
-                    <ManagedDropdown
-                      value={it.sold}
-                      onChange={(v) =>
-                        updateItemFields(idx, {
-                          sold: v,
-                          soldPrice: lookupPrice(v, Number(it.soldPrice || 0)),
-                        })
-                      }
-                      options={serviceItems}
-                      setOptions={setServiceItems}
-                      placeholder="เลือกบริการ..."
-                    />
-                  ) : (
-                    <ProductPicker
-                      value={it.sold}
-                      label="สินค้าที่ขายจริง"
-                      placeholder={it.category ? 'สินค้าที่ขาย...' : 'เลือกชนิดสินค้าก่อน'}
-                      options={productOptions}
-                      disabled={!it.category}
-                      className="field w-full text-sm px-3 py-2 font-medium"
-                      onChange={(prodName) => {
-                        const p = productOptions.find((x) => x.name === prodName);
-                        const fallback = p ? p.sellPrice || p.cost * 2 : 0;
-                        updateItemFields(idx, {
-                          sold: prodName,
-                          soldPrice: lookupPrice(prodName, fallback),
-                        });
-                      }}
-                    />
-                  )}
+                  {/*
+                    Every ชนิดสินค้า — งานบริการ included — picks from สต็อกสินค้า
+                    and nothing else. งานบริการ used to be a ManagedDropdown over
+                    the `service_items` option list, which was the last place in
+                    Book งาน where a product name could be invented on the spot:
+                    a name typed here existed nowhere in stock, so it had no cost,
+                    no price and no record, and it went straight onto a customer's
+                    ใบงานขาย. A service is added in สต็อกสินค้า now, like anything
+                    else that gets sold.
+                  */}
+                  <ProductPicker
+                    value={it.sold}
+                    label="สินค้าที่ขายจริง"
+                    placeholder={it.category ? 'สินค้าที่ขาย...' : 'เลือกชนิดสินค้าก่อน'}
+                    options={productOptions}
+                    disabled={!it.category}
+                    className="field w-full text-sm px-3 py-2 font-medium"
+                    onChange={(prodName) => {
+                      const p = productOptions.find((x) => x.name === prodName);
+                      const fallback = p ? p.sellPrice || p.cost * 2 : 0;
+                      updateItemFields(idx, {
+                        sold: prodName,
+                        soldPrice: lookupPrice(prodName, fallback),
+                      });
+                    }}
+                  />
                   <input
                     type="number"
                     placeholder="ราคาที่ขาย"
@@ -400,7 +389,9 @@ export function ItemsSection({
                     className="field text-sm px-3 py-2"
                   />
                 </div>
-                {it.category && !isService && productOptions.length === 0 && (
+                {/* งานบริการ is no longer exempt: it reads stock like the rest,
+                    so an empty งานบริการ list needs the same way out. */}
+                {it.category && productOptions.length === 0 && (
                   <p className="text-xs mt-1.5" style={{ color: '#B23A48' }}>
                     <i className="fa-solid fa-triangle-exclamation mr-1"></i>ยังไม่มีสินค้าหมวด
                     &quot;{it.category}&quot; ในสต็อก — ไปเพิ่มสินค้าที่เมนู &quot;สต็อกสินค้า&quot;

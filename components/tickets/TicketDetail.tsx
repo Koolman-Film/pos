@@ -668,8 +668,6 @@ export function TicketDetail({
                 setFilmPositions={opt('film_positions')}
                 wrapPositions={options.wrap_positions}
                 setWrapPositions={opt('wrap_positions')}
-                serviceItems={options.service_items}
-                setServiceItems={opt('service_items')}
                 addItem={addItem}
                 removeItem={removeItem}
                 updateItem={updateItem}
