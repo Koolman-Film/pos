@@ -136,6 +136,20 @@ const cellWrite: CSSProperties = {
   height: 26,
 };
 
+/** The "1", "2" ringed numbers that tie a category to the summary strip. */
+const stepBadge: CSSProperties = {
+  display: 'inline-block',
+  width: 16,
+  height: 16,
+  border: '1.5px solid #333',
+  borderRadius: 999,
+  fontSize: 10,
+  fontWeight: 'bold',
+  lineHeight: '14px',
+  textAlign: 'center',
+  flexShrink: 0,
+};
+
 /**
  * The physical work-order / sales / offsite / financial-document sheets.
  * Ported from the `.print-area` portals inside TicketDetail
@@ -192,6 +206,11 @@ export function PrintJobSheet({
   const filledExtras = extraOptions.filter((name) => t.extras?.[name]?.checked);
   const info = shopInfo[t.shop] || {};
   const receivedPayments = t.payments.filter((p) => Number(p.amount || 0) > 0);
+  /** Net per ชนิดสินค้า, for the sale sheet's multi-category summary strip. */
+  const categoryTotals: Record<string, number> = {};
+  for (const i of t.items.filter((i) => i.sold)) {
+    categoryTotals[i.category] = (categoryTotals[i.category] || 0) + itemNetPrice(mapItem(i));
+  }
 
   function extrasBlock(gap: number) {
     if (filledExtras.length === 0) return null;
@@ -356,6 +375,53 @@ export function PrintJobSheet({
     );
   }
 
+  /**
+   * Both ends of the job, in the order they happen — shared by all three work
+   * sheets so they cannot drift apart again.
+   *
+   * Only the delivery date used to print, so a sheet never said when the car
+   * came in, and "how long have you had my car" is the question the counter
+   * fields. The delivery date keeps the emphasis; it is the one the customer is
+   * here about.
+   */
+  function jobDates() {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 14,
+            fontWeight: 'bold',
+            border: '1.5px solid #666',
+            borderRadius: 6,
+            padding: '4px 10px',
+          }}
+        >
+          วันที่รับงาน: {fmtThaiDate(t.dropOffDateObj)}
+        </span>
+        <span
+          style={{
+            fontSize: 17,
+            fontWeight: 'bold',
+            border: '2px solid #D8A83A',
+            borderRadius: 6,
+            padding: '4px 12px',
+            background: '#FFF7DD',
+          }}
+        >
+          วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
+        </span>
+      </div>
+    );
+  }
+
   let content: React.ReactNode = null;
 
   if (printMode === 'job') {
@@ -370,20 +436,7 @@ export function PrintJobSheet({
             <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานติดตั้ง</h1>
             <div style={{ textAlign: 'right', marginBottom: 16 }}>
               <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
-              <p
-                style={{
-                  margin: 0,
-                  display: 'inline-block',
-                  fontSize: 17,
-                  fontWeight: 'bold',
-                  border: '2px solid #D8A83A',
-                  borderRadius: 6,
-                  padding: '4px 12px',
-                  background: '#FFF7DD',
-                }}
-              >
-                วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
-              </p>
+              {jobDates()}
               <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
               <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
                 บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
@@ -819,46 +872,7 @@ export function PrintJobSheet({
           <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานขาย</h1>
           <div style={{ textAlign: 'right', marginBottom: 16 }}>
             <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
-            {/*
-            Both ends of the job, in the order they happen. Only the delivery
-            date was printed, so the sheet never said when the car came in — and
-            "how long have you had my car" is the question the counter fields.
-            The delivery date keeps the emphasis; it is still the one the
-            customer is here about.
-          */}
-            <div
-              style={{
-                display: 'flex',
-                gap: 8,
-                justifyContent: 'flex-end',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 14,
-                  fontWeight: 'bold',
-                  border: '1.5px solid #666',
-                  borderRadius: 6,
-                  padding: '4px 10px',
-                }}
-              >
-                วันที่รับงาน: {fmtThaiDate(t.dropOffDateObj)}
-              </span>
-              <span
-                style={{
-                  fontSize: 17,
-                  fontWeight: 'bold',
-                  border: '2px solid #D8A83A',
-                  borderRadius: 6,
-                  padding: '4px 12px',
-                  background: '#FFF7DD',
-                }}
-              >
-                วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
-              </span>
-            </div>
+            {jobDates()}
             <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
             <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
               บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
@@ -907,6 +921,37 @@ export function PrintJobSheet({
             </span>
           </div>
           <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
+          {/*
+            A ticket carrying film AND audio printed as two headings that looked
+            like the rest of the page, so nobody could tell at a glance that the
+            job had two halves — or spot that one of them was missing. The strip
+            says how many there are and what each came to; the blocks below are
+            numbered to match and ruled down the side so they read as units.
+            None of it appears for a single-category ticket, which needs no map.
+          */}
+          {categories.length > 1 && (
+            <div
+              style={{
+                border: '1.5px solid #333',
+                borderRadius: 6,
+                padding: '6px 10px',
+                marginBottom: 12,
+                display: 'flex',
+                gap: '4px 14px',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                fontSize: 12,
+              }}
+            >
+              <span style={{ fontWeight: 'bold' }}>งานนี้มี {categories.length} ชนิดสินค้า</span>
+              {categories.map((cat, ci) => (
+                <span key={cat} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={stepBadge}>{ci + 1}</span>
+                  {cat} <b>{fmt(categoryTotals[cat] || 0)}</b>
+                </span>
+              ))}
+            </div>
+          )}
           {t.items
             .filter((i) => i.sold)
             .map((i, idx) => {
@@ -924,8 +969,16 @@ export function PrintJobSheet({
               } else {
                 rows = [{ label: null, product: i.sold }];
               }
+              const multi = categories.length > 1;
               return (
-                <div key={idx} style={{ marginBottom: 16 }}>
+                <div
+                  key={idx}
+                  style={
+                    multi
+                      ? { marginBottom: 16, borderLeft: '3px solid #333', paddingLeft: 10 }
+                      : { marginBottom: 16 }
+                  }
+                >
                   <div
                     style={{
                       display: 'flex',
@@ -940,12 +993,19 @@ export function PrintJobSheet({
                         fontSize: 17,
                         fontWeight: 900,
                         letterSpacing: 0.3,
-                        borderBottom: '2px solid #333',
-                        display: 'inline-block',
-                        paddingBottom: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 7,
                       }}
                     >
-                      {i.category}
+                      {multi && (
+                        <span style={{ ...stepBadge, width: 20, height: 20, lineHeight: '18px' }}>
+                          {categories.indexOf(i.category) + 1}
+                        </span>
+                      )}
+                      <span style={{ borderBottom: '2px solid #333', paddingBottom: 2 }}>
+                        {i.category}
+                      </span>
                     </p>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 11, color: '#666' }}>
@@ -1171,20 +1231,7 @@ export function PrintJobSheet({
         <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานนอกสถานที่</h1>
         <div style={{ textAlign: 'right', marginBottom: 16 }}>
           <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
-          <p
-            style={{
-              margin: 0,
-              display: 'inline-block',
-              fontSize: 17,
-              fontWeight: 'bold',
-              border: '2px solid #D8A83A',
-              borderRadius: 6,
-              padding: '4px 12px',
-              background: '#FFF7DD',
-            }}
-          >
-            วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
-          </p>
+          {jobDates()}
           <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
           <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
             บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}

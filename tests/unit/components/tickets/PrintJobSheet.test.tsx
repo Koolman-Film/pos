@@ -80,6 +80,26 @@ describe('ใบงานขาย', () => {
     expect(screen.getByText(/วันที่ส่งงาน:/)).toBeInTheDocument();
   });
 
+  it('counts the ชนิดสินค้า and numbers them when there is more than one', () => {
+    const t = makeTicket({
+      items: [item(), item({ category: 'เครื่องเสียง', sold: 'ลำโพง JBL Stage', soldPrice: 4500 })],
+    });
+    renderSheet(t);
+
+    // The strip says how many and what each came to...
+    const strip = screen.getByText('งานนี้มี 2 ชนิดสินค้า').parentElement!;
+    expect(within(strip).getByText('29,500.00')).toBeInTheDocument();
+    expect(within(strip).getByText('4,500.00')).toBeInTheDocument();
+    // ...and the numbers appear twice each: once in the strip, once on the block.
+    expect(screen.getAllByText('1')).toHaveLength(2);
+    expect(screen.getAllByText('2')).toHaveLength(2);
+  });
+
+  it('leaves the map off a single-category ticket', () => {
+    renderSheet(makeTicket({ items: [item()] }));
+    expect(screen.queryByText(/^งานนี้มี/)).not.toBeInTheDocument();
+  });
+
   it('itemises each receipt with what it was and how it arrived', () => {
     const t = makeTicket({
       items: [item()],
@@ -108,8 +128,19 @@ describe('ใบงานขาย', () => {
   });
 
   it('greens the cheer-up TOTAL and leaves its breakdown in ink', () => {
+    // Two categories, so the total (+9,000) and each category row are distinct
+    // figures and the assertions cannot land on the wrong element.
     const t = makeTicket({
-      items: [item({ interested: 'TPU กันรอยเกรดมาตรฐาน', interestedPrice: 22000 })],
+      items: [
+        item({ interested: 'TPU กันรอยเกรดมาตรฐาน', interestedPrice: 22000 }),
+        item({
+          category: 'เครื่องเสียง',
+          sold: 'ลำโพง JBL Stage',
+          soldPrice: 4500,
+          interested: 'ลำโพงติดรถเดิม',
+          interestedPrice: 3000,
+        }),
+      ],
     });
     renderSheet(t);
 
@@ -118,10 +149,17 @@ describe('ใบงานขาย', () => {
     const total = screen.getByText('ส่วนต่างเชียร์ขาย (Cheer-up)').parentElement!;
     expect(total).toHaveClass('print-gain');
     expect(total).toHaveStyle({ color: '#2F7A4F' });
+    expect(total).toHaveTextContent('+9,000.00');
 
-    // The per-category row under it is detail, not a second highlight.
-    const categoryRow = screen.getByText('ฟิล์มกันรอย', { selector: 'span' }).parentElement!;
-    expect(categoryRow).not.toHaveClass('print-gain');
+    // The per-category rows under it are detail, not more highlights.
+    for (const [figure, category] of [
+      ['+7,500.00', 'ฟิล์มกันรอย'],
+      ['+1,500.00', 'เครื่องเสียง'],
+    ]) {
+      const row = screen.getByText(figure).parentElement!;
+      expect(row).toHaveTextContent(category);
+      expect(row).not.toHaveClass('print-gain');
+    }
   });
 
   it('collects every category note under the ticket-wide one', () => {
@@ -138,6 +176,16 @@ describe('ใบงานขาย', () => {
 });
 
 describe('ใบงานติดตั้ง', () => {
+  it('carries both dates on every category page, like the sale sheet', () => {
+    const t = makeTicket({
+      items: [item(), item({ category: 'เครื่องเสียง', sold: 'ลำโพง JBL Stage' })],
+    });
+    renderSheet(t, 'job');
+    // Two installation pages; the ใบเช็ครถ has its own vehicle header.
+    expect(screen.getAllByText(/วันที่รับงาน:/)).toHaveLength(2);
+    expect(screen.getAllByText(/วันที่ส่งงาน:/)).toHaveLength(2);
+  });
+
   it('gives each category page only its own note', () => {
     const t = makeTicket({
       items: [item(), item({ category: 'เครื่องเสียง', sold: 'ลำโพง JBL Stage' })],
