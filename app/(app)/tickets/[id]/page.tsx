@@ -6,6 +6,8 @@ import { getSessionContext } from '@/lib/auth/session';
 import {
   deleteTicket,
   getTicketAttachmentUrl,
+  saveCarModel,
+  saveCorporateBuyer,
   saveTicket,
   unlockTicket,
   updateOptionList,
@@ -52,6 +54,8 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       deleteAction={deleteTicket}
       unlockAction={unlockTicket}
       attachmentUrlAction={getTicketAttachmentUrl}
+      corporateBuyerAction={saveCorporateBuyer}
+      carModelAction={saveCarModel}
     />
   );
 }

@@ -26,9 +26,10 @@ import type { Shop } from '@/components/ui/PeriodShopFilter';
  *     arrays directly. Here the expense/petty-cash rows arrive as props from the
  *     Server Component page (the source of truth is the `expenses` and
  *     `petty_cash` tables); every mutation calls a Server Action and the page
- *     re-renders via `revalidatePath`. Only the *config* lists (`expenseCategories`
- *     / `paymentSources`, edited inline through `ManagedDropdown`) are kept as
- *     in-session local state — persisting those is the Permissions module's job.
+ *     re-renders via `revalidatePath`. The *config* lists (`expenseCategories` /
+ *     `paymentSources`, edited inline through `ManagedDropdown`) are optimistic
+ *     in local state and written through `updateOptionListAction`. They used to
+ *     be local ONLY — an entry added here was gone on the next load.
  *   - The gate: the plan's test passes `canDo` as a function, but a Server
  *     Component cannot hand a closure to a Client Component (only serializable
  *     props cross the boundary — see the Sidebar/Commission precedent). So the

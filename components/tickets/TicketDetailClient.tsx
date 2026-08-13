@@ -42,6 +42,8 @@ export function TicketDetailClient({
   deleteAction,
   unlockAction,
   attachmentUrlAction,
+  corporateBuyerAction,
+  carModelAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -65,6 +67,16 @@ export function TicketDetailClient({
   deleteAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
   unlockAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
   attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
+  corporateBuyerAction?: (input: {
+    name: string;
+    address: string;
+    taxId: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  carModelAction?: (input: {
+    model: string;
+    brand: string;
+    carType: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -88,6 +100,8 @@ export function TicketDetailClient({
       deleteAction={deleteAction}
       unlockAction={unlockAction}
       attachmentUrlAction={attachmentUrlAction}
+      corporateBuyerAction={corporateBuyerAction}
+      carModelAction={carModelAction}
     />
   );
 }

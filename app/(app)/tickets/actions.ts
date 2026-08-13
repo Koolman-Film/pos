@@ -364,3 +364,88 @@ export async function updateOptionList(
 ): Promise<{ ok: boolean; error?: string }> {
   return updateOptionListAction(listKey, values);
 }
+
+/**
+ * ข้อมูลนิติบุคคล for a tax invoice — "บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป".
+ *
+ * The button said exactly that and did not do it: the buyer went into React
+ * state and was gone on reload, so the same company's address and tax id got
+ * retyped for every invoice.
+ *
+ * Gated on the Book งาน nav rather than a capability of its own — anyone who can
+ * reach the ticket and issue the document is the person who has these details in
+ * front of them.
+ */
+export async function saveCorporateBuyer(input: {
+  name: string;
+  address: string;
+  taxId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์บันทึกข้อมูลนิติบุคคล' };
+
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: 'กรุณากรอกชื่อนิติบุคคลก่อนบันทึก' };
+  const row = { name, address: input.address.trim(), tax_id: input.taxId.trim() };
+
+  const supabase = await createClient();
+  try {
+    // The picker keys buyers by name, so saving the same company twice has to
+    // update it rather than leave two rows the dropdown cannot tell apart.
+    const { data: existing } = await supabase
+      .from('corporate_buyers')
+      .select('id')
+      .eq('name', name)
+      .limit(1)
+      .maybeSingle();
+    const { error } = existing?.id
+      ? await supabase.from('corporate_buyers').update(row).eq('id', existing.id)
+      : await supabase.from('corporate_buyers').insert(row);
+    if (error) throw new Error(error.message);
+    revalidatePath('/tickets');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
+  }
+}
+
+/**
+ * รุ่นรถ → ยี่ห้อ + ประเภทรถ, so the next ticket for the same model fills those
+ * two in by itself. The form has always taught this registry; it just taught it
+ * to a React array that lived until the page reloaded.
+ *
+ * Keyed on the model name, case-insensitively, which is how `onModelChange`
+ * looks it up.
+ */
+export async function saveCarModel(input: {
+  model: string;
+  brand: string;
+  carType: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์บันทึกทะเบียนรุ่นรถ' };
+
+  const model = input.model.trim();
+  const brand = input.brand.trim();
+  const carType = input.carType.trim();
+  // A half-filled row would autofill blanks over a later ticket's real values.
+  if (!model || !brand || !carType) return { ok: true };
+
+  const supabase = await createClient();
+  try {
+    const { data: existing } = await supabase
+      .from('car_models')
+      .select('id')
+      .ilike('model', model)
+      .limit(1)
+      .maybeSingle();
+    const { error } = existing?.id
+      ? await supabase.from('car_models').update({ brand, car_type: carType }).eq('id', existing.id)
+      : await supabase.from('car_models').insert({ model, brand, car_type: carType });
+    if (error) throw new Error(error.message);
+    revalidatePath('/tickets');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
+  }
+}

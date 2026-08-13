@@ -69,6 +69,8 @@ export function TicketDetail({
   deleteAction,
   unlockAction,
   attachmentUrlAction,
+  corporateBuyerAction,
+  carModelAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -95,6 +97,18 @@ export function TicketDetail({
   unlockAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
   /** Signed-URL minter for the slips and QC photos stored on this ticket. */
   attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
+  /** Persists ข้อมูลนิติบุคคล for the financial document. */
+  corporateBuyerAction?: (input: {
+    name: string;
+    address: string;
+    taxId: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  /** Persists รุ่นรถ → ยี่ห้อ/ประเภทรถ so the next ticket autofills them. */
+  carModelAction?: (input: {
+    model: string;
+    brand: string;
+    carType: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
@@ -112,14 +126,27 @@ export function TicketDetail({
   }
   const opt = (name: OptionListName) => (values: string[]) => setOption(name, values);
 
-  // Secondary registries. These update in-session so the form behaves like the
-  // prototype; full persistence of these config tables is out of scope for the
-  // three named ticket server actions (flagged in the task report).
+  /*
+    Registries the form edits as a side effect of doing a job. Each is optimistic
+    in state AND written to its table, except where noted:
+
+    - `stock` is a PREVIEW ONLY — see updateActualQty. The server moves stock on
+      save, because only it can diff against what is stored.
+    - `priceMatrix` is deliberately session-local. `commitPrice` fires on every
+      keystroke in the sold-price box, so persisting it would let a one-off
+      discount — or the "3" on the way to typing "3000" — become the standard
+      price for that ประเภทรถ + สินค้า on every future ticket. Film prices have a
+      proper editor in สต็อกสินค้า → ตั้งราคาฟิล์ม/กันรอย, which does persist.
+    - `retailCustomers` is written by the ticket save itself
+      (`resolveRetailCustomerId`), keyed on name + phone.
+  */
   const [stock, setStock] = useState<StockRow[]>(initialStock);
   const [carModels, setCarModels] = useState<CarModel[]>(initialCarModels);
   const [priceMatrix, setPriceMatrix] = useState<PriceMatrixRow[]>(initialPriceMatrix);
   const [retailCustomers, setRetailCustomers] = useState<RetailCustomer[]>(initialRetailCustomers);
   const [corporateBuyers, setCorporateBuyers] = useState<CorporateBuyer[]>(initialCorporateBuyers);
+  const [savingBuyer, setSavingBuyer] = useState(false);
+  const [buyerSaveMsg, setBuyerSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -254,6 +281,11 @@ export function TicketDetail({
     if (match) setT({ ...t, model: v, brand: match.brand, carType: match.carType });
     else setT({ ...t, model: v });
   }
+  /**
+   * Teaches the รุ่นรถ registry so the next ticket for the same model fills in
+   * ยี่ห้อ and ประเภทรถ by itself. Optimistic locally, then persisted — it used
+   * to be local only, so the lesson lasted until the page reloaded.
+   */
   function commitModelRegistry(brand: string, carType: string) {
     if (!t.model) return;
     setCarModels((prev) => {
@@ -268,6 +300,45 @@ export function TicketDetail({
       }
       return [...prev, entry];
     });
+    // Fire and forget: the registry is a convenience, and a failed write must
+    // not interrupt someone filling in a ticket. The action ignores half-filled
+    // rows rather than storing a model with no brand.
+    void carModelAction?.({ model: t.model, brand, carType });
+  }
+
+  /** ข้อมูลนิติบุคคล — the button says it saves for next time, so it must. */
+  async function saveBuyer() {
+    const name = buyerName.trim();
+    if (!name) {
+      setBuyerSaveMsg({ ok: false, text: 'กรุณากรอกชื่อลูกค้าในเอกสารก่อนบันทึก' });
+      return;
+    }
+    setCorporateBuyers((prev) => {
+      const idx = prev.findIndex((x) => x.name === name);
+      const entry = { name, address: buyerAddress, taxId: buyerTaxId };
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = entry;
+        return copy;
+      }
+      return [...prev, entry];
+    });
+    if (!corporateBuyerAction) {
+      setBuyerSaveMsg({ ok: true, text: 'บันทึกไว้ในหน้านี้แล้ว' });
+      return;
+    }
+    setSavingBuyer(true);
+    const result = await corporateBuyerAction({
+      name,
+      address: buyerAddress,
+      taxId: buyerTaxId,
+    });
+    setSavingBuyer(false);
+    setBuyerSaveMsg(
+      result.ok
+        ? { ok: true, text: 'บันทึกแล้ว — ครั้งหน้าเลือกจากรายการได้เลย' }
+        : { ok: false, text: result.error || 'บันทึกไม่สำเร็จ' },
+    );
   }
   function lookupPrice(product: string, fallback: number) {
     const m = priceMatrix.find((p) => p.carType === t.carType && p.product === product);
@@ -808,25 +879,35 @@ export function TicketDetail({
                     className="field w-full text-xs px-2.5 py-1.5 mb-2"
                   />
                   <button
-                    onClick={() => {
-                      if (!buyerName.trim()) return;
-                      setCorporateBuyers((prev) => {
-                        const idx = prev.findIndex((x) => x.name === buyerName);
-                        const entry = { name: buyerName, address: buyerAddress, taxId: buyerTaxId };
-                        if (idx >= 0) {
-                          const copy = [...prev];
-                          copy[idx] = entry;
-                          return copy;
-                        }
-                        return [...prev, entry];
-                      });
-                    }}
+                    onClick={saveBuyer}
+                    disabled={savingBuyer}
                     className="btn-outline w-full text-xs py-1.5 rounded-lg"
-                    style={{ borderColor: '#2563EB', color: '#1D4ED8' }}
+                    style={{
+                      borderColor: '#2563EB',
+                      color: '#1D4ED8',
+                      opacity: savingBuyer ? 0.7 : 1,
+                    }}
                   >
-                    <i className="fa-solid fa-floppy-disk mr-1.5"></i>
-                    บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป
+                    <i
+                      className={`fa-solid ${savingBuyer ? 'fa-spinner fa-spin' : 'fa-floppy-disk'} mr-1.5`}
+                    ></i>
+                    {savingBuyer ? 'กำลังบันทึก...' : 'บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป'}
                   </button>
+                  {/* The button's whole promise is that this survives. Saying so
+                      out loud is the difference between a saved buyer and one
+                      that only looked saved. */}
+                  {buyerSaveMsg && (
+                    <p
+                      className="text-xs mt-1.5"
+                      role="status"
+                      style={{ color: buyerSaveMsg.ok ? '#3F6B33' : '#B23A48' }}
+                    >
+                      <i
+                        className={`fa-solid ${buyerSaveMsg.ok ? 'fa-circle-check' : 'fa-triangle-exclamation'} mr-1`}
+                      ></i>
+                      {buyerSaveMsg.text}
+                    </p>
+                  )}
                 </div>
               )}
               <label
