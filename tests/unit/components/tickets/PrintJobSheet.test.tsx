@@ -291,13 +291,25 @@ describe('เอกสารทางการเงิน', () => {
     expect(screen.getByText(/^วันที่เอกสาร:/)).toBeInTheDocument();
   });
 
-  it('ticks the channels the money actually arrived by', () => {
+  it('lists only the channels the money actually arrived by', () => {
     renderDoc();
     const box = screen.getByText('ช่องทางการชำระเงิน').parentElement!;
-    // All three of the shop's channels print; only the used one is ticked.
-    expect(within(box).getByText('เงินสด')).toBeInTheDocument();
-    expect(within(box).getByText('บัตรเครดิต')).toBeInTheDocument();
+    // A receipt records what happened; the shop's other two channels have no
+    // business on it, and empty boxes beside them said nothing.
+    expect(within(box).getByText('โอนเงิน')).toBeInTheDocument();
+    expect(within(box).queryByText('เงินสด')).not.toBeInTheDocument();
+    expect(within(box).queryByText('บัตรเครดิต')).not.toBeInTheDocument();
     expect(within(box).getAllByText('✓')).toHaveLength(1);
     expect(within(box).getByText(/ชำระมัดจำ 3,000.00 บาท \(โอนเงิน\)/)).toBeInTheDocument();
+  });
+
+  it('keeps a channel that has since been dropped from the shop settings', () => {
+    // The receipt is a record of that day. Reading the channels off the payments
+    // rather than จัดการสิทธิ์ means an old document still reads correctly.
+    renderDoc({
+      shopInfo: { cm: { ...shopInfo.cm, paymentChannels: ['เงินสด'] } },
+    });
+    const box = screen.getByText('ช่องทางการชำระเงิน').parentElement!;
+    expect(within(box).getByText('โอนเงิน')).toBeInTheDocument();
   });
 });

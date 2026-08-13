@@ -1392,13 +1392,12 @@ export function PrintJobSheet({
     const isTaxInvoice = docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
     const isQuotation = docType === 'ใบเสนอราคา';
     const docPrefix = isQuotation ? 'QT' : isTaxInvoice ? 'INV' : 'RCT';
-    // Tick boxes for the shop's own channels, ticked from what was actually
-    // received. A channel used once but since removed from the shop's list still
-    // shows, otherwise the document would claim money arrived by nothing.
-    const usedMethods = new Set(receivedPayments.map((p) => p.method).filter(Boolean));
-    const channels = [
-      ...new Set([...(info.paymentChannels ?? []).filter(Boolean), ...usedMethods]),
-    ];
+    // Only the channels money actually arrived by, in the order it arrived.
+    // The shop's full list used to print with empty boxes beside the unused
+    // ones, which is a form to fill in — a receipt records what happened. Read
+    // off the payments rather than the shop's configured list, so a channel
+    // dropped from จัดการสิทธิ์ after the fact still appears on the old receipt.
+    const usedChannels = [...new Set(receivedPayments.map((p) => p.method).filter(Boolean))];
 
     // One row per product, with the positions it covers folded into a quantity.
     const lines = t.items
@@ -1571,11 +1570,17 @@ export function PrintJobSheet({
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', marginBottom: 12 }}>
+          {/*
+            2:1, not 50/50. A channel here is the shop's full deposit line —
+            "ธนาคารกสิกรไทย เลขบัญชี 236-1-38053-6 ชื่อบัญชี หจก.คูลมาน ลำปาง" —
+            and half a page wrapped it across three lines. The signature needs a
+            line and two words; the money needs the room.
+          */}
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', marginBottom: 12 }}>
             {!isQuotation && (
               <div
                 style={{
-                  flex: 1,
+                  flex: 2,
                   border: '1px solid #666',
                   borderRadius: 6,
                   padding: '8px 10px',
@@ -1583,8 +1588,13 @@ export function PrintJobSheet({
                 }}
               >
                 <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>ช่องทางการชำระเงิน</p>
+                {/*
+                  Only the channels the money actually came in by. Printing the
+                  shop's whole list with empty boxes beside it said nothing —
+                  a receipt records what happened, it is not a form to fill in.
+                */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
-                  {channels.map((m) => (
+                  {usedChannels.map((m) => (
                     <span key={m} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                       <span
                         style={{
@@ -1597,9 +1607,10 @@ export function PrintJobSheet({
                           lineHeight: '11px',
                           fontSize: 11,
                           fontWeight: 'bold',
+                          flexShrink: 0,
                         }}
                       >
-                        {usedMethods.has(m) ? '✓' : ' '}
+                        ✓
                       </span>
                       {m}
                     </span>
