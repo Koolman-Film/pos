@@ -183,7 +183,19 @@ export function ItemsSection({
                 <option value="" disabled>
                   ชนิดสินค้า...
                 </option>
-                {productCategories.map((c) => (
+                {/*
+                  A category this item already carries stays listed even when it
+                  is no longer in the managed list. A `<select>` whose value
+                  matches no option renders the FIRST one, so an older ticket
+                  whose ชนิดสินค้า was, say, "จอ" read as "ฟิล์มกรองแสง" — while
+                  the notes, the technician block and the printed sheets all
+                  still keyed off the real value. Same rule ManagedDropdown and
+                  the payment-method picker follow.
+                */}
+                {(it.category && !productCategories.includes(it.category)
+                  ? [it.category, ...productCategories]
+                  : productCategories
+                ).map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>

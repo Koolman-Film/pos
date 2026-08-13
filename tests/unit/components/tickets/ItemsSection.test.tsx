@@ -144,3 +144,33 @@ describe('ItemsSection product options', () => {
     expect(labels[1]).toContain('FNCT40');
   });
 });
+
+/**
+ * Same defect the stock module had. A `<select>` whose value matches no option
+ * renders the FIRST one, so an older ticket carrying a ชนิดสินค้า that has since
+ * left the managed list read as whatever happens to sit at the top — while the
+ * per-category notes, the technician block and the printed sheets all still
+ * keyed off the real value.
+ */
+describe('ItemsSection — a ชนิดสินค้า outside the managed list', () => {
+  const withCategory = (category: string) =>
+    ({
+      ...ticket,
+      items: [{ category, booked: '', bookedPrice: 0, sold: '', soldPrice: 0, positions: [] }],
+    }) as unknown as Ticket;
+
+  it('keeps the item’s own category selected and selectable', () => {
+    // `renderItems` supplies productCategories = [ฟิล์มกรองแสง, เครื่องเสียง].
+    renderItems(withCategory('จอ'));
+
+    const select = screen.getByLabelText('ชนิดสินค้า') as HTMLSelectElement;
+    expect(select.value).toBe('จอ');
+    expect(screen.getByRole('option', { name: 'จอ' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'ฟิล์มกรองแสง' })).toBeInTheDocument();
+  });
+
+  it('does not duplicate a category that is in the list', () => {
+    renderItems(withCategory('ฟิล์มกรองแสง'));
+    expect(screen.getAllByRole('option', { name: 'ฟิล์มกรองแสง' })).toHaveLength(1);
+  });
+});
