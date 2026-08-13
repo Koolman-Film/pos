@@ -57,11 +57,43 @@ create policy expense_attachments_rw on expense_attachments for all
 -- Storage-side policies. `storage.objects` already has RLS enabled by Supabase;
 -- these add the bucket's rules on top. Uploads and removals ride on the same
 -- capability as creating the expense they belong to.
-create policy expense_attachments_object_read on storage.objects for select to authenticated
-  using (bucket_id = 'expense-attachments' and pos.current_user_has_nav('accounting'));
-
-create policy expense_attachments_object_insert on storage.objects for insert to authenticated
-  with check (bucket_id = 'expense-attachments' and pos.current_user_can('accounting.addExpense'));
-
-create policy expense_attachments_object_delete on storage.objects for delete to authenticated
-  using (bucket_id = 'expense-attachments' and pos.current_user_can('accounting.addExpense'));
+--
+-- WHY THESE ARE ATTEMPTED RATHER THAN ASSERTED: on a hosted project
+-- `storage.objects` is owned by `supabase_storage_admin`, and the migration
+-- connects as `postgres`, which is not a member of that role. `create policy`
+-- then raises `must be owner of table objects`, and since each migration runs
+-- in its own transaction that would roll this file back and strand the release
+-- mid-batch. `set role supabase_storage_admin` does not rescue it either —
+-- `postgres` may not set that role (verified against the production project).
+--
+-- So each policy is attempted, and a missing privilege is downgraded to a
+-- warning. Locally `postgres` does own `storage.objects`, so a `db reset`
+-- creates them exactly as before and nothing about development changes.
+--
+-- On hosted, create them from Dashboard → Storage → Policies, which runs as the
+-- storage service rather than `postgres`. The six statements are kept verbatim
+-- in `supabase/storage-policies.sql`. Until they exist the bucket is unreadable:
+-- uploads still succeed and every receipt fails to open.
+do $$
+declare
+  ddl text;
+begin
+  foreach ddl in array array[
+    $p$create policy expense_attachments_object_read on storage.objects for select to authenticated
+      using (bucket_id = 'expense-attachments' and pos.current_user_has_nav('accounting'))$p$,
+    $p$create policy expense_attachments_object_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'expense-attachments' and pos.current_user_can('accounting.addExpense'))$p$,
+    $p$create policy expense_attachments_object_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'expense-attachments' and pos.current_user_can('accounting.addExpense'))$p$
+  ]
+  loop
+    begin
+      execute ddl;
+    exception
+      when insufficient_privilege then
+        raise warning 'SKIPPED a storage.objects policy for expense-attachments: not the owner of storage.objects. Create the three from Dashboard -> Storage -> Policies using supabase/storage-policies.sql, or the bucket stays unreadable.';
+      when duplicate_object then
+        null;
+    end;
+  end loop;
+end $$;

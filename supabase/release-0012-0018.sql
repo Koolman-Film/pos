@@ -276,17 +276,38 @@ create policy expense_attachments_rw on expense_attachments for all
 -- Storage-side policies. `storage.objects` already has RLS enabled by Supabase;
 -- these add the bucket's rules on top. Uploads and removals ride on the same
 -- capability as creating the expense they belong to.
-drop policy if exists expense_attachments_object_read on storage.objects;
-create policy expense_attachments_object_read on storage.objects for select to authenticated
-  using (bucket_id = 'expense-attachments' and pos.current_user_has_nav('accounting'));
-
-drop policy if exists expense_attachments_object_insert on storage.objects;
-create policy expense_attachments_object_insert on storage.objects for insert to authenticated
-  with check (bucket_id = 'expense-attachments' and pos.current_user_can('accounting.addExpense'));
-
-drop policy if exists expense_attachments_object_delete on storage.objects;
-create policy expense_attachments_object_delete on storage.objects for delete to authenticated
-  using (bucket_id = 'expense-attachments' and pos.current_user_can('accounting.addExpense'));
+-- Attempted, not asserted: on a hosted project `storage.objects` belongs to
+-- `supabase_storage_admin`, and this script runs as `postgres` whether it is
+-- pasted into the SQL Editor or pushed by the CLI. Both `drop policy` and
+-- `create policy` need ownership, so both raise `must be owner of table
+-- objects`. Create the six from Dashboard -> Storage -> Policies instead; see
+-- supabase/storage-policies.sql.
+do $$
+declare
+  ddl text;
+begin
+  foreach ddl in array array[
+    $p$drop policy if exists expense_attachments_object_read on storage.objects$p$,
+    $p$create policy expense_attachments_object_read on storage.objects for select to authenticated
+      using (bucket_id = 'expense-attachments' and pos.current_user_has_nav('accounting'))$p$,
+    $p$drop policy if exists expense_attachments_object_insert on storage.objects$p$,
+    $p$create policy expense_attachments_object_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'expense-attachments' and pos.current_user_can('accounting.addExpense'))$p$,
+    $p$drop policy if exists expense_attachments_object_delete on storage.objects$p$,
+    $p$create policy expense_attachments_object_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'expense-attachments' and pos.current_user_can('accounting.addExpense'))$p$
+  ]
+  loop
+    begin
+      execute ddl;
+    exception
+      when insufficient_privilege then
+        raise warning 'SKIPPED a storage.objects policy for expense-attachments: not the owner. Create the three from Dashboard -> Storage -> Policies using supabase/storage-policies.sql, or the bucket stays unreadable.';
+      when duplicate_object then
+        null;
+    end;
+  end loop;
+end $$;
 
 insert into supabase_migrations.schema_migrations(version, name) values ('0014', 'expense_attachments') on conflict (version) do nothing;
 
@@ -822,16 +843,32 @@ grant execute on function save_ticket_children(text, jsonb, jsonb) to authentica
 
 -- Storage policies: the ticket module's own nav is the gate, so a technician who
 -- can open the ticket can also see the QC photos on it and add more.
-drop policy if exists ticket_attachments_object_read on storage.objects;
-create policy ticket_attachments_object_read on storage.objects for select to authenticated
-  using (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'));
-
-drop policy if exists ticket_attachments_object_insert on storage.objects;
-create policy ticket_attachments_object_insert on storage.objects for insert to authenticated
-  with check (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'));
-
-drop policy if exists ticket_attachments_object_delete on storage.objects;
-create policy ticket_attachments_object_delete on storage.objects for delete to authenticated
-  using (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'));
+-- Attempted, not asserted — same ownership limit as the expense bucket above.
+do $$
+declare
+  ddl text;
+begin
+  foreach ddl in array array[
+    $p$drop policy if exists ticket_attachments_object_read on storage.objects$p$,
+    $p$create policy ticket_attachments_object_read on storage.objects for select to authenticated
+      using (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'))$p$,
+    $p$drop policy if exists ticket_attachments_object_insert on storage.objects$p$,
+    $p$create policy ticket_attachments_object_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'))$p$,
+    $p$drop policy if exists ticket_attachments_object_delete on storage.objects$p$,
+    $p$create policy ticket_attachments_object_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'))$p$
+  ]
+  loop
+    begin
+      execute ddl;
+    exception
+      when insufficient_privilege then
+        raise warning 'SKIPPED a storage.objects policy for ticket-attachments: not the owner. Create the three from Dashboard -> Storage -> Policies using supabase/storage-policies.sql, or slips and QC photos will not open.';
+      when duplicate_object then
+        null;
+    end;
+  end loop;
+end $$;
 
 insert into supabase_migrations.schema_migrations(version, name) values ('0018', 'ticket_attachments') on conflict (version) do nothing;

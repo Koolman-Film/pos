@@ -112,11 +112,33 @@ grant execute on function save_ticket_children(text, jsonb, jsonb) to authentica
 
 -- Storage policies: the ticket module's own nav is the gate, so a technician who
 -- can open the ticket can also see the QC photos on it and add more.
-create policy ticket_attachments_object_read on storage.objects for select to authenticated
-  using (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'));
-
-create policy ticket_attachments_object_insert on storage.objects for insert to authenticated
-  with check (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'));
-
-create policy ticket_attachments_object_delete on storage.objects for delete to authenticated
-  using (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'));
+--
+-- Attempted rather than asserted, for the reason spelled out at the same point
+-- in 0014: on a hosted project `storage.objects` belongs to
+-- `supabase_storage_admin` and `postgres` cannot create policies on it, so a
+-- hard failure here would roll back this migration and strand the release.
+-- Create these from Dashboard -> Storage -> Policies; they are kept verbatim in
+-- `supabase/storage-policies.sql`. Locally nothing changes.
+do $$
+declare
+  ddl text;
+begin
+  foreach ddl in array array[
+    $p$create policy ticket_attachments_object_read on storage.objects for select to authenticated
+      using (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'))$p$,
+    $p$create policy ticket_attachments_object_insert on storage.objects for insert to authenticated
+      with check (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'))$p$,
+    $p$create policy ticket_attachments_object_delete on storage.objects for delete to authenticated
+      using (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'))$p$
+  ]
+  loop
+    begin
+      execute ddl;
+    exception
+      when insufficient_privilege then
+        raise warning 'SKIPPED a storage.objects policy for ticket-attachments: not the owner of storage.objects. Create the three from Dashboard -> Storage -> Policies using supabase/storage-policies.sql, or slips and QC photos will not open.';
+      when duplicate_object then
+        null;
+    end;
+  end loop;
+end $$;
