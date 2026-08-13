@@ -49,7 +49,7 @@ const item = (over: Partial<Ticket['items'][number]> = {}) => ({
   ...over,
 });
 
-function renderSheet(t: Ticket, printMode: PrintMode = 'sale') {
+function renderSheet(t: Ticket, printMode: PrintMode = 'sale', overrides = {}) {
   return render(
     <PrintJobSheet
       t={t}
@@ -67,6 +67,7 @@ function renderSheet(t: Ticket, printMode: PrintMode = 'sale') {
       buyerAddress=""
       showCompanyInfo={false}
       showDisclaimer={false}
+      {...overrides}
     />,
   );
 }
@@ -190,5 +191,65 @@ describe('ใบเช็ครถ (ฟิล์มกันรอย)', () => {
     ]) {
       expect(screen.getAllByText(part)).toHaveLength(1);
     }
+  });
+});
+
+describe('เอกสารทางการเงิน', () => {
+  const shopInfo = {
+    cm: {
+      companyName: 'บริษัท คูลมาน จำกัด',
+      address: '4/9 ถนนมหิดล ตำบลป่าแดด อำเภอเมืองเชียงใหม่',
+      phone: '098-262-5623',
+      taxId: '0505561000000',
+      paymentChannels: ['เงินสด', 'โอนเงิน', 'บัตรเครดิต'],
+    },
+  };
+
+  const renderDoc = (over = {}) =>
+    renderSheet(
+      makeTicket({
+        items: [item()],
+        payments: [{ type: 'มัดจำ', method: 'โอนเงิน', amount: 3000, date: '2026-08-12' }],
+      }),
+      'doc',
+      { shopInfo, docType: 'ใบกำกับภาษี/ใบเสร็จรับเงิน', showCompanyInfo: true, ...over },
+    );
+
+  it('puts the branch above the legal entity in the issuer block', () => {
+    const { container } = renderDoc();
+    const issuer = screen.getByText('ผู้ออกใบเสร็จรับเงิน :').parentElement!;
+    const lines = Array.from(issuer.querySelectorAll('p')).map((p) => p.textContent);
+    // The customer knows the shop by its branch; the นิติบุคคล line is there
+    // because the tax id belongs to it.
+    expect(lines[1]).toBe('FINNIX FILM เชียงใหม่');
+    expect(lines[2]).toBe('บริษัท คูลมาน จำกัด');
+    expect(container).toBeTruthy();
+  });
+
+  it('signs off with a line and a role, naming no company or branch', () => {
+    renderDoc();
+    expect(screen.getByText(/^ลงชื่อ/)).toBeInTheDocument();
+    expect(screen.getByText(/ผู้รับเงิน ·/)).toBeInTheDocument();
+    // The old sheet repeated the issuer here — "ผู้รับเงินในนาม บริษัท …" —
+    // which said again what the header already says.
+    expect(screen.queryByText(/ในนาม/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/บริษัท คูลมาน จำกัด/)).toHaveLength(1);
+  });
+
+  it('numbers the document from the ticket id, without doubling the shop code', () => {
+    renderDoc();
+    // t.id is JT-CM-00216, so INV-CM-00216 — not INV-CM-CM-00216.
+    expect(screen.getByText('เลขที่เอกสาร: INV-CM-00216')).toBeInTheDocument();
+    expect(screen.getByText(/^วันที่เอกสาร:/)).toBeInTheDocument();
+  });
+
+  it('ticks the channels the money actually arrived by', () => {
+    renderDoc();
+    const box = screen.getByText('ช่องทางการชำระเงิน').parentElement!;
+    // All three of the shop's channels print; only the used one is ticked.
+    expect(within(box).getByText('เงินสด')).toBeInTheDocument();
+    expect(within(box).getByText('บัตรเครดิต')).toBeInTheDocument();
+    expect(within(box).getAllByText('✓')).toHaveLength(1);
+    expect(within(box).getByText(/ชำระมัดจำ 3,000.00 บาท \(โอนเงิน\)/)).toBeInTheDocument();
   });
 });

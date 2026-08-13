@@ -1345,7 +1345,6 @@ export function PrintJobSheet({
     const isTaxInvoice = docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
     const isQuotation = docType === 'ใบเสนอราคา';
     const docPrefix = isQuotation ? 'QT' : isTaxInvoice ? 'INV' : 'RCT';
-    const issuerName = (showCompanyInfo && info.companyName) || shopName(t.shop);
     // Tick boxes for the shop's own channels, ticked from what was actually
     // received. A channel used once but since removed from the shop's list still
     // shows, otherwise the document would claim money arrived by nothing.
@@ -1577,11 +1576,16 @@ export function PrintJobSheet({
               </div>
             )}
             <div style={{ flex: 1, textAlign: 'center', fontSize: 11 }}>
-              <p style={{ margin: '0 0 26px' }}>
-                {isQuotation ? 'ผู้เสนอราคา' : 'ผู้รับเงินในนาม'} {issuerName}
+              {/* Just the signature. Naming the issuer again here repeated what
+                  the header already says — and the person signing is a member of
+                  staff, not the company. */}
+              <p style={{ margin: '26px 0 0' }}>
+                ลงชื่อ .............................................
               </p>
-              <p style={{ margin: 0 }}>ลงชื่อ .............................................</p>
-              <p style={{ margin: '4px 0 0' }}>วันที่ {fmtThaiDate(new Date())}</p>
+              <p style={{ margin: '4px 0 0' }}>
+                {isQuotation ? 'ผู้เสนอราคา' : 'ผู้รับเงิน'} &middot; วันที่{' '}
+                {fmtThaiDate(new Date())}
+              </p>
             </div>
           </div>
 
