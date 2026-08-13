@@ -3,26 +3,33 @@
 -- The six RLS policies on `storage.objects` for the two private attachment
 -- buckets, kept verbatim so there is one place to read them from.
 --
--- WHY THEY ARE NOT SIMPLY IN THE MIGRATIONS
+-- WHEN YOU NEED THIS FILE
 --
--- They are in migrations 0014 and 0018 — but attempted, not asserted. On a
--- hosted Supabase project `storage.objects` is owned by `supabase_storage_admin`
--- while migrations connect as `postgres`, and `create policy` requires
--- ownership. Measured against the production project (ykkfxpjjhwwthgmppvgv):
+-- Usually you do not. These six live in migrations 0014 and 0018, and
+-- `supabase db push` creates them: the CLI opens its migration connection with
+-- a privileged login role that can act as the owner of `storage.objects`.
+-- Verified on the production project — after a push, all six are present.
+--
+-- You need this file when the SQL reaches the database as `postgres` instead:
+-- the Dashboard SQL Editor, a direct psql/PostgREST connection, or the
+-- paste-and-run `release-0012-0018.sql`. `storage.objects` is owned by
+-- `supabase_storage_admin`, and measured on production (ykkfxpjjhwwthgmppvgv):
 --
 --   storage.objects owner                        supabase_storage_admin
---   migration connects as                        postgres (not superuser)
+--   postgres is superuser                        false
 --   postgres member of supabase_storage_admin    false
 --   set role supabase_storage_admin              permission denied
 --
--- So `db push` cannot create them, the Dashboard SQL Editor cannot either (it
--- also connects as `postgres`), and the `set role supabase_storage_admin`
--- workaround that earlier drafts of the runbook suggested does not work on this
--- project. Because each migration runs in its own transaction, letting the
--- error stand would roll 0014 back and strand the release part-applied — hence
--- attempt-and-warn there, and this file here.
+-- so `create policy` — and `drop policy`, which needs ownership too — raises
+-- `must be owner of table objects`. `supabase_admin` is the superuser that can,
+-- but it is not a role you are handed.
 --
--- HOW TO APPLY THEM ON A HOSTED PROJECT
+-- Because each migration runs in its own transaction, letting that error stand
+-- would roll 0014 back and strand the release part-applied. So the migrations
+-- and the release script attempt the six and downgrade a missing privilege to a
+-- warning — which is what makes this file necessary as the fallback.
+--
+-- HOW TO APPLY THEM BY HAND
 --
 -- Dashboard -> Storage -> Policies, on each bucket. That path runs as the
 -- storage service rather than `postgres`, which is why it succeeds. For each

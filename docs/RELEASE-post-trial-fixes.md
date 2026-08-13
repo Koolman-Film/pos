@@ -57,48 +57,61 @@ deleted, nothing is rewritten in place:
 | `0017_ticket_lock`              | `tickets.locked`, a trigger, `save_ticket_children` refuses a locked ticket, capability `list.unlock`.                                                                                                                                                                                        | Low                                                             |
 | `0018_ticket_attachments`       | Private `ticket-attachments` storage bucket, `ticket_payments.attachments`, and `save_ticket_children` writes the slips.                                                                                                                                                                      | **Same storage caveat as 0014.**                                |
 
-### Storage step for 0014 and 0018 — required, not conditional
+### Storage policies for 0014 and 0018 — depends which path you take
 
-Both migrations need six policies on `storage.objects`, which on a hosted
-project is owned by `supabase_storage_admin` rather than `postgres`. This is not
-a "can fail" — it was measured against the production project
-(`ykkfxpjjhwwthgmppvgv`) and it fails there every time:
+The six policies on `storage.objects` need the table's owner, and which role you
+get depends on how the SQL is delivered.
 
-| Check                                         | Value                     |
-| --------------------------------------------- | ------------------------- |
-| `storage.objects` owner                       | `supabase_storage_admin`  |
-| migration connects as                         | `postgres`, not superuser |
-| `postgres` member of `supabase_storage_admin` | false                     |
-| `set role supabase_storage_admin`             | `permission denied`       |
+**`supabase db push` creates them. Nothing further to do.** The CLI opens its
+migration connection with a privileged login role (the `Initialising login
+role...` line in its output), which can act as the owner. Confirmed on the
+production project: after the push, all six exist with the right roles and
+expressions.
 
-So `db push` cannot create them; the Dashboard SQL Editor cannot either, since
-it also connects as `postgres`; and the `set role supabase_storage_admin`
-recipe this section used to recommend does not work on this project — the role
-grant it depends on is not there.
+**The SQL Editor path cannot.** `storage.objects` is owned by
+`supabase_storage_admin`, and the Dashboard SQL Editor — like any `postgres`
+connection — is not a member of it. Measured on the production project
+(`ykkfxpjjhwwthgmppvgv`):
 
-Because each migration runs in its own transaction, a hard failure would roll
-0014 back and leave the batch part-applied. So 0014 and 0018 now _attempt_ the
-six policies and downgrade a missing privilege to a warning, letting the rest of
-the release land. Watch the `db push` output for:
+| Check                                         | Value                    |
+| --------------------------------------------- | ------------------------ |
+| `storage.objects` owner                       | `supabase_storage_admin` |
+| `postgres` is superuser                       | false                    |
+| `postgres` member of `supabase_storage_admin` | false                    |
+| `set role supabase_storage_admin`             | `permission denied`      |
+
+So pasting `supabase/release-0012-0018.sql` would stop on those six statements —
+and on their `drop policy if exists` guards, which need ownership too. The
+`set role supabase_storage_admin` recipe this section used to recommend does not
+work here: the grant it depends on is not present. (`supabase_admin` is the
+superuser that can, but it is not a role you are given.)
+
+Because a hard failure would roll 0014 back and strand the batch part-applied,
+both the migrations and the release script now _attempt_ the six and downgrade a
+missing privilege to a warning. If you took the SQL Editor path and saw:
 
 ```
 WARNING:  SKIPPED a storage.objects policy …
 ```
 
-Two warnings (one per bucket) is the expected hosted outcome. Locally there are
-none, because `postgres` owns `storage.objects` in the CLI stack and all six are
-created by `supabase db reset` as before.
+then create the six by hand from Dashboard → Storage → Policies on
+`expense-attachments` and `ticket-attachments`, which runs as the storage service
+rather than `postgres`. The statements are in
+[`supabase/storage-policies.sql`](../supabase/storage-policies.sql) with the role
+and USING/WITH CHECK placement for each.
 
-**Then create the six by hand**, from Dashboard → Storage → Policies on
-`expense-attachments` and `ticket-attachments`. That path runs as the storage
-service rather than `postgres`, which is why it succeeds. The statements are in
-[`supabase/storage-policies.sql`](../supabase/storage-policies.sql) with the
-role and USING/WITH CHECK placement for each.
+Either way, verify:
 
-Until they exist the buckets are unreadable: uploads still succeed, but every
-receipt, slip and QC photo fails to open — which is the same "ไม่แสดงไฟล์แนบ"
-this release exists to fix. Confirm by opening a file in the app, not by
-counting rows in `pg_policies`.
+```sql
+select policyname, cmd from pg_policies
+ where schemaname = 'storage' and tablename = 'objects'
+ order by policyname;
+```
+
+Expect six. Until they exist the buckets are unreadable: uploads still succeed,
+but every receipt, slip and QC photo fails to open — the same "ไม่แสดงไฟล์แนบ"
+this release exists to fix. Six rows is necessary but not sufficient; open a file
+in the app to prove the expressions actually pass.
 
 ### After the push
 

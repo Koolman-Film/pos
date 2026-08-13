@@ -58,22 +58,23 @@ create policy expense_attachments_rw on expense_attachments for all
 -- these add the bucket's rules on top. Uploads and removals ride on the same
 -- capability as creating the expense they belong to.
 --
--- WHY THESE ARE ATTEMPTED RATHER THAN ASSERTED: on a hosted project
--- `storage.objects` is owned by `supabase_storage_admin`, and the migration
--- connects as `postgres`, which is not a member of that role. `create policy`
--- then raises `must be owner of table objects`, and since each migration runs
--- in its own transaction that would roll this file back and strand the release
--- mid-batch. `set role supabase_storage_admin` does not rescue it either —
--- `postgres` may not set that role (verified against the production project).
+-- WHY THESE ARE ATTEMPTED RATHER THAN ASSERTED: `storage.objects` is owned by
+-- `supabase_storage_admin` on a hosted project, so creating a policy on it needs
+-- a connection that can act as that owner. `supabase db push` has one and these
+-- succeed (verified on production). A connection as plain `postgres` does not —
+-- not a member, and `set role supabase_storage_admin` is denied — so the same
+-- SQL pasted into the Dashboard SQL Editor, or run from
+-- `supabase/release-0012-0018.sql`, raises `must be owner of table objects`.
 --
--- So each policy is attempted, and a missing privilege is downgraded to a
--- warning. Locally `postgres` does own `storage.objects`, so a `db reset`
--- creates them exactly as before and nothing about development changes.
+-- Each migration runs in its own transaction, so letting that error stand would
+-- roll this file back and strand the release mid-batch with later migrations
+-- unapplied. Instead a missing privilege is downgraded to a warning, and
+-- `supabase/storage-policies.sql` carries the six for creating by hand from
+-- Dashboard → Storage → Policies. Locally nothing changes: `postgres` owns
+-- `storage.objects` in the CLI stack, so `db reset` creates all six as before.
 --
--- On hosted, create them from Dashboard → Storage → Policies, which runs as the
--- storage service rather than `postgres`. The six statements are kept verbatim
--- in `supabase/storage-policies.sql`. Until they exist the bucket is unreadable:
--- uploads still succeed and every receipt fails to open.
+-- They are not optional. Until they exist the bucket is unreadable: uploads
+-- still succeed and every receipt fails to open.
 do $$
 declare
   ddl text;

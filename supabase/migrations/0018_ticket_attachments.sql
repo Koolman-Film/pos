@@ -114,11 +114,12 @@ grant execute on function save_ticket_children(text, jsonb, jsonb) to authentica
 -- can open the ticket can also see the QC photos on it and add more.
 --
 -- Attempted rather than asserted, for the reason spelled out at the same point
--- in 0014: on a hosted project `storage.objects` belongs to
--- `supabase_storage_admin` and `postgres` cannot create policies on it, so a
--- hard failure here would roll back this migration and strand the release.
--- Create these from Dashboard -> Storage -> Policies; they are kept verbatim in
--- `supabase/storage-policies.sql`. Locally nothing changes.
+-- in 0014: `storage.objects` belongs to `supabase_storage_admin`, so these
+-- succeed under `supabase db push` (whose connection can act as that owner) but
+-- not under a plain `postgres` one such as the Dashboard SQL Editor. A hard
+-- failure there would roll this migration back and strand the release, so a
+-- missing privilege becomes a warning and `supabase/storage-policies.sql` holds
+-- the six for creating by hand. Locally nothing changes.
 do $$
 declare
   ddl text;
