@@ -7,6 +7,8 @@ import { getSessionContext } from '@/lib/auth/session';
 import { fmtThaiDate } from '@/lib/domain/format';
 import { createClient } from '@/lib/supabase/server';
 
+import { updateOptionListAction } from '../optionListActions';
+
 import {
   addExpense,
   addExpenseAttachments,
@@ -120,6 +122,7 @@ export default async function AccountingPage() {
       attachmentUrlAction={getExpenseAttachmentUrl}
       attachAction={addExpenseAttachments}
       detachAction={deleteExpenseAttachment}
+      updateOptionListAction={updateOptionListAction}
       accessibleShops={accessibleShops}
       canSeeAllShops={session.seesAllShops}
     />

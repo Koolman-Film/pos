@@ -162,6 +162,7 @@ export function AccountingModule({
   attachmentUrlAction,
   attachAction,
   detachAction,
+  updateOptionListAction,
   accessibleShops = [],
   canSeeAllShops = true,
 }: {
@@ -188,6 +189,14 @@ export function AccountingModule({
     attachments: UploadedAttachment[],
   ) => Promise<{ ok: boolean; error?: string }>;
   detachAction?: (attachmentId: number) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Persists หมวดค่าใช้จ่าย / จ่ายจาก. Without it the pickers only edit React
+   * state, so an entry added here was gone on the next load.
+   */
+  updateOptionListAction?: (
+    listKey: string,
+    values: string[],
+  ) => Promise<{ ok: boolean; error?: string }>;
   accessibleShops?: Shop[];
   canSeeAllShops?: boolean;
 }) {
@@ -199,8 +208,19 @@ export function AccountingModule({
   const firstShop = accessibleShops[0]?.id || '';
   const shopName = (id: string) => accessibleShops.find((s) => s.id === id)?.name || id;
 
-  const [expenseCategories, setExpenseCategories] = useState<string[]>(expenseCategoriesProp);
-  const [paymentSources, setPaymentSources] = useState<string[]>(paymentSourcesProp);
+  // Optimistic locally, persisted through the shared option-list action. Both
+  // pickers used to hand ManagedDropdown a bare setState, so "+ เพิ่มตัวเลือกใหม่"
+  // added an entry that survived exactly until the page reloaded.
+  const [expenseCategories, setExpenseCategoriesState] = useState<string[]>(expenseCategoriesProp);
+  const [paymentSources, setPaymentSourcesState] = useState<string[]>(paymentSourcesProp);
+  function setExpenseCategories(next: string[]) {
+    setExpenseCategoriesState(next);
+    void updateOptionListAction?.('expense_categories', next);
+  }
+  function setPaymentSources(next: string[]) {
+    setPaymentSourcesState(next);
+    void updateOptionListAction?.('payment_sources', next);
+  }
   const [isPending, startTransition] = useTransition();
 
   // Gates the body-level print portal below; document does not exist during SSR.

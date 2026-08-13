@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { WholesaleDetail } from '@/components/wholesale/WholesaleDetail';
 import { getSessionContext } from '@/lib/auth/session';
 
+import { updateOptionListAction } from '../../optionListActions';
 import {
   approveOrderPrice,
   markOrderBadDebt,
@@ -56,6 +57,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       onRejectPrice={rejectOrderPrice}
       onMarkBadDebt={markOrderBadDebt}
       onSaveCustomer={saveCustomer}
+      updateOptionListAction={updateOptionListAction}
     />
   );
 }

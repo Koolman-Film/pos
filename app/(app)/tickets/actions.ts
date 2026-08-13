@@ -8,6 +8,8 @@ import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib
 import { ticketPaid, ticketTotal } from '@/lib/domain/tickets';
 import type { Database } from '@/lib/types/database';
 
+import { updateOptionListAction } from '../optionListActions';
+
 // Addressed through Database['pos'] rather than the generated TablesInsert/
 // TablesUpdate helpers: those derive their default schema from
 // `Extract<keyof Database, 'public'>`, which is `never` for a pos-only codegen
@@ -30,21 +32,8 @@ export type SaveResult = { ok: boolean; error?: string; id?: string };
  * backstop that scopes rows by shop, not the only check.
  */
 
-const OPTION_LISTS: OptionListName[] = [
-  'booking_channels',
-  'service_types',
-  'car_types',
-  'car_brands',
-  'time_slots',
-  'film_positions',
-  'wrap_positions',
-  'extra_options',
-  'slide_types',
-  'technicians',
-  'product_categories',
-  'service_items',
-  'payment_methods',
-];
+// The list of valid option-list keys moved to lib/domain/optionLists.ts — it is
+// shared with สต็อกสินค้า, บัญชี and ขายส่ง now, which have their own lists.
 
 async function nextTicketId(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -364,35 +353,14 @@ export async function restoreTicket(ticketId: string): Promise<{ ok: boolean; er
  * Full-list replace for a `list_key`: the picker owns the complete value list.
  * Only shop-global lists (shop_id null) are managed here, matching the seed.
  */
+/**
+ * Kept as the ticket module's own entry point (TicketDetail types its prop as
+ * `OptionListName`), but the write itself lives in one place now — สต็อกสินค้า,
+ * บัญชี and ขายส่ง need exactly the same thing and used to do none of it.
+ */
 export async function updateOptionList(
   listKey: OptionListName,
   values: string[],
 ): Promise<{ ok: boolean; error?: string }> {
-  const session = await getSessionContext(); // C2: authenticate before mutating
-  // These lists are shared by every shop and every ticket, so extending one is
-  // an administrative act, not part of filling in a job. The pickers hide their
-  // add/remove controls without this capability; this is the actual gate.
-  if (!session.canDo('options.manage')) {
-    return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขรายการตัวเลือก (เฉพาะแอดมิน)' };
-  }
-  if (!OPTION_LISTS.includes(listKey)) return { ok: false, error: 'invalid list' };
-  const supabase = await createClient();
-  try {
-    await supabase.from('option_lists').delete().eq('list_key', listKey).is('shop_id', null);
-    if (values.length) {
-      const { error } = await supabase.from('option_lists').insert(
-        values.map((value, i) => ({
-          list_key: listKey,
-          value,
-          shop_id: null,
-          sort_order: i + 1,
-        })),
-      );
-      if (error) throw new Error(error.message);
-    }
-    revalidatePath('/tickets');
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
-  }
+  return updateOptionListAction(listKey, values);
 }

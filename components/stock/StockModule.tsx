@@ -82,6 +82,11 @@ type StockActions = {
   saveProduct?: (input: any) => Promise<void>;
   deleteProduct?: (id: number) => Promise<void>;
   setFilmPrice?: (input: FilmPriceEntry) => Promise<void>;
+  /** Persists หมวดหมู่ (ชนิดสินค้า). Without it the picker only edits state. */
+  updateOptionList?: (
+    listKey: string,
+    values: string[],
+  ) => Promise<{ ok: boolean; error?: string }>;
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -135,7 +140,24 @@ export function StockModule({
   // needs `document`, which is absent during SSR, hence the mount gate.
   const mounted = useIsMounted();
 
-  const [categories, setCategories] = useState<string[]>(productCategories);
+  const [categoriesState, setCategoriesState] = useState<string[]>(productCategories);
+  /**
+   * Every ชนิดสินค้า that is either in the managed list OR already carried by a
+   * product on this page.
+   *
+   * A bulk import can bring in a category nobody added to the list — "จอ" was
+   * one — and those products then edited as if they had no category at all, the
+   * dropdown showing the first entry instead. The list is what you may PICK; the
+   * stock is what exists. The picker has to offer both.
+   */
+  const categories = [
+    ...new Set([...categoriesState, ...stock.map((s) => s.category).filter(Boolean)]),
+  ];
+  /** Optimistic locally, persisted through the shared option-list action. */
+  function setCategories(next: string[]) {
+    setCategoriesState(next);
+    void actions.updateOptionList?.('product_categories', next);
+  }
   const [priceMatrix, setPriceMatrix] = useState<FilmPriceEntry[]>(filmPriceMatrix);
   const [priceProdCat, setPriceProdCat] = useState('ฟิล์มกรองแสง');
   const [priceProd, setPriceProd] = useState('');
@@ -319,8 +341,11 @@ export function StockModule({
   async function confirmBulkImport() {
     const validRows = bulkRows.filter((r) => r.valid);
     if (validRows.length === 0) return;
+    // Categories arriving from the spreadsheet join the managed list for real.
+    // This used to be a setState only, which is how "จอ" ended up on fifteen
+    // products and in no dropdown anywhere.
     const newCats = [...new Set(validRows.map((r) => r.category))].filter(
-      (c) => !categories.includes(c),
+      (c) => c && !categories.includes(c),
     );
     if (newCats.length) setCategories([...categories, ...newCats]);
     await actions.bulkImport?.(

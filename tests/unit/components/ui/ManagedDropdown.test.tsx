@@ -124,3 +124,42 @@ describe('ManagedDropdown — options.manage gate', () => {
     expect(screen.getByRole('option', { name: 'เงินสด' })).toBeInTheDocument();
   });
 });
+
+/**
+ * A `<select>` whose `value` matches no `<option>` does not show blank — the
+ * browser shows the FIRST option. So a product whose ชนิดสินค้า was "จอ", a
+ * category nobody had added to the managed list, opened for editing reading
+ * "ฟิล์มกรองแสง". Saving from that screen wrote the wrong category.
+ */
+describe('ManagedDropdown — a value outside the list', () => {
+  it('keeps the saved value selectable and selected', () => {
+    render(
+      <ManagedDropdown
+        value="จอ"
+        onChange={vi.fn()}
+        options={options}
+        setOptions={vi.fn()}
+        placeholder="เลือกช่องทาง..."
+      />,
+    );
+
+    const select = screen.getByRole('combobox') as HTMLSelectElement;
+    expect(select.value).toBe('จอ');
+    expect(screen.getByRole('option', { name: 'จอ' })).toBeInTheDocument();
+    // The managed entries are still all there.
+    for (const o of options) expect(screen.getByRole('option', { name: o })).toBeInTheDocument();
+  });
+
+  it('does not duplicate a value that is already in the list', () => {
+    render(
+      <ManagedDropdown
+        value="เงินสด"
+        onChange={vi.fn()}
+        options={options}
+        setOptions={vi.fn()}
+        placeholder="เลือกช่องทาง..."
+      />,
+    );
+    expect(screen.getAllByRole('option', { name: 'เงินสด' })).toHaveLength(1);
+  });
+});

@@ -30,6 +30,16 @@ export function ManagedDropdown({
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState('');
 
+  /**
+   * A saved value that is no longer in the list still belongs in the list.
+   *
+   * Without this the `<select>` has no matching `<option>`, so the browser
+   * displays the FIRST one — a product whose ชนิดสินค้า is "จอ" read as
+   * "ฟิล์มกรองแสง", and saving the row from that screen wrote the wrong
+   * category. Same rule the payment-method picker already follows.
+   */
+  const shown = value && !options.includes(value) ? [value, ...options] : options;
+
   function commitAdd() {
     const v = newVal.trim();
     if (!v) {
@@ -90,7 +100,7 @@ export function ManagedDropdown({
         <option value="" disabled>
           {placeholder || 'เลือก...'}
         </option>
-        {options.map((o) => (
+        {shown.map((o) => (
           <option key={o} value={o}>
             {o}
           </option>

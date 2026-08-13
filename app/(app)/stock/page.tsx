@@ -8,6 +8,8 @@ import {
   type FilmPriceEntry,
 } from '@/components/stock/StockModule';
 
+import { updateOptionListAction } from '../optionListActions';
+
 import {
   addProductAction,
   bulkImportAction,
@@ -165,6 +167,7 @@ export default async function StockPage() {
         saveProduct: saveProductAction,
         deleteProduct: deleteProductAction,
         setFilmPrice: setFilmPriceAction,
+        updateOptionList: updateOptionListAction,
       }}
     />
   );

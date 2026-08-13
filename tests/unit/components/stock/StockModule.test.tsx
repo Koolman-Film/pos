@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { StockModule, type StockItem } from '@/components/stock/StockModule';
 
@@ -203,5 +204,72 @@ describe('StockModule totals and grouping', () => {
   it('renders an empty module without crashing when there is no stock at all', () => {
     render(<StockModule stock={[]} caps={allCaps(true)} canSeeStockPrices={false} />);
     expect(screen.getByText('สต็อกสินค้า')).toBeInTheDocument();
+  });
+});
+
+/**
+ * "ชนิดสินค้าเป็น จอ แต่ในรายละเอียดไม่มี" from the trial run. Two separate
+ * defects met here: the หมวดหมู่ picker offered only the managed list, and its
+ * `setOptions` was a bare setState that never reached the database — so a
+ * category added in this module was gone on the next load, and a category that
+ * arrived by bulk import was never in the list to begin with.
+ */
+describe('StockModule — ชนิดสินค้า that is not in the managed list', () => {
+  const offList: StockItem[] = [
+    { ...stock[0], id: 9, sku: 'SCREEN-009', name: 'จอแอนดรอยด์ AF8', category: 'จอ' },
+  ];
+  const categories = ['ฟิล์มกรองแสง', 'ฟิล์มกันรอย'];
+
+  it('offers a category that products use but the list has not got', async () => {
+    const user = userEvent.setup();
+    render(
+      <StockModule
+        stock={offList}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        productCategories={categories}
+      />,
+    );
+    await user.click(screen.getByLabelText('แก้ไขสินค้า SCREEN-009'));
+
+    // The edit form's picker, not the page's category FILTER — that one also
+    // lists จอ, but its options carry an "all" entry and its value is 'all'.
+    const select = screen.getAllByRole('combobox').find((s) => {
+      const opts = Array.from((s as HTMLSelectElement).options).map((o) => o.value);
+      return opts.includes('จอ') && !opts.includes('all');
+    })!;
+    // Selected, not merely present: an unmatched value shows the FIRST option.
+    expect((select as HTMLSelectElement).value).toBe('จอ');
+  });
+
+  it('persists a new category instead of only holding it in state', async () => {
+    const user = userEvent.setup();
+    const updateOptionList = vi.fn(async () => ({ ok: true }));
+    render(
+      <StockModule
+        stock={offList}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        productCategories={categories}
+        actions={{ updateOptionList }}
+      />,
+    );
+    await user.click(screen.getByLabelText('แก้ไขสินค้า SCREEN-009'));
+
+    const select = screen
+      .getAllByRole('combobox')
+      .find((s) =>
+        Array.from((s as HTMLSelectElement).options).some((o) => o.value === '__add__'),
+      )!;
+    await user.selectOptions(select, '__add__');
+    await user.type(screen.getByPlaceholderText('พิมพ์ตัวเลือกใหม่...'), 'กล้องติดรถยนต์');
+    await user.click(screen.getByRole('button', { name: 'เพิ่ม' }));
+
+    expect(updateOptionList).toHaveBeenCalledWith(
+      'product_categories',
+      // The write also reconciles the list with what stock already uses, which
+      // is how "จอ" stops being orphaned.
+      expect.arrayContaining([...categories, 'จอ', 'กล้องติดรถยนต์']),
+    );
   });
 });
