@@ -1,4 +1,4 @@
-# Release runbook — post-trial fixes (migrations 0012–0018)
+# Release runbook — post-trial fixes (migrations 0012–0019)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
 
@@ -23,29 +23,38 @@ work FIRST (step 2) — the new code reads columns that do not exist yet, so a
 deploy that lands before the migrations will 500 on the ticket list, the
 dashboard and the accounting page.
 
-## 2. Database — seven migrations
+## 2. Database — eight migrations
 
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0018 only
+npx supabase db push                     # applies 0012 … 0019 only
 ```
 
-### No CLI? Paste one file instead
+### No CLI? Paste the files instead
 
-`supabase/release-0012-0018.sql` is the same seven migrations concatenated in
-order, with guards that make every statement safe to run twice. Open the project
-dashboard → SQL Editor → paste → Run. It records the versions in
-`supabase_migrations.schema_migrations` too, so a later `db push` skips them.
+In this order, from the dashboard → SQL Editor. Each is guarded so that running
+it twice changes nothing, and each records its versions in
+`supabase_migrations.schema_migrations` so a later `db push` skips them.
 
-Use this OR the CLI above, not both — though running both would be harmless.
+| Order | File                             | Needs                                      |
+| ----- | -------------------------------- | ------------------------------------------ |
+| 1     | `supabase/release-0012-0018.sql` | a normal connection                        |
+| 2     | `supabase/storage-policies.sql`  | **owner of `storage.objects`** — see below |
+| 3     | `supabase/release-0019.sql`      | a normal connection                        |
+
+`release-0019.sql` is separate because 0019 was written after the first file had
+already been handed over. If nothing has been run yet, running all three in order
+is still correct.
+
+Use these OR the CLI above, not both — though running both would be harmless.
 
 `supabase/config.toml` currently carries the LOCAL stack id
 (`project_id = "branch-porting-performance-e58d15"`); `link` rewrites it. Do not
 commit that rewrite unless you mean to.
 
-What each one does. All seven are additive — no column is dropped, no row is
-deleted, nothing is rewritten in place:
+What each one does. All are additive — no column is dropped and no row is
+deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 
 | Migration                       | Change                                                                                                                                                                                                                                                                                        | Risk                                                            |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -56,6 +65,7 @@ deleted, nothing is rewritten in place:
 | `0016_option_manage_capability` | Capability `options.manage` (admin only). Replaces the reset function again.                                                                                                                                                                                                                  | Low                                                             |
 | `0017_ticket_lock`              | `tickets.locked`, a trigger, `save_ticket_children` refuses a locked ticket, capability `list.unlock`.                                                                                                                                                                                        | Low                                                             |
 | `0018_ticket_attachments`       | Private `ticket-attachments` storage bucket, `ticket_payments.attachments`, and `save_ticket_children` writes the slips.                                                                                                                                                                      | **Same storage caveat as 0014.**                                |
+| `0019_expense_doc_no`           | `expenses.doc_no` (เลขที่เอกสาร POS-LPG-6908001), a unique index, `next_expense_doc_no()`, and a BEFORE INSERT trigger that issues the number. Backfills existing expenses per shop per month, oldest first.                                                                                  | Low. Writes `doc_no` on every existing expense row once.        |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

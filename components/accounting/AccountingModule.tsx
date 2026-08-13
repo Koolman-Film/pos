@@ -51,6 +51,12 @@ import type { Shop } from '@/components/ui/PeriodShopFilter';
 /** An expense row flattened for display (prototype shape). */
 export type ExpenseView = {
   id: number;
+  /**
+   * เลขที่เอกสาร — POS-LPG-6908001, issued by the database on insert
+   * (migration 0019) and never recomputed. Blank only for a row created before
+   * that migration ran.
+   */
+  docNo?: string;
   shop: string;
   desc: string;
   category: string;
@@ -333,6 +339,7 @@ export function AccountingModule({
       groups: exportGroups.map((g) => ({
         sheetName: shopName(g.shopId),
         rows: g.items.map((e) => ({
+          เลขที่เอกสาร: e.docNo ?? '',
           วันที่: e.date ?? '',
           กลุ่มค่าใช้จ่าย: e.category,
           รายละเอียด: e.desc,
@@ -1278,6 +1285,14 @@ export function AccountingModule({
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{e.desc}</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
+                      {/* The reference someone quotes when they ring up about
+                          this expense, so it leads the line. */}
+                      {e.docNo && (
+                        <>
+                          <span style={{ fontFamily: 'monospace' }}>{e.docNo}</span>
+                          {' · '}
+                        </>
+                      )}
                       {e.category} &middot; {e.source} &middot; {e.date}
                     </p>
                     {/*
@@ -1371,6 +1386,7 @@ export function AccountingModule({
                       <tr>
                         <th>วันที่</th>
                         <th>กลุ่มค่าใช้จ่าย</th>
+                        <th>เลขที่เอกสาร</th>
                         <th>รายละเอียด</th>
                         <th>จ่ายจาก</th>
                         <th>สถานะ</th>
@@ -1382,6 +1398,7 @@ export function AccountingModule({
                         <tr key={e.id}>
                           <td>{e.date}</td>
                           <td>{e.category}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{e.docNo || '-'}</td>
                           <td>{e.desc}</td>
                           <td>{e.source}</td>
                           <td>{e.status}</td>

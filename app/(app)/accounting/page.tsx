@@ -33,6 +33,7 @@ import {
 /** The expense projection below; the attachments embed defeats inference. */
 type ExpenseRow = {
   id: number;
+  doc_no: string | null;
   shop_id: string;
   description: string;
   category: string;
@@ -55,7 +56,7 @@ export default async function AccountingPage() {
       supabase
         .from('expenses')
         .select(
-          'id, shop_id, description, category, source, amount, status, paid_at, due_at, ' +
+          'id, doc_no, shop_id, description, category, source, amount, status, paid_at, due_at, ' +
             'expense_attachments(id, file_name, storage_path, mime_type)',
         )
         .order('id', { ascending: false }),
@@ -71,6 +72,7 @@ export default async function AccountingPage() {
 
   const expenses: ExpenseView[] = ((expenseRows ?? []) as unknown as ExpenseRow[]).map((e) => ({
     id: e.id,
+    docNo: e.doc_no ?? '',
     shop: e.shop_id,
     desc: e.description,
     category: e.category,
