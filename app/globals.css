@@ -7,8 +7,14 @@
   --revenue: #2563eb;
   --revenue-soft: #e4ecfc;
   --ink: #2a211d;
-  --ink-soft: #8b7f76;
-  --ink-faint: #b5aaa1;
+  /* Darkened from the prototype's #8b7f76 / #b5aaa1, which measured 3.89:1 and
+     2.27:1 on white — under the 4.5:1 AA floor. They were tolerable while they
+     only sat on white and --paper; the numbered form sections put them on five
+     tinted fills, where they fell to 3.36-3.65 and 1.96-2.13 and failed the
+     a11y suite on 26 nodes. Both values stay on the original warm-grey ramp.
+     Worst case across all seven surfaces: --ink-soft 5.02, --ink-faint 4.52. */
+  --ink-soft: #6f635b;
+  --ink-faint: #726b65;
   --paper: #faf7f3;
   --surface: #ffffff;
   --sidebar: #211a18;
