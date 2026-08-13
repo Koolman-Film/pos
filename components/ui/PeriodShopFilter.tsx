@@ -109,6 +109,7 @@ export function PeriodShopFilter({
           type="month"
           value={periodValue}
           onChange={(e) => setPeriodValue(e.target.value)}
+          aria-label="เลือกเดือน"
           className="field text-sm px-3 py-2"
         />
       )}

@@ -26,9 +26,7 @@ export function OptionManageProvider({
   canManage: boolean;
   children: React.ReactNode;
 }) {
-  return (
-    <OptionManageContext.Provider value={canManage}>{children}</OptionManageContext.Provider>
-  );
+  return <OptionManageContext.Provider value={canManage}>{children}</OptionManageContext.Provider>;
 }
 
 export function useCanManageOptions(): boolean {
