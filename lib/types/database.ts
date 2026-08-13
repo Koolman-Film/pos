@@ -200,6 +200,7 @@ export type Database = {
           amount: number
           category: string
           description: string
+          doc_no: string | null
           due_at: string | null
           id: number
           paid_at: string | null
@@ -211,6 +212,7 @@ export type Database = {
           amount: number
           category: string
           description: string
+          doc_no?: string | null
           due_at?: string | null
           id?: never
           paid_at?: string | null
@@ -222,6 +224,7 @@ export type Database = {
           amount?: number
           category?: string
           description?: string
+          doc_no?: string | null
           due_at?: string | null
           id?: never
           paid_at?: string | null
@@ -1105,6 +1108,7 @@ export type Database = {
       current_user_role: { Args: never; Returns: string }
       current_user_sees_all_shops: { Args: never; Returns: boolean }
       current_user_shops: { Args: never; Returns: string[] }
+      next_expense_doc_no: { Args: { p_date: string; p_shop: string }; Returns: string }
       reset_permissions_to_defaults: { Args: never; Returns: undefined }
       save_order_children: {
         Args: {
