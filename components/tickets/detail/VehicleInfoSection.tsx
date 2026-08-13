@@ -21,8 +21,6 @@ export function VehicleInfoSection({
   setCarTypes,
   carBrands,
   setCarBrands,
-  timeSlots,
-  setTimeSlots,
   retailCustomers,
   setRetailCustomers,
   onSelectCustomer,
@@ -39,22 +37,16 @@ export function VehicleInfoSection({
   setCarTypes: (v: string[]) => void;
   carBrands: string[];
   setCarBrands: (v: string[]) => void;
-  timeSlots: string[];
-  setTimeSlots: (v: string[]) => void;
   retailCustomers: RetailCustomer[];
   setRetailCustomers: (v: RetailCustomer[]) => void;
   onSelectCustomer: (c: { name: string; phone: string }) => void;
   onModelChange: (v: string) => void;
   commitModelRegistry: (brand: string, carType: string) => void;
 }) {
+  // The panel and its heading live in the FormSection wrapper this is rendered
+  // inside — see detail/FormSection.tsx.
   return (
-    <div className="rounded-2xl p-4 mb-5" style={{ background: 'var(--paper)' }}>
-      <p
-        className="text-xs font-medium mb-3 flex items-center gap-1.5"
-        style={{ color: 'var(--ink-soft)' }}
-      >
-        <i className="fa-solid fa-car"></i>ข้อมูลงานและลูกค้า
-      </p>
+    <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
@@ -64,8 +56,6 @@ export function VehicleInfoSection({
             label="วันที่รับรถ"
             value={t.dropOffDateObj}
             onChange={(v) => field('dropOffDateObj', v)}
-            timeSlots={timeSlots}
-            setTimeSlots={setTimeSlots}
           />
         </div>
         <div>
@@ -76,8 +66,6 @@ export function VehicleInfoSection({
             label="วันที่ส่งงาน"
             value={t.pickupDateObj}
             onChange={(v) => field('pickupDateObj', v)}
-            timeSlots={timeSlots}
-            setTimeSlots={setTimeSlots}
           />
         </div>
       </div>
@@ -226,6 +214,6 @@ export function VehicleInfoSection({
           setOptions={setCarTypes}
         />
       </div>
-    </div>
+    </>
   );
 }

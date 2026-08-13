@@ -7,7 +7,16 @@ import { getSessionContext } from '@/lib/auth/session';
 import { fmtThaiDate } from '@/lib/domain/format';
 import { createClient } from '@/lib/supabase/server';
 
-import { addExpense, deleteExpense, exportExpenses, topupCash, updateExpense } from './actions';
+import {
+  addExpense,
+  addExpenseAttachments,
+  deleteExpenseAttachment,
+  deleteExpense,
+  exportExpenses,
+  getExpenseAttachmentUrl,
+  topupCash,
+  updateExpense,
+} from './actions';
 
 /**
  * Accounting route — Server Component. Fetches expenses, petty cash and the two
@@ -19,6 +28,21 @@ import { addExpense, deleteExpense, exportExpenses, topupCash, updateExpense } f
  * closure cannot cross into a Client Component (see the module's note and the
  * Sidebar/Commission precedent).
  */
+/** The expense projection below; the attachments embed defeats inference. */
+type ExpenseRow = {
+  id: number;
+  shop_id: string;
+  description: string;
+  category: string;
+  source: string;
+  amount: number;
+  status: string;
+  paid_at: string | null;
+  due_at: string | null;
+  expense_attachments:
+    { id: number; file_name: string; storage_path: string; mime_type: string | null }[] | null;
+};
+
 export default async function AccountingPage() {
   const session = await getSessionContext();
   const supabase = await createClient();
@@ -28,7 +52,10 @@ export default async function AccountingPage() {
       supabase.from('shops').select('id, name').order('sort_order'),
       supabase
         .from('expenses')
-        .select('id, shop_id, description, category, source, amount, status, paid_at, due_at')
+        .select(
+          'id, shop_id, description, category, source, amount, status, paid_at, due_at, ' +
+            'expense_attachments(id, file_name, storage_path, mime_type)',
+        )
         .order('id', { ascending: false }),
       supabase.from('petty_cash').select('id, shop_id, type, amount, note, entry_at'),
       supabase
@@ -40,7 +67,7 @@ export default async function AccountingPage() {
 
   const accessibleShops = (shopRows ?? []).filter((s) => session.accessibleShopIds.includes(s.id));
 
-  const expenses: ExpenseView[] = (expenseRows ?? []).map((e) => ({
+  const expenses: ExpenseView[] = ((expenseRows ?? []) as unknown as ExpenseRow[]).map((e) => ({
     id: e.id,
     shop: e.shop_id,
     desc: e.description,
@@ -51,6 +78,12 @@ export default async function AccountingPage() {
     dateObj: e.paid_at ? new Date(e.paid_at) : null,
     date: e.paid_at ? fmtThaiDate(new Date(e.paid_at)) : '-',
     due: e.due_at ? fmtThaiDate(new Date(e.due_at)) : undefined,
+    attachments: (e.expense_attachments ?? []).map((a) => ({
+      id: a.id,
+      fileName: a.file_name,
+      path: a.storage_path,
+      mimeType: a.mime_type ?? '',
+    })),
   }));
 
   const pettyCash: PettyCashView[] = (pettyRows ?? []).map((p) => ({
@@ -78,11 +111,15 @@ export default async function AccountingPage() {
       canAddExpense={session.canDo('accounting.addExpense')}
       canTopupCash={session.canDo('accounting.topupCash')}
       canExport={session.canDo('accounting.export')}
+      canManageOptions={session.canDo('options.manage')}
       addExpenseAction={addExpense}
       topupCashAction={topupCash}
       updateExpenseAction={updateExpense}
       deleteExpenseAction={deleteExpense}
       exportAction={exportExpenses}
+      attachmentUrlAction={getExpenseAttachmentUrl}
+      attachAction={addExpenseAttachments}
+      detachAction={deleteExpenseAttachment}
       accessibleShops={accessibleShops}
       canSeeAllShops={session.seesAllShops}
     />

@@ -15,17 +15,34 @@
 
 /** `YYYY-MM` for the current month — the `periodValue` default. */
 export function currentMonthValue(): string {
-  return new Date().toISOString().slice(0, 7);
+  return dateInputValue(new Date()).slice(0, 7);
 }
 
 /** `YYYY-MM-DD` for today — the `rangeEnd` default. */
 export function todayValue(): string {
-  return new Date().toISOString().slice(0, 10);
+  return dateInputValue(new Date());
 }
 
 /** `YYYY-MM-DD` for N days back — the `rangeStart` default (N = 6). */
 export function daysAgoValue(n: number): string {
-  return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  return dateInputValue(new Date(Date.now() - n * 86400000));
+}
+
+/**
+ * `YYYY-MM-DD` from the LOCAL calendar parts — the value an `<input type="date">`
+ * expects, and the string a `date` column should be given.
+ *
+ * `toISOString()` is UTC. In Asia/Bangkok (UTC+7) that reports the previous day
+ * for every local time before 07:00, so an expense dated 1 August rendered — and
+ * saved — as 31 July. Same class of bug `DateTimeField` was already fixed for;
+ * every date field now goes through here.
+ */
+export function dateInputValue(d: Date | string | null | undefined): string {
+  if (!d) return '';
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /**

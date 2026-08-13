@@ -21,14 +21,16 @@ describe('Sidebar', () => {
     expect(screen.getByText('จัดการสิทธิ์')).toBeInTheDocument();
   });
 
-  it('registers all seven modules, each gated on its own nav permission', () => {
-    // Wave 4 builds seven module routes concurrently and none of them may edit
+  it('registers every module, each gated on its own nav permission', () => {
+    // Wave 4 builds the module routes concurrently and none of them may edit
     // this component, so every entry has to exist before they start. Asserting
     // the ids AND that each is individually gated is what keeps a later
     // "gate the whole group on one key" refactor from going unnoticed.
+    // `customers` (ทะเบียนลูกค้า) joined after the trial run.
     expect(NAV_ITEMS.map((i) => i.id)).toEqual([
       'dashboard',
       'list',
+      'customers',
       'wholesale',
       'stock',
       'commission',

@@ -1,6 +1,16 @@
+import { dateInputValue } from '@/lib/domain/now';
+
 import type { Ticket, TicketSavePayload } from './types';
 
-const toISODate = (d: string) => (d ? new Date(d + 'T00:00:00').toISOString().slice(0, 10) : '');
+/**
+ * `YYYY-MM-DD` for a `date` column, read off the LOCAL calendar.
+ *
+ * This used to be `new Date(d + 'T00:00:00').toISOString().slice(0, 10)`, which
+ * parses local midnight and then reports it in UTC — in Asia/Bangkok that is
+ * 17:00 the PREVIOUS day, so every save walked each payment date one day
+ * backwards. Same defect the accounting dates had.
+ */
+const toISODate = (d: string) => (d ? dateInputValue(new Date(d + 'T00:00:00')) : '');
 
 /**
  * Flatten the client ticket into the plain-JSON payload the create/update
@@ -16,8 +26,15 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
   const extras: Record<string, unknown> = { ...t.extras };
   extras.__meta = {
     notes: t.notes ?? '',
+    // Blank entries are dropped rather than stored as '': a category the user
+    // typed in and then cleared should leave nothing behind.
+    notesByCategory: Object.fromEntries(
+      Object.entries(t.notesByCategory ?? {}).filter(([cat, note]) => cat && note.trim()),
+    ),
+    wrapOptions: t.wrapOptions ?? [],
     createdBy: t.createdBy ?? '',
     qcPhotos: t.qcPhotos ?? [],
+    qcAlbumUrl: (t.qcAlbumUrl ?? '').trim(),
     installConfirmed: !!t.installConfirmed,
     installConfirmedAt: t.installConfirmedAt ?? '',
   };
@@ -52,6 +69,10 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
       bookedPrice: Number(i.bookedPrice || 0),
       sold: i.sold || '',
       soldPrice: Number(i.soldPrice || 0),
+      // The cheer-up baseline. Dropped here until migration 0015, which is why
+      // สินค้าที่สนใจ came back empty every time a ticket was reopened.
+      interested: i.interested || '',
+      interestedPrice: Number(i.interestedPrice || 0),
       discountType: i.discountType ?? null,
       discountValue:
         i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : null,
@@ -73,7 +94,11 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
       type: p.type,
       method: p.method,
       amount: Number(p.amount || 0),
-      paidAt: toISODate(p.date || '') || new Date().toISOString().slice(0, 10),
+      paidAt: toISODate(p.date || '') || dateInputValue(new Date()),
+      // Storage paths for the transfer slips (migration 0018). These were
+      // dropped here entirely — `ticket_payments` had no column for them — so a
+      // slip attached to a payment never survived the save.
+      attachments: (p.attachments ?? []).filter(Boolean),
     })),
   };
 }

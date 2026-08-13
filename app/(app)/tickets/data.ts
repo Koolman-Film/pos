@@ -68,17 +68,23 @@ type ListRow = {
     discount_value: number | null;
   }[];
   ticket_payments: { amount: number }[];
+  deleted_at: string | null;
+  deleted_by: string | null;
 };
+
+const LIST_SELECT =
+  'id, shop_id, customer_name, plate, status, tech_by_category, drop_off_date, pickup_date, deleted_at, deleted_by, ' +
+  'ticket_items(category, sold_price, discount_type, discount_value), ticket_payments(amount)';
 
 export async function loadTicketList(): Promise<TicketListRow[]> {
   const supabase = await createClient();
   // RLS scopes rows to the caller's shops — this is the real backstop.
   const { data } = await supabase
     .from('tickets')
-    .select(
-      'id, shop_id, customer_name, plate, status, tech_by_category, drop_off_date, pickup_date, ' +
-        'ticket_items(category, sold_price, discount_type, discount_value), ticket_payments(amount)',
-    )
+    .select(LIST_SELECT)
+    // Soft-deleted tickets (migration 0013) live on in the table but are gone
+    // from every list; the bin below is the only place they surface.
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   return ((data ?? []) as unknown as ListRow[]).map((t) => ({
@@ -97,6 +103,45 @@ export async function loadTicketList(): Promise<TicketListRow[]> {
     dropOffDateObj: t.drop_off_date ? new Date(t.drop_off_date) : null,
     pickupDateObj: t.pickup_date ? new Date(t.pickup_date) : null,
     techByCategory: (t.tech_by_category as Record<string, string[]>) || {},
+  }));
+}
+
+/**
+ * The bin: tickets flagged by `deleteTicket`, newest deletion first. Only ever
+ * rendered for a caller holding `list.restore`, and RLS still scopes the rows to
+ * their shops. `deleted_by` is resolved to a name here rather than embedded, so
+ * a ticket whose deleter has since been removed still lists.
+ */
+export async function loadDeletedTicketList(): Promise<TicketListRow[]> {
+  const supabase = await createClient();
+  const [{ data }, { data: users }] = await Promise.all([
+    supabase
+      .from('tickets')
+      .select(LIST_SELECT)
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false }),
+    supabase.from('app_users').select('id, name'),
+  ]);
+  const nameById = new Map((users ?? []).map((u) => [u.id, u.name]));
+
+  return ((data ?? []) as unknown as ListRow[]).map((t) => ({
+    id: t.id,
+    shop: t.shop_id,
+    customer: t.customer_name,
+    plate: t.plate,
+    status: t.status,
+    items: (t.ticket_items ?? []).map((i) => ({
+      category: i.category,
+      soldPrice: Number(i.sold_price || 0),
+      discountType: (i.discount_type as 'percent' | 'amount' | null) || undefined,
+      discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
+    })),
+    payments: (t.ticket_payments ?? []).map((p) => ({ amount: Number(p.amount || 0) })),
+    dropOffDateObj: t.drop_off_date ? new Date(t.drop_off_date) : null,
+    pickupDateObj: t.pickup_date ? new Date(t.pickup_date) : null,
+    techByCategory: (t.tech_by_category as Record<string, string[]>) || {},
+    deletedAt: t.deleted_at ? new Date(t.deleted_at) : null,
+    deletedByName: t.deleted_by ? (nameById.get(t.deleted_by) ?? '') : '',
   }));
 }
 
@@ -204,8 +249,11 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
 
 type ExtraMeta = {
   notes?: string;
+  notesByCategory?: Record<string, string>;
+  wrapOptions?: string[];
   createdBy?: string;
   qcPhotos?: string[];
+  qcAlbumUrl?: string;
   installConfirmed?: boolean;
   installConfirmedAt?: string;
 };
@@ -227,6 +275,7 @@ type DetailRow = {
   drop_off_date: string;
   pickup_date: string;
   extras: Record<string, unknown> | null;
+  locked: boolean | null;
   ticket_items: {
     id: number;
     category: string;
@@ -234,12 +283,20 @@ type DetailRow = {
     booked_price: number;
     sold: string;
     sold_price: number;
+    interested: string | null;
+    interested_price: number | null;
     discount_type: string | null;
     discount_value: number | null;
     actual_qty: Record<string, number> | null;
     ticket_item_positions: { position: string; product: string; price: number }[];
   }[];
-  ticket_payments: { type: string; method: string; amount: number; paid_at: string | null }[];
+  ticket_payments: {
+    type: string;
+    method: string;
+    amount: number;
+    paid_at: string | null;
+    attachments: string[] | null;
+  }[];
 };
 
 export async function loadTicket(id: string): Promise<Ticket | null> {
@@ -248,10 +305,10 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     .from('tickets')
     .select(
       'id, shop_id, customer_name, phone, plate, car_type, brand, model, color, service_type, status, ' +
-        'booking_channel, tech_by_category, drop_off_date, pickup_date, extras, ' +
-        'ticket_items(id, category, booked, booked_price, sold, sold_price, discount_type, discount_value, actual_qty, ' +
+        'booking_channel, tech_by_category, drop_off_date, pickup_date, extras, locked, ' +
+        'ticket_items(id, category, booked, booked_price, sold, sold_price, interested, interested_price, discount_type, discount_value, actual_qty, ' +
         'ticket_item_positions(position, product, price)), ' +
-        'ticket_payments(type, method, amount, paid_at)',
+        'ticket_payments(type, method, amount, paid_at, attachments)',
     )
     .eq('id', id)
     .maybeSingle();
@@ -281,16 +338,24 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     pickupDateObj: new Date(t.pickup_date),
     extras: extras as Ticket['extras'],
     notes: meta.notes ?? '',
+    notesByCategory: meta.notesByCategory ?? {},
+    wrapOptions: meta.wrapOptions ?? [],
     createdBy: meta.createdBy ?? '',
     qcPhotos: meta.qcPhotos ?? [],
+    qcAlbumUrl: meta.qcAlbumUrl ?? '',
     installConfirmed: !!meta.installConfirmed,
     installConfirmedAt: meta.installConfirmedAt ?? '',
+    locked: !!t.locked,
     items: (t.ticket_items ?? []).map((i) => ({
       category: i.category,
       booked: i.booked,
       bookedPrice: Number(i.booked_price || 0),
       sold: i.sold,
       soldPrice: Number(i.sold_price || 0),
+      interested: i.interested ?? '',
+      // Left blank rather than 0 when nothing was chosen, so the price box shows
+      // its placeholder instead of a misleading zero.
+      interestedPrice: i.interested ? Number(i.interested_price || 0) : '',
       discountType: (i.discount_type as 'percent' | 'amount' | null) ?? null,
       discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
       positions: (i.ticket_item_positions ?? []).map((p) => ({
@@ -308,7 +373,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
       method: p.method,
       amount: Number(p.amount || 0),
       date: p.paid_at ?? '',
-      attachments: [],
+      attachments: p.attachments ?? [],
     })),
   };
 }
@@ -335,6 +400,9 @@ export function blankTicket(shop: string): Ticket {
     payments: [],
     extras: {},
     notes: '',
+    notesByCategory: {},
+    wrapOptions: [],
     qcPhotos: [],
+    qcAlbumUrl: '',
   };
 }

@@ -1,11 +1,11 @@
 'use client';
 
-import { ManagedDropdown } from './ManagedDropdown';
+import { TimeSelect } from './TimeSelect';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /**
- * Ported from reference/v0.4/finnix-film.html:1184-1196 (date + admin-manageable time slots).
+ * Ported from reference/v0.4/finnix-film.html:1184-1196 (date + time slots).
  *
  * Deviation from the prototype: the prototype derives the date string with
  * `value.toISOString().slice(0,10)`, which is UTC. In Asia/Bangkok (UTC+7) that
@@ -13,18 +13,17 @@ const pad = (n: number) => String(n).padStart(2, '0');
  * rebuilds the Date from that shifted day — silently moving a booking back one
  * day. We format from the local date parts instead, which is identical for all
  * mid-day values and correct at the edges.
+ *
+ * Second deviation: the time part is a fixed 09:00–18:00 list (`TimeSelect`),
+ * not an admin-managed one — see that file for why.
  */
 export function DateTimeField({
   value,
   onChange,
-  timeSlots,
-  setTimeSlots,
   label,
 }: {
   value: Date;
   onChange: (d: Date) => void;
-  timeSlots: string[];
-  setTimeSlots: (s: string[]) => void;
   /**
    * Names the date input for assistive tech. The visible caption sits outside
    * this component, so without it the field is announced only as "date".
@@ -51,13 +50,7 @@ export function DateTimeField({
         onChange={(e) => setDate(e.target.value)}
         className="field w-full text-sm px-3 py-2"
       />
-      <ManagedDropdown
-        value={timeStr}
-        onChange={setTime}
-        options={timeSlots}
-        setOptions={setTimeSlots}
-        placeholder="เลือกเวลา..."
-      />
+      <TimeSelect value={timeStr} onChange={setTime} />
     </div>
   );
 }

@@ -51,6 +51,7 @@ export const ROLE_ICON_CHOICES = [
 export const NAV_ITEMS: { id: string; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'แดชบอร์ด', icon: 'fa-gauge-high' },
   { id: 'list', label: 'Book งาน', icon: 'fa-clipboard-list' },
+  { id: 'customers', label: 'ทะเบียนลูกค้า', icon: 'fa-address-book' },
   { id: 'wholesale', label: 'ขายส่ง', icon: 'fa-truck-fast' },
   { id: 'stock', label: 'สต็อกสินค้า', icon: 'fa-boxes-stacked' },
   { id: 'commission', label: 'ค่าคอมมิชชั่น', icon: 'fa-percent' },
@@ -80,6 +81,14 @@ export const OTHER_CAPABILITIES: LabeledKey[] = [
 export const MODULE_CAPABILITIES: LabeledKey[] = [
   { key: 'list.createNew', label: 'ใบงานติดตั้ง: สร้างใบงานใหม่' },
   { key: 'list.printSheet', label: 'ใบงานติดตั้ง: พิมพ์ใบงานสำหรับช่าง' },
+  { key: 'list.delete', label: 'ใบงานติดตั้ง: ลบใบงาน (ลงถังขยะ)' },
+  { key: 'list.restore', label: 'ใบงานติดตั้ง: ดูถังขยะและกู้คืนใบงาน' },
+  { key: 'list.unlock', label: 'ใบงานติดตั้ง: ปลดล็อกใบงานที่ปิดงานแล้วเพื่อแก้ไข' },
+  { key: 'customers.edit', label: 'ทะเบียนลูกค้า: เพิ่ม/แก้ไข/ลบลูกค้า' },
+  {
+    key: 'options.manage',
+    label: 'ทุกโมดูล: เพิ่ม/ลบตัวเลือกในรายการ (จองผ่าน, ประเภทรถ, ตำแหน่งติดตั้ง ฯลฯ)',
+  },
   { key: 'wholesale.createNew', label: 'ขายส่ง: สร้าง PO ใหม่' },
   { key: 'wholesale.priceApproval', label: 'ขายส่ง: อนุมัติ/ปฏิเสธราคา' },
   { key: 'wholesale.badDebt', label: 'ขายส่ง: แจ้งตัดหนี้สูญ' },

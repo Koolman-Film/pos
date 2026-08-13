@@ -36,6 +36,11 @@ export type WsOrder = {
   shop: string;
   customerId: number | null;
   status: string;
+  /**
+   * `orders.created_at`, the date the period filter windows the list on. Absent
+   * on an unsaved draft from `blankOrder`, which the filter then always shows.
+   */
+  createdAt?: string;
   items: WsItem[];
   returns: WsReturn[];
   adjustments: WsAdjustment[];

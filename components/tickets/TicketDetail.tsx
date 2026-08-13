@@ -4,16 +4,22 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
+import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { itemNetPrice } from '@/lib/domain/tickets';
+import { fitPrintPages } from '@/lib/print/fitToPage';
 
 import { PrintJobSheet, type PrintMode } from './PrintJobSheet';
 import { serializeTicket } from './serialize';
 import { ExtrasSection } from './detail/ExtrasSection';
+import { FormSection, SECTION_TONES } from './detail/FormSection';
 import { ItemsSection } from './detail/ItemsSection';
+import { NotesSection } from './detail/NotesSection';
 import { PaymentsSection } from './detail/PaymentsSection';
 import { TechSection } from './detail/TechSection';
 import { VehicleInfoSection } from './detail/VehicleInfoSection';
+import { WrapOptionsSection } from './detail/WrapOptionsSection';
+import { WRAP_CATEGORY } from './wrapOptions';
 import type {
   CarModel,
   CorporateBuyer,
@@ -60,6 +66,9 @@ export function TicketDetail({
   shopInfo,
   saveAction,
   optionAction,
+  deleteAction,
+  unlockAction,
+  attachmentUrlAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -80,6 +89,12 @@ export function TicketDetail({
     listKey: OptionListName,
     values: string[],
   ) => Promise<{ ok: boolean; error?: string }>;
+  /** Soft-delete action; omitted (or without `list.delete`) hides the button. */
+  deleteAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Reopens a closed ticket; shown only to a `list.unlock` holder. */
+  unlockAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Signed-URL minter for the slips and QC photos stored on this ticket. */
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
@@ -107,7 +122,27 @@ export function TicketDetail({
   const [corporateBuyers, setCorporateBuyers] = useState<CorporateBuyer[]>(initialCorporateBuyers);
 
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Frozen record. `initialTicket.locked` rather than `t.locked` on purpose: the
+  // flag is not something the form edits, and reading it from the draft would
+  // let a stray field() call appear to unlock the ticket on screen.
+  const locked = !isNew && !!initialTicket.locked;
+
+  async function unlock() {
+    if (!unlockAction) return;
+    setSaveError(null);
+    setUnlocking(true);
+    const result = await unlockAction(t.id);
+    setUnlocking(false);
+    if (!result.ok) {
+      setSaveError(result.error || 'ปลดล็อกไม่สำเร็จ');
+      return;
+    }
+    router.refresh();
+  }
 
   // Financial-document + print state.
   const [docType, setDocType] = useState('ใบเสร็จรับเงิน');
@@ -121,13 +156,29 @@ export function TicketDetail({
   const productCategories = options.product_categories;
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? id;
 
+  /**
+   * วิธีชำระเงิน comes from the shop's ช่องทางการชำระเงิน, set in จัดการสิทธิ์ →
+   * ข้อมูลนิติบุคคลของสาขา — the same list that prints on its invoices. The
+   * global `payment_methods` option list is the fallback for a shop that has not
+   * filled its channels in yet, because a dropdown with nothing in it would make
+   * recording a payment impossible.
+   */
+  const shopChannels = (shopInfo[t.shop]?.paymentChannels ?? []).filter(Boolean);
+  const paymentMethodOptions = shopChannels.length > 0 ? shopChannels : options.payment_methods;
+
   function changeDocType(dt: string) {
     setDocType(dt);
     setShowCompanyInfo(dt === 'ใบกำกับภาษี/ใบเสร็จรับเงิน');
   }
   function doPrint(mode: PrintMode) {
     setPrintMode(mode);
-    setTimeout(() => window.print(), 50);
+    setTimeout(() => {
+      // Shrink any page that would spill onto a second sheet, then print. The
+      // 50ms is the sheet's render; the measurement has to come after it and
+      // before the dialog, which is why both live here.
+      fitPrintPages();
+      window.print();
+    }, 50);
   }
 
   async function save() {
@@ -150,8 +201,46 @@ export function TicketDetail({
     }
   }
 
+  /**
+   * ลบใบงาน. Soft delete, so the confirmation says where the ticket goes rather
+   * than warning that it is gone forever — an admin can pull it back out of the
+   * bin. The unsaved-changes guard is cleared first, otherwise leaving the page
+   * right after deleting prompts to save a ticket that no longer shows anywhere.
+   */
+  async function remove() {
+    if (!deleteAction) return;
+    if (
+      !window.confirm(
+        `ลบใบงาน #${t.id} ของ ${t.customer || 'ลูกค้า'}?\n\n` +
+          'ใบงานจะถูกย้ายไปถังขยะ ไม่แสดงในรายการและไม่ถูกนับในแดชบอร์ดอีก ' +
+          'แอดมินกู้คืนได้ภายหลัง (สต็อกที่ตัดไปแล้วจะไม่ถูกคืนอัตโนมัติ)',
+      )
+    )
+      return;
+    setSaveError(null);
+    setDeleting(true);
+    try {
+      const result = await deleteAction(t.id);
+      if (!result.ok) {
+        setSaveError(result.error || 'ลบใบงานไม่สำเร็จ');
+        setDeleting(false);
+        return;
+      }
+      window.__hasUnsavedFormChanges = false;
+      router.push('/tickets');
+      router.refresh();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'ลบใบงานไม่สำเร็จ');
+      setDeleting(false);
+    }
+  }
+
   function field(key: keyof Ticket, value: unknown) {
     setT({ ...t, [key]: value });
+  }
+  /** หมายเหตุของชนิดสินค้าหนึ่ง — prints only on that category's ใบงานติดตั้ง. */
+  function setCategoryNote(category: string, value: string) {
+    setT({ ...t, notesByCategory: { ...(t.notesByCategory || {}), [category]: value } });
   }
   function changeStatus(newStatus: string) {
     setT({
@@ -318,6 +407,15 @@ export function TicketDetail({
       ],
     });
   }
+  /**
+   * Remove a payment row. The form had no way to do this: a row added by
+   * mistake stayed on the ticket as a 0-baht entry forever, and the only bin
+   * icon on the row belonged to the payment-method dropdown (it deletes the
+   * METHOD from the system-wide list, which is not what anyone wanted there).
+   */
+  function removePayment(idx: number) {
+    setT({ ...t, payments: t.payments.filter((_, i) => i !== idx) });
+  }
   function updatePayment(idx: number, key: keyof TicketPayment, val: unknown) {
     const payments = [...t.payments];
     payments[idx] = { ...payments[idx], [key]: val };
@@ -340,7 +438,12 @@ export function TicketDetail({
     }));
   }
   function shareQcAlbum() {
-    const link = `${window.location.origin}${window.location.pathname}#qc-album-${t.id}`;
+    // The drive album when there is one — that is a page the customer can
+    // actually open. The in-app link only resolves for someone who can sign in.
+    const external = (t.qcAlbumUrl || '').trim();
+    const link = /^https?:\/\/\S+$/i.test(external)
+      ? external
+      : `${window.location.origin}${window.location.pathname}#qc-album-${t.id}`;
     const text = `อัลบั้มรูป QC ก่อนติดตั้ง — ${t.customer || ''} (${t.plate || ''})`;
     if (navigator.share)
       navigator
@@ -366,342 +469,455 @@ export function TicketDetail({
   const paid = t.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
   return (
-    <div className="max-w-2xl fade-page">
-      <button
-        onClick={() => {
-          if (
-            confirmDiscardIfDirty(
-              isDirty,
-              'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
+    <OptionManageProvider canManage={canDo('options.manage')}>
+      <div className="max-w-2xl fade-page">
+        <button
+          onClick={() => {
+            if (
+              confirmDiscardIfDirty(
+                isDirty,
+                'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
+              )
             )
-          )
-            router.push('/tickets');
-        }}
-        className="text-sm mb-4 flex items-center gap-2 font-medium"
-        style={{ color: 'var(--ink-soft)' }}
-      >
-        <i className="fa-solid fa-arrow-left"></i>กลับไปรายการใบงาน
-      </button>
-      <div className="card p-5 sm:p-7">
-        <div className="flex items-start justify-between mb-1">
-          <p
-            className="text-xs font-semibold flex items-center gap-1.5"
-            style={{ color: 'var(--primary)' }}
-          >
-            <i className="fa-solid fa-store"></i>
-            {shopName(t.shop)}
-          </p>
-          <select
-            value={t.status}
-            aria-label="สถานะใบงาน"
-            onChange={(e) => changeStatus(e.target.value)}
-            className="text-sm font-bold px-3 py-1.5 rounded-full border-none cursor-pointer"
-            style={{
-              background: getStatus(statuses, t.status).bg,
-              color: getStatus(statuses, t.status).text,
-            }}
-          >
-            {statuses.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.key}
-              </option>
-            ))}
-          </select>
-        </div>
-        <p className="text-lg font-bold mb-5">{isNew ? 'สร้างใบงานใหม่' : `ใบงาน #${t.id}`}</p>
-
-        <VehicleInfoSection
-          t={t}
-          field={field}
-          bookingChannels={options.booking_channels}
-          setBookingChannels={opt('booking_channels')}
-          serviceTypes={options.service_types}
-          setServiceTypes={opt('service_types')}
-          carTypes={options.car_types}
-          setCarTypes={opt('car_types')}
-          carBrands={options.car_brands}
-          setCarBrands={opt('car_brands')}
-          timeSlots={options.time_slots}
-          setTimeSlots={opt('time_slots')}
-          retailCustomers={retailCustomers}
-          setRetailCustomers={setRetailCustomers}
-          onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
-          onModelChange={onModelChange}
-          commitModelRegistry={commitModelRegistry}
-        />
-
-        <div className="mb-5">
-          <label className="text-xs font-medium block mb-1" style={{ color: 'var(--ink-soft)' }}>
-            หมายเหตุ
-          </label>
-          <textarea
-            value={t.notes || ''}
-            onChange={(e) => field('notes', e.target.value)}
-            placeholder="ข้อมูลสำคัญที่ต้องการบันทึกไว้..."
-            rows={2}
-            className="field w-full text-sm px-3 py-2"
-            style={{ resize: 'vertical' }}
-          />
-        </div>
-
-        <ItemsSection
-          t={t}
-          stock={stock}
-          productCategories={productCategories}
-          filmPositions={options.film_positions}
-          setFilmPositions={opt('film_positions')}
-          wrapPositions={options.wrap_positions}
-          setWrapPositions={opt('wrap_positions')}
-          serviceItems={options.service_items}
-          setServiceItems={opt('service_items')}
-          addItem={addItem}
-          removeItem={removeItem}
-          updateItem={updateItem}
-          updateItemFields={updateItemFields}
-          updateFilmPositions={updateFilmPositions}
-          lookupPrice={lookupPrice}
-          lookupFilmPrice={lookupFilmPrice}
-          commitPrice={commitPrice}
-        />
-
-        <TechSection
-          t={t}
-          field={field}
-          technicians={options.technicians}
-          setTechnicians={opt('technicians')}
-          updateActualQty={updateActualQty}
-          confirmInstall={confirmInstall}
-          shareQcAlbum={shareQcAlbum}
-          shopName={shopName}
-        />
-
-        <ExtrasSection
-          t={t}
-          extraOptions={options.extra_options}
-          setExtraOptions={opt('extra_options')}
-          slideTypes={options.slide_types}
-          timeSlots={options.time_slots}
-          setTimeSlots={opt('time_slots')}
-          stock={stock}
-          toggleExtra={toggleExtra}
-          updateExtraDetail={updateExtraDetail}
-          setSlideType={setSlideType}
-          updateSlideLeg={updateSlideLeg}
-          shareLink={shareLink}
-        />
-
-        <PaymentsSection
-          t={t}
-          paymentMethods={options.payment_methods}
-          setPaymentMethods={opt('payment_methods')}
-          addPayment={addPayment}
-          updatePayment={updatePayment}
-          total={total}
-          paid={paid}
-        />
-
-        {saveError && (
-          <p
-            className="text-sm mb-3 px-3 py-2 rounded-lg"
-            style={{ background: '#FBEAEC', color: '#B23A48' }}
-            role="alert"
-          >
-            <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
-            {saveError}
-          </p>
-        )}
-        <div className="flex gap-3">
-          <button
-            onClick={() => router.push('/tickets')}
-            className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
-          >
-            ยกเลิก
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-            style={{ opacity: saving ? 0.7 : 1 }}
-          >
-            <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
-            {saving ? 'กำลังบันทึก...' : 'บันทึกใบงาน'}
-          </button>
-        </div>
-
-        {!isNew && t.items.some((i) => i.sold) && canDo('list.printSheet') && (
-          <div className="flex gap-3 mt-3">
-            <button
-              onClick={() => doPrint('job')}
-              className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              router.push('/tickets');
+          }}
+          className="text-sm mb-4 flex items-center gap-2 font-medium"
+          style={{ color: 'var(--ink-soft)' }}
+        >
+          <i className="fa-solid fa-arrow-left"></i>กลับไปรายการใบงาน
+        </button>
+        <div className="card p-5 sm:p-7">
+          <div className="flex items-start justify-between mb-1">
+            <p
+              className="text-xs font-semibold flex items-center gap-1.5"
+              style={{ color: 'var(--primary)' }}
             >
-              <i className="fa-solid fa-print"></i> ใบงานติดตั้ง
-            </button>
-            <button
-              onClick={() => doPrint('sale')}
-              className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              <i className="fa-solid fa-store"></i>
+              {shopName(t.shop)}
+            </p>
+            <select
+              value={t.status}
+              aria-label="สถานะใบงาน"
+              onChange={(e) => changeStatus(e.target.value)}
+              className="text-sm font-bold px-3 py-1.5 rounded-full border-none cursor-pointer"
+              style={{
+                background: getStatus(statuses, t.status).bg,
+                color: getStatus(statuses, t.status).text,
+              }}
             >
-              <i className="fa-solid fa-print"></i> ใบงานขาย
-            </button>
+              {statuses.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.key}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
-        {!isNew &&
-          t.items.some((i) => i.sold) &&
-          canDo('list.printSheet') &&
-          t.extras?.['นอกสถานที่']?.checked && (
-            <button
-              onClick={() => doPrint('offsite')}
-              className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+          <p className="text-lg font-bold mb-5">{isNew ? 'สร้างใบงานใหม่' : `ใบงาน #${t.id}`}</p>
+
+          {/*
+            A closed ticket (ส่งมอบแล้ว + ชำระครบ) is what commission, revenue and
+            any later dispute are read from, so it is frozen. The fields below
+            stay visible — this is still the record of the job — but nothing in
+            them can be changed or saved until an admin reopens it.
+          */}
+          {locked && (
+            <div
+              className="rounded-2xl p-4 mb-5"
+              style={{ background: '#F1EDE7', border: '1.5px solid #B5AAA1' }}
             >
-              <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <i className="fa-solid fa-lock"></i>ใบงานนี้ปิดงานแล้ว — ล็อกไม่ให้แก้ไข
+              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                ส่งมอบงานและชำระเงินครบแล้ว
+                ข้อมูลจึงถูกล็อกไว้เพื่อไม่ให้ยอดขายและค่าคอมมิชชั่นเปลี่ยนย้อนหลัง
+                {canDo('list.unlock')
+                  ? ' — กดปลดล็อกด้านล่างเพื่อแก้ไข แล้วระบบจะล็อกกลับเองเมื่อบันทึก'
+                  : ' หากต้องแก้ไขกรุณาแจ้งแอดมิน'}
+              </p>
+              {canDo('list.unlock') && unlockAction && (
+                <button
+                  onClick={unlock}
+                  disabled={unlocking}
+                  className="btn-outline mt-3 rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2"
+                  style={{ opacity: unlocking ? 0.7 : 1 }}
+                >
+                  <i
+                    className={`fa-solid ${unlocking ? 'fa-spinner fa-spin' : 'fa-lock-open'}`}
+                  ></i>
+                  {unlocking ? 'กำลังปลดล็อก...' : 'ปลดล็อกเพื่อแก้ไข'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/*
+            One guard around every editable section instead of a `disabled` on
+            each of the ~40 controls inside them: the sections stay readable, the
+            status dropdown above stays usable for nothing (it is covered too),
+            and there is no field left behind when a new one is added.
+          */}
+          <div
+            style={
+              locked ? { pointerEvents: 'none', opacity: 0.65, userSelect: 'text' } : undefined
+            }
+            aria-disabled={locked || undefined}
+          >
+            <FormSection step={1} title="ข้อมูลงานและลูกค้า" icon="fa-car" tone={SECTION_TONES.job}>
+              <VehicleInfoSection
+                t={t}
+                field={field}
+                bookingChannels={options.booking_channels}
+                setBookingChannels={opt('booking_channels')}
+                serviceTypes={options.service_types}
+                setServiceTypes={opt('service_types')}
+                carTypes={options.car_types}
+                setCarTypes={opt('car_types')}
+                carBrands={options.car_brands}
+                setCarBrands={opt('car_brands')}
+                retailCustomers={retailCustomers}
+                setRetailCustomers={setRetailCustomers}
+                onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
+                onModelChange={onModelChange}
+                commitModelRegistry={commitModelRegistry}
+              />
+            </FormSection>
+
+            <FormSection
+              step={2}
+              title={`สินค้า/การติดตั้ง (${t.items.length})`}
+              icon="fa-bag-shopping"
+              tone={SECTION_TONES.items}
+            >
+              <ItemsSection
+                t={t}
+                stock={stock}
+                productCategories={productCategories}
+                filmPositions={options.film_positions}
+                setFilmPositions={opt('film_positions')}
+                wrapPositions={options.wrap_positions}
+                setWrapPositions={opt('wrap_positions')}
+                serviceItems={options.service_items}
+                setServiceItems={opt('service_items')}
+                addItem={addItem}
+                removeItem={removeItem}
+                updateItem={updateItem}
+                updateItemFields={updateItemFields}
+                updateFilmPositions={updateFilmPositions}
+                lookupPrice={lookupPrice}
+                lookupFilmPrice={lookupFilmPrice}
+                commitPrice={commitPrice}
+              />
+
+              {/*
+                These three sit BELOW the products on purpose: the wrap tick-list
+                and the per-category notes only mean anything once the ชนิดสินค้า
+                on the ticket are known, and a note box that appears above the
+                item you just added is a box nobody scrolls back up to.
+              */}
+              <div className="mt-4">
+                {t.items.some((i) => i.category === WRAP_CATEGORY) && (
+                  <WrapOptionsSection
+                    selected={t.wrapOptions ?? []}
+                    onChange={(next) => field('wrapOptions', next)}
+                  />
+                )}
+
+                <NotesSection
+                  t={t}
+                  setNote={(v) => field('notes', v)}
+                  setCategoryNote={setCategoryNote}
+                />
+
+                <ExtrasSection
+                  t={t}
+                  extraOptions={options.extra_options}
+                  setExtraOptions={opt('extra_options')}
+                  slideTypes={options.slide_types}
+                  stock={stock}
+                  toggleExtra={toggleExtra}
+                  updateExtraDetail={updateExtraDetail}
+                  setSlideType={setSlideType}
+                  updateSlideLeg={updateSlideLeg}
+                  shareLink={shareLink}
+                />
+              </div>
+            </FormSection>
+
+            <FormSection
+              step={3}
+              title="การชำระเงิน"
+              icon="fa-money-bill-wave"
+              tone={SECTION_TONES.payment}
+            >
+              <PaymentsSection
+                t={t}
+                shop={t.shop}
+                paymentMethods={paymentMethodOptions}
+                attachmentUrlAction={attachmentUrlAction}
+                addPayment={addPayment}
+                removePayment={removePayment}
+                updatePayment={updatePayment}
+                total={total}
+                paid={paid}
+              />
+            </FormSection>
+          </div>
+
+          {saveError && (
+            <p
+              className="text-sm mb-3 px-3 py-2 rounded-lg"
+              style={{ background: '#FBEAEC', color: '#B23A48' }}
+              role="alert"
+            >
+              <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
+              {saveError}
+            </p>
+          )}
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push('/tickets')}
+              className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
+            >
+              {locked ? 'กลับไปรายการใบงาน' : 'ยกเลิก'}
+            </button>
+            {/* Saving a locked ticket would be refused by the database anyway;
+                not offering the button is the honest version of that. */}
+            {!locked && (
+              <button
+                onClick={save}
+                disabled={saving}
+                className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                style={{ opacity: saving ? 0.7 : 1 }}
+              >
+                <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
+                {saving ? 'กำลังบันทึก...' : 'บันทึกใบงาน'}
+              </button>
+            )}
+          </div>
+
+          {!isNew && t.items.some((i) => i.sold) && canDo('list.printSheet') && (
+            <div className="flex gap-3 mt-3">
+              <button
+                onClick={() => doPrint('job')}
+                className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-print"></i> ใบงานติดตั้ง
+              </button>
+              <button
+                onClick={() => doPrint('sale')}
+                className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-print"></i> ใบงานขาย
+              </button>
+            </div>
+          )}
+          {!isNew &&
+            t.items.some((i) => i.sold) &&
+            canDo('list.printSheet') &&
+            t.extras?.['นอกสถานที่']?.checked && (
+              <button
+                onClick={() => doPrint('offsite')}
+                className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
+              </button>
+            )}
+          {!isNew && !locked && canDo('list.delete') && deleteAction && (
+            <button
+              onClick={remove}
+              disabled={deleting}
+              className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+              style={{ color: '#B23A48', borderColor: '#B23A48', opacity: deleting ? 0.7 : 1 }}
+            >
+              <i className={`fa-solid ${deleting ? 'fa-spinner fa-spin' : 'fa-trash'}`}></i>
+              {deleting ? 'กำลังลบ...' : 'ลบใบงาน'}
             </button>
           )}
-        {!isNew && (
-          <div
-            className="rounded-2xl p-4 mt-4"
-            style={{ background: '#EAF1FB', border: '1.5px solid #2563EB' }}
-          >
-            <p className="text-xs font-semibold mb-2" style={{ color: '#1D4ED8' }}>
-              <i className="fa-solid fa-file-invoice mr-1.5"></i>ออกเอกสารทางการเงิน
-            </p>
-            <div className="flex gap-1.5 mb-2.5">
-              {['ใบเสนอราคา', 'ใบกำกับภาษี/ใบเสร็จรับเงิน', 'ใบเสร็จรับเงิน'].map((dt) => (
-                <button
-                  key={dt}
-                  onClick={() => changeDocType(dt)}
-                  className="text-xs px-2.5 py-1.5 rounded-full font-semibold flex-1"
-                  style={{
-                    background: docType === dt ? '#2563EB' : '#fff',
-                    color: docType === dt ? '#fff' : '#1D4ED8',
-                  }}
-                >
-                  {dt}
-                </button>
-              ))}
-            </div>
-            <div className="mb-2.5">
-              <label className="text-xs" style={{ color: '#1D4ED8' }}>
-                ชื่อลูกค้าในเอกสาร
-              </label>
-              <input
-                value={buyerName}
-                onChange={(e) => setBuyerName(e.target.value)}
-                placeholder={t.customer}
-                className="field w-full text-xs px-2.5 py-1.5"
-              />
-            </div>
-            {docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน' && (
-              <div className="mb-2.5 rounded-lg p-2.5" style={{ background: '#fff' }}>
-                <p className="text-xs font-medium mb-2" style={{ color: '#1D4ED8' }}>
-                  ข้อมูลนิติบุคคล
-                </p>
-                {corporateBuyers.length > 0 && (
-                  <select
-                    onChange={(e) => {
-                      const b = corporateBuyers.find((x) => x.name === e.target.value);
-                      if (b) {
-                        setBuyerName(b.name);
-                        setBuyerAddress(b.address);
-                        setBuyerTaxId(b.taxId);
-                      }
+          {!isNew && (
+            <FormSection
+              step={4}
+              title="ออกเอกสารทางการเงิน"
+              icon="fa-file-invoice"
+              tone={SECTION_TONES.document}
+            >
+              <div className="flex gap-1.5 mb-2.5">
+                {['ใบเสนอราคา', 'ใบกำกับภาษี/ใบเสร็จรับเงิน', 'ใบเสร็จรับเงิน'].map((dt) => (
+                  <button
+                    key={dt}
+                    onClick={() => changeDocType(dt)}
+                    className="text-xs px-2.5 py-1.5 rounded-full font-semibold flex-1"
+                    style={{
+                      background: docType === dt ? '#2563EB' : '#fff',
+                      color: docType === dt ? '#fff' : '#1D4ED8',
                     }}
-                    defaultValue=""
-                    className="field w-full text-xs px-2.5 py-1.5 mb-2"
                   >
-                    <option value="" disabled>
-                      เลือกจากที่บันทึกไว้...
-                    </option>
-                    {corporateBuyers.map((b) => (
-                      <option key={b.name} value={b.name}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <input
-                  value={buyerAddress}
-                  onChange={(e) => setBuyerAddress(e.target.value)}
-                  placeholder="ที่อยู่นิติบุคคล"
-                  className="field w-full text-xs px-2.5 py-1.5 mb-2"
-                />
-                <input
-                  value={buyerTaxId}
-                  onChange={(e) => setBuyerTaxId(e.target.value)}
-                  placeholder="เลขผู้เสียภาษี 13 หลัก"
-                  className="field w-full text-xs px-2.5 py-1.5 mb-2"
-                />
-                <button
-                  onClick={() => {
-                    if (!buyerName.trim()) return;
-                    setCorporateBuyers((prev) => {
-                      const idx = prev.findIndex((x) => x.name === buyerName);
-                      const entry = { name: buyerName, address: buyerAddress, taxId: buyerTaxId };
-                      if (idx >= 0) {
-                        const copy = [...prev];
-                        copy[idx] = entry;
-                        return copy;
-                      }
-                      return [...prev, entry];
-                    });
-                  }}
-                  className="btn-outline w-full text-xs py-1.5 rounded-lg"
-                  style={{ borderColor: '#2563EB', color: '#1D4ED8' }}
-                >
-                  <i className="fa-solid fa-floppy-disk mr-1.5"></i>บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป
-                </button>
+                    {dt}
+                  </button>
+                ))}
               </div>
-            )}
-            <label
-              className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
-              style={{ color: '#1D4ED8' }}
+              <div className="mb-2.5">
+                <label className="text-xs" style={{ color: '#1D4ED8' }}>
+                  ชื่อลูกค้าในเอกสาร
+                </label>
+                <input
+                  value={buyerName}
+                  onChange={(e) => setBuyerName(e.target.value)}
+                  placeholder={t.customer}
+                  className="field w-full text-xs px-2.5 py-1.5"
+                />
+              </div>
+              {docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน' && (
+                <div className="mb-2.5 rounded-lg p-2.5" style={{ background: '#fff' }}>
+                  <p className="text-xs font-medium mb-2" style={{ color: '#1D4ED8' }}>
+                    ข้อมูลนิติบุคคล
+                  </p>
+                  {corporateBuyers.length > 0 && (
+                    <select
+                      onChange={(e) => {
+                        const b = corporateBuyers.find((x) => x.name === e.target.value);
+                        if (b) {
+                          setBuyerName(b.name);
+                          setBuyerAddress(b.address);
+                          setBuyerTaxId(b.taxId);
+                        }
+                      }}
+                      defaultValue=""
+                      className="field w-full text-xs px-2.5 py-1.5 mb-2"
+                    >
+                      <option value="" disabled>
+                        เลือกจากที่บันทึกไว้...
+                      </option>
+                      {corporateBuyers.map((b) => (
+                        <option key={b.name} value={b.name}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    value={buyerAddress}
+                    onChange={(e) => setBuyerAddress(e.target.value)}
+                    placeholder="ที่อยู่นิติบุคคล"
+                    className="field w-full text-xs px-2.5 py-1.5 mb-2"
+                  />
+                  <input
+                    value={buyerTaxId}
+                    onChange={(e) => setBuyerTaxId(e.target.value)}
+                    placeholder="เลขผู้เสียภาษี 13 หลัก"
+                    className="field w-full text-xs px-2.5 py-1.5 mb-2"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!buyerName.trim()) return;
+                      setCorporateBuyers((prev) => {
+                        const idx = prev.findIndex((x) => x.name === buyerName);
+                        const entry = { name: buyerName, address: buyerAddress, taxId: buyerTaxId };
+                        if (idx >= 0) {
+                          const copy = [...prev];
+                          copy[idx] = entry;
+                          return copy;
+                        }
+                        return [...prev, entry];
+                      });
+                    }}
+                    className="btn-outline w-full text-xs py-1.5 rounded-lg"
+                    style={{ borderColor: '#2563EB', color: '#1D4ED8' }}
+                  >
+                    <i className="fa-solid fa-floppy-disk mr-1.5"></i>
+                    บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป
+                  </button>
+                </div>
+              )}
+              <label
+                className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
+                style={{ color: '#1D4ED8' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showCompanyInfo}
+                  onChange={(e) => setShowCompanyInfo(e.target.checked)}
+                  className="w-3.5 h-3.5"
+                />
+                แสดงชื่อนิติบุคคล/เลขผู้เสียภาษีของร้าน
+              </label>
+              <label
+                className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
+                style={{ color: '#1D4ED8' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showDisclaimer}
+                  onChange={(e) => setShowDisclaimer(e.target.checked)}
+                  className="w-3.5 h-3.5"
+                />
+                แสดงข้อความแจ้งเตือนตรวจเช็ครอบคัน
+              </label>
+              <button
+                onClick={() => doPrint('doc')}
+                className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
+                style={{ background: '#2563EB', color: '#fff' }}
+              >
+                <i className="fa-solid fa-print"></i> ออก{docType}
+              </button>
+            </FormSection>
+          )}
+          {/*
+            ข้อมูลของช่าง sits at the very bottom, below the financial-document
+            block. The ticket is filled top-to-bottom by whoever is with the
+            customer — vehicle, products, extras, money, paperwork — and the
+            technician block (QC photos, install confirmation, actual
+            quantities) is worked on later, usually by someone else. Several
+            roles open this screen; none of them should have to scroll past a
+            section that is not theirs.
+          */}
+          <div
+            style={
+              locked ? { pointerEvents: 'none', opacity: 0.65, userSelect: 'text' } : undefined
+            }
+            aria-disabled={locked || undefined}
+          >
+            <FormSection
+              step={5}
+              title="ข้อมูลของช่าง"
+              icon="fa-user-gear"
+              tone={SECTION_TONES.tech}
+              hint="(แยกตามชนิดสินค้า เพราะแต่ละชนิดใช้ช่างคนละคนและตัดสต็อกต่างกัน)"
             >
-              <input
-                type="checkbox"
-                checked={showCompanyInfo}
-                onChange={(e) => setShowCompanyInfo(e.target.checked)}
-                className="w-3.5 h-3.5"
+              <TechSection
+                t={t}
+                stock={stock}
+                attachmentUrlAction={attachmentUrlAction}
+                field={field}
+                technicians={options.technicians}
+                setTechnicians={opt('technicians')}
+                updateActualQty={updateActualQty}
+                confirmInstall={confirmInstall}
+                shareQcAlbum={shareQcAlbum}
+                shopName={shopName}
               />
-              แสดงชื่อนิติบุคคล/เลขผู้เสียภาษีของร้าน
-            </label>
-            <label
-              className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
-              style={{ color: '#1D4ED8' }}
-            >
-              <input
-                type="checkbox"
-                checked={showDisclaimer}
-                onChange={(e) => setShowDisclaimer(e.target.checked)}
-                className="w-3.5 h-3.5"
-              />
-              แสดงข้อความแจ้งเตือนตรวจเช็ครอบคัน
-            </label>
-            <button
-              onClick={() => doPrint('doc')}
-              className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
-              style={{ background: '#2563EB', color: '#fff' }}
-            >
-              <i className="fa-solid fa-print"></i> ออก{docType}
-            </button>
+            </FormSection>
           </div>
-        )}
-      </div>
+        </div>
 
-      <PrintJobSheet
-        t={t}
-        printMode={printMode}
-        currentUserName={currentUserName}
-        shopName={shopName}
-        shopInfo={shopInfo}
-        stock={stock}
-        extraOptions={options.extra_options}
-        total={total}
-        paid={paid}
-        docType={docType}
-        buyerName={buyerName}
-        buyerTaxId={buyerTaxId}
-        buyerAddress={buyerAddress}
-        showCompanyInfo={showCompanyInfo}
-        showDisclaimer={showDisclaimer}
-      />
-    </div>
+        <PrintJobSheet
+          t={t}
+          printMode={printMode}
+          currentUserName={currentUserName}
+          shopName={shopName}
+          shopInfo={shopInfo}
+          stock={stock}
+          extraOptions={options.extra_options}
+          total={total}
+          paid={paid}
+          docType={docType}
+          buyerName={buyerName}
+          buyerTaxId={buyerTaxId}
+          buyerAddress={buyerAddress}
+          showCompanyInfo={showCompanyInfo}
+          showDisclaimer={showDisclaimer}
+        />
+      </div>
+    </OptionManageProvider>
   );
 }

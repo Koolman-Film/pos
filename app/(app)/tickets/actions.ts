@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
+import { ticketPaid, ticketTotal } from '@/lib/domain/tickets';
 import type { Database } from '@/lib/types/database';
 
 // Addressed through Database['pos'] rather than the generated TablesInsert/
@@ -201,6 +202,28 @@ export async function createTicket(p: TicketSavePayload): Promise<SaveResult> {
   }
 }
 
+/**
+ * Is this ticket a closed record — ส่งมอบแล้ว and paid in full?
+ *
+ * Evaluated here rather than in SQL because `lib/domain/tickets.ts` already owns
+ * the percent/amount discount maths; a second copy in a trigger would be free to
+ * disagree with the totals the rest of the app shows. Migration 0017 enforces
+ * the resulting flag, which is the part that has to be un-walk-around-able.
+ */
+function shouldLock(p: TicketSavePayload): boolean {
+  if (p.status !== 'ส่งมอบแล้ว') return false;
+  const forTotals = {
+    items: p.items.map((i) => ({
+      soldPrice: i.soldPrice,
+      discountType: (i.discountType ?? undefined) as 'percent' | 'amount' | undefined,
+      discountValue: i.discountValue ?? undefined,
+    })),
+    payments: p.payments.map((pay) => ({ amount: pay.amount })),
+  };
+  const total = ticketTotal(forTotals);
+  return total > 0 && ticketPaid(forTotals) >= total;
+}
+
 export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
   // Editing an existing ticket is not separately capability-gated in the
   // prototype; authentication (via getSessionContext) plus RLS shop-scoping is
@@ -219,6 +242,15 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
     if (error) throw new Error(error.message);
     await writeTicketChildren(supabase, p.id, p);
     await syncTicketStock(supabase, p.id, p, before, session.name);
+    // Closing the ticket is the LAST thing that happens, after the children are
+    // written — `save_ticket_children` refuses to touch a locked ticket, so
+    // setting the flag any earlier would block the same save that sets it.
+    if (shouldLock(p)) {
+      await supabase
+        .from('tickets')
+        .update({ locked: true } as unknown as TicketUpdate)
+        .eq('id', p.id);
+    }
     revalidatePath('/tickets');
     revalidatePath(`/tickets/${p.id}`);
     return { ok: true, id: p.id };
@@ -246,6 +278,88 @@ export async function updateTicketStatus(ticketId: string, newStatus: string): P
 }
 
 /**
+ * ลบใบงาน — a soft delete (migration 0013). The row keeps its job number and all
+ * its children; it simply stops appearing in the lists. `list.restore` holders
+ * see it in the bin and can put it back.
+ *
+ * The capability is re-checked here per C2 AND enforced by a trigger in the
+ * database, because `tickets_rw` lets any shop member update the row.
+ */
+export async function deleteTicket(ticketId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('list.delete')) return { ok: false, error: 'ไม่มีสิทธิ์ลบใบงาน' };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('tickets')
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: session.userId,
+    } as unknown as TicketUpdate)
+    .eq('id', ticketId)
+    .is('deleted_at', null);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  revalidatePath(`/tickets/${ticketId}`);
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+/**
+ * A one-minute signed URL for a slip or QC photo on a ticket.
+ *
+ * The `ticket-attachments` bucket is private (migration 0018), so this is the
+ * only way to open one. Authentication is re-checked here per C2 and storage
+ * RLS checks the `list` nav again when the URL is redeemed.
+ */
+export async function getTicketAttachmentUrl(
+  path: string,
+): Promise<{ url?: string; error?: string }> {
+  await getSessionContext();
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage
+    .from('ticket-attachments')
+    .createSignedUrl(path, 60);
+  if (error) return { error: error.message };
+  return { url: data?.signedUrl };
+}
+
+/**
+ * ปลดล็อกใบงาน — reopen a closed ticket for editing, gated on `list.unlock`
+ * (admin). The ticket re-locks by itself on the next save if it still qualifies,
+ * so this is "let me fix this one thing", not a permanent switch.
+ */
+export async function unlockTicket(ticketId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('list.unlock')) return { ok: false, error: 'ไม่มีสิทธิ์ปลดล็อกใบงาน' };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('tickets')
+    .update({ locked: false } as unknown as TicketUpdate)
+    .eq('id', ticketId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  revalidatePath(`/tickets/${ticketId}`);
+  return { ok: true };
+}
+
+/** กู้คืนใบงาน — the other half of `deleteTicket`, gated on `list.restore`. */
+export async function restoreTicket(ticketId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('list.restore')) return { ok: false, error: 'ไม่มีสิทธิ์กู้คืนใบงาน' };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('tickets')
+    .update({ deleted_at: null, deleted_by: null } as unknown as TicketUpdate)
+    .eq('id', ticketId)
+    .not('deleted_at', 'is', null);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  revalidatePath(`/tickets/${ticketId}`);
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+/**
  * Persist an admin-managed option list (the `Managed*` pickers' `setOptions`).
  * Full-list replace for a `list_key`: the picker owns the complete value list.
  * Only shop-global lists (shop_id null) are managed here, matching the seed.
@@ -254,7 +368,13 @@ export async function updateOptionList(
   listKey: OptionListName,
   values: string[],
 ): Promise<{ ok: boolean; error?: string }> {
-  await getSessionContext(); // C2: authenticate before mutating
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  // These lists are shared by every shop and every ticket, so extending one is
+  // an administrative act, not part of filling in a job. The pickers hide their
+  // add/remove controls without this capability; this is the actual gate.
+  if (!session.canDo('options.manage')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขรายการตัวเลือก (เฉพาะแอดมิน)' };
+  }
   if (!OPTION_LISTS.includes(listKey)) return { ok: false, error: 'invalid list' };
   const supabase = await createClient();
   try {

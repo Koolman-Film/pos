@@ -107,6 +107,10 @@ const ACCEPTED_ABSENCES: Record<string, string> = {
   'เป็นระบบทดลอง)': 'divergence: tail of the same prototype-only disclaimer.',
   'คุณ (ผ่านระบบ)':
     'divergence: the prototype stamped manual withdrawals with the literal "คุณ (ผ่านระบบ)" because it had no user identity. The port records the real signed-in user name.',
+  'สินค้าที่จอง...':
+    'divergence: the ticket form had TWO cheer-up baselines — this "สินค้าที่จองไว้ตอนแรก" picker and สินค้าที่สนใจ — which fed two figures that could disagree with each other. The trial run asked for the duplicate to go; สินค้าที่สนใจ is the only baseline now. `ticket_items.booked` is still read and written so older tickets keep what they recorded.',
+  'ที่อยู่ (นิติบุคคล)':
+    "divergence: this was a row label in the financial document's old key/value table. The redesigned document prints the corporate address inside the ข้อมูลลูกค้า column without a row label, the way the shop's own invoice sample does. The address itself is still printed on a ใบกำกับภาษี.",
 };
 
 function walk(dir: string): string[] {

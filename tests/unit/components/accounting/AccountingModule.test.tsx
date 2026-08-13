@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { AccountingModule } from '@/components/accounting/AccountingModule';
 
@@ -165,5 +166,63 @@ describe('AccountingModule totals', () => {
   it('survives having no expenses and no petty cash', () => {
     render(<AccountingModule expenses={[]} pettyCash={[]} accessibleShops={SHOPS} />);
     expect(screen.getByText('บัญชี / ค่าใช้จ่าย')).toBeInTheDocument();
+  });
+});
+
+describe('AccountingModule attachments', () => {
+  it('previews a stored receipt in place, through a signed URL rather than a download', async () => {
+    const user = userEvent.setup();
+    const attachmentUrlAction = vi.fn(async () => ({ url: 'https://signed.example/slip.jpg' }));
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    render(
+      <AccountingModule
+        expenses={[
+          {
+            id: 1,
+            shop: 'cm',
+            desc: 'ค่าเช่าร้าน',
+            category: 'ค่าเช่า',
+            source: 'บัญชีธนาคารสาขา',
+            amount: 35000,
+            status: 'จ่ายแล้ว',
+            attachments: [{ id: 7, fileName: 'สลิปโอน.jpg', path: 'cm/abc-slip.jpg' }],
+          },
+        ]}
+        pettyCash={[]}
+        accessibleShops={SHOPS}
+        attachmentUrlAction={attachmentUrlAction}
+      />,
+    );
+
+    const chip = screen.getByTitle('เปิด สลิปโอน.jpg');
+    expect(chip).toBeInTheDocument();
+
+    await user.click(chip);
+
+    expect(attachmentUrlAction).toHaveBeenCalledWith('cm/abc-slip.jpg');
+
+    // The receipt opens INSIDE the page — no new tab, no file on disk.
+    const dialog = await screen.findByRole('dialog', { name: /สลิปโอน\.jpg/ });
+    expect(within(dialog).getByAltText('สลิปโอน.jpg')).toHaveAttribute(
+      'src',
+      'https://signed.example/slip.jpg',
+    );
+    expect(open).not.toHaveBeenCalled();
+
+    // …but the escape hatch is there for anyone who does want the file.
+    expect(within(dialog).getByText('เปิดแท็บใหม่')).toHaveAttribute(
+      'href',
+      'https://signed.example/slip.jpg',
+    );
+
+    await user.click(within(dialog).getByLabelText('ปิดหน้าต่างดูไฟล์แนบ'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    open.mockRestore();
+  });
+
+  it('renders no attachment chips for an expense without any', () => {
+    render(<AccountingModule expenses={mixedExpenses} pettyCash={[]} accessibleShops={SHOPS} />);
+    expect(screen.queryByTitle(/^เปิด /)).not.toBeInTheDocument();
   });
 });

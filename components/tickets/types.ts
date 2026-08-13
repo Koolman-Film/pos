@@ -59,11 +59,40 @@ export type Ticket = {
   items: TicketItem[];
   payments: TicketPayment[];
   notes?: string;
+  /**
+   * หมายเหตุแยกตามชนิดสินค้า — keyed by `TicketItem.category`.
+   *
+   * ใบงานติดตั้ง prints one page per category, so a single ticket-wide note put
+   * the film instructions on the audio page and vice versa. This is the note
+   * that belongs to one category's page; `notes` stays the ticket-wide one and
+   * prints on every sheet.
+   */
+  notesByCategory?: Record<string, string>;
+  /**
+   * งานฟิล์มกันรอย — the ticked entries of the paper form's "Option / รายการแถม"
+   * row (see WRAP_OPTIONS). Values, not flags, so an option the shop later
+   * renames does not silently un-tick every old ticket.
+   */
+  wrapOptions?: string[];
   qcPhotos?: string[];
+  /**
+   * An album of QC photos hosted somewhere else — Google Drive and the like.
+   *
+   * A walk-around of one car runs to dozens of photos, which is a slow upload on
+   * shop wifi and a lot of storage for something the shop already keeps in a
+   * drive. This holds the album's URL instead; it counts as QC evidence exactly
+   * like an upload does, and it is what gets shared with the customer when set.
+   */
+  qcAlbumUrl?: string;
   createdBy?: string;
   statusHistory?: StatusHistoryEntry[];
   installConfirmed?: boolean;
   installConfirmedAt?: string;
+  /**
+   * Closed record — ส่งมอบแล้ว and paid in full (migration 0017). Read-only in
+   * the form; only a `list.unlock` holder can reopen it.
+   */
+  locked?: boolean;
 };
 
 // Row shapes the list receives (a projection of the ticket for the list view).
@@ -85,6 +114,9 @@ export type TicketListRow = {
   dropOffDateObj?: Date | null;
   pickupDateObj?: Date | null;
   techByCategory?: Record<string, string[]>;
+  /** Set only on rows from the bin (`loadDeletedTicketList`). */
+  deletedAt?: Date | null;
+  deletedByName?: string;
 };
 
 export type Shop = { id: string; name: string };
@@ -165,6 +197,9 @@ export type TicketSavePayload = {
     bookedPrice: number;
     sold: string;
     soldPrice: number;
+    /** สินค้าที่สนใจ — the cheer-up baseline (`ticket_items.interested`). */
+    interested: string;
+    interestedPrice: number;
     discountType: DiscountType;
     discountValue: number | null;
     positions: { position: string; product: string; price: number }[];
@@ -175,7 +210,14 @@ export type TicketSavePayload = {
      */
     actualQty: Record<string, number>;
   }[];
-  payments: { type: string; method: string; amount: number; paidAt: string }[];
+  payments: {
+    type: string;
+    method: string;
+    amount: number;
+    paidAt: string;
+    /** Storage paths in the `ticket-attachments` bucket (migration 0018). */
+    attachments: string[];
+  }[];
 };
 
 export const BRAND_TH: Record<string, string> = {

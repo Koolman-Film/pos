@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 
-/** Ported from reference/v0.4/finnix-film.html:1197-1237 (click to select, add/remove options). */
+import { useCanManageOptions } from './optionManage';
+
+/**
+ * Ported from reference/v0.4/finnix-film.html:1197-1237 (click to select,
+ * add/remove options). Adding and the จัดการตัวเลือก gear are admin-only
+ * (`options.manage`); selecting is not.
+ */
 export function ManagedChipPicker({
   value,
   onChange,
@@ -14,6 +20,7 @@ export function ManagedChipPicker({
   options: string[];
   setOptions: (opts: string[]) => void;
 }) {
+  const canManage = useCanManageOptions();
   const [manage, setManage] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newVal, setNewVal] = useState('');
@@ -47,7 +54,7 @@ export function ManagedChipPicker({
             >
               {o}
             </button>
-            {manage && (
+            {canManage && manage && (
               <button
                 onClick={() => removeOption(o)}
                 aria-label={`ลบ ${o}`}
@@ -59,7 +66,7 @@ export function ManagedChipPicker({
             )}
           </div>
         ))}
-        {adding ? (
+        {canManage && adding ? (
           <div className="flex gap-1 items-center">
             <input
               autoFocus
@@ -82,24 +89,28 @@ export function ManagedChipPicker({
             </button>
           </div>
         ) : (
+          canManage && (
+            <button
+              onClick={() => setAdding(true)}
+              aria-label="เพิ่มตัวเลือกใหม่"
+              className="text-xs w-7 h-7 rounded-full flex items-center justify-center"
+              style={{ border: '1px dashed var(--line-strong)', color: 'var(--ink-soft)' }}
+            >
+              <i className="fa-solid fa-plus"></i>
+            </button>
+          )
+        )}
+        {canManage && (
           <button
-            onClick={() => setAdding(true)}
-            aria-label="เพิ่มตัวเลือกใหม่"
+            onClick={() => setManage(!manage)}
             className="text-xs w-7 h-7 rounded-full flex items-center justify-center"
-            style={{ border: '1px dashed var(--line-strong)', color: 'var(--ink-soft)' }}
+            style={{ color: manage ? 'var(--primary)' : 'var(--ink-faint)' }}
+            title="จัดการตัวเลือก"
+            aria-label="จัดการตัวเลือก"
           >
-            <i className="fa-solid fa-plus"></i>
+            <i className="fa-solid fa-gear"></i>
           </button>
         )}
-        <button
-          onClick={() => setManage(!manage)}
-          className="text-xs w-7 h-7 rounded-full flex items-center justify-center"
-          style={{ color: manage ? 'var(--primary)' : 'var(--ink-faint)' }}
-          title="จัดการตัวเลือก"
-          aria-label="จัดการตัวเลือก"
-        >
-          <i className="fa-solid fa-gear"></i>
-        </button>
       </div>
     </div>
   );

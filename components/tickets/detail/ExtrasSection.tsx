@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { TimeSelect } from '@/components/ui/TimeSelect';
 
 import type { StockRow, Ticket, TicketExtra } from '../types';
 
@@ -14,8 +14,6 @@ export function ExtrasSection({
   extraOptions,
   setExtraOptions,
   slideTypes,
-  timeSlots,
-  setTimeSlots,
   stock,
   toggleExtra,
   updateExtraDetail,
@@ -27,8 +25,6 @@ export function ExtrasSection({
   extraOptions: string[];
   setExtraOptions: (v: string[]) => void;
   slideTypes: string[];
-  timeSlots: string[];
-  setTimeSlots: (v: string[]) => void;
   stock: StockRow[];
   toggleExtra: (name: string) => void;
   updateExtraDetail: (name: string, key: string, val: unknown) => void;
@@ -151,12 +147,11 @@ export function ExtrasSection({
                             onChange={(e) => updateSlideLeg(legIdx, 'date', e.target.value)}
                             className="field text-xs px-2.5 py-1.5"
                           />
-                          <ManagedDropdown
+                          <TimeSelect
                             value={leg.time || ''}
                             onChange={(v) => updateSlideLeg(legIdx, 'time', v)}
-                            options={timeSlots}
-                            setOptions={setTimeSlots}
                             placeholder="เวลา..."
+                            className="field w-full text-xs px-2.5 py-1.5"
                           />
                         </div>
                       </div>
@@ -190,12 +185,11 @@ export function ExtrasSection({
                             onChange={(e) => updateSlideLeg(legIdx, 'date', e.target.value)}
                             className="field text-xs px-2.5 py-1.5"
                           />
-                          <ManagedDropdown
+                          <TimeSelect
                             value={leg.time || ''}
                             onChange={(v) => updateSlideLeg(legIdx, 'time', v)}
-                            options={timeSlots}
-                            setOptions={setTimeSlots}
                             placeholder="เวลา..."
+                            className="field w-full text-xs px-2.5 py-1.5"
                           />
                         </div>
                       </div>

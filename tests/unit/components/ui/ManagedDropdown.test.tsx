@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { OptionManageProvider } from '@/components/ui/optionManage';
 
 const options = ['เงินสด', 'โอน'];
 
@@ -92,5 +93,34 @@ describe('ManagedDropdown', () => {
     expect(
       screen.queryByRole('button', { name: 'ลบตัวเลือกนี้ออกจากระบบ' }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('ManagedDropdown — options.manage gate', () => {
+  const renderWith = (canManage: boolean) =>
+    render(
+      <OptionManageProvider canManage={canManage}>
+        <ManagedDropdown
+          value="เงินสด"
+          onChange={vi.fn()}
+          options={options}
+          setOptions={vi.fn()}
+          placeholder="เลือกช่องทาง..."
+        />
+      </OptionManageProvider>,
+    );
+
+  it('offers add and delete to a caller who may manage the list', () => {
+    renderWith(true);
+    expect(screen.getByText('+ เพิ่มตัวเลือกใหม่...')).toBeInTheDocument();
+    expect(screen.getByLabelText('ลบตัวเลือกนี้ออกจากระบบ')).toBeInTheDocument();
+  });
+
+  it('hides both from everyone else, while still allowing selection', () => {
+    renderWith(false);
+    expect(screen.queryByText('+ เพิ่มตัวเลือกใหม่...')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('ลบตัวเลือกนี้ออกจากระบบ')).not.toBeInTheDocument();
+    // The list itself is untouched — picking an existing value is not gated.
+    expect(screen.getByRole('option', { name: 'เงินสด' })).toBeInTheDocument();
   });
 });
