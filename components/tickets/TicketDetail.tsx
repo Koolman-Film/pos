@@ -438,7 +438,12 @@ export function TicketDetail({
     }));
   }
   function shareQcAlbum() {
-    const link = `${window.location.origin}${window.location.pathname}#qc-album-${t.id}`;
+    // The drive album when there is one — that is a page the customer can
+    // actually open. The in-app link only resolves for someone who can sign in.
+    const external = (t.qcAlbumUrl || '').trim();
+    const link = /^https?:\/\/\S+$/i.test(external)
+      ? external
+      : `${window.location.origin}${window.location.pathname}#qc-album-${t.id}`;
     const text = `อัลบั้มรูป QC ก่อนติดตั้ง — ${t.customer || ''} (${t.plate || ''})`;
     if (navigator.share)
       navigator

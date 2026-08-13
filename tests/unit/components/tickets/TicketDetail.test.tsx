@@ -173,3 +173,59 @@ describe('TicketDetail', () => {
     expect(fmt(total - paid)).toBe('2,000.00');
   });
 });
+
+/**
+ * A car's walk-around runs to dozens of photos, so the shop keeps them in a
+ * drive and attaches the album instead of uploading. The link therefore has to
+ * count as QC evidence everywhere an upload does.
+ */
+describe('TicketDetail — external QC album link', () => {
+  const filmTicket = (over: Partial<Ticket> = {}) =>
+    makeTicket({
+      items: [
+        { category: 'ฟิล์มกรองแสง', booked: '', bookedPrice: 0, sold: 'FilmA', soldPrice: 1 },
+      ],
+      ...over,
+    });
+
+  it('offers the confirmation form off a link alone, with no photos uploaded', () => {
+    render(
+      <TicketDetail
+        {...baseProps(
+          filmTicket({ qcPhotos: [], qcAlbumUrl: 'https://drive.google.com/drive/folders/abc' }),
+        )}
+      />,
+    );
+    expect(screen.getByText('แบบฟอร์มการยืนยันการติดตั้ง')).toBeInTheDocument();
+  });
+
+  it('does not treat an unopenable link as evidence', () => {
+    // `javascript:` in an href the shop typed is how a link field becomes an
+    // attack on whoever clicks it, so nothing but http(s) counts.
+    render(
+      <TicketDetail
+        {...baseProps(filmTicket({ qcPhotos: [], qcAlbumUrl: 'javascript:alert(1)' }))}
+      />,
+    );
+    expect(screen.queryByText('แบบฟอร์มการยืนยันการติดตั้ง')).not.toBeInTheDocument();
+    expect(screen.getByText(/ต้องขึ้นต้นด้วย http/)).toBeInTheDocument();
+  });
+
+  it('keeps the open button off until the link is usable', () => {
+    // Separate renders rather than a rerender: the form seeds its draft from
+    // `initialTicket` once, so a changed prop does not reach the field.
+    const half = render(
+      <TicketDetail {...baseProps(filmTicket({ qcAlbumUrl: 'drive.google' }))} />,
+    );
+    expect(screen.queryByRole('link', { name: /เปิด/ })).not.toBeInTheDocument();
+    half.unmount();
+
+    render(
+      <TicketDetail {...baseProps(filmTicket({ qcAlbumUrl: 'https://drive.google.com/x' }))} />,
+    );
+    expect(screen.getByRole('link', { name: /เปิด/ })).toHaveAttribute(
+      'href',
+      'https://drive.google.com/x',
+    );
+  });
+});

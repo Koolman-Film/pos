@@ -253,6 +253,7 @@ type ExtraMeta = {
   wrapOptions?: string[];
   createdBy?: string;
   qcPhotos?: string[];
+  qcAlbumUrl?: string;
   installConfirmed?: boolean;
   installConfirmedAt?: string;
 };
@@ -341,6 +342,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     wrapOptions: meta.wrapOptions ?? [],
     createdBy: meta.createdBy ?? '',
     qcPhotos: meta.qcPhotos ?? [],
+    qcAlbumUrl: meta.qcAlbumUrl ?? '',
     installConfirmed: !!meta.installConfirmed,
     installConfirmedAt: meta.installConfirmedAt ?? '',
     locked: !!t.locked,
@@ -401,5 +403,6 @@ export function blankTicket(shop: string): Ticket {
     notesByCategory: {},
     wrapOptions: [],
     qcPhotos: [],
+    qcAlbumUrl: '',
   };
 }

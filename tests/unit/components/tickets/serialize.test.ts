@@ -191,6 +191,7 @@ const meta = (t: Ticket) =>
   serializeTicket(t, false).extras.__meta as {
     notesByCategory: Record<string, string>;
     wrapOptions: string[];
+    qcAlbumUrl: string;
   };
 
 describe('serializeTicket — per-category notes and wrap options', () => {
@@ -218,6 +219,14 @@ describe('serializeTicket — per-category notes and wrap options', () => {
   it('sends empty containers rather than undefined for a ticket with neither', () => {
     expect(meta(baseTicket()).notesByCategory).toEqual({});
     expect(meta(baseTicket()).wrapOptions).toEqual([]);
+  });
+
+  it('carries the external QC album link, trimmed', () => {
+    const t = baseTicket({
+      qcAlbumUrl: '  https://drive.google.com/drive/folders/abc123  ',
+    } as unknown as Partial<Ticket>);
+    expect(meta(t).qcAlbumUrl).toBe('https://drive.google.com/drive/folders/abc123');
+    expect(meta(baseTicket()).qcAlbumUrl).toBe('');
   });
 });
 

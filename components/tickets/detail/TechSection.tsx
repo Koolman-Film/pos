@@ -53,7 +53,17 @@ export function TechSection({
   const qcCategories = [...new Set(t.items.filter(isFilled).map((i) => i.category))].filter(
     (c) => c === 'ฟิล์มกรองแสง' || c === 'ฟิล์มกันรอย',
   );
-  const showInstallConfirm = !!(t.qcPhotos && t.qcPhotos.length > 0) && qcCategories.length > 0;
+
+  const albumUrl = (t.qcAlbumUrl || '').trim();
+  const hasAlbumUrl = albumUrl.length > 0;
+  // Only http(s) is opened or shared. `javascript:` and `data:` in an href the
+  // shop typed is how a link field becomes an attack on whoever clicks it.
+  const albumUrlOk = /^https?:\/\/\S+$/i.test(albumUrl);
+
+  // Either kind of evidence unlocks the confirmation form: a shop that keeps its
+  // photos in a drive has done the QC just as much as one that uploaded them.
+  const hasQcEvidence = !!(t.qcPhotos && t.qcPhotos.length > 0) || albumUrlOk;
+  const showInstallConfirm = hasQcEvidence && qcCategories.length > 0;
 
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
@@ -78,6 +88,47 @@ export function TechSection({
             folder={t.shop}
             urlAction={attachmentUrlAction}
           />
+        </div>
+
+        {/*
+          A walk-around of one car is dozens of photos — slow to upload on shop
+          wifi, and the shop already keeps them in a drive. A link to that album
+          counts as QC evidence exactly like an upload does, and it is what the
+          customer gets when the album is shared.
+        */}
+        <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line)' }}>
+          <label className={labelCls} htmlFor="qc-album-url" style={{ color: 'var(--ink-soft)' }}>
+            <i className="fa-solid fa-link mr-1"></i>หรือแนบลิงก์อัลบั้มรูป (Google Drive / อื่น ๆ)
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="qc-album-url"
+              type="url"
+              inputMode="url"
+              value={t.qcAlbumUrl || ''}
+              onChange={(e) => field('qcAlbumUrl', e.target.value)}
+              placeholder="https://drive.google.com/..."
+              className="field flex-1 text-sm px-3 py-2"
+            />
+            {/* Only offered once the link can actually be opened — a half-typed
+                address in a new tab is worse than no button. */}
+            {albumUrlOk && (
+              <a
+                href={(t.qcAlbumUrl || '').trim()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-outline text-xs px-3 rounded-lg font-medium flex items-center gap-1.5 flex-shrink-0"
+              >
+                <i className="fa-solid fa-arrow-up-right-from-square"></i>เปิด
+              </a>
+            )}
+          </div>
+          {hasAlbumUrl && !albumUrlOk && (
+            <p className="text-xs mt-1" style={{ color: '#B23A48' }}>
+              <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+              ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://
+            </p>
+          )}
         </div>
       </div>
       {showInstallConfirm && (
@@ -156,6 +207,11 @@ export function TechSection({
                   </span>
                 ))}
               </div>
+              {albumUrlOk && (
+                <p className="text-xs mb-3 break-all" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-link mr-1.5"></i>อัลบั้มรูปเพิ่มเติม: {albumUrl}
+                </p>
+              )}
               {qcCategories.includes('ฟิล์มกรองแสง') && (
                 <div className="mb-3 text-xs leading-relaxed" style={{ color: 'var(--ink-soft)' }}>
                   <p className="font-semibold mb-1" style={{ color: 'var(--ink)' }}>

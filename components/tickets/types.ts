@@ -75,6 +75,15 @@ export type Ticket = {
    */
   wrapOptions?: string[];
   qcPhotos?: string[];
+  /**
+   * An album of QC photos hosted somewhere else — Google Drive and the like.
+   *
+   * A walk-around of one car runs to dozens of photos, which is a slow upload on
+   * shop wifi and a lot of storage for something the shop already keeps in a
+   * drive. This holds the album's URL instead; it counts as QC evidence exactly
+   * like an upload does, and it is what gets shared with the customer when set.
+   */
+  qcAlbumUrl?: string;
   createdBy?: string;
   statusHistory?: StatusHistoryEntry[];
   installConfirmed?: boolean;
