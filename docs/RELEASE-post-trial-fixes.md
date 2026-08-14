@@ -1,4 +1,4 @@
-# Release runbook — post-trial fixes (migrations 0012–0019)
+# Release runbook — post-trial fixes (migrations 0012–0020)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
 
@@ -23,12 +23,12 @@ work FIRST (step 2) — the new code reads columns that do not exist yet, so a
 deploy that lands before the migrations will 500 on the ticket list, the
 dashboard and the accounting page.
 
-## 2. Database — eight migrations
+## 2. Database — nine migrations
 
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0019 only
+npx supabase db push                     # applies 0012 … 0020 only
 ```
 
 ### No CLI? Paste the files instead
@@ -42,13 +42,14 @@ it twice changes nothing, and each records its versions in
 | 1     | `supabase/release-0012-0018.sql`              | a normal connection                        |
 | 2     | `supabase/storage-policies.sql`               | **owner of `storage.objects`** — see below |
 | 3     | `supabase/release-0019.sql`                   | a normal connection                        |
-| 4     | `supabase/repair-categories-and-services.sql` | a normal connection                        |
+| 4     | `supabase/release-0020.sql`                   | a normal connection                        |
+| 5     | `supabase/repair-categories-and-services.sql` | a normal connection                        |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all four in order
+already been handed over. If nothing has been run yet, running all five in order
 is still correct.
 
-Step 4 is a one-time DATA repair, not schema. It folds every ชนิดสินค้า that
+The last step is a one-time DATA repair, not schema. It folds every ชนิดสินค้า that
 products actually use into `product_categories` (so a product whose category was
 never on the list can be sold again), and moves the `service_items` list into
 `stock` as งานบริการ products for every shop — Book งาน picks product names from
@@ -75,6 +76,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0017_ticket_lock`              | `tickets.locked`, a trigger, `save_ticket_children` refuses a locked ticket, capability `list.unlock`.                                                                                                                                                                                        | Low                                                             |
 | `0018_ticket_attachments`       | Private `ticket-attachments` storage bucket, `ticket_payments.attachments`, and `save_ticket_children` writes the slips.                                                                                                                                                                      | **Same storage caveat as 0014.**                                |
 | `0019_expense_doc_no`           | `expenses.doc_no` (เลขที่เอกสาร POS-LPG-6908001), a unique index, `next_expense_doc_no()`, and a BEFORE INSERT trigger that issues the number. Backfills existing expenses per shop per month, oldest first.                                                                                  | Low. Writes `doc_no` on every existing expense row once.        |
+| `0020_service_visits`           | `service_visits` + `service_visit_points` for ใบเซอร์วิส, their RLS policies, and `save_service_visit()`. Two new tables; nothing existing is touched.                                                                                                                                        | Low. Purely additive.                                           |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

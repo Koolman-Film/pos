@@ -6,7 +6,7 @@ import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
 import { ticketPaid, ticketTotal } from '@/lib/domain/tickets';
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 
 import { updateOptionListAction } from '../optionListActions';
 
@@ -448,4 +448,76 @@ export async function saveCarModel(input: {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
+}
+
+/**
+ * บันทึกใบเซอร์วิส — one visit the car actually made (migration 0020).
+ *
+ * The visit and its ten จุดพิเศษ rows go through `save_service_visit` in a single
+ * call, so a visit can never be stored without the points written on it, and a
+ * NEW visit takes its `visit_no` under a lock rather than from a number the
+ * browser guessed — two people filing at once get 3 and 4, not two 3s.
+ *
+ * Gated on the ticket's own edit capability: recording a service visit is part
+ * of working the job, and a locked ticket is a closed record.
+ */
+export async function saveServiceVisit(input: {
+  id?: number;
+  ticketId: string;
+  visit: Record<string, unknown>;
+  points: { seq: number; position: string; detail: string; note: string }[];
+}): Promise<{ ok: boolean; error?: string; id?: number }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  // The Book งาน nav is the gate, the same one that lets someone edit the ticket
+  // at all — there is no separate "edit" capability, only createNew/delete/
+  // restore/unlock/printSheet.
+  if (!session.hasNav('list')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์บันทึกใบเซอร์วิส' };
+  }
+
+  const supabase = await createClient();
+  try {
+    const { data: ticket } = await supabase
+      .from('tickets')
+      .select('id, locked')
+      .eq('id', input.ticketId)
+      .maybeSingle();
+    if (!ticket) return { ok: false, error: 'ไม่พบใบงานนี้' };
+    if (ticket.locked && !session.canDo('list.unlock')) {
+      return { ok: false, error: 'ใบงานนี้ปิดงานแล้วและถูกล็อก (ต้องให้แอดมินปลดล็อกก่อน)' };
+    }
+
+    // `p_id` is nullable in SQL — a null means "issue the next visit_no" — but
+    // the generated Args type has no way to express that, hence the cast.
+    const { data, error } = await supabase.rpc('save_service_visit', {
+      p_id: (input.id ?? null) as number,
+      p_ticket_id: input.ticketId,
+      p_visit: input.visit as Json,
+      p_points: input.points as unknown as Json,
+    });
+    if (error) throw new Error(error.message);
+    revalidatePath('/tickets');
+    return { ok: true, id: (data as number) ?? undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
+  }
+}
+
+/**
+ * Removes a recorded visit. The points cascade with it.
+ *
+ * Deliberately NOT renumbering the visits after it: "ครั้งที่ 3" is what was
+ * printed and handed to a customer, and shuffling the ones above it down would
+ * make every sheet already in a folder disagree with the system.
+ */
+export async function deleteServiceVisit(id: number): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('list.delete')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์ลบใบเซอร์วิส (เฉพาะผู้ที่ลบใบงานได้)' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.from('service_visits').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  return { ok: true };
 }

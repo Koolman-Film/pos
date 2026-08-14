@@ -299,6 +299,85 @@ type DetailRow = {
   }[];
 };
 
+type ServiceVisitRow = {
+  id: number;
+  visit_no: number;
+  plate: string;
+  received_at: string | null;
+  received_time: string;
+  delivered_at: string | null;
+  delivered_time: string;
+  sales_by: string;
+  qc_by: string;
+  technicians: string[] | null;
+  film_type: string;
+  film_thickness: string;
+  film_colour_code: string;
+  customer_waits: boolean | null;
+  overall_ok: boolean | null;
+  checks: Record<string, string> | null;
+  notes: string;
+  service_visit_points: { seq: number; position: string; detail: string; note: string }[] | null;
+};
+
+/**
+ * The visits recorded against a ticket, plus how many this plate has had in
+ * total. Two queries because they answer two different questions: the ticket's
+ * own list drives "ครั้งที่ 2 / 10", the plate count drives "รถคันนี้เซอร์วิสไป
+ * กี่ครั้ง" across every job it has ever had.
+ */
+async function loadServiceVisits(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ticketId: string,
+  plate: string,
+): Promise<{ visits: Ticket['serviceVisits']; forPlate: number }> {
+  const { data } = await supabase
+    .from('service_visits')
+    .select(
+      'id, visit_no, plate, received_at, received_time, delivered_at, delivered_time, ' +
+        'sales_by, qc_by, technicians, film_type, film_thickness, film_colour_code, ' +
+        'customer_waits, overall_ok, checks, notes, ' +
+        'service_visit_points(seq, position, detail, note)',
+    )
+    .eq('ticket_id', ticketId)
+    .order('visit_no', { ascending: false });
+
+  const visits = ((data ?? []) as unknown as ServiceVisitRow[]).map((v) => ({
+    id: v.id,
+    visitNo: v.visit_no,
+    plate: v.plate,
+    receivedAt: v.received_at ?? '',
+    receivedTime: v.received_time ?? '',
+    deliveredAt: v.delivered_at ?? '',
+    deliveredTime: v.delivered_time ?? '',
+    salesBy: v.sales_by ?? '',
+    qcBy: v.qc_by ?? '',
+    technicians: v.technicians ?? [],
+    filmType: v.film_type ?? '',
+    filmThickness: v.film_thickness ?? '',
+    filmColourCode: v.film_colour_code ?? '',
+    customerWaits: v.customer_waits,
+    overallOk: v.overall_ok,
+    checks: v.checks ?? {},
+    notes: v.notes ?? '',
+    points: (v.service_visit_points ?? [])
+      .map((p) => ({ seq: p.seq, position: p.position, detail: p.detail, note: p.note }))
+      .sort((a, b) => a.seq - b.seq),
+  }));
+
+  // A blank plate would count every other blank-plate ticket's visits as this
+  // car's, so it reports only what this ticket carries.
+  let forPlate = visits.length;
+  if (plate.trim()) {
+    const { count } = await supabase
+      .from('service_visits')
+      .select('id', { count: 'exact', head: true })
+      .eq('plate', plate);
+    forPlate = count ?? visits.length;
+  }
+  return { visits, forPlate };
+}
+
 export async function loadTicket(id: string): Promise<Ticket | null> {
   const supabase = await createClient();
   const { data } = await supabase
@@ -319,6 +398,8 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
   const meta = (rawExtras.__meta as ExtraMeta) || {};
   const extras = { ...rawExtras };
   delete (extras as Record<string, unknown>).__meta;
+
+  const service = await loadServiceVisits(supabase, t.id, t.plate);
 
   return {
     id: t.id,
@@ -343,6 +424,8 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     createdBy: meta.createdBy ?? '',
     qcPhotos: meta.qcPhotos ?? [],
     qcAlbumUrl: meta.qcAlbumUrl ?? '',
+    serviceVisits: service.visits,
+    serviceVisitsForPlate: service.forPlate,
     installConfirmed: !!meta.installConfirmed,
     installConfirmedAt: meta.installConfirmedAt ?? '',
     locked: !!t.locked,
@@ -404,5 +487,7 @@ export function blankTicket(shop: string): Ticket {
     wrapOptions: [],
     qcPhotos: [],
     qcAlbumUrl: '',
+    serviceVisits: [],
+    serviceVisitsForPlate: 0,
   };
 }

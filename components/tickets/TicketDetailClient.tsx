@@ -44,6 +44,8 @@ export function TicketDetailClient({
   attachmentUrlAction,
   corporateBuyerAction,
   carModelAction,
+  serviceVisitAction,
+  serviceVisitDeleteAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -77,6 +79,13 @@ export function TicketDetailClient({
     brand: string;
     carType: string;
   }) => Promise<{ ok: boolean; error?: string }>;
+  serviceVisitAction?: (input: {
+    id?: number;
+    ticketId: string;
+    visit: Record<string, unknown>;
+    points: { seq: number; position: string; detail: string; note: string }[];
+  }) => Promise<{ ok: boolean; error?: string; id?: number }>;
+  serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -102,6 +111,8 @@ export function TicketDetailClient({
       attachmentUrlAction={attachmentUrlAction}
       corporateBuyerAction={corporateBuyerAction}
       carModelAction={carModelAction}
+      serviceVisitAction={serviceVisitAction}
+      serviceVisitDeleteAction={serviceVisitDeleteAction}
     />
   );
 }

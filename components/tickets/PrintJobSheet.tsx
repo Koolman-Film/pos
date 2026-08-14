@@ -7,11 +7,17 @@ import { fmt, fmtThaiDate, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
+import {
+  SERVICE_EXTERIOR_PARTS,
+  SERVICE_FILM_THICKNESS,
+  SERVICE_INTERIOR_PARTS,
+  SERVICE_POINT_ROWS,
+} from './serviceForm';
 import { WRAP_CATEGORY, WRAP_OPTIONS } from './wrapOptions';
 
-import type { ShopInfo, StockRow, Ticket } from './types';
+import type { ServiceVisit, ShopInfo, StockRow, Ticket } from './types';
 
-export type PrintMode = 'job' | 'sale' | 'offsite' | 'doc' | null;
+export type PrintMode = 'job' | 'sale' | 'offsite' | 'doc' | 'service' | null;
 
 /**
  * The pre-installation inspection sheet (ใบตรวจเช็คสภาพก่อนติดตั้ง), ported
@@ -204,6 +210,8 @@ export function PrintJobSheet({
   buyerAddress,
   showCompanyInfo,
   showDisclaimer,
+  serviceVisit = null,
+  technicianOptions = [],
 }: {
   t: Ticket;
   printMode: PrintMode;
@@ -220,6 +228,10 @@ export function PrintJobSheet({
   buyerAddress: string;
   showCompanyInfo: boolean;
   showDisclaimer: boolean;
+  /** The visit to print on the service sheet; null prints a blank one. */
+  serviceVisit?: ServiceVisit | null;
+  /** ทีมช่าง tick row — the shop's own list, not the paper form's old names. */
+  technicianOptions?: string[];
 }) {
   const mounted = useIsMounted();
   if (!mounted || !printMode) return null;
@@ -1399,6 +1411,275 @@ export function PrintJobSheet({
             boxSizing: 'border-box',
           }}
         ></div>
+      </div>
+    );
+  } else if (printMode === 'service') {
+    /*
+      ใบเซอร์วิส ลูกค้าหน้าร้าน, following the shop's paper form.
+
+      `serviceVisit` null means a blank sheet: the header still comes from the
+      ticket (the car and customer are known either way), and everything the
+      technician fills in at the car is left empty to write on. With a visit it
+      prints the recorded answers instead — both ways of working, as asked.
+    */
+    const v = serviceVisit;
+    const mark = (on: boolean) => (
+      <span
+        style={{
+          display: 'inline-block',
+          width: 13,
+          height: 13,
+          border: '1.5px solid #333',
+          borderRadius: 999,
+          textAlign: 'center',
+          lineHeight: '11px',
+          fontSize: 10,
+          fontWeight: 'bold',
+          flexShrink: 0,
+        }}
+      >
+        {on ? '✓' : ' '}
+      </span>
+    );
+    const line = (label: string, value: string, width: number) => (
+      <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+        {label}
+        <span
+          style={{
+            display: 'inline-block',
+            minWidth: width,
+            borderBottom: '1px solid #555',
+            fontWeight: 'bold',
+            paddingLeft: 3,
+          }}
+        >
+          {value || ' '}
+        </span>
+      </span>
+    );
+    const checkCell = (part: string) => (
+      <tr key={part}>
+        <td style={{ padding: '2px 6px' }}>{part}</td>
+        <td style={{ padding: '2px 6px', fontWeight: 'bold', width: 90 }}>
+          {v?.checks?.[part] || ' '}
+        </td>
+      </tr>
+    );
+
+    content = (
+      <div className="print-area">
+        <div className="print-page">
+          <h2 style={{ textAlign: 'center', margin: '0 0 10px', fontSize: 17 }}>
+            ใบเซอร์วิส ลูกค้าหน้าร้าน
+          </h2>
+          {v && (
+            <p style={{ textAlign: 'right', margin: '0 0 6px', fontSize: 11 }}>
+              ครั้งที่ <b>{v.visitNo}</b> &middot; ใบงาน {t.id}
+            </p>
+          )}
+
+          <div style={{ fontSize: 11, display: 'flex', flexWrap: 'wrap', gap: '5px 18px' }}>
+            {line('ชื่อลูกค้า', t.customer, 150)}
+            {line('เบอร์โทร', t.phone, 110)}
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '5px 18px',
+              margin: '5px 0 10px',
+            }}
+          >
+            {line('ยี่ห้อรถ', t.brand, 90)}
+            {line('รุ่นรถ', t.model, 90)}
+            {line('สีรถ', t.color, 60)}
+            {line('ทะเบียน', t.plate, 90)}
+          </div>
+
+          {/* ประเภทฟิล์ม / ความหนา — the chosen ones are ringed, the rest print
+              so the sheet still reads as the form the shop knows. */}
+          <table style={{ fontSize: 11, marginBottom: 8 }}>
+            <tbody>
+              <tr>
+                <td rowSpan={2} style={{ fontWeight: 'bold', fontSize: 13, width: 100 }}>
+                  ประเภทฟิล์ม
+                </td>
+                <td style={{ width: 55, textAlign: 'center' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {mark(v?.filmType === 'TPU')}TPU
+                  </span>
+                </td>
+                <td style={{ width: 80, fontWeight: 'bold' }}>ความหนา</td>
+                {SERVICE_FILM_THICKNESS.map((th) => (
+                  <td key={th} style={{ textAlign: 'center' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {mark(v?.filmThickness === th)}
+                      {th}
+                    </span>
+                  </td>
+                ))}
+              </tr>
+              <tr>
+                <td style={{ textAlign: 'center' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {mark(v?.filmType === 'PET')}PET
+                  </span>
+                </td>
+                <td style={{ fontWeight: 'bold' }}>รหัสสี</td>
+                <td colSpan={SERVICE_FILM_THICKNESS.length} style={{ fontWeight: 'bold' }}>
+                  {v?.filmColourCode || ' '}
+                </td>
+              </tr>
+              <tr>
+                <td style={{ fontWeight: 'bold' }}>เซลล์รับรถ</td>
+                <td colSpan={2} style={{ fontWeight: 'bold' }}>
+                  {v?.salesBy || ' '}
+                </td>
+                <td colSpan={2} style={{ fontWeight: 'bold', textAlign: 'center' }}>
+                  QC ผู้รับผิดชอบ
+                </td>
+                <td colSpan={3} style={{ fontWeight: 'bold' }}>
+                  {v?.qcBy || ' '}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div
+            style={{
+              fontSize: 11,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '5px 16px',
+              marginBottom: 10,
+            }}
+          >
+            {line('วันรับรถ', v?.receivedAt ? fmtThaiDate(new Date(v.receivedAt)) : '', 100)}
+            {line('เวลารับรถ', v?.receivedTime ?? '', 60)}
+            {line('วันส่งมอบรถ', v?.deliveredAt ? fmtThaiDate(new Date(v.deliveredAt)) : '', 100)}
+            {line('เวลาส่งมอบรถ', v?.deliveredTime ?? '', 60)}
+          </div>
+
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            {/* Same drawings as the ใบเช็ครถ — the technician marks the car up
+                by hand here too, on either kind of sheet. */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {WRAP_DIAGRAMS.map((d) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={d.src}
+                  src={d.src}
+                  alt={d.alt}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    maxWidth: d.maxWidth,
+                    marginBottom: 6,
+                  }}
+                />
+              ))}
+              <p style={{ margin: '2px 0 0', fontSize: 9, color: '#555' }}>
+                L = ซ้าย &middot; R = ขวา &middot; F = หน้า &middot; B = หลัง
+              </p>
+            </div>
+
+            <div style={{ width: 230, flexShrink: 0 }}>
+              <table style={{ fontSize: 10, marginBottom: 10 }}>
+                <thead>
+                  <tr>
+                    <th colSpan={2} style={{ textAlign: 'center' }}>
+                      ภายในรถ
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>{SERVICE_INTERIOR_PARTS.map(checkCell)}</tbody>
+              </table>
+              <table style={{ fontSize: 10, marginBottom: 10 }}>
+                <thead>
+                  <tr>
+                    <th colSpan={2} style={{ textAlign: 'center' }}>
+                      ภายนอกรถ
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>{SERVICE_EXTERIOR_PARTS.map(checkCell)}</tbody>
+              </table>
+
+              <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 'bold' }}>
+                เช็คสภาพงาน รอบคัน
+                {v?.overallOk === true ? ' — ปกติ' : v?.overallOk === false ? ' — พบปัญหา' : ''}
+              </p>
+              <p
+                style={{
+                  margin: '0 0 8px',
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                ลูกค้า {mark(v?.customerWaits === true)} รอ {mark(v?.customerWaits === false)} ไม่รอ
+              </p>
+
+              <table style={{ fontSize: 9 }}>
+                <thead>
+                  <tr>
+                    <th colSpan={4} style={{ textAlign: 'center' }}>
+                      จุดพิเศษลูกค้าต้องการแก้ไข
+                    </th>
+                  </tr>
+                  <tr>
+                    <th style={{ width: 22 }}>จุด</th>
+                    <th>ตำแหน่ง</th>
+                    <th>รายละเอียด</th>
+                    <th>หมายเหตุ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: SERVICE_POINT_ROWS }, (_, i) => i + 1).map((seq) => {
+                    const p = v?.points?.find((x) => x.seq === seq);
+                    return (
+                      <tr key={seq}>
+                        <td style={{ textAlign: 'center' }}>{seq}.</td>
+                        <td>{p?.position || ' '}</td>
+                        <td>{p?.detail || ' '}</td>
+                        <td>{p?.note || ' '}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ทีมช่าง — the shop's own technician list, not the seven names the
+              paper form was printed with years ago. */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: '6px 16px',
+              marginTop: 10,
+              fontSize: 12,
+            }}
+          >
+            <span style={{ fontWeight: 'bold' }}>ทีมช่าง :</span>
+            {technicianOptions.map((name) => (
+              <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                {mark(!!v?.technicians?.includes(name))}
+                {name}
+              </span>
+            ))}
+          </div>
+
+          {v?.notes && (
+            <p style={{ margin: '8px 0 0', fontSize: 11 }}>
+              <b>หมายเหตุ:</b> {v.notes}
+            </p>
+          )}
+        </div>
       </div>
     );
   } else if (printMode === 'doc') {

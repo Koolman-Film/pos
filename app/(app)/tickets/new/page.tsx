@@ -5,8 +5,10 @@ import { getSessionContext } from '@/lib/auth/session';
 
 import {
   getTicketAttachmentUrl,
+  deleteServiceVisit,
   saveCarModel,
   saveCorporateBuyer,
+  saveServiceVisit,
   saveTicket,
   updateOptionList,
 } from '../actions';
@@ -66,6 +68,8 @@ export default async function NewTicketPage({
       attachmentUrlAction={getTicketAttachmentUrl}
       corporateBuyerAction={saveCorporateBuyer}
       carModelAction={saveCarModel}
+      serviceVisitAction={saveServiceVisit}
+      serviceVisitDeleteAction={deleteServiceVisit}
     />
   );
 }

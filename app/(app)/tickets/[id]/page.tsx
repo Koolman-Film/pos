@@ -6,8 +6,10 @@ import { getSessionContext } from '@/lib/auth/session';
 import {
   deleteTicket,
   getTicketAttachmentUrl,
+  deleteServiceVisit,
   saveCarModel,
   saveCorporateBuyer,
+  saveServiceVisit,
   saveTicket,
   unlockTicket,
   updateOptionList,
@@ -56,6 +58,8 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       attachmentUrlAction={getTicketAttachmentUrl}
       corporateBuyerAction={saveCorporateBuyer}
       carModelAction={saveCarModel}
+      serviceVisitAction={saveServiceVisit}
+      serviceVisitDeleteAction={deleteServiceVisit}
     />
   );
 }

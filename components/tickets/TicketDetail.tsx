@@ -16,6 +16,7 @@ import { FormSection, SECTION_TONES } from './detail/FormSection';
 import { ItemsSection } from './detail/ItemsSection';
 import { NotesSection } from './detail/NotesSection';
 import { PaymentsSection } from './detail/PaymentsSection';
+import { ServiceVisitsSection } from './detail/ServiceVisitsSection';
 import { TechSection } from './detail/TechSection';
 import { VehicleInfoSection } from './detail/VehicleInfoSection';
 import { WrapOptionsSection } from './detail/WrapOptionsSection';
@@ -27,6 +28,7 @@ import type {
   OptionListName,
   PriceMatrixRow,
   RetailCustomer,
+  ServiceVisit,
   Shop,
   ShopInfo,
   StockRow,
@@ -71,6 +73,8 @@ export function TicketDetail({
   attachmentUrlAction,
   corporateBuyerAction,
   carModelAction,
+  serviceVisitAction,
+  serviceVisitDeleteAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -109,6 +113,14 @@ export function TicketDetail({
     brand: string;
     carType: string;
   }) => Promise<{ ok: boolean; error?: string }>;
+  /** Records one ใบเซอร์วิส visit against this ticket (migration 0020). */
+  serviceVisitAction?: (input: {
+    id?: number;
+    ticketId: string;
+    visit: Record<string, unknown>;
+    points: { seq: number; position: string; detail: string; note: string }[];
+  }) => Promise<{ ok: boolean; error?: string; id?: number }>;
+  serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
@@ -179,6 +191,7 @@ export function TicketDetail({
   const [buyerAddress, setBuyerAddress] = useState('');
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [printMode, setPrintMode] = useState<PrintMode>('job');
+  const [printVisit, setPrintVisit] = useState<ServiceVisit | null>(null);
 
   const productCategories = options.product_categories;
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? id;
@@ -197,6 +210,55 @@ export function TicketDetail({
     setDocType(dt);
     setShowCompanyInfo(dt === 'ใบกำกับภาษี/ใบเสร็จรับเงิน');
   }
+  /**
+   * ใบเซอร์วิส — one recorded visit, or a blank sheet when given null.
+   *
+   * The visit has to be in state before the print portal renders, hence the
+   * separate setter rather than reusing `doPrint` alone.
+   */
+  function printServiceSheet(visit: ServiceVisit | null) {
+    setPrintVisit(visit);
+    doPrint('service');
+  }
+
+  /** Save a visit, then pull the ticket's list back from the server. */
+  async function saveServiceVisit(visit: ServiceVisit) {
+    if (!serviceVisitAction) return { ok: false, error: 'ยังไม่พร้อมใช้งาน' };
+    const result = await serviceVisitAction({
+      id: visit.id,
+      ticketId: t.id,
+      visit: {
+        plate: t.plate,
+        receivedAt: visit.receivedAt || null,
+        receivedTime: visit.receivedTime,
+        deliveredAt: visit.deliveredAt || null,
+        deliveredTime: visit.deliveredTime,
+        salesBy: visit.salesBy,
+        qcBy: visit.qcBy,
+        technicians: visit.technicians,
+        filmType: visit.filmType,
+        filmThickness: visit.filmThickness,
+        filmColourCode: visit.filmColourCode,
+        customerWaits: visit.customerWaits,
+        overallOk: visit.overallOk,
+        checks: visit.checks,
+        notes: visit.notes,
+      },
+      points: visit.points,
+    });
+    // The list lives on the server-rendered ticket, so a refresh is what shows
+    // the new visit — and the visit_no the database actually issued.
+    if (result.ok) router.refresh();
+    return result;
+  }
+
+  async function deleteServiceVisit(id: number) {
+    if (!serviceVisitDeleteAction) return { ok: false, error: 'ยังไม่พร้อมใช้งาน' };
+    const result = await serviceVisitDeleteAction(id);
+    if (result.ok) router.refresh();
+    return result;
+  }
+
   function doPrint(mode: PrintMode) {
     setPrintMode(mode);
     setTimeout(() => {
@@ -709,6 +771,28 @@ export function TicketDetail({
                   setSlideType={setSlideType}
                   updateSlideLeg={updateSlideLeg}
                   shareLink={shareLink}
+                  serviceVisits={
+                    // A visit is a child row of a saved ticket, so there is
+                    // nothing for it to hang off until the ticket has an id.
+                    isNew || !serviceVisitAction
+                      ? undefined
+                      : ({ entitled }) => (
+                          <ServiceVisitsSection
+                            t={t}
+                            // Server-owned: from initialTicket, not the draft.
+                            visits={initialTicket.serviceVisits ?? []}
+                            visitsForPlate={initialTicket.serviceVisitsForPlate ?? 0}
+                            entitled={entitled}
+                            technicians={options.technicians}
+                            setTechnicians={opt('technicians')}
+                            currentUserName={currentUserName}
+                            canDelete={canDo('list.delete')}
+                            onSave={saveServiceVisit}
+                            onDelete={deleteServiceVisit}
+                            onPrint={printServiceSheet}
+                          />
+                        )
+                  }
                 />
               </div>
             </FormSection>
@@ -995,6 +1079,8 @@ export function TicketDetail({
           buyerAddress={buyerAddress}
           showCompanyInfo={showCompanyInfo}
           showDisclaimer={showDisclaimer}
+          serviceVisit={printVisit}
+          technicianOptions={options.technicians}
         />
       </div>
     </OptionManageProvider>

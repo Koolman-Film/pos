@@ -362,3 +362,89 @@ describe('ใบเช็ครถ — แผนผังตัวรถ', () =>
     expect(screen.queryByAltText(/แผนผัง/)).not.toBeInTheDocument();
   });
 });
+
+/**
+ * ใบเซอร์วิส ลูกค้าหน้าร้าน. Two ways of working had to keep working: print a
+ * blank sheet and fill it in at the car, or record the visit here and print it
+ * filled. Both come off the same form so a filed stack reads consistently.
+ */
+describe('ใบเซอร์วิส', () => {
+  const visit = {
+    id: 1,
+    visitNo: 2,
+    plate: 'กก 999',
+    receivedAt: '2026-08-20',
+    receivedTime: '09:00',
+    deliveredAt: '2026-08-20',
+    deliveredTime: '16:30',
+    salesBy: 'พนักงานขาย',
+    qcBy: 'ช่างเอก',
+    technicians: ['ช่างเอก'],
+    filmType: 'TPU',
+    filmThickness: '195',
+    filmColourCode: 'BK-01',
+    customerWaits: true,
+    overallOk: true,
+    checks: { 'หน้าจอ 1': 'ปกติ', Sunroof: 'ผิดปกติ' },
+    notes: 'ลูกค้าขอเร่ง',
+    points: [{ seq: 1, position: 'กันชนหน้า', detail: 'ฟิล์มเผยอ', note: 'แก้แล้ว' }],
+  };
+
+  const renderService = (over = {}) =>
+    renderSheet(makeTicket({ items: [item()] }), 'service', {
+      technicianOptions: ['ช่างเอก', 'ช่างบอย'],
+      ...over,
+    });
+
+  it('takes the customer and car straight from the ticket', () => {
+    renderService({ serviceVisit: visit });
+    expect(screen.getByText('ใบเซอร์วิส ลูกค้าหน้าร้าน')).toBeInTheDocument();
+    expect(screen.getByText('คุณ ปรีชา')).toBeInTheDocument();
+    expect(screen.getByText('กก 999')).toBeInTheDocument();
+  });
+
+  it('prints a recorded visit with its number, checks and points', () => {
+    renderService({ serviceVisit: visit });
+    expect(screen.getByText('2')).toBeInTheDocument(); // ครั้งที่
+    expect(screen.getByText('ปกติ')).toBeInTheDocument();
+    expect(screen.getByText('ผิดปกติ')).toBeInTheDocument();
+    expect(screen.getByText('กันชนหน้า')).toBeInTheDocument();
+    expect(screen.getByText('ฟิล์มเผยอ')).toBeInTheDocument();
+  });
+
+  it('prints a blank sheet when no visit is given', () => {
+    renderService({ serviceVisit: null });
+    // Still headed with the car, because that much is known either way.
+    expect(screen.getByText('กก 999')).toBeInTheDocument();
+    // ...and nothing a technician has to write at the car is pre-answered.
+    expect(screen.queryByText('ฟิล์มเผยอ')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^ครั้งที่/)).not.toBeInTheDocument();
+  });
+
+  it('lists ทีมช่าง from the shop, not the names the paper form was printed with', () => {
+    renderService({ serviceVisit: visit });
+    // Scoped to the tick row: ช่างเอก is also this visit's QC person.
+    const row = screen.getByText('ทีมช่าง :').parentElement!;
+    expect(within(row).getByText('ช่างเอก')).toBeInTheDocument();
+    expect(within(row).getByText('ช่างบอย')).toBeInTheDocument();
+    // Every technician prints, ticked or not, and only the one who worked is
+    // ticked — the same rule as the wrap sheet's Option row.
+    expect(within(row).getAllByText('✓')).toHaveLength(1);
+    // The paper form's own seven names are gone.
+    expect(screen.queryByText('จอจอ')).not.toBeInTheDocument();
+  });
+
+  it('always prints all ten จุดพิเศษ rows so the sheet can be written on', () => {
+    renderService({ serviceVisit: visit });
+    for (const n of [1, 5, 10]) expect(screen.getByText(`${n}.`)).toBeInTheDocument();
+  });
+
+  it('carries the same car diagrams as the ใบเช็ครถ', () => {
+    renderService({ serviceVisit: null });
+    const srcs = screen
+      .getAllByRole('img')
+      .map((el) => el.getAttribute('src'))
+      .filter((s) => s?.startsWith('/wrap/'));
+    expect(srcs).toHaveLength(3);
+  });
+});

@@ -39,6 +39,47 @@ export type TicketExtra = {
 
 export type StatusHistoryEntry = { status: string; date: Date };
 
+/** One numbered row of จุดพิเศษลูกค้าต้องการแก้ไข on the service sheet. */
+export type ServiceVisitPoint = {
+  seq: number;
+  position: string;
+  detail: string;
+  note: string;
+};
+
+/**
+ * One visit the car actually made, recorded against the ticket that entitled it
+ * (migration 0020).
+ *
+ * The ticket's `extras.Service` holds the ENTITLEMENT — how many visits were
+ * sold and when the next one is due. This is the record of what happened: when
+ * the car came in, who worked on it, what was checked and what was fixed.
+ */
+export type ServiceVisit = {
+  /** Absent until saved. */
+  id?: number;
+  /** 1..N within the ticket, issued by the database. */
+  visitNo: number;
+  plate: string;
+  receivedAt: string;
+  receivedTime: string;
+  deliveredAt: string;
+  deliveredTime: string;
+  salesBy: string;
+  qcBy: string;
+  technicians: string[];
+  filmType: string;
+  filmThickness: string;
+  filmColourCode: string;
+  /** null = nobody has said yet, which is not the same as "ไม่รอ". */
+  customerWaits: boolean | null;
+  overallOk: boolean | null;
+  /** Part name -> result, keyed by the SERVICE_*_PARTS lists. */
+  checks: Record<string, string>;
+  notes: string;
+  points: ServiceVisitPoint[];
+};
+
 export type Ticket = {
   id: string;
   shop: string;
@@ -84,6 +125,13 @@ export type Ticket = {
    * like an upload does, and it is what gets shared with the customer when set.
    */
   qcAlbumUrl?: string;
+  /** Visits recorded against this ticket, newest first. */
+  serviceVisits?: ServiceVisit[];
+  /**
+   * How many visits this PLATE has had across every ticket. The entitlement is
+   * per ticket, but "รถคันนี้เซอร์วิสไปกี่ครั้ง" is a question about the car.
+   */
+  serviceVisitsForPlate?: number;
   createdBy?: string;
   statusHistory?: StatusHistoryEntry[];
   installConfirmed?: boolean;

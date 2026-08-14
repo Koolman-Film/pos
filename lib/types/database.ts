@@ -637,6 +637,118 @@ export type Database = {
           },
         ]
       }
+      service_visits: {
+        Row: {
+          checks: Json
+          created_at: string
+          created_by: string | null
+          customer_waits: boolean | null
+          delivered_at: string | null
+          delivered_time: string
+          film_colour_code: string
+          film_thickness: string
+          film_type: string
+          id: number
+          notes: string
+          overall_ok: boolean | null
+          plate: string
+          qc_by: string
+          received_at: string | null
+          received_time: string
+          sales_by: string
+          technicians: Json
+          ticket_id: string
+          visit_no: number
+        }
+        Insert: {
+          checks?: Json
+          created_at?: string
+          created_by?: string | null
+          customer_waits?: boolean | null
+          delivered_at?: string | null
+          delivered_time?: string
+          film_colour_code?: string
+          film_thickness?: string
+          film_type?: string
+          id?: never
+          notes?: string
+          overall_ok?: boolean | null
+          plate?: string
+          qc_by?: string
+          received_at?: string | null
+          received_time?: string
+          sales_by?: string
+          technicians?: Json
+          ticket_id: string
+          visit_no: number
+        }
+        Update: {
+          checks?: Json
+          created_at?: string
+          created_by?: string | null
+          customer_waits?: boolean | null
+          delivered_at?: string | null
+          delivered_time?: string
+          film_colour_code?: string
+          film_thickness?: string
+          film_type?: string
+          id?: never
+          notes?: string
+          overall_ok?: boolean | null
+          plate?: string
+          qc_by?: string
+          received_at?: string | null
+          received_time?: string
+          sales_by?: string
+          technicians?: Json
+          ticket_id?: string
+          visit_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_visits_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_visit_points: {
+        Row: {
+          detail: string
+          id: number
+          note: string
+          position: string
+          seq: number
+          visit_id: number
+        }
+        Insert: {
+          detail?: string
+          id?: never
+          note?: string
+          position?: string
+          seq: number
+          visit_id: number
+        }
+        Update: {
+          detail?: string
+          id?: never
+          note?: string
+          position?: string
+          seq?: number
+          visit_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_visit_points_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "service_visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shops: {
         Row: {
           id: string
@@ -1120,6 +1232,10 @@ export type Database = {
           p_saved_on: string
         }
         Returns: undefined
+      }
+      save_service_visit: {
+        Args: { p_id: number; p_points: Json; p_ticket_id: string; p_visit: Json }
+        Returns: number
       }
       save_ticket_children: {
         Args: { p_items: Json; p_payments: Json; p_ticket_id: string }

@@ -20,6 +20,7 @@ export function ExtrasSection({
   setSlideType,
   updateSlideLeg,
   shareLink,
+  serviceVisits,
 }: {
   t: Ticket;
   extraOptions: string[];
@@ -31,6 +32,11 @@ export function ExtrasSection({
   setSlideType: (st: string) => void;
   updateSlideLeg: (legIdx: number, key: string, val: unknown) => void;
   shareLink: (link?: string) => void;
+  /**
+   * Renders the service-visit record inside the Service extra. A render prop so
+   * this component stays a pure form and does not need the ticket actions.
+   */
+  serviceVisits?: (args: { entitled: number }) => React.ReactNode;
 }) {
   const [showOptional, setShowOptional] = useState(false);
   const [addingExtra, setAddingExtra] = useState(false);
@@ -261,6 +267,17 @@ export function ExtrasSection({
                       เพิ่มก่อนเพื่อดึงข้อมูลบริการ
                     </p>
                   )}
+                  {/*
+                    The visits themselves. Above this point the ticket only says
+                    how many were SOLD; this is the record of the ones that
+                    happened — which is what "รถคันนี้เซอร์วิสไปกี่ครั้งแล้ว"
+                    needs. Only rendered for a saved ticket: a visit is a child
+                    row and has nothing to hang off until the ticket has an id.
+                  */}
+                  {serviceVisits &&
+                    serviceVisits({
+                      entitled: Number(ex.serviceCount ?? wrapStock?.serviceCount ?? 0) || 0,
+                    })}
                 </div>
               )}
             </div>
