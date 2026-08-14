@@ -313,3 +313,52 @@ describe('เอกสารทางการเงิน', () => {
     expect(within(box).getByText('โอนเงิน')).toBeInTheDocument();
   });
 });
+
+/**
+ * The three car outlines the technician marks up. They were inline base64 in
+ * the prototype (~520KB), so the port replaced them with dashed boxes reading
+ * "แผนผังตัวรถ" and left a note to re-add them as assets — which meant the
+ * printed ใบเช็ครถ had nowhere to record where a scratch actually was.
+ */
+describe('ใบเช็ครถ — แผนผังตัวรถ', () => {
+  const diagrams = ['/wrap/wrap-interior.png', '/wrap/wrap-body.png', '/wrap/wrap-exterior.png'];
+
+  it('prints all three diagrams, in the order the paper form has them', () => {
+    renderSheet(makeTicket({ items: [item()] }), 'job');
+
+    const srcs = screen
+      .getAllByRole('img')
+      .map((el) => el.getAttribute('src'))
+      .filter((s) => s?.startsWith('/wrap/'));
+    expect(srcs).toEqual(diagrams);
+  });
+
+  it('replaces the placeholder boxes rather than sitting beside them', () => {
+    renderSheet(makeTicket({ items: [item()] }), 'job');
+    expect(screen.queryByText(/^แผนผังตัวรถ \(/)).not.toBeInTheDocument();
+  });
+
+  it('spells out what the L/R/B/F on the drawings mean', () => {
+    renderSheet(makeTicket({ items: [item()] }), 'job');
+    // The letters are part of the artwork; only Thai readers of the sheet need
+    // telling which is which.
+    expect(screen.getByText(/L = ซ้าย/)).toBeInTheDocument();
+    expect(screen.getByText(/B = หลัง/)).toBeInTheDocument();
+  });
+
+  it('keeps both part tables on the sheet alongside the drawings', () => {
+    renderSheet(makeTicket({ items: [item()] }), 'job');
+    expect(screen.getByText('ภายในตัวรถ')).toBeInTheDocument();
+    expect(screen.getByText('ภายนอกตัวรถ')).toBeInTheDocument();
+    expect(screen.getByText('Piano Black')).toBeInTheDocument();
+    expect(screen.getByText('ล้อหลังขวา')).toBeInTheDocument();
+  });
+
+  it('leaves them off a ticket with no ฟิล์มกันรอย work', () => {
+    renderSheet(
+      makeTicket({ items: [item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม 3M' })] }),
+      'job',
+    );
+    expect(screen.queryByAltText(/แผนผัง/)).not.toBeInTheDocument();
+  });
+});

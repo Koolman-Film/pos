@@ -89,6 +89,29 @@ function paymentLabel(type: string): string {
 }
 
 /**
+ * The car outlines the technician marks up on the ใบเช็ครถ, in the order the
+ * paper form has them: interior, then both flanks, then rear and front.
+ *
+ * Extracted from the prototype, where they were three inline base64 PNGs
+ * totalling ~520KB — which is why the port dropped them for dashed placeholder
+ * boxes and left a note to re-add them as assets. As /public files reduced to a
+ * 32-colour palette they come to 84KB, and the browser caches them across every
+ * sheet printed instead of re-parsing them out of the bundle each time.
+ *
+ * `maxWidth` keeps each drawing at a sane size on a wide screen; the print sheet
+ * is narrow enough that `width: 100%` governs there.
+ */
+const WRAP_DIAGRAMS = [
+  { src: '/wrap/wrap-interior.png', alt: 'แผนผังภายในตัวรถ (คอนโซลหน้า)', maxWidth: 330 },
+  { src: '/wrap/wrap-body.png', alt: 'แผนผังตัวรถด้านข้าง ซ้าย (L) และขวา (R)', maxWidth: 300 },
+  {
+    src: '/wrap/wrap-exterior.png',
+    alt: 'แผนผังตัวรถด้านหลัง (B) และด้านหน้า (F)',
+    maxWidth: 330,
+  },
+] as const;
+
+/**
  * The ภายในตัวรถ grid on the ใบเช็ครถ — the interior parts a wrap job touches.
  *
  * Both columns were wrong in the port: "Piano Black" (the trim finish) had been
@@ -160,11 +183,10 @@ const stepBadge: CSSProperties = {
  * app shell and shows only `.print-area`. Guarded by a `mounted` state because
  * `document.body` only exists client-side.
  *
- * NOTE (judgment call): the prototype's wrap (ฟิล์มกันรอย) QC checklist embeds
- * three multi-hundred-KB base64 car-diagram images inline. Embedding those in a
- * client bundle would bloat it by ~600KB, so the diagram slots render as labeled
- * placeholder boxes here; the functional interior/exterior part-checklist tables
- * are ported verbatim. Flagged for human review — re-add as /public assets.
+ * The wrap (ฟิล์มกันรอย) sheet's three car diagrams were inline base64 in the
+ * prototype (~520KB), so the port left labelled placeholder boxes and a note to
+ * re-add them as assets. Done: they are /public/wrap PNGs now, palette-reduced
+ * to 84KB in total — see WRAP_DIAGRAMS.
  */
 export function PrintJobSheet({
   t,
@@ -775,23 +797,39 @@ export function PrintJobSheet({
                 ))}
               </tbody>
             </table>
+            {/*
+              The shop's own car diagrams, back where they belong. They were
+              inline base64 in the prototype (three of them, ~520KB), so the port
+              left labelled dashed boxes in their place and flagged it. They live
+              in /public/wrap now, palette-reduced to 84KB all told, which is
+              what makes them cheap enough to ship.
+
+              Layout follows the paper form: the drawings run down the left, the
+              two part tables stack on the right. The L / R / B / F letters are
+              part of the artwork.
+            */}
             <div style={{ display: 'flex', gap: 14, marginBottom: 12, alignItems: 'flex-start' }}>
-              <div
-                style={{
-                  flex: 1,
-                  minHeight: 150,
-                  border: '1px dashed #999',
-                  borderRadius: 6,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10,
-                  color: '#999',
-                }}
-              >
-                แผนผังตัวรถ (สำหรับทำเครื่องหมายจุดที่ตรวจพบ)
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {WRAP_DIAGRAMS.map((d) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={d.src}
+                    src={d.src}
+                    alt={d.alt}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      maxWidth: d.maxWidth,
+                      marginBottom: 6,
+                    }}
+                  />
+                ))}
+                <p style={{ margin: '2px 0 0', fontSize: 9, color: '#555' }}>
+                  L = ซ้าย &middot; R = ขวา &middot; F = หน้า &middot; B = หลัง &middot;
+                  ทำเครื่องหมายบนภาพตรงจุดที่ตรวจพบ
+                </p>
               </div>
-              <div style={{ width: 200, flexShrink: 0 }}>
+              <div style={{ width: 210, flexShrink: 0 }}>
                 <p
                   style={{
                     fontSize: 12,
@@ -802,7 +840,7 @@ export function PrintJobSheet({
                 >
                   ภายในตัวรถ
                 </p>
-                <table style={{ fontSize: 10 }}>
+                <table style={{ fontSize: 10, marginBottom: 12 }}>
                   <tbody>
                     {WRAP_INTERIOR_PARTS.map(([left, right]) => (
                       <tr key={left}>
@@ -812,25 +850,6 @@ export function PrintJobSheet({
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 14, marginBottom: 16, alignItems: 'flex-start' }}>
-              <div
-                style={{
-                  flex: 1,
-                  minHeight: 150,
-                  border: '1px dashed #999',
-                  borderRadius: 6,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10,
-                  color: '#999',
-                }}
-              >
-                แผนผังตัวรถ (ด้านนอก)
-              </div>
-              <div style={{ flex: 1 }}>
                 <p
                   style={{
                     fontSize: 12,
@@ -841,7 +860,7 @@ export function PrintJobSheet({
                 >
                   ภายนอกตัวรถ
                 </p>
-                <table style={{ fontSize: 11, marginBottom: 10, width: 200 }}>
+                <table style={{ fontSize: 10 }}>
                   <tbody>
                     <tr>
                       <td>ล้อหน้าซ้าย</td>
