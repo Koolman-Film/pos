@@ -59,6 +59,7 @@ function renderSection(t: Ticket, over: Record<string, unknown> = {}) {
       technicians={['ช่างเอก', 'ช่างบอย']}
       setTechnicians={vi.fn()}
       currentUserName="แอดมินระบบ"
+      film={{ type: 'TPU', thickness: '195', colourCode: 'BK-01' }}
       canDelete={false}
       onSave={onSave}
       onDelete={vi.fn(async () => ({ ok: true }))}
@@ -131,19 +132,39 @@ describe('ServiceVisitsSection', () => {
     expect(sent.points).toEqual([{ seq: 1, position: 'กันชนหน้า', detail: 'ฟิล์มเผยอ', note: '' }]);
   });
 
-  it('lets a check result be un-set by pressing it again', async () => {
+  it('takes each check as free text, and leaves untouched parts blank', async () => {
     const user = userEvent.setup();
     const { onSave } = renderSection(ticket());
 
     await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิสครั้งใหม่/ }));
-    const normal = screen.getByLabelText('หน้าจอ 1 — ปกติ');
-    await user.click(normal);
-    expect(normal).toHaveAttribute('aria-pressed', 'true');
-    await user.click(normal);
-    expect(normal).toHaveAttribute('aria-pressed', 'false');
+    // Whatever the technician writes — a state, a measurement, a note. Three
+    // fixed buttons could not carry that.
+    await user.type(screen.getByLabelText('หน้าจอ 1'), 'ปกติ');
+    await user.type(screen.getByLabelText('Sunroof'), 'รอยขีด 2 ซม.');
+    await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิส$/ }));
+
+    const sent = onSave.mock.calls[0][0];
+    expect(sent.checks['หน้าจอ 1']).toBe('ปกติ');
+    expect(sent.checks['Sunroof']).toBe('รอยขีด 2 ซม.');
+    // A part nobody wrote against carries nothing, so it prints empty.
+    expect(sent.checks['Piano Black']).toBeUndefined();
+  });
+
+  it('takes ประเภทฟิล์ม / ความหนา / รหัสสี from the ticket instead of asking', async () => {
+    const user = userEvent.setup();
+    const { onSave } = renderSection(ticket());
+
+    await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิสครั้งใหม่/ }));
+    // Shown, not editable — the ticket is the source.
+    expect(screen.getByText(/TPU · 195 · BK-01/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('ความหนาฟิล์ม')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิส$/ }));
+    // Still stored on the visit, so reprinting an old sheet shows what was true
+    // that day even after the ticket is edited.
     const sent = onSave.mock.calls[0][0];
-    expect(sent.checks['หน้าจอ 1']).toBe('');
+    expect(sent.filmType).toBe('TPU');
+    expect(sent.filmThickness).toBe('195');
+    expect(sent.filmColourCode).toBe('BK-01');
   });
 });

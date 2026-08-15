@@ -29,12 +29,19 @@ export const SERVICE_FILM_TYPES = ['TPU', 'PET'] as const;
 /** ความหนา. The form prints these five as column headings. */
 export const SERVICE_FILM_THICKNESS = ['165', '195', '195ด้าน', '215', '255'] as const;
 
-/**
- * What a part can be marked as. The paper form leaves a blank cell, so a mark is
- * whatever the technician writes; these are the three answers that actually get
- * written, and an empty string keeps "ยังไม่ตรวจ" distinct from "ปกติ".
- */
-export const SERVICE_CHECK_RESULTS = ['ปกติ', 'แก้ไขแล้ว', 'ผิดปกติ'] as const;
-
 /** จุดพิเศษลูกค้าต้องการแก้ไข — the form has exactly ten numbered rows. */
 export const SERVICE_POINT_ROWS = 10;
+
+/**
+ * ประเภทฟิล์ม read off the ฟิล์มกันรอย product the ticket sold.
+ *
+ * The product name is the only place the ticket records this — "TPU
+ * กันรอยเกรดพรีเมียม" is a TPU job — so the service sheet derives it rather than
+ * asking again. ความหนา and รหัสสี have no such source and are set once on the
+ * ticket's Service block instead.
+ */
+export function deriveFilmType(productName: string): string {
+  const name = (productName || '').toUpperCase();
+  for (const type of SERVICE_FILM_TYPES) if (name.includes(type)) return type;
+  return '';
+}

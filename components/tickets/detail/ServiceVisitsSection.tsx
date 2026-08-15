@@ -6,14 +6,7 @@ import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 import { fmtThaiDate } from '@/lib/domain/format';
 import { dateInputValue } from '@/lib/domain/now';
 
-import {
-  SERVICE_CHECK_RESULTS,
-  SERVICE_EXTERIOR_PARTS,
-  SERVICE_FILM_THICKNESS,
-  SERVICE_FILM_TYPES,
-  SERVICE_INTERIOR_PARTS,
-  SERVICE_POINT_ROWS,
-} from '../serviceForm';
+import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } from '../serviceForm';
 
 import type { ServiceVisit, ServiceVisitPoint, Ticket } from '../types';
 
@@ -28,7 +21,12 @@ import type { ServiceVisit, ServiceVisitPoint, Ticket } from '../types';
  * underneath answers the same question for the car across every job it has had.
  */
 
-const empty = (visitNo: number, t: Ticket, currentUserName: string): ServiceVisit => ({
+const empty = (
+  visitNo: number,
+  t: Ticket,
+  currentUserName: string,
+  film: { type: string; thickness: string; colourCode: string },
+): ServiceVisit => ({
   visitNo,
   plate: t.plate,
   receivedAt: dateInputValue(new Date()),
@@ -39,9 +37,9 @@ const empty = (visitNo: number, t: Ticket, currentUserName: string): ServiceVisi
   salesBy: currentUserName,
   qcBy: '',
   technicians: [],
-  filmType: '',
-  filmThickness: '',
-  filmColourCode: '',
+  filmType: film.type,
+  filmThickness: film.thickness,
+  filmColourCode: film.colourCode,
   customerWaits: null,
   overallOk: null,
   checks: {},
@@ -59,6 +57,7 @@ export function ServiceVisitsSection({
   technicians,
   setTechnicians,
   currentUserName,
+  film,
   canDelete,
   onSave,
   onDelete,
@@ -78,6 +77,8 @@ export function ServiceVisitsSection({
   technicians: string[];
   setTechnicians: (v: string[]) => void;
   currentUserName: string;
+  /** ประเภท/ความหนา/รหัสสี as the ticket records them — never asked again here. */
+  film: { type: string; thickness: string; colourCode: string };
   canDelete: boolean;
   onSave: (visit: ServiceVisit) => Promise<{ ok: boolean; error?: string }>;
   onDelete: (id: number) => Promise<{ ok: boolean; error?: string }>;
@@ -91,7 +92,7 @@ export function ServiceVisitsSection({
 
   function startNew() {
     setError(null);
-    setDraft(empty(used + 1, t, currentUserName));
+    setDraft(empty(used + 1, t, currentUserName, film));
   }
   function startEdit(v: ServiceVisit) {
     setError(null);
@@ -101,9 +102,7 @@ export function ServiceVisitsSection({
     setDraft((d) => (d ? { ...d, [key]: value } : d));
   }
   function setCheck(part: string, result: string) {
-    setDraft((d) =>
-      d ? { ...d, checks: { ...d.checks, [part]: d.checks[part] === result ? '' : result } } : d,
-    );
+    setDraft((d) => (d ? { ...d, checks: { ...d.checks, [part]: result } } : d));
   }
   function setPoint(seq: number, field: keyof ServiceVisitPoint, value: string) {
     setDraft((d) => {
@@ -335,44 +334,28 @@ export function ServiceVisitsSection({
             </div>
           </div>
 
+          {/*
+            Read from the ticket, not asked again: ประเภทฟิล์ม comes off the
+            ฟิล์มกันรอย product's name, ความหนา and รหัสสี from the Service block
+            above. The visit still STORES its own copy, so reprinting an old
+            sheet shows what was true that day.
+          */}
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
             ประเภทฟิล์ม / ความหนา / รหัสสี
           </label>
-          <div className="grid grid-cols-3 gap-2 mb-2.5">
-            <select
-              aria-label="ประเภทฟิล์ม"
-              value={draft.filmType}
-              onChange={(e) => set('filmType', e.target.value)}
-              className="field text-xs px-2.5 py-1.5"
-            >
-              <option value="">ประเภท...</option>
-              {SERVICE_FILM_TYPES.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="ความหนาฟิล์ม"
-              value={draft.filmThickness}
-              onChange={(e) => set('filmThickness', e.target.value)}
-              className="field text-xs px-2.5 py-1.5"
-            >
-              <option value="">ความหนา...</option>
-              {SERVICE_FILM_THICKNESS.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-            <input
-              aria-label="รหัสสี"
-              placeholder="รหัสสี"
-              value={draft.filmColourCode}
-              onChange={(e) => set('filmColourCode', e.target.value)}
-              className="field text-xs px-2.5 py-1.5"
-            />
-          </div>
+          <p
+            className="text-xs mb-2.5 px-2.5 py-1.5 rounded-lg"
+            style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
+          >
+            {[draft.filmType, draft.filmThickness, draft.filmColourCode].filter(Boolean).join(' · ')
+              ? [draft.filmType, draft.filmThickness, draft.filmColourCode]
+                  .filter(Boolean)
+                  .join(' · ')
+              : 'ยังไม่ได้ระบุในใบงาน'}
+            <span className="ml-1.5" style={{ color: 'var(--ink-faint)' }}>
+              (จากใบงาน)
+            </span>
+          </p>
 
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
             ทีมช่าง
@@ -445,27 +428,22 @@ export function ServiceVisitsSection({
               <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
                 {group.title}
               </label>
+              {/*
+                Typed, not picked from three buttons. The paper form leaves a
+                blank cell beside each part precisely because what gets written
+                there varies — a state, a measurement, a note. A row left empty
+                prints empty.
+              */}
               {group.parts.map((part) => (
-                <div key={part} className="flex items-center justify-between gap-2 py-0.5">
-                  <span className="text-xs">{part}</span>
-                  <div className="flex gap-1 flex-shrink-0">
-                    {SERVICE_CHECK_RESULTS.map((r) => (
-                      <button
-                        key={r}
-                        onClick={() => setCheck(part, r)}
-                        aria-label={`${part} — ${r}`}
-                        aria-pressed={draft.checks[part] === r}
-                        className="text-xs px-2 py-0.5 rounded-lg"
-                        style={
-                          draft.checks[part] === r
-                            ? { background: 'var(--primary)', color: '#fff' }
-                            : { border: '1px solid var(--line)', color: 'var(--ink-soft)' }
-                        }
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
+                <div key={part} className="flex items-center gap-2 py-0.5">
+                  <span className="text-xs flex-1 min-w-0">{part}</span>
+                  <input
+                    aria-label={part}
+                    value={draft.checks[part] ?? ''}
+                    onChange={(e) => setCheck(part, e.target.value)}
+                    className="field text-xs px-2 py-1"
+                    style={{ width: 150, flexShrink: 0 }}
+                  />
                 </div>
               ))}
             </div>

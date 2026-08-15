@@ -4,6 +4,8 @@ import { useState } from 'react';
 
 import { TimeSelect } from '@/components/ui/TimeSelect';
 
+import { SERVICE_FILM_THICKNESS } from '../serviceForm';
+
 import type { StockRow, Ticket, TicketExtra } from '../types';
 
 type SlideLeg = { from?: string; to?: string; date?: string; time?: string };
@@ -36,7 +38,13 @@ export function ExtrasSection({
    * Renders the service-visit record inside the Service extra. A render prop so
    * this component stays a pure form and does not need the ticket actions.
    */
-  serviceVisits?: (args: { entitled: number }) => React.ReactNode;
+  serviceVisits?: (args: {
+    entitled: number;
+    /** The ฟิล์มกันรอย product sold — ประเภทฟิล์ม is read off its name. */
+    filmProduct: string;
+    filmThickness: string;
+    filmColourCode: string;
+  }) => React.ReactNode;
 }) {
   const [showOptional, setShowOptional] = useState(false);
   const [addingExtra, setAddingExtra] = useState(false);
@@ -260,6 +268,48 @@ export function ExtrasSection({
                           />
                         </div>
                       </div>
+                      {/*
+                        ความหนา and รหัสสี belong to the FILM on this car, not to
+                        one visit, so they are set here once and every ใบเซอร์วิส
+                        reads them. ประเภทฟิล์ม is not asked at all — the product
+                        name above already says TPU or PET.
+                      */}
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                          <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                            ความหนาฟิล์ม
+                          </label>
+                          <select
+                            aria-label="ความหนาฟิล์ม (ใบงาน)"
+                            value={(ex.filmThickness as string) || ''}
+                            onChange={(e) =>
+                              updateExtraDetail(name, 'filmThickness', e.target.value)
+                            }
+                            className="field text-xs px-2.5 py-1.5 w-full"
+                          >
+                            <option value="">ยังไม่ระบุ</option>
+                            {SERVICE_FILM_THICKNESS.map((th) => (
+                              <option key={th} value={th}>
+                                {th}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                            รหัสสี
+                          </label>
+                          <input
+                            aria-label="รหัสสีฟิล์ม (ใบงาน)"
+                            value={(ex.filmColourCode as string) || ''}
+                            onChange={(e) =>
+                              updateExtraDetail(name, 'filmColourCode', e.target.value)
+                            }
+                            placeholder="เช่น BK-01"
+                            className="field text-xs px-2.5 py-1.5 w-full"
+                          />
+                        </div>
+                      </div>
                     </>
                   ) : (
                     <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
@@ -277,6 +327,9 @@ export function ExtrasSection({
                   {serviceVisits &&
                     serviceVisits({
                       entitled: Number(ex.serviceCount ?? wrapStock?.serviceCount ?? 0) || 0,
+                      filmProduct: wrapItem?.sold ?? '',
+                      filmThickness: (ex.filmThickness as string) || '',
+                      filmColourCode: (ex.filmColourCode as string) || '',
                     })}
                 </div>
               )}

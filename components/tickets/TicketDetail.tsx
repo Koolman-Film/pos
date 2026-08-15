@@ -20,6 +20,7 @@ import { ServiceVisitsSection } from './detail/ServiceVisitsSection';
 import { TechSection } from './detail/TechSection';
 import { VehicleInfoSection } from './detail/VehicleInfoSection';
 import { WrapOptionsSection } from './detail/WrapOptionsSection';
+import { deriveFilmType } from './serviceForm';
 import { WRAP_CATEGORY } from './wrapOptions';
 import type {
   CarModel,
@@ -776,7 +777,7 @@ export function TicketDetail({
                     // nothing for it to hang off until the ticket has an id.
                     isNew || !serviceVisitAction
                       ? undefined
-                      : ({ entitled }) => (
+                      : ({ entitled, filmProduct, filmThickness, filmColourCode }) => (
                           <ServiceVisitsSection
                             t={t}
                             // Server-owned: from initialTicket, not the draft.
@@ -786,6 +787,11 @@ export function TicketDetail({
                             technicians={options.technicians}
                             setTechnicians={opt('technicians')}
                             currentUserName={currentUserName}
+                            film={{
+                              type: deriveFilmType(filmProduct),
+                              thickness: filmThickness,
+                              colourCode: filmColourCode,
+                            }}
                             canDelete={canDo('list.delete')}
                             onSave={saveServiceVisit}
                             onDelete={deleteServiceVisit}
