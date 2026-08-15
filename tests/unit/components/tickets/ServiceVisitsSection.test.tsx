@@ -36,9 +36,7 @@ const visit = (over: Partial<ServiceVisit> = {}): ServiceVisit => ({
   salesBy: 'พนักงานขาย',
   qcBy: '',
   technicians: ['ช่างเอก'],
-  filmType: 'TPU',
-  filmThickness: '195',
-  filmColourCode: '',
+  filmProduct: 'TPU กันรอยเกรดพรีเมียม 195',
   customerWaits: true,
   overallOk: true,
   checks: {},
@@ -59,7 +57,7 @@ function renderSection(t: Ticket, over: Record<string, unknown> = {}) {
       technicians={['ช่างเอก', 'ช่างบอย']}
       setTechnicians={vi.fn()}
       currentUserName="แอดมินระบบ"
-      film={{ type: 'TPU', thickness: '195', colourCode: 'BK-01' }}
+      filmProduct="TPU กันรอยเกรดพรีเมียม 195"
       canDelete={false}
       onSave={onSave}
       onDelete={vi.fn(async () => ({ ok: true }))}
@@ -150,21 +148,19 @@ describe('ServiceVisitsSection', () => {
     expect(sent.checks['Piano Black']).toBeUndefined();
   });
 
-  it('takes ประเภทฟิล์ม / ความหนา / รหัสสี from the ticket instead of asking', async () => {
+  it('takes ฟิล์มที่ใช้ from the ticket instead of asking', async () => {
     const user = userEvent.setup();
     const { onSave } = renderSection(ticket());
 
     await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิสครั้งใหม่/ }));
     // Shown, not editable — the ticket is the source.
-    expect(screen.getByText(/TPU · 195 · BK-01/)).toBeInTheDocument();
-    expect(screen.queryByLabelText('ความหนาฟิล์ม')).not.toBeInTheDocument();
+    expect(screen.getByText(/TPU กันรอยเกรดพรีเมียม 195/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('ฟิล์มที่ใช้')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิส$/ }));
     // Still stored on the visit, so reprinting an old sheet shows what was true
     // that day even after the ticket is edited.
     const sent = onSave.mock.calls[0][0];
-    expect(sent.filmType).toBe('TPU');
-    expect(sent.filmThickness).toBe('195');
-    expect(sent.filmColourCode).toBe('BK-01');
+    expect(sent.filmProduct).toBe('TPU กันรอยเกรดพรีเมียม 195');
   });
 });

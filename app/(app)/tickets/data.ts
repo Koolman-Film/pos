@@ -173,11 +173,7 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
       .select('list_key, value, sort_order')
       .is('shop_id', null)
       .order('sort_order'),
-    supabase
-      .from('stock')
-      .select(
-        'id, name, short_name, category, shop_id, qty, cost, sell_price, film_thickness, film_colour_code',
-      ),
+    supabase.from('stock').select('id, name, short_name, category, shop_id, qty, cost, sell_price'),
     supabase.from('car_models').select('model, brand, car_type'),
     supabase.from('price_matrix').select('car_type, product, price'),
     supabase.from('film_price_matrix').select('category, product, position, car_type, price'),
@@ -219,9 +215,6 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
       qty: Number(s.qty || 0),
       cost: Number(s.cost || 0),
       sellPrice: Number(s.sell_price || 0),
-      // The ใบเซอร์วิส prints these; they are the product's spec, not the job's.
-      filmThickness: s.film_thickness || '',
-      filmColourCode: s.film_colour_code || '',
     })),
     carModels: (carModelsRes.data ?? []).map((m) => ({
       model: m.model,
@@ -317,9 +310,7 @@ type ServiceVisitRow = {
   sales_by: string;
   qc_by: string;
   technicians: string[] | null;
-  film_type: string;
-  film_thickness: string;
-  film_colour_code: string;
+  film_product: string;
   customer_waits: boolean | null;
   overall_ok: boolean | null;
   checks: Record<string, string> | null;
@@ -342,7 +333,7 @@ async function loadServiceVisits(
     .from('service_visits')
     .select(
       'id, visit_no, plate, received_at, received_time, delivered_at, delivered_time, ' +
-        'sales_by, qc_by, technicians, film_type, film_thickness, film_colour_code, ' +
+        'sales_by, qc_by, technicians, film_product, ' +
         'customer_waits, overall_ok, checks, notes, ' +
         'service_visit_points(seq, position, detail, note)',
     )
@@ -360,9 +351,7 @@ async function loadServiceVisits(
     salesBy: v.sales_by ?? '',
     qcBy: v.qc_by ?? '',
     technicians: v.technicians ?? [],
-    filmType: v.film_type ?? '',
-    filmThickness: v.film_thickness ?? '',
-    filmColourCode: v.film_colour_code ?? '',
+    filmProduct: v.film_product ?? '',
     customerWaits: v.customer_waits,
     overallOk: v.overall_ok,
     checks: v.checks ?? {},

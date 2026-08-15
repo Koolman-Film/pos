@@ -57,16 +57,12 @@ export default async function StockPage() {
   const { data: stockRows } = canSeeStockPrices
     ? await supabase
         .from('stock')
-        .select(
-          'id, sku, name, short_name, category, shop_id, qty, min_qty, film_thickness, film_colour_code, cost, sell_price',
-        )
+        .select('id, sku, name, short_name, category, shop_id, qty, min_qty, cost, sell_price')
         .order('category', { ascending: true })
         .order('name', { ascending: true })
     : await supabase
         .from('stock')
-        .select(
-          'id, sku, name, short_name, category, shop_id, qty, min_qty, film_thickness, film_colour_code',
-        )
+        .select('id, sku, name, short_name, category, shop_id, qty, min_qty')
         .order('category', { ascending: true })
         .order('name', { ascending: true });
 
@@ -79,8 +75,6 @@ export default async function StockPage() {
     shop_id: string;
     qty: number;
     min_qty: number;
-    film_thickness?: string;
-    film_colour_code?: string;
     cost?: number;
     sell_price?: number;
   };
@@ -94,8 +88,6 @@ export default async function StockPage() {
       shop: row.shop_id,
       qty: row.qty,
       min: row.min_qty,
-      filmThickness: row.film_thickness || '',
-      filmColourCode: row.film_colour_code || '',
     };
     if (canSeeStockPrices) {
       item.cost = row.cost ?? 0;

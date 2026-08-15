@@ -25,7 +25,7 @@ const empty = (
   visitNo: number,
   t: Ticket,
   currentUserName: string,
-  film: { type: string; thickness: string; colourCode: string },
+  filmProduct: string,
 ): ServiceVisit => ({
   visitNo,
   plate: t.plate,
@@ -37,9 +37,7 @@ const empty = (
   salesBy: currentUserName,
   qcBy: '',
   technicians: [],
-  filmType: film.type,
-  filmThickness: film.thickness,
-  filmColourCode: film.colourCode,
+  filmProduct,
   customerWaits: null,
   overallOk: null,
   checks: {},
@@ -57,7 +55,7 @@ export function ServiceVisitsSection({
   technicians,
   setTechnicians,
   currentUserName,
-  film,
+  filmProduct,
   canDelete,
   onSave,
   onDelete,
@@ -77,8 +75,8 @@ export function ServiceVisitsSection({
   technicians: string[];
   setTechnicians: (v: string[]) => void;
   currentUserName: string;
-  /** ประเภท/ความหนา/รหัสสี as the ticket records them — never asked again here. */
-  film: { type: string; thickness: string; colourCode: string };
+  /** ชื่อสินค้าฟิล์มจากใบงาน — never asked again here; the name says the thickness. */
+  filmProduct: string;
   canDelete: boolean;
   onSave: (visit: ServiceVisit) => Promise<{ ok: boolean; error?: string }>;
   onDelete: (id: number) => Promise<{ ok: boolean; error?: string }>;
@@ -92,7 +90,7 @@ export function ServiceVisitsSection({
 
   function startNew() {
     setError(null);
-    setDraft(empty(used + 1, t, currentUserName, film));
+    setDraft(empty(used + 1, t, currentUserName, filmProduct));
   }
   function startEdit(v: ServiceVisit) {
     setError(null);
@@ -335,29 +333,23 @@ export function ServiceVisitsSection({
           </div>
 
           {/*
-            Read from the ticket, not asked again: ประเภทฟิล์ม comes off the
-            ฟิล์มกันรอย product's name, ความหนา and รหัสสี off that same
-            product's stock record. One spec, one place to edit it. The visit
-            still STORES its own copy, so reprinting an old sheet shows what was
-            true that day even after the product is re-specced.
+            The film, as the ticket sold it. Not asked again and not split into
+            ประเภท / ความหนา / รหัสสี — each SKU states its thickness in the name,
+            so the name is the whole answer. The visit still STORES its own copy,
+            so reprinting an old sheet shows the film fitted that day.
           */}
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-            ประเภทฟิล์ม / ความหนา / รหัสสี
+            ฟิล์มที่ใช้
           </label>
           <p
             className="text-xs mb-2.5 px-2.5 py-1.5 rounded-lg"
             style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
           >
-            {[draft.filmType, draft.filmThickness, draft.filmColourCode].filter(Boolean).join(' · ')
-              ? [draft.filmType, draft.filmThickness, draft.filmColourCode]
-                  .filter(Boolean)
-                  .join(' · ')
-              : 'ยังไม่ได้ระบุที่สินค้า'}
+            {draft.filmProduct || 'ยังไม่มีสินค้าฟิล์มในใบงาน'}
             <span className="ml-1.5" style={{ color: 'var(--ink-faint)' }}>
-              (จากสินค้าในใบงาน)
+              (จากใบงาน)
             </span>
           </p>
-
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
             ทีมช่าง
           </label>

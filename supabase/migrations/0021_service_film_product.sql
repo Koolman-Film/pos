@@ -1,12 +1,3 @@
--- supabase/release-0021.sql
---
--- ใบเซอร์วิส: บันทึกฟิล์มที่ใช้เป็นชื่อสินค้า (ความหนาอยู่ในชื่อสินค้าอยู่แล้ว)
---
--- รันต่อจาก release-0020.sql
---
--- ปลอดภัยเมื่อรันซ้ำ: add/drop column if exists, create or replace function
---
--- รันด้วย connection ปกติได้ ไม่ต้องใช้สิทธิ์เจ้าของ storage.objects
 -- supabase/migrations/0021_service_film_product.sql
 --
 -- ใบเซอร์วิส: บันทึกฟิล์มที่ใช้เป็น "ชื่อสินค้า" ไม่ต้องแยก ประเภท/ความหนา/รหัสสี
@@ -141,5 +132,3 @@ $$;
 
 revoke all on function save_service_visit(bigint, text, jsonb, jsonb) from public, anon;
 grant execute on function save_service_visit(bigint, text, jsonb, jsonb) to authenticated;
-
-insert into supabase_migrations.schema_migrations(version, name) values ('0021', 'service_film_product') on conflict (version) do nothing;

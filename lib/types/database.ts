@@ -645,9 +645,7 @@ export type Database = {
           customer_waits: boolean | null
           delivered_at: string | null
           delivered_time: string
-          film_colour_code: string
-          film_thickness: string
-          film_type: string
+          film_product: string
           id: number
           notes: string
           overall_ok: boolean | null
@@ -667,9 +665,7 @@ export type Database = {
           customer_waits?: boolean | null
           delivered_at?: string | null
           delivered_time?: string
-          film_colour_code?: string
-          film_thickness?: string
-          film_type?: string
+          film_product?: string
           id?: never
           notes?: string
           overall_ok?: boolean | null
@@ -689,9 +685,7 @@ export type Database = {
           customer_waits?: boolean | null
           delivered_at?: string | null
           delivered_time?: string
-          film_colour_code?: string
-          film_thickness?: string
-          film_type?: string
+          film_product?: string
           id?: never
           notes?: string
           overall_ok?: boolean | null
@@ -798,8 +792,6 @@ export type Database = {
         Row: {
           category: string
           cost: number
-          film_colour_code: string
-          film_thickness: string
           id: number
           min_qty: number
           name: string
@@ -812,8 +804,6 @@ export type Database = {
         Insert: {
           category: string
           cost?: number
-          film_colour_code?: string
-          film_thickness?: string
           id?: never
           min_qty?: number
           name: string
@@ -826,8 +816,6 @@ export type Database = {
         Update: {
           category?: string
           cost?: number
-          film_colour_code?: string
-          film_thickness?: string
           id?: never
           min_qty?: number
           name?: string

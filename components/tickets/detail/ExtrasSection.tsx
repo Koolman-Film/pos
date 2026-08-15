@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { TimeSelect } from '@/components/ui/TimeSelect';
 
-import { deriveFilmType, findProductStock } from '../serviceForm';
+import { findProductStock } from '../serviceForm';
 
 import type { StockRow, Ticket, TicketExtra } from '../types';
 
@@ -40,10 +40,8 @@ export function ExtrasSection({
    */
   serviceVisits?: (args: {
     entitled: number;
-    /** The ฟิล์มกันรอย product sold — ประเภทฟิล์ม is read off its name. */
+    /** ชื่อสินค้าฟิล์มที่ขาย — the SKU name already states the thickness. */
     filmProduct: string;
-    filmThickness: string;
-    filmColourCode: string;
   }) => React.ReactNode;
 }) {
   const [showOptional, setShowOptional] = useState(false);
@@ -238,7 +236,7 @@ export function ExtrasSection({
                   {wrapItem ? (
                     <>
                       <p className="text-xs mb-2" style={{ color: 'var(--ink-soft)' }}>
-                        สินค้า: {wrapItem.sold}
+                        สินค้า: {wrapStock?.name ?? wrapItem.sold}
                       </p>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -268,34 +266,6 @@ export function ExtrasSection({
                           />
                         </div>
                       </div>
-                      {/*
-                        ประเภทฟิล์ม / ความหนา / รหัสสี are one spec, and it belongs
-                        to the PRODUCT — "TPU-PR" is one film, one thickness, one
-                        colour. So nothing is asked here: the type comes off the
-                        product's name, the other two off its stock record, set
-                        once in สต็อกสินค้า. Shown so the counter can see what will
-                        print on the ใบเซอร์วิส.
-                      */}
-                      <div
-                        className="mt-2 rounded-lg px-2.5 py-2"
-                        style={{ background: 'var(--surface-2, #F6F3EE)' }}
-                      >
-                        <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                          ประเภทฟิล์ม / ความหนา / รหัสสี
-                        </p>
-                        <p className="text-xs font-semibold mt-0.5">
-                          {[
-                            deriveFilmType(wrapItem.sold ?? ''),
-                            wrapStock?.filmThickness,
-                            wrapStock?.filmColourCode,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ') || 'ยังไม่ได้ระบุที่สินค้า'}
-                        </p>
-                        <p className="text-[11px] mt-1" style={{ color: 'var(--ink-faint)' }}>
-                          แก้ไขได้ที่ สต็อกสินค้า → {wrapStock?.name ?? wrapItem.sold}
-                        </p>
-                      </div>
                     </>
                   ) : (
                     <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
@@ -313,9 +283,7 @@ export function ExtrasSection({
                   {serviceVisits &&
                     serviceVisits({
                       entitled: Number(ex.serviceCount ?? wrapStock?.serviceCount ?? 0) || 0,
-                      filmProduct: wrapItem?.sold ?? '',
-                      filmThickness: wrapStock?.filmThickness ?? '',
-                      filmColourCode: wrapStock?.filmColourCode ?? '',
+                      filmProduct: wrapStock?.name ?? wrapItem?.sold ?? '',
                     })}
                 </div>
               )}

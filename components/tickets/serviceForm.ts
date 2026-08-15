@@ -23,38 +23,17 @@ export const SERVICE_INTERIOR_PARTS = [
 /** ภายนอกรถ. */
 export const SERVICE_EXTERIOR_PARTS = ['นิรภัยหน้า', 'Sunroof', 'สปอยเลอร์หลัง'] as const;
 
-/** ประเภทฟิล์ม. */
-export const SERVICE_FILM_TYPES = ['TPU', 'PET'] as const;
-
-/** ความหนา. The form prints these five as column headings. */
-export const SERVICE_FILM_THICKNESS = ['165', '195', '195ด้าน', '215', '255'] as const;
-
 /** จุดพิเศษลูกค้าต้องการแก้ไข — the form has exactly ten numbered rows. */
 export const SERVICE_POINT_ROWS = 10;
-
-/**
- * ประเภทฟิล์ม read off the ฟิล์มกันรอย product the ticket sold.
- *
- * The product name is the only place the ticket records this — "TPU
- * กันรอยเกรดพรีเมียม" is a TPU job — so the service sheet derives it rather than
- * asking again. ความหนา and รหัสสี come off the same product's stock record
- * (`stock.film_thickness` / `stock.film_colour_code`): one spec, entered once
- * when the product is set up, inherited by every ticket and every visit.
- */
-export function deriveFilmType(productName: string): string {
-  const name = (productName || '').toUpperCase();
-  for (const type of SERVICE_FILM_TYPES) if (name.includes(type)) return type;
-  return '';
-}
 
 /**
  * The stock row behind an item's `sold` label.
  *
  * `sold` is not always the product name: a ฟิล์มกันรอย line reads
- * "เต็มคัน: TPU กันรอยเกรดพรีเมียม" — position first, product after. An exact
- * match therefore finds nothing on exactly the lines that need the film spec, so
+ * "เต็มคัน: TPU กันรอยเกรดพรีเมียม 195" — position first, product after. An exact
+ * match therefore finds nothing on exactly the lines the ใบเซอร์วิส is about, so
  * fall back to the longest product name contained in the label (longest, so
- * "TPU กันรอย" never wins over "TPU กันรอยเกรดพรีเมียม").
+ * "TPU กันรอย" never wins over "TPU กันรอยเกรดพรีเมียม 195").
  */
 export function findProductStock<T extends { name: string }>(
   stock: readonly T[],

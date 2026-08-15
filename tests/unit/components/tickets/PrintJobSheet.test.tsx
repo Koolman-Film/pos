@@ -380,9 +380,7 @@ describe('ใบเซอร์วิส', () => {
     salesBy: 'พนักงานขาย',
     qcBy: 'ช่างเอก',
     technicians: ['ช่างเอก'],
-    filmType: 'TPU',
-    filmThickness: '195',
-    filmColourCode: 'BK-01',
+    filmProduct: 'TPU กันรอยเกรดพรีเมียม 195',
     customerWaits: true,
     overallOk: true,
     checks: { 'หน้าจอ 1': 'ปกติ', Sunroof: 'ผิดปกติ' },
@@ -439,32 +437,14 @@ describe('ใบเซอร์วิส', () => {
     for (const n of [1, 5, 10]) expect(screen.getByText(`${n}.`)).toBeInTheDocument();
   });
 
-  it('rings the ความหนา the product carries and prints its รหัสสี', () => {
+  it('names the film by its ชื่อสินค้า, which already states the thickness', () => {
     renderService({ serviceVisit: visit });
-    // The spec comes off the ฟิล์มกันรอย product, so the sheet is right without
-    // anyone choosing on the form.
-    const row = screen.getByText('ความหนา').parentElement!;
-    const ringed = within(row)
-      .getAllByText('✓')
-      .map((el) => el.parentElement!.textContent);
-    // The ประเภทฟิล์ม tick shares this row; both come off the same product.
-    expect(ringed).toEqual(['✓TPU', '✓195']);
-    expect(screen.getByText('BK-01')).toBeInTheDocument();
-  });
-
-  it('gives a ความหนา outside the form’s five columns a column of its own', () => {
-    // ความหนา is free text on the product; a film the paper form never had a
-    // heading for must still print rather than silently disappear.
-    renderService({ serviceVisit: { ...visit, filmThickness: '230' } });
-    const row = screen.getByText('ความหนา').parentElement!;
-    expect(within(row).getByText('230')).toBeInTheDocument();
-    // Two ticks in the row: ประเภทฟิล์ม, and the one off-list thickness — none
-    // of the five printed columns is ringed.
-    expect(
-      within(row)
-        .getAllByText('✓')
-        .map((el) => el.parentElement!.textContent),
-    ).toEqual(['✓TPU', '✓230']);
+    // One SKU per thickness, so a separate ประเภท / ความหนา / รหัสสี row would
+    // only ask for the same fact three times.
+    expect(screen.getByText('ฟิล์มที่ใช้')).toBeInTheDocument();
+    expect(screen.getByText('TPU กันรอยเกรดพรีเมียม 195')).toBeInTheDocument();
+    expect(screen.queryByText('ความหนา')).not.toBeInTheDocument();
+    expect(screen.queryByText('รหัสสี')).not.toBeInTheDocument();
   });
 
   it('carries the same car diagrams as the ใบเช็ครถ', () => {

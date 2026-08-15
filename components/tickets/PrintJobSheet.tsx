@@ -7,12 +7,7 @@ import { fmt, fmtThaiDate, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
-import {
-  SERVICE_EXTERIOR_PARTS,
-  SERVICE_FILM_THICKNESS,
-  SERVICE_INTERIOR_PARTS,
-  SERVICE_POINT_ROWS,
-} from './serviceForm';
+import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } from './serviceForm';
 import { WRAP_CATEGORY, WRAP_OPTIONS } from './wrapOptions';
 
 import type { ServiceVisit, ShopInfo, StockRow, Ticket } from './types';
@@ -1423,12 +1418,6 @@ export function PrintJobSheet({
       prints the recorded answers instead — both ways of working, as asked.
     */
     const v = serviceVisit;
-    /* ความหนา is free text on the product; anything outside the form's five
-       printed columns gets a column of its own rather than vanishing. */
-    const offListThickness =
-      v?.filmThickness && !(SERVICE_FILM_THICKNESS as readonly string[]).includes(v.filmThickness)
-        ? v.filmThickness
-        : '';
     const mark = (on: boolean) => (
       <span
         style={{
@@ -1503,51 +1492,15 @@ export function PrintJobSheet({
             {line('ทะเบียน', t.plate, 90)}
           </div>
 
-          {/* ประเภทฟิล์ม / ความหนา — the chosen ones are ringed, the rest print
-              so the sheet still reads as the form the shop knows. */}
+          {/* ฟิล์มที่ใช้ — the ชื่อสินค้า, which already states the thickness.
+              The shop keeps one SKU per thickness, so a separate ประเภท /
+              ความหนา / รหัสสี row only asked for the same fact three times. */}
           <table style={{ fontSize: 11, marginBottom: 8 }}>
             <tbody>
               <tr>
-                <td rowSpan={2} style={{ fontWeight: 'bold', fontSize: 13, width: 100 }}>
-                  ประเภทฟิล์ม
-                </td>
-                <td style={{ width: 55, textAlign: 'center' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    {mark(v?.filmType === 'TPU')}TPU
-                  </span>
-                </td>
-                <td style={{ width: 80, fontWeight: 'bold' }}>ความหนา</td>
-                {SERVICE_FILM_THICKNESS.map((th) => (
-                  <td key={th} style={{ textAlign: 'center' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      {mark(v?.filmThickness === th)}
-                      {th}
-                    </span>
-                  </td>
-                ))}
-                {/* ความหนา is free text on the product, so a film the paper form
-                    never had a column for still prints — ringed, in its own cell. */}
-                {offListThickness && (
-                  <td style={{ textAlign: 'center' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      {mark(true)}
-                      {offListThickness}
-                    </span>
-                  </td>
-                )}
-              </tr>
-              <tr>
-                <td style={{ textAlign: 'center' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    {mark(v?.filmType === 'PET')}PET
-                  </span>
-                </td>
-                <td style={{ fontWeight: 'bold' }}>รหัสสี</td>
-                <td
-                  colSpan={SERVICE_FILM_THICKNESS.length + (offListThickness ? 1 : 0)}
-                  style={{ fontWeight: 'bold' }}
-                >
-                  {v?.filmColourCode || ' '}
+                <td style={{ fontWeight: 'bold', fontSize: 13, width: 100 }}>ฟิล์มที่ใช้</td>
+                <td colSpan={7} style={{ fontWeight: 'bold' }}>
+                  {v?.filmProduct || ' '}
                 </td>
               </tr>
               <tr>

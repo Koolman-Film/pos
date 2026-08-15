@@ -68,9 +68,12 @@ export type ServiceVisit = {
   salesBy: string;
   qcBy: string;
   technicians: string[];
-  filmType: string;
-  filmThickness: string;
-  filmColourCode: string;
+  /**
+   * ชื่อสินค้าฟิล์มที่ใช้ — a snapshot, so an old sheet reprints the film that
+   * was actually fitted. The SKU name already carries the thickness, so there is
+   * nothing else to record.
+   */
+  filmProduct: string;
   /** null = nobody has said yet, which is not the same as "ไม่รอ". */
   customerWaits: boolean | null;
   overallOk: boolean | null;
@@ -179,9 +182,6 @@ export type StockRow = {
   cost: number;
   sellPrice: number;
   serviceCount?: number;
-  /** ความหนา / รหัสสี ของฟิล์ม — printed on the ใบเซอร์วิส. */
-  filmThickness?: string;
-  filmColourCode?: string;
 };
 
 export type CarModel = { model: string; brand: string; carType: string };
