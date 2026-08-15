@@ -336,9 +336,10 @@ export function ServiceVisitsSection({
 
           {/*
             Read from the ticket, not asked again: ประเภทฟิล์ม comes off the
-            ฟิล์มกันรอย product's name, ความหนา and รหัสสี from the Service block
-            above. The visit still STORES its own copy, so reprinting an old
-            sheet shows what was true that day.
+            ฟิล์มกันรอย product's name, ความหนา and รหัสสี off that same
+            product's stock record. One spec, one place to edit it. The visit
+            still STORES its own copy, so reprinting an old sheet shows what was
+            true that day even after the product is re-specced.
           */}
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
             ประเภทฟิล์ม / ความหนา / รหัสสี
@@ -351,9 +352,9 @@ export function ServiceVisitsSection({
               ? [draft.filmType, draft.filmThickness, draft.filmColourCode]
                   .filter(Boolean)
                   .join(' · ')
-              : 'ยังไม่ได้ระบุในใบงาน'}
+              : 'ยังไม่ได้ระบุที่สินค้า'}
             <span className="ml-1.5" style={{ color: 'var(--ink-faint)' }}>
-              (จากใบงาน)
+              (จากสินค้าในใบงาน)
             </span>
           </p>
 

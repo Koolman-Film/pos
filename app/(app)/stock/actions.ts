@@ -48,6 +48,9 @@ export type AddProductInput =
       qty: number;
       cost: number;
       sellPrice: number;
+      /** ความหนา / รหัสสี — film products only; blank everywhere else. */
+      filmThickness?: string;
+      filmColourCode?: string;
     };
 
 export async function addProductAction(input: AddProductInput): Promise<void> {
@@ -82,10 +85,15 @@ export async function addProductAction(input: AddProductInput): Promise<void> {
       min_qty: 5,
       cost: canSeePrices ? Number(input.cost) || 0 : 0,
       sell_price: canSeePrices ? Number(input.sellPrice) || 0 : 0,
+      // Not price data, so no `seeStockPrices` gate — the ใบเซอร์วิส prints these
+      // and a price-blind salesperson still has to set the product up.
+      film_thickness: input.filmThickness?.trim() ?? '',
+      film_colour_code: input.filmColourCode?.trim() ?? '',
     });
     if (error) throw error;
   }
   revalidatePath('/stock');
+  revalidatePath('/tickets');
 }
 
 export type BulkImportRow = {
@@ -188,6 +196,8 @@ export async function saveProductAction(input: {
   min: number;
   cost?: number;
   sellPrice?: number;
+  filmThickness?: string;
+  filmColourCode?: string;
 }): Promise<void> {
   const session = await requireCapability('stock.editDelete');
   const canSeePrices = session.hasDashboardWidget('seeStockPrices');
@@ -210,6 +220,8 @@ export async function saveProductAction(input: {
     category: input.category,
     qty: Number(input.qty),
     min_qty: Number(input.min),
+    film_thickness: input.filmThickness?.trim() ?? '',
+    film_colour_code: input.filmColourCode?.trim() ?? '',
     ...(canSeePrices
       ? { cost: Number(input.cost) || 0, sell_price: Number(input.sellPrice) || 0 }
       : {}),
@@ -217,6 +229,8 @@ export async function saveProductAction(input: {
   const { error: upErr } = await supabase.from('stock').update(patch).eq('id', row.id);
   if (upErr) throw upErr;
   revalidatePath('/stock');
+  // A ticket selling this film reads the spec off the product for its ใบเซอร์วิส.
+  revalidatePath('/tickets');
 }
 
 export async function deleteProductAction(id: number): Promise<void> {

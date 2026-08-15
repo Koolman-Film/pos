@@ -1,4 +1,4 @@
-# Release runbook — post-trial fixes (migrations 0012–0020)
+# Release runbook — post-trial fixes (migrations 0012–0021)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
 
@@ -28,7 +28,7 @@ dashboard and the accounting page.
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0020 only
+npx supabase db push                     # applies 0012 … 0021 only
 ```
 
 ### No CLI? Paste the files instead
@@ -43,10 +43,11 @@ it twice changes nothing, and each records its versions in
 | 2     | `supabase/storage-policies.sql`               | **owner of `storage.objects`** — see below |
 | 3     | `supabase/release-0019.sql`                   | a normal connection                        |
 | 4     | `supabase/release-0020.sql`                   | a normal connection                        |
-| 5     | `supabase/repair-categories-and-services.sql` | a normal connection                        |
+| 5     | `supabase/release-0021.sql`                   | a normal connection                        |
+| 6     | `supabase/repair-categories-and-services.sql` | a normal connection                        |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all five in order
+already been handed over. If nothing has been run yet, running all six in order
 is still correct.
 
 The last step is a one-time DATA repair, not schema. It folds every ชนิดสินค้า that
@@ -77,6 +78,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0018_ticket_attachments`       | Private `ticket-attachments` storage bucket, `ticket_payments.attachments`, and `save_ticket_children` writes the slips.                                                                                                                                                                      | **Same storage caveat as 0014.**                                |
 | `0019_expense_doc_no`           | `expenses.doc_no` (เลขที่เอกสาร POS-LPG-6908001), a unique index, `next_expense_doc_no()`, and a BEFORE INSERT trigger that issues the number. Backfills existing expenses per shop per month, oldest first.                                                                                  | Low. Writes `doc_no` on every existing expense row once.        |
 | `0020_service_visits`           | `service_visits` + `service_visit_points` for ใบเซอร์วิส, their RLS policies, and `save_service_visit()`. Two new tables; nothing existing is touched.                                                                                                                                        | Low. Purely additive.                                           |
+| `0021_stock_film_spec`          | `stock.film_thickness` / `stock.film_colour_code` — ความหนา และ รหัสสี ของฟิล์ม, entered once on the product and read by every ใบงาน and ใบเซอร์วิส that sells it. Both default to `''`.                                                                                                      | Low. Purely additive.                                           |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

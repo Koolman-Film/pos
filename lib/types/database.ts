@@ -798,6 +798,8 @@ export type Database = {
         Row: {
           category: string
           cost: number
+          film_colour_code: string
+          film_thickness: string
           id: number
           min_qty: number
           name: string
@@ -810,6 +812,8 @@ export type Database = {
         Insert: {
           category: string
           cost?: number
+          film_colour_code?: string
+          film_thickness?: string
           id?: never
           min_qty?: number
           name: string
@@ -822,6 +826,8 @@ export type Database = {
         Update: {
           category?: string
           cost?: number
+          film_colour_code?: string
+          film_thickness?: string
           id?: never
           min_qty?: number
           name?: string

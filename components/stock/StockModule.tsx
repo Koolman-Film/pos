@@ -45,7 +45,24 @@ export type StockItem = {
   cost?: number;
   sellPrice?: number;
   serviceCount?: number;
+  /** ความหนา / รหัสสี of a film product — the ใบเซอร์วิส prints these. */
+  filmThickness?: string;
+  filmColourCode?: string;
 };
+
+/**
+ * Whether a product carries a film spec (ความหนา / รหัสสี).
+ *
+ * A substring test, not a fixed list: the ชนิดสินค้า list is branch-editable, so
+ * "ฟิล์มกรองแสง", "ฟิล์มกันรอย" and whatever a branch adds next all qualify, and
+ * an amplifier never shows the fields.
+ */
+export function isFilmCategory(category: string): boolean {
+  return (category || '').includes('ฟิล์ม');
+}
+
+/** The five ความหนา the shop's paper ใบเซอร์วิส prints as column headings. */
+const FILM_THICKNESS_SUGGESTIONS = ['165', '195', '195ด้าน', '215', '255'];
 
 export type Withdrawal = {
   id: number;
@@ -236,6 +253,8 @@ export function StockModule({
     cost: 0,
     sellPrice: 0,
     serviceCount: '' as string | number,
+    filmThickness: '',
+    filmColourCode: '',
     reason: 'ซื้อเพิ่ม',
   });
   const blankAdjust = () => ({ id: stock[0]?.id ?? 0, counted: 0, note: '' });
@@ -432,6 +451,8 @@ export function StockModule({
         qty: Number(addStk.qty),
         cost: Number(addStk.cost),
         sellPrice: Number(addStk.sellPrice),
+        filmThickness: addStk.filmThickness,
+        filmColourCode: addStk.filmColourCode,
       });
     } else {
       await actions.addProduct?.({
@@ -442,20 +463,7 @@ export function StockModule({
       });
     }
     setPanel(null);
-    setAddStk({
-      mode: 'existing',
-      existingId: stock[0]?.id ?? 0,
-      newName: '',
-      shortName: '',
-      sku: '',
-      category: '',
-      shop: accessibleShops[0]?.id || 'cm',
-      qty: 1,
-      cost: 0,
-      sellPrice: 0,
-      serviceCount: '',
-      reason: 'ซื้อเพิ่ม',
-    });
+    setAddStk(blankAddStock());
   }
 
   function startEdit(s: StockItem) {
@@ -474,6 +482,8 @@ export function StockModule({
       min: Number(editForm.min),
       cost: Number(editForm.cost),
       sellPrice: Number(editForm.sellPrice),
+      filmThickness: editForm.filmThickness ?? '',
+      filmColourCode: editForm.filmColourCode ?? '',
     });
     setEditingId(null);
     setEditForm(null);
@@ -537,6 +547,15 @@ export function StockModule({
   return (
     <OptionManageProvider canManage={can('options.manage')}>
       <div className="fade-page">
+        {/*
+          Suggestions, not a closed list — ความหนา is free text so a branch can
+          record a film the paper form never had a column for.
+        */}
+        <datalist id="film-thickness-options">
+          {FILM_THICKNESS_SUGGESTIONS.map((th) => (
+            <option key={th} value={th} />
+          ))}
+        </datalist>
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <h1 className="text-xl font-bold">สต็อกสินค้า</h1>
           <div className="flex gap-2 flex-wrap">
@@ -989,6 +1008,38 @@ export function StockModule({
                       />
                     </div>
                   )}
+                  {/*
+                    The film's own spec. Entered once here, then every ใบงาน that
+                    sells this product and every ใบเซอร์วิส printed for that car
+                    show the same numbers — nobody retypes them per visit.
+                  */}
+                  {isFilmCategory(addStk.category) && (
+                    <>
+                      <div>
+                        <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                          ความหนาฟิล์ม
+                        </label>
+                        <input
+                          list="film-thickness-options"
+                          value={addStk.filmThickness}
+                          onChange={(e) => setAddStk({ ...addStk, filmThickness: e.target.value })}
+                          placeholder="เช่น 195"
+                          className="field w-full text-sm px-3 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                          รหัสสีฟิล์ม
+                        </label>
+                        <input
+                          value={addStk.filmColourCode}
+                          onChange={(e) => setAddStk({ ...addStk, filmColourCode: e.target.value })}
+                          placeholder="เช่น BK-01"
+                          className="field w-full text-sm px-3 py-2"
+                        />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
               <div>
@@ -1392,6 +1443,39 @@ export function StockModule({
                                 className="field text-sm px-2.5 py-1.5 w-full"
                               />
                             </div>
+                            {isFilmCategory(editForm.category) && (
+                              <>
+                                <div>
+                                  <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                                    ความหนาฟิล์ม
+                                  </label>
+                                  <input
+                                    aria-label="ความหนาฟิล์ม"
+                                    list="film-thickness-options"
+                                    value={editForm.filmThickness ?? ''}
+                                    onChange={(e) =>
+                                      setEditForm({ ...editForm, filmThickness: e.target.value })
+                                    }
+                                    placeholder="เช่น 195"
+                                    className="field text-sm px-2.5 py-1.5 w-full"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                                    รหัสสีฟิล์ม
+                                  </label>
+                                  <input
+                                    aria-label="รหัสสีฟิล์ม"
+                                    value={editForm.filmColourCode ?? ''}
+                                    onChange={(e) =>
+                                      setEditForm({ ...editForm, filmColourCode: e.target.value })
+                                    }
+                                    placeholder="เช่น BK-01"
+                                    className="field text-sm px-2.5 py-1.5 w-full"
+                                  />
+                                </div>
+                              </>
+                            )}
                             {canSeePrices && (
                               <>
                                 <div>

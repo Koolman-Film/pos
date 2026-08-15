@@ -1423,6 +1423,12 @@ export function PrintJobSheet({
       prints the recorded answers instead — both ways of working, as asked.
     */
     const v = serviceVisit;
+    /* ความหนา is free text on the product; anything outside the form's five
+       printed columns gets a column of its own rather than vanishing. */
+    const offListThickness =
+      v?.filmThickness && !(SERVICE_FILM_THICKNESS as readonly string[]).includes(v.filmThickness)
+        ? v.filmThickness
+        : '';
     const mark = (on: boolean) => (
       <span
         style={{
@@ -1519,6 +1525,16 @@ export function PrintJobSheet({
                     </span>
                   </td>
                 ))}
+                {/* ความหนา is free text on the product, so a film the paper form
+                    never had a column for still prints — ringed, in its own cell. */}
+                {offListThickness && (
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {mark(true)}
+                      {offListThickness}
+                    </span>
+                  </td>
+                )}
               </tr>
               <tr>
                 <td style={{ textAlign: 'center' }}>
@@ -1527,7 +1543,10 @@ export function PrintJobSheet({
                   </span>
                 </td>
                 <td style={{ fontWeight: 'bold' }}>รหัสสี</td>
-                <td colSpan={SERVICE_FILM_THICKNESS.length} style={{ fontWeight: 'bold' }}>
+                <td
+                  colSpan={SERVICE_FILM_THICKNESS.length + (offListThickness ? 1 : 0)}
+                  style={{ fontWeight: 'bold' }}
+                >
                   {v?.filmColourCode || ' '}
                 </td>
               </tr>

@@ -37,11 +37,36 @@ export const SERVICE_POINT_ROWS = 10;
  *
  * The product name is the only place the ticket records this — "TPU
  * กันรอยเกรดพรีเมียม" is a TPU job — so the service sheet derives it rather than
- * asking again. ความหนา and รหัสสี have no such source and are set once on the
- * ticket's Service block instead.
+ * asking again. ความหนา and รหัสสี come off the same product's stock record
+ * (`stock.film_thickness` / `stock.film_colour_code`): one spec, entered once
+ * when the product is set up, inherited by every ticket and every visit.
  */
 export function deriveFilmType(productName: string): string {
   const name = (productName || '').toUpperCase();
   for (const type of SERVICE_FILM_TYPES) if (name.includes(type)) return type;
   return '';
+}
+
+/**
+ * The stock row behind an item's `sold` label.
+ *
+ * `sold` is not always the product name: a ฟิล์มกันรอย line reads
+ * "เต็มคัน: TPU กันรอยเกรดพรีเมียม" — position first, product after. An exact
+ * match therefore finds nothing on exactly the lines that need the film spec, so
+ * fall back to the longest product name contained in the label (longest, so
+ * "TPU กันรอย" never wins over "TPU กันรอยเกรดพรีเมียม").
+ */
+export function findProductStock<T extends { name: string }>(
+  stock: readonly T[],
+  sold: string,
+): T | null {
+  if (!sold) return null;
+  const exact = stock.find((s) => s.name === sold);
+  if (exact) return exact;
+  let best: T | null = null;
+  for (const s of stock) {
+    if (!s.name || !sold.includes(s.name)) continue;
+    if (!best || s.name.length > best.name.length) best = s;
+  }
+  return best;
 }

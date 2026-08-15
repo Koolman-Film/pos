@@ -179,6 +179,9 @@ export type StockRow = {
   cost: number;
   sellPrice: number;
   serviceCount?: number;
+  /** ความหนา / รหัสสี ของฟิล์ม — printed on the ใบเซอร์วิส. */
+  filmThickness?: string;
+  filmColourCode?: string;
 };
 
 export type CarModel = { model: string; brand: string; carType: string };

@@ -173,7 +173,11 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
       .select('list_key, value, sort_order')
       .is('shop_id', null)
       .order('sort_order'),
-    supabase.from('stock').select('id, name, short_name, category, shop_id, qty, cost, sell_price'),
+    supabase
+      .from('stock')
+      .select(
+        'id, name, short_name, category, shop_id, qty, cost, sell_price, film_thickness, film_colour_code',
+      ),
     supabase.from('car_models').select('model, brand, car_type'),
     supabase.from('price_matrix').select('car_type, product, price'),
     supabase.from('film_price_matrix').select('category, product, position, car_type, price'),
@@ -215,6 +219,9 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
       qty: Number(s.qty || 0),
       cost: Number(s.cost || 0),
       sellPrice: Number(s.sell_price || 0),
+      // The ใบเซอร์วิส prints these; they are the product's spec, not the job's.
+      filmThickness: s.film_thickness || '',
+      filmColourCode: s.film_colour_code || '',
     })),
     carModels: (carModelsRes.data ?? []).map((m) => ({
       model: m.model,
