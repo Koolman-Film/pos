@@ -1726,32 +1726,49 @@ export function PrintJobSheet({
         <div className="print-page">
           {/* The title band. The sample the shop brought in leads with the
               document's name rather than the shop's, which is also what makes a
-              receipt findable in a stack of them. */}
+              receipt findable in a stack of them.
+
+              Three columns so the band keeps its place in the middle of the
+              page while shrinking to the width of the title: an empty column
+              balances the เลขที่ / วันที่ block on the right. A band stretched
+              across the full width made the title look like a section heading
+              rather than the name of the document. */}
           <div
             style={{
-              background: DOC_ACCENT,
-              color: '#fff',
-              borderRadius: 6,
-              padding: '10px 16px',
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: 12,
               marginBottom: 14,
-              textAlign: 'center',
             }}
-            className="doc-band"
           >
-            <p style={{ margin: 0, fontSize: 20, fontWeight: 'bold', letterSpacing: 0.5 }}>
-              {docType}
-            </p>
-            {/* Own line each, under the title. Run together on one line they
+            <div style={{ flex: 1 }} />
+            <div
+              style={{
+                background: DOC_ACCENT,
+                color: '#fff',
+                borderRadius: 6,
+                padding: '8px 22px',
+                textAlign: 'center',
+              }}
+              className="doc-band"
+            >
+              <p style={{ margin: 0, fontSize: 20, fontWeight: 'bold', letterSpacing: 0.5 }}>
+                {docType}
+              </p>
+            </div>
+            {/* Own line each, off to the right. Run together on one line they
                 read as a single reference and the eye has to split them; the
                 number is what gets quoted on the phone. */}
-            <p style={{ margin: '4px 0 0', fontSize: 12 }}>
-              {/* The ticket id already carries the shop — JT-CM-00216. Prefixing
-                  t.shop again printed RCT-CM-CM-00216 on every document. */}
-              เลขที่เอกสาร: {docPrefix}-{t.id.replace('JT-', '')}
-            </p>
-            <p style={{ margin: '1px 0 0', fontSize: 12 }}>
-              วันที่เอกสาร: {fmtThaiDate(new Date())}
-            </p>
+            <div style={{ flex: 1, textAlign: 'right' }}>
+              <p style={{ margin: 0, fontSize: 12 }}>
+                {/* The ticket id already carries the shop — JT-CM-00216. Prefixing
+                    t.shop again printed RCT-CM-CM-00216 on every document. */}
+                เลขที่เอกสาร: {docPrefix}-{t.id.replace('JT-', '')}
+              </p>
+              <p style={{ margin: '2px 0 0', fontSize: 12 }}>
+                วันที่เอกสาร: {fmtThaiDate(new Date())}
+              </p>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 20, marginBottom: 14, fontSize: 11 }}>
