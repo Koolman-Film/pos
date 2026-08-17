@@ -44,6 +44,7 @@ export function TicketDetailClient({
   attachmentUrlAction,
   corporateBuyerAction,
   carModelAction,
+  extrasAction,
   serviceVisitAction,
   serviceVisitDeleteAction,
 }: {
@@ -79,6 +80,11 @@ export function TicketDetailClient({
     brand: string;
     carType: string;
   }) => Promise<{ ok: boolean; error?: string }>;
+  extrasAction?: (input: {
+    ticketId: string;
+    extras: Record<string, unknown>;
+    insurance: boolean;
+  }) => Promise<{ ok: boolean; error?: string }>;
   serviceVisitAction?: (input: {
     id?: number;
     ticketId: string;
@@ -111,6 +117,7 @@ export function TicketDetailClient({
       attachmentUrlAction={attachmentUrlAction}
       corporateBuyerAction={corporateBuyerAction}
       carModelAction={carModelAction}
+      extrasAction={extrasAction}
       serviceVisitAction={serviceVisitAction}
       serviceVisitDeleteAction={serviceVisitDeleteAction}
     />

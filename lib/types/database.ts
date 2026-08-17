@@ -1235,6 +1235,10 @@ export type Database = {
         Args: { p_items: Json; p_payments: Json; p_ticket_id: string }
         Returns: undefined
       }
+      save_ticket_extras: {
+        Args: { p_extras: Json; p_insurance: boolean; p_ticket_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       permission_type: "nav" | "dashboard_widget" | "module_capability"

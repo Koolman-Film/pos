@@ -42,6 +42,8 @@ export function ExtrasSection({
     entitled: number;
     /** ชื่อสินค้าฟิล์มที่ขาย — the SKU name already states the thickness. */
     filmProduct: string;
+    /** ช่างที่รับผิดชอบหมวดฟิล์มกันรอย — seeds ทีมช่าง on a new visit. */
+    assignedTechnicians: string[];
   }) => React.ReactNode;
 }) {
   const [showOptional, setShowOptional] = useState(false);
@@ -284,6 +286,7 @@ export function ExtrasSection({
                     serviceVisits({
                       entitled: Number(ex.serviceCount ?? wrapStock?.serviceCount ?? 0) || 0,
                       filmProduct: wrapStock?.name ?? wrapItem?.sold ?? '',
+                      assignedTechnicians: t.techByCategory?.['ฟิล์มกันรอย'] ?? [],
                     })}
                 </div>
               )}

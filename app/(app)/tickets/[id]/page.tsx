@@ -11,6 +11,7 @@ import {
   saveCorporateBuyer,
   saveServiceVisit,
   saveTicket,
+  saveTicketExtras,
   unlockTicket,
   updateOptionList,
 } from '../actions';
@@ -58,6 +59,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       attachmentUrlAction={getTicketAttachmentUrl}
       corporateBuyerAction={saveCorporateBuyer}
       carModelAction={saveCarModel}
+      extrasAction={saveTicketExtras}
       serviceVisitAction={saveServiceVisit}
       serviceVisitDeleteAction={deleteServiceVisit}
     />

@@ -229,3 +229,66 @@ describe('TicketDetail — external QC album link', () => {
     );
   });
 });
+
+/**
+ * A closed ticket (ส่งมอบแล้ว + ชำระครบ) is frozen so its numbers cannot move
+ * months after the money did. But the job does not end at delivery — the car
+ * comes back to be serviced, and the customer may take ประกัน afterwards. Both
+ * live in ข้อมูลเพิ่มเติม, so that block alone stays open.
+ */
+describe('TicketDetail — ใบงานที่ปิดงานแล้ว', () => {
+  const closed = () =>
+    makeTicket({
+      locked: true,
+      status: 'ส่งมอบแล้ว',
+      extras: { Service: { checked: true } },
+    });
+
+  const props = () => ({
+    ...baseProps(closed()),
+    initialOptions: options({ extra_options: ['Service', 'ประกัน'] }),
+    extrasAction: vi.fn(async () => ({ ok: true })),
+  });
+
+  it('freezes the rest of the ticket but not ข้อมูลเพิ่มเติม', () => {
+    const { container } = render(<TicketDetail {...props()} />);
+
+    expect(screen.getByText(/ใบงานนี้ปิดงานแล้ว/)).toBeInTheDocument();
+    // The guard that greys out everything else is still in place...
+    const guard = container.querySelector('[aria-disabled="true"]') as HTMLElement;
+    expect(guard.style.pointerEvents).toBe('none');
+    // ...and the ข้อมูลเพิ่มเติม block reaches back through it.
+    expect(screen.getByText(/ส่วนนี้ยังแก้ไขได้แม้ใบงานปิดแล้ว/)).toBeInTheDocument();
+  });
+
+  it('saves ข้อมูลเพิ่มเติม on its own, without touching the frozen parts', async () => {
+    const p = props();
+    render(<TicketDetail {...p} />);
+
+    // The ticket-wide save is gone; this one is not.
+    expect(screen.queryByRole('button', { name: /^บันทึกใบงาน/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /บันทึกข้อมูลเพิ่มเติม/ }));
+
+    await vi.waitFor(() =>
+      expect(p.extrasAction).toHaveBeenCalledWith({
+        ticketId: 'JT-CM-00214',
+        extras: { Service: { checked: true } },
+        insurance: false,
+      }),
+    );
+  });
+
+  it('sends the ประกัน tick so the closed ticket can still take one', async () => {
+    const p = props();
+    render(<TicketDetail {...p} />);
+
+    // Unticked extras are folded away until the section is opened.
+    fireEvent.click(screen.getByRole('button', { name: /^ข้อมูลเพิ่มเติม/ }));
+    fireEvent.click(screen.getByLabelText('ประกัน'));
+    fireEvent.click(screen.getByRole('button', { name: /บันทึกข้อมูลเพิ่มเติม/ }));
+
+    await vi.waitFor(() =>
+      expect(p.extrasAction).toHaveBeenCalledWith(expect.objectContaining({ insurance: true })),
+    );
+  });
+});

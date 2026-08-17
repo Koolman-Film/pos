@@ -73,6 +73,7 @@ export function TicketDetail({
   attachmentUrlAction,
   corporateBuyerAction,
   carModelAction,
+  extrasAction,
   serviceVisitAction,
   serviceVisitDeleteAction,
 }: {
@@ -112,6 +113,15 @@ export function TicketDetail({
     model: string;
     brand: string;
     carType: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Saves ข้อมูลเพิ่มเติม on its own. The only write a CLOSED ticket accepts —
+   * service visits and a later ประกัน happen after delivery (migration 0022).
+   */
+  extrasAction?: (input: {
+    ticketId: string;
+    extras: Record<string, unknown>;
+    insurance: boolean;
   }) => Promise<{ ok: boolean; error?: string }>;
   /** Records one ใบเซอร์วิส visit against this ticket (migration 0020). */
   serviceVisitAction?: (input: {
@@ -169,6 +179,35 @@ export function TicketDetail({
   // flag is not something the form edits, and reading it from the draft would
   // let a stray field() call appear to unlock the ticket on screen.
   const locked = !isNew && !!initialTicket.locked;
+
+  /**
+   * บันทึก ข้อมูลเพิ่มเติม on a CLOSED ticket.
+   *
+   * The main save button is hidden while locked and the database would refuse
+   * it anyway, so this narrow path exists instead: it writes `extras` and
+   * nothing else (migration 0022). Only rendered when the ticket is locked —
+   * an open ticket saves its extras with everything else.
+   */
+  const [savingExtras, setSavingExtras] = useState(false);
+  const [extrasSaved, setExtrasSaved] = useState(false);
+  async function saveExtras() {
+    if (!extrasAction) return;
+    setSaveError(null);
+    setExtrasSaved(false);
+    setSavingExtras(true);
+    const result = await extrasAction({
+      ticketId: t.id,
+      extras: (t.extras ?? {}) as Record<string, unknown>,
+      insurance: !!t.extras?.['ประกัน']?.checked,
+    });
+    setSavingExtras(false);
+    if (!result.ok) {
+      setSaveError(result.error || 'บันทึกข้อมูลเพิ่มเติมไม่สำเร็จ');
+      return;
+    }
+    setExtrasSaved(true);
+    router.refresh();
+  }
 
   async function unlock() {
     if (!unlockAction) return;
@@ -758,41 +797,81 @@ export function TicketDetail({
                   setCategoryNote={setCategoryNote}
                 />
 
-                <ExtrasSection
-                  t={t}
-                  extraOptions={options.extra_options}
-                  setExtraOptions={opt('extra_options')}
-                  slideTypes={options.slide_types}
-                  stock={stock}
-                  toggleExtra={toggleExtra}
-                  updateExtraDetail={updateExtraDetail}
-                  setSlideType={setSlideType}
-                  updateSlideLeg={updateSlideLeg}
-                  shareLink={shareLink}
-                  serviceVisits={
-                    // A visit is a child row of a saved ticket, so there is
-                    // nothing for it to hang off until the ticket has an id.
-                    isNew || !serviceVisitAction
-                      ? undefined
-                      : ({ entitled, filmProduct }) => (
-                          <ServiceVisitsSection
-                            t={t}
-                            // Server-owned: from initialTicket, not the draft.
-                            visits={initialTicket.serviceVisits ?? []}
-                            visitsForPlate={initialTicket.serviceVisitsForPlate ?? 0}
-                            entitled={entitled}
-                            technicians={options.technicians}
-                            setTechnicians={opt('technicians')}
-                            currentUserName={currentUserName}
-                            filmProduct={filmProduct}
-                            canDelete={canDo('list.delete')}
-                            onSave={saveServiceVisit}
-                            onDelete={deleteServiceVisit}
-                            onPrint={printServiceSheet}
-                          />
-                        )
-                  }
-                />
+                {/*
+                  pointerEvents back on: this one block escapes the lock. A
+                  car comes back for service — and sometimes buys ประกัน —
+                  long after the ticket was delivered, paid and closed, so
+                  freezing this along with the money made the shop ask an
+                  admin to reopen a finished job just to write down a visit.
+                */}
+                <div style={locked ? { pointerEvents: 'auto', opacity: 1 } : undefined}>
+                  {locked && (
+                    <p
+                      className="text-xs mb-2 flex items-center gap-1.5"
+                      style={{ color: '#4C7A3E' }}
+                    >
+                      <i className="fa-solid fa-lock-open"></i>
+                      ส่วนนี้ยังแก้ไขได้แม้ใบงานปิดแล้ว (เซอร์วิส / ประกัน)
+                    </p>
+                  )}
+                  <ExtrasSection
+                    t={t}
+                    extraOptions={options.extra_options}
+                    setExtraOptions={opt('extra_options')}
+                    slideTypes={options.slide_types}
+                    stock={stock}
+                    toggleExtra={toggleExtra}
+                    updateExtraDetail={updateExtraDetail}
+                    setSlideType={setSlideType}
+                    updateSlideLeg={updateSlideLeg}
+                    shareLink={shareLink}
+                    serviceVisits={
+                      // A visit is a child row of a saved ticket, so there is
+                      // nothing for it to hang off until the ticket has an id.
+                      isNew || !serviceVisitAction
+                        ? undefined
+                        : ({ entitled, filmProduct, assignedTechnicians }) => (
+                            <ServiceVisitsSection
+                              t={t}
+                              // Server-owned: from initialTicket, not the draft.
+                              visits={initialTicket.serviceVisits ?? []}
+                              visitsForPlate={initialTicket.serviceVisitsForPlate ?? 0}
+                              entitled={entitled}
+                              technicians={options.technicians}
+                              setTechnicians={opt('technicians')}
+                              currentUserName={currentUserName}
+                              filmProduct={filmProduct}
+                              assignedTechnicians={assignedTechnicians}
+                              canDelete={canDo('list.delete')}
+                              onSave={saveServiceVisit}
+                              onDelete={deleteServiceVisit}
+                              onPrint={printServiceSheet}
+                            />
+                          )
+                    }
+                  />
+                  {/* Its own save: the ticket-wide one is gone while locked. */}
+                  {locked && extrasAction && (
+                    <div className="flex items-center gap-3 mt-3">
+                      <button
+                        onClick={saveExtras}
+                        disabled={savingExtras}
+                        className="btn-primary rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2"
+                        style={{ opacity: savingExtras ? 0.7 : 1 }}
+                      >
+                        <i
+                          className={`fa-solid ${savingExtras ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}
+                        ></i>
+                        {savingExtras ? 'กำลังบันทึก...' : 'บันทึกข้อมูลเพิ่มเติม'}
+                      </button>
+                      {extrasSaved && (
+                        <span className="text-xs" style={{ color: '#4C7A3E' }}>
+                          <i className="fa-solid fa-circle-check mr-1"></i>บันทึกแล้ว
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </FormSection>
 

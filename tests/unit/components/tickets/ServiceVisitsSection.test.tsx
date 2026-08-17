@@ -58,6 +58,7 @@ function renderSection(t: Ticket, over: Record<string, unknown> = {}) {
       setTechnicians={vi.fn()}
       currentUserName="แอดมินระบบ"
       filmProduct="TPU กันรอยเกรดพรีเมียม 195"
+      assignedTechnicians={['ช่างเอก']}
       canDelete={false}
       onSave={onSave}
       onDelete={vi.fn(async () => ({ ok: true }))}
@@ -162,5 +163,34 @@ describe('ServiceVisitsSection', () => {
     // that day even after the ticket is edited.
     const sent = onSave.mock.calls[0][0];
     expect(sent.filmProduct).toBe('TPU กันรอยเกรดพรีเมียม 195');
+  });
+});
+
+/**
+ * ทีมช่าง on a new visit.
+ *
+ * The ticket already names the ช่างที่รับผิดชอบ for the ฟิล์มกันรอย job, so the
+ * service form fills that in rather than asking a second time — but it stays a
+ * picker, because a visit two years later may be a different team.
+ */
+describe('ServiceVisitsSection — ทีมช่าง', () => {
+  it('starts a new visit with the ช่างที่รับผิดชอบ from the ticket', async () => {
+    const user = userEvent.setup();
+    const { onSave } = renderSection(ticket());
+
+    await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิสครั้งใหม่/ }));
+    await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิส$/ }));
+    expect(onSave.mock.calls[0][0].technicians).toEqual(['ช่างเอก']);
+  });
+
+  it('lets the visit record a different team', async () => {
+    const user = userEvent.setup();
+    const { onSave } = renderSection(ticket());
+
+    await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิสครั้งใหม่/ }));
+    // The picker is still there; ช่างบอย did this one.
+    await user.click(screen.getByRole('button', { name: 'ช่างบอย' }));
+    await user.click(screen.getByRole('button', { name: /บันทึกการเซอร์วิส$/ }));
+    expect(onSave.mock.calls[0][0].technicians).toEqual(['ช่างเอก', 'ช่างบอย']);
   });
 });

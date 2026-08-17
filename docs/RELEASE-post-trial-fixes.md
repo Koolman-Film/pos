@@ -1,4 +1,4 @@
-# Release runbook — post-trial fixes (migrations 0012–0021)
+# Release runbook — post-trial fixes (migrations 0012–0022)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
 
@@ -28,7 +28,7 @@ dashboard and the accounting page.
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0021 only
+npx supabase db push                     # applies 0012 … 0022 only
 ```
 
 ### No CLI? Paste the files instead
@@ -44,10 +44,11 @@ it twice changes nothing, and each records its versions in
 | 3     | `supabase/release-0019.sql`                   | a normal connection                        |
 | 4     | `supabase/release-0020.sql`                   | a normal connection                        |
 | 5     | `supabase/release-0021.sql`                   | a normal connection                        |
-| 6     | `supabase/repair-categories-and-services.sql` | a normal connection                        |
+| 6     | `supabase/release-0022.sql`                   | a normal connection                        |
+| 7     | `supabase/repair-categories-and-services.sql` | a normal connection                        |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all six in order
+already been handed over. If nothing has been run yet, running all seven in order
 is still correct.
 
 The last step is a one-time DATA repair, not schema. It folds every ชนิดสินค้า that
@@ -79,6 +80,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0019_expense_doc_no`           | `expenses.doc_no` (เลขที่เอกสาร POS-LPG-6908001), a unique index, `next_expense_doc_no()`, and a BEFORE INSERT trigger that issues the number. Backfills existing expenses per shop per month, oldest first.                                                                                                                         | Low. Writes `doc_no` on every existing expense row once.        |
 | `0020_service_visits`           | `service_visits` + `service_visit_points` for ใบเซอร์วิส, their RLS policies, and `save_service_visit()`. Two new tables; nothing existing is touched.                                                                                                                                                                               | Low. Purely additive.                                           |
 | `0021_service_film_product`     | ใบเซอร์วิส records the film as one `service_visits.film_product` (ชื่อสินค้า) instead of ประเภท/ความหนา/รหัสสี — each SKU states its thickness in the name. Carries the three old columns forward before dropping them, replaces `save_service_visit()`, and drops the `stock.film_*` columns that only ever existed in development. | Low. Additive then narrowing; no visit loses its film.          |
+| `0022_extras_after_lock`        | ใบงานที่ปิดงานแล้วยังแก้ ข้อมูลเพิ่มเติม ได้: `enforce_ticket_lock` lets an update through when `extras` is the only column that moved, and `save_ticket_extras()` is the one write path the app uses for it. Everything else on a locked ticket stays frozen.                                                                       | Low. Narrows the lock; adds one function.                       |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

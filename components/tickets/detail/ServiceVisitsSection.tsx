@@ -26,6 +26,7 @@ const empty = (
   t: Ticket,
   currentUserName: string,
   filmProduct: string,
+  assignedTechnicians: string[],
 ): ServiceVisit => ({
   visitNo,
   plate: t.plate,
@@ -36,7 +37,10 @@ const empty = (
   // The person filling this in is the one receiving the car, nine times in ten.
   salesBy: currentUserName,
   qcBy: '',
-  technicians: [],
+  // The team the ticket put on the ฟิล์มกันรอย job. Almost always the same
+  // people, so it is filled in rather than asked for again — still editable,
+  // because a visit two years later may be somebody else.
+  technicians: assignedTechnicians,
   filmProduct,
   customerWaits: null,
   overallOk: null,
@@ -56,6 +60,7 @@ export function ServiceVisitsSection({
   setTechnicians,
   currentUserName,
   filmProduct,
+  assignedTechnicians,
   canDelete,
   onSave,
   onDelete,
@@ -77,6 +82,8 @@ export function ServiceVisitsSection({
   currentUserName: string;
   /** ชื่อสินค้าฟิล์มจากใบงาน — never asked again here; the name says the thickness. */
   filmProduct: string;
+  /** ช่างที่รับผิดชอบ from the ticket — the default ทีมช่าง for a new visit. */
+  assignedTechnicians: string[];
   canDelete: boolean;
   onSave: (visit: ServiceVisit) => Promise<{ ok: boolean; error?: string }>;
   onDelete: (id: number) => Promise<{ ok: boolean; error?: string }>;
@@ -90,7 +97,7 @@ export function ServiceVisitsSection({
 
   function startNew() {
     setError(null);
-    setDraft(empty(used + 1, t, currentUserName, filmProduct));
+    setDraft(empty(used + 1, t, currentUserName, filmProduct, assignedTechnicians));
   }
   function startEdit(v: ServiceVisit) {
     setError(null);

@@ -313,6 +313,37 @@ export async function getTicketAttachmentUrl(
 }
 
 /**
+ * บันทึกเฉพาะ ข้อมูลเพิ่มเติม (extras) — the one part of a ticket that stays open
+ * after it is closed.
+ *
+ * A delivered-and-paid ticket is frozen so its numbers cannot move (migration
+ * 0017), but the job itself carries on: the car comes back for service, and the
+ * customer may take ประกัน afterwards. Those live in ข้อมูลเพิ่มเติม, so that
+ * block alone stays editable — through this action, which can write nothing
+ * else. `save_ticket_extras` and the lock trigger enforce that in the database;
+ * this function only decides WHO may call it.
+ */
+export async function saveTicketExtras(input: {
+  ticketId: string;
+  extras: Record<string, unknown>;
+  /** ประกัน ticked — mirrored onto the auto ประกัน line at ราคา 0. */
+  insurance: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขใบงาน' };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('save_ticket_extras', {
+    p_ticket_id: input.ticketId,
+    p_extras: input.extras as Json,
+    p_insurance: input.insurance,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  revalidatePath(`/tickets/${input.ticketId}`);
+  return { ok: true };
+}
+
+/**
  * ปลดล็อกใบงาน — reopen a closed ticket for editing, gated on `list.unlock`
  * (admin). The ticket re-locks by itself on the next save if it still qualifies,
  * so this is "let me fix this one thing", not a permanent switch.
@@ -458,8 +489,9 @@ export async function saveCarModel(input: {
  * NEW visit takes its `visit_no` under a lock rather than from a number the
  * browser guessed — two people filing at once get 3 and 4, not two 3s.
  *
- * Gated on the ticket's own edit capability: recording a service visit is part
- * of working the job, and a locked ticket is a closed record.
+ * A LOCKED ticket is fine here: a car comes back to be serviced long after it
+ * was delivered and paid for, and the lock is there to stop the MONEY moving,
+ * not to stop the shop recording what it did afterwards.
  */
 export async function saveServiceVisit(input: {
   id?: number;
@@ -479,14 +511,10 @@ export async function saveServiceVisit(input: {
   try {
     const { data: ticket } = await supabase
       .from('tickets')
-      .select('id, locked')
+      .select('id')
       .eq('id', input.ticketId)
       .maybeSingle();
     if (!ticket) return { ok: false, error: 'ไม่พบใบงานนี้' };
-    if (ticket.locked && !session.canDo('list.unlock')) {
-      return { ok: false, error: 'ใบงานนี้ปิดงานแล้วและถูกล็อก (ต้องให้แอดมินปลดล็อกก่อน)' };
-    }
-
     // `p_id` is nullable in SQL — a null means "issue the next visit_no" — but
     // the generated Args type has no way to express that, hence the cast.
     const { data, error } = await supabase.rpc('save_service_visit', {
