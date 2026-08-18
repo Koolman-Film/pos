@@ -22,6 +22,7 @@ export function ExtrasSection({
   setSlideType,
   updateSlideLeg,
   shareLink,
+  insurance,
   serviceVisits,
 }: {
   t: Ticket;
@@ -38,6 +39,11 @@ export function ExtrasSection({
    * Renders the service-visit record inside the Service extra. A render prop so
    * this component stays a pure form and does not need the ticket actions.
    */
+  /**
+   * Renders the ประกัน record inside the ประกัน extra. Same shape as
+   * `serviceVisits`: a render prop keeps this component a pure form.
+   */
+  insurance?: () => React.ReactNode;
   serviceVisits?: (args: {
     entitled: number;
     /** ชื่อสินค้าฟิล์มที่ขาย — the SKU name already states the thickness. */
@@ -96,12 +102,8 @@ export function ExtrasSection({
                   <i className="fa-solid fa-trash"></i>
                 </button>
               </div>
-              {ex.checked && name === 'ประกัน' && (
-                <p className="text-xs mt-1.5 ml-6" style={{ color: '#4C7A3E' }}>
-                  <i className="fa-solid fa-circle-check mr-1.5"></i>เพิ่มรายการ &quot;ประกัน&quot;
-                  ในสินค้า/การติดตั้งให้อัตโนมัติแล้ว
-                </p>
-              )}
+              {ex.checked && name === 'ประกัน' && insurance && insurance()}
+
               {ex.checked && name === 'นอกสถานที่' && (
                 <div className="mt-2 ml-6 flex flex-col gap-2">
                   <input

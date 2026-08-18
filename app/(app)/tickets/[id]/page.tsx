@@ -10,12 +10,20 @@ import {
   saveCarModel,
   saveCorporateBuyer,
   saveServiceVisit,
+  saveInsurancePolicy,
+  deleteInsurancePolicy,
   saveTicket,
   saveTicketExtras,
   unlockTicket,
   updateOptionList,
 } from '../actions';
-import { loadDetailRegistries, loadShops, loadStatuses, loadTicket } from '../data';
+import {
+  loadDetailRegistries,
+  loadInsurancePlans,
+  loadShops,
+  loadStatuses,
+  loadTicket,
+} from '../data';
 
 export default async function TicketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,6 +37,9 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
   ]);
   // RLS already scopes which tickets are visible; a miss is a genuine 404.
   if (!ticket) notFound();
+
+  // After the ticket, because the plans a branch may sell depend on its shop.
+  const insurancePlans = await loadInsurancePlans(ticket.shop);
 
   return (
     <TicketDetailClient
@@ -62,6 +73,9 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       extrasAction={saveTicketExtras}
       serviceVisitAction={saveServiceVisit}
       serviceVisitDeleteAction={deleteServiceVisit}
+      insurancePlans={insurancePlans}
+      insuranceAction={saveInsurancePolicy}
+      insuranceDeleteAction={deleteInsurancePolicy}
     />
   );
 }

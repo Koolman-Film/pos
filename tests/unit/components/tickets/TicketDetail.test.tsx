@@ -248,6 +248,29 @@ describe('TicketDetail — ใบงานที่ปิดงานแล้�
     ...baseProps(closed()),
     initialOptions: options({ extra_options: ['Service', 'ประกัน'] }),
     extrasAction: vi.fn(async () => ({ ok: true })),
+    // Typed, so `mock.calls[0][0]` is the policy payload and not `never`.
+    // Typed through its argument, so `mock.calls[0][0]` is the policy payload
+    // rather than `never`.
+    insuranceAction: vi.fn(
+      async (input: { ticketId: string; policy: Record<string, unknown> }) => ({
+        ok: true,
+        id: 1,
+        ticketId: input.ticketId,
+      }),
+    ),
+    insuranceDeleteAction: vi.fn(async () => ({ ok: true })),
+    insurancePlans: [
+      {
+        id: 1,
+        name: 'ประกันฟิล์มกันรอย 1 ปี',
+        price: 3000,
+        bigPieces: 2,
+        smallPieces: 20,
+        months: 12,
+        terms: '',
+        active: true,
+      },
+    ],
   });
 
   it('freezes the rest of the ticket but not ข้อมูลเพิ่มเติม', () => {
@@ -273,22 +296,29 @@ describe('TicketDetail — ใบงานที่ปิดงานแล้�
       expect(p.extrasAction).toHaveBeenCalledWith({
         ticketId: 'JT-CM-00214',
         extras: { Service: { checked: true } },
-        insurance: false,
       }),
     );
   });
 
-  it('sends the ประกัน tick so the closed ticket can still take one', async () => {
+  it('takes a ประกัน sale on a closed ticket without touching its total', async () => {
     const p = props();
     render(<TicketDetail {...p} />);
 
     // Unticked extras are folded away until the section is opened.
     fireEvent.click(screen.getByRole('button', { name: /^ข้อมูลเพิ่มเติม/ }));
     fireEvent.click(screen.getByLabelText('ประกัน'));
-    fireEvent.click(screen.getByRole('button', { name: /บันทึกข้อมูลเพิ่มเติม/ }));
 
-    await vi.waitFor(() =>
-      expect(p.extrasAction).toHaveBeenCalledWith(expect.objectContaining({ insurance: true })),
-    );
+    // Ticking it opens the policy form — it does NOT add a line to
+    // สินค้า/การติดตั้ง any more, which is what used to move a closed
+    // ticket's revenue.
+    fireEvent.click(screen.getByRole('button', { name: /บันทึกประกันฉบับใหม่/ }));
+    expect(screen.getByLabelText('ราคาประกัน')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^บันทึกประกัน$/ }));
+    await vi.waitFor(() => expect(p.insuranceAction).toHaveBeenCalled());
+    const sent = p.insuranceAction.mock.calls[0][0];
+    expect(sent.ticketId).toBe('JT-CM-00214');
+    // Its own sale date, which is what keeps the money off the old job.
+    expect(sent.policy.soldAt).toBeTruthy();
   });
 });

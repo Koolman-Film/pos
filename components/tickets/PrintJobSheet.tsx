@@ -10,9 +10,10 @@ import { itemNetPrice } from '@/lib/domain/tickets';
 import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } from './serviceForm';
 import { WRAP_CATEGORY, WRAP_OPTIONS } from './wrapOptions';
 
-import type { ServiceVisit, ShopInfo, StockRow, Ticket } from './types';
+import type { InsurancePolicy, ServiceVisit, ShopInfo, StockRow, Ticket } from './types';
+import { coverageText } from './detail/InsuranceSection';
 
-export type PrintMode = 'job' | 'sale' | 'offsite' | 'doc' | 'service' | null;
+export type PrintMode = 'job' | 'sale' | 'offsite' | 'doc' | 'service' | 'insurance' | null;
 
 /**
  * The pre-installation inspection sheet (ใบตรวจเช็คสภาพก่อนติดตั้ง), ported
@@ -206,6 +207,7 @@ export function PrintJobSheet({
   showCompanyInfo,
   showDisclaimer,
   serviceVisit = null,
+  insurancePolicy = null,
   technicianOptions = [],
 }: {
   t: Ticket;
@@ -225,6 +227,8 @@ export function PrintJobSheet({
   showDisclaimer: boolean;
   /** The visit to print on the service sheet; null prints a blank one. */
   serviceVisit?: ServiceVisit | null;
+  /** The policy to print a ใบเสร็จค่าประกัน for. */
+  insurancePolicy?: InsurancePolicy | null;
   /** ทีมช่าง tick row — the shop's own list, not the paper form's old names. */
   technicianOptions?: string[];
 }) {
@@ -1952,6 +1956,143 @@ export function PrintJobSheet({
               ยกเว้นความเสียหายอยู่ในการรับประกันสินค้า
             </p>
           )}
+        </div>
+      </div>
+    );
+  } else if (printMode === 'insurance' && insurancePolicy) {
+    /*
+      ใบเสร็จค่าประกัน — its own receipt, because a policy is its own sale.
+
+      ประกัน is not on the ticket’s ใบเสร็จ whenever it was bought: with the
+      install or a year later, the money belongs to the day the policy was
+      sold, and one document per sale is what keeps that straight. Same band
+      and same layout as the financial document, so a customer holding both
+      recognises them as coming from the same shop.
+    */
+    const v = insurancePolicy;
+    const usedBig = v.claims.reduce((n, c) => n + Number(c.bigUsed || 0), 0);
+    const usedSmall = v.claims.reduce((n, c) => n + Number(c.smallUsed || 0), 0);
+    const row = (label: string, value: string) => (
+      <tr>
+        <td style={{ padding: '4px 8px', width: 150, fontWeight: 'bold' }}>{label}</td>
+        <td style={{ padding: '4px 8px' }}>{value || ' '}</td>
+      </tr>
+    );
+
+    content = (
+      <div className="print-area">
+        <div className="print-page">
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 14 }}>
+            <div style={{ flex: 1 }} />
+            <div
+              style={{
+                background: DOC_ACCENT,
+                color: '#fff',
+                borderRadius: 6,
+                padding: '8px 22px',
+                textAlign: 'center',
+              }}
+              className="doc-band"
+            >
+              <p style={{ margin: 0, fontSize: 20, fontWeight: 'bold', letterSpacing: 0.5 }}>
+                ใบเสร็จค่าประกัน
+              </p>
+            </div>
+            <div style={{ flex: 1, textAlign: 'right' }}>
+              <p style={{ margin: 0, fontSize: 12 }}>
+                เลขที่เอกสาร: INS-{t.id.replace('JT-', '')}
+                {v.id ? `-${v.id}` : ''}
+              </p>
+              <p style={{ margin: '2px 0 0', fontSize: 12 }}>
+                วันที่เอกสาร: {v.soldAt ? fmtThaiDate(new Date(v.soldAt)) : fmtThaiDate(new Date())}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 20, marginBottom: 14, fontSize: 11 }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>ข้อมูลลูกค้า :</p>
+              <p style={{ margin: 0, fontWeight: 'bold' }}>{t.customer}</p>
+              {t.phone && <p style={{ margin: '2px 0 0' }}>โทร {t.phone}</p>}
+              <p style={{ margin: '2px 0 0' }}>
+                รถ: {t.brand} {t.model} &middot; {v.plate || t.plate}
+              </p>
+            </div>
+            <div style={{ flex: 1, textAlign: 'right' }}>
+              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>ผู้ออกใบเสร็จ :</p>
+              <p style={{ margin: 0, fontWeight: 'bold' }}>{shopName(t.shop)}</p>
+              {info.address && <p style={{ margin: '2px 0 0' }}>{info.address}</p>}
+              {info.phone && <p style={{ margin: '2px 0 0' }}>โทร {info.phone}</p>}
+            </div>
+          </div>
+
+          <table style={{ fontSize: 11, marginBottom: 12 }}>
+            <tbody>
+              {row('แผนประกัน', v.planName || 'ประกันฟิล์มกันรอย')}
+              {row('ความคุ้มครอง', coverageText(v.bigPieces, v.smallPieces))}
+              {row(
+                'ระยะเวลาคุ้มครอง',
+                `${v.startsAt ? fmtThaiDate(new Date(v.startsAt)) : '-'} ถึง ${
+                  v.endsAt ? fmtThaiDate(new Date(v.endsAt)) : '-'
+                }`,
+              )}
+              {row('ใบงานอ้างอิง', t.id)}
+              {v.terms ? row('เงื่อนไข', v.terms) : null}
+              {v.notes ? row('หมายเหตุ', v.notes) : null}
+            </tbody>
+          </table>
+
+          <div
+            className="doc-total"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              background: DOC_ACCENT,
+              color: '#fff',
+              padding: '6px 10px',
+              borderRadius: 4,
+              fontSize: 13,
+              fontWeight: 'bold',
+              marginBottom: 14,
+            }}
+          >
+            <span>ยอดชำระค่าประกัน</span>
+            <span>{fmt(v.price)}</span>
+          </div>
+
+          {/* The claims already written against this policy, so the copy in the
+              customer’s folder says what is left of the cover. */}
+          {v.claims.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 'bold' }}>ประวัติการเคลม</p>
+              <table style={{ fontSize: 11 }}>
+                <tbody>
+                  {v.claims.map((c, i) => (
+                    <tr key={i}>
+                      <td style={{ padding: '3px 8px', width: 110 }}>
+                        {c.claimedAt ? fmtThaiDate(new Date(c.claimedAt)) : '-'}
+                      </td>
+                      <td style={{ padding: '3px 8px' }}>{c.detail || '-'}</td>
+                      <td style={{ padding: '3px 8px', width: 150 }}>
+                        {c.bigUsed} ชิ้นใหญ่, {c.smallUsed} ชิ้นเล็ก
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{ margin: '4px 0 0', fontSize: 11, fontWeight: 'bold' }}>
+                คงเหลือ {v.bigPieces - usedBig} ชิ้นใหญ่, {v.smallPieces - usedSmall} ชิ้นเล็ก
+              </p>
+            </div>
+          )}
+
+          <div style={{ textAlign: 'right', fontSize: 11, marginTop: 24 }}>
+            <p style={{ margin: 0 }}>ลงชื่อ .............................................</p>
+            <p style={{ margin: '4px 0 0' }}>
+              ผู้รับเงิน &middot; วันที่{' '}
+              {v.soldAt ? fmtThaiDate(new Date(v.soldAt)) : fmtThaiDate(new Date())}
+            </p>
+          </div>
         </div>
       </div>
     );

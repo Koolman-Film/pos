@@ -318,7 +318,8 @@ export async function getTicketAttachmentUrl(
  *
  * A delivered-and-paid ticket is frozen so its numbers cannot move (migration
  * 0017), but the job itself carries on: the car comes back for service, and the
- * customer may take ประกัน afterwards. Those live in ข้อมูลเพิ่มเติม, so that
+ * customer may take ประกัน afterwards (its own record — see saveInsurancePolicy).
+ * Those live in ข้อมูลเพิ่มเติม, so that
  * block alone stays editable — through this action, which can write nothing
  * else. `save_ticket_extras` and the lock trigger enforce that in the database;
  * this function only decides WHO may call it.
@@ -326,8 +327,6 @@ export async function getTicketAttachmentUrl(
 export async function saveTicketExtras(input: {
   ticketId: string;
   extras: Record<string, unknown>;
-  /** ประกัน ticked — mirrored onto the auto ประกัน line at ราคา 0. */
-  insurance: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await getSessionContext(); // C2: authenticate before mutating
   if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขใบงาน' };
@@ -335,7 +334,6 @@ export async function saveTicketExtras(input: {
   const { error } = await supabase.rpc('save_ticket_extras', {
     p_ticket_id: input.ticketId,
     p_extras: input.extras as Json,
-    p_insurance: input.insurance,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath('/tickets');
@@ -547,5 +545,55 @@ export async function deleteServiceVisit(id: number): Promise<{ ok: boolean; err
   const { error } = await supabase.from('service_visits').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/tickets');
+  return { ok: true };
+}
+
+/**
+ * บันทึกกรมธรรม์ประกัน พร้อมการเคลมทั้งหมดในครั้งเดียว.
+ *
+ * No `locked` check, unlike everything else that writes to a ticket: ประกัน is
+ * routinely bought months after delivery, and a policy is not part of the
+ * ticket's numbers — it carries its own `soldAt`, which is the date the revenue
+ * belongs to. That is the whole reason it is a record of its own.
+ */
+export async function saveInsurancePolicy(input: {
+  id?: number;
+  ticketId: string;
+  policy: Record<string, unknown>;
+  claims: Record<string, unknown>[];
+}): Promise<{ ok: boolean; error?: string; id?: number }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์บันทึกประกัน' };
+
+  const supabase = await createClient();
+  try {
+    // `p_id` is nullable in SQL — null means "issue a new policy" — but the
+    // generated Args type cannot express that, hence the cast.
+    const { data, error } = await supabase.rpc('save_insurance_policy', {
+      p_id: (input.id ?? null) as number,
+      p_ticket_id: input.ticketId,
+      p_policy: input.policy as Json,
+      p_claims: input.claims as unknown as Json,
+    });
+    if (error) throw new Error(error.message);
+    revalidatePath('/tickets');
+    revalidatePath('/dashboard');
+    return { ok: true, id: (data as number) ?? undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'บันทึกประกันไม่สำเร็จ' };
+  }
+}
+
+/** ลบกรมธรรม์ — the claims cascade with it. Same gate as deleting a ใบเซอร์วิส. */
+export async function deleteInsurancePolicy(id: number): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('list.delete')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์ลบประกัน (เฉพาะผู้ที่ลบใบงานได้)' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.from('insurance_policies').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  revalidatePath('/dashboard');
   return { ok: true };
 }

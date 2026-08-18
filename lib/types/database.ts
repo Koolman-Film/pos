@@ -269,6 +269,156 @@ export type Database = {
         }
         Relationships: []
       }
+      insurance_claims: {
+        Row: {
+          big_used: number
+          claimed_at: string
+          created_at: string
+          created_by: string | null
+          detail: string
+          id: number
+          policy_id: number
+          small_used: number
+          technician: string
+        }
+        Insert: {
+          big_used?: number
+          claimed_at?: string
+          created_at?: string
+          created_by?: string | null
+          detail?: string
+          id?: never
+          policy_id: number
+          small_used?: number
+          technician?: string
+        }
+        Update: {
+          big_used?: number
+          claimed_at?: string
+          created_at?: string
+          created_by?: string | null
+          detail?: string
+          id?: never
+          policy_id?: number
+          small_used?: number
+          technician?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_claims_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_policies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insurance_plans: {
+        Row: {
+          active: boolean
+          big_pieces: number
+          id: number
+          months: number
+          name: string
+          price: number
+          shop_id: string | null
+          small_pieces: number
+          sort_order: number
+          terms: string
+        }
+        Insert: {
+          active?: boolean
+          big_pieces?: number
+          id?: never
+          months?: number
+          name: string
+          price?: number
+          shop_id?: string | null
+          small_pieces?: number
+          sort_order?: number
+          terms?: string
+        }
+        Update: {
+          active?: boolean
+          big_pieces?: number
+          id?: never
+          months?: number
+          name?: string
+          price?: number
+          shop_id?: string | null
+          small_pieces?: number
+          sort_order?: number
+          terms?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_plans_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insurance_policies: {
+        Row: {
+          big_pieces: number
+          created_at: string
+          created_by: string | null
+          ends_at: string | null
+          id: number
+          notes: string
+          plan_name: string
+          plate: string
+          price: number
+          small_pieces: number
+          sold_at: string
+          starts_at: string | null
+          terms: string
+          ticket_id: string
+        }
+        Insert: {
+          big_pieces?: number
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          id?: never
+          notes?: string
+          plan_name?: string
+          plate?: string
+          price?: number
+          small_pieces?: number
+          sold_at?: string
+          starts_at?: string | null
+          terms?: string
+          ticket_id: string
+        }
+        Update: {
+          big_pieces?: number
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          id?: never
+          notes?: string
+          plan_name?: string
+          plate?: string
+          price?: number
+          small_pieces?: number
+          sold_at?: string
+          starts_at?: string | null
+          terms?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_policies_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       option_lists: {
         Row: {
           id: number
@@ -1235,8 +1385,12 @@ export type Database = {
         Args: { p_items: Json; p_payments: Json; p_ticket_id: string }
         Returns: undefined
       }
+      save_insurance_policy: {
+        Args: { p_claims: Json; p_id: number; p_policy: Json; p_ticket_id: string }
+        Returns: number
+      }
       save_ticket_extras: {
-        Args: { p_extras: Json; p_insurance: boolean; p_ticket_id: string }
+        Args: { p_extras: Json; p_ticket_id: string }
         Returns: undefined
       }
     }

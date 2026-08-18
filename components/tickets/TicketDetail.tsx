@@ -12,6 +12,7 @@ import { fitPrintPages } from '@/lib/print/fitToPage';
 import { PrintJobSheet, type PrintMode } from './PrintJobSheet';
 import { serializeTicket } from './serialize';
 import { ExtrasSection } from './detail/ExtrasSection';
+import { InsuranceSection } from './detail/InsuranceSection';
 import { FormSection, SECTION_TONES } from './detail/FormSection';
 import { ItemsSection } from './detail/ItemsSection';
 import { NotesSection } from './detail/NotesSection';
@@ -25,6 +26,8 @@ import type {
   CarModel,
   CorporateBuyer,
   FilmPriceRow,
+  InsurancePlan,
+  InsurancePolicy,
   OptionListName,
   PriceMatrixRow,
   RetailCustomer,
@@ -76,6 +79,9 @@ export function TicketDetail({
   extrasAction,
   serviceVisitAction,
   serviceVisitDeleteAction,
+  insurancePlans = [],
+  insuranceAction,
+  insuranceDeleteAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -121,7 +127,6 @@ export function TicketDetail({
   extrasAction?: (input: {
     ticketId: string;
     extras: Record<string, unknown>;
-    insurance: boolean;
   }) => Promise<{ ok: boolean; error?: string }>;
   /** Records one ใบเซอร์วิส visit against this ticket (migration 0020). */
   serviceVisitAction?: (input: {
@@ -131,6 +136,16 @@ export function TicketDetail({
     points: { seq: number; position: string; detail: string; note: string }[];
   }) => Promise<{ ok: boolean; error?: string; id?: number }>;
   serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  /** แผนประกัน the branch sells, for the picker (migration 0023). */
+  insurancePlans?: InsurancePlan[];
+  /** Records one กรมธรรม์ประกัน against this ticket, with its claims. */
+  insuranceAction?: (input: {
+    id?: number;
+    ticketId: string;
+    policy: Record<string, unknown>;
+    claims: Record<string, unknown>[];
+  }) => Promise<{ ok: boolean; error?: string; id?: number }>;
+  insuranceDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
@@ -198,7 +213,6 @@ export function TicketDetail({
     const result = await extrasAction({
       ticketId: t.id,
       extras: (t.extras ?? {}) as Record<string, unknown>,
-      insurance: !!t.extras?.['ประกัน']?.checked,
     });
     setSavingExtras(false);
     if (!result.ok) {
@@ -231,6 +245,7 @@ export function TicketDetail({
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [printMode, setPrintMode] = useState<PrintMode>('job');
   const [printVisit, setPrintVisit] = useState<ServiceVisit | null>(null);
+  const [printPolicy, setPrintPolicy] = useState<InsurancePolicy | null>(null);
 
   const productCategories = options.product_categories;
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? id;
@@ -292,6 +307,49 @@ export function TicketDetail({
   async function deleteServiceVisit(id: number) {
     if (!serviceVisitDeleteAction) return { ok: false, error: 'ยังไม่พร้อมใช้งาน' };
     const result = await serviceVisitDeleteAction(id);
+    if (result.ok) router.refresh();
+    return result;
+  }
+
+  /** ใบเสร็จค่าประกัน — its own document, on the policy’s own date. */
+  function printInsuranceReceipt(policy: InsurancePolicy) {
+    setPrintPolicy(policy);
+    doPrint('insurance');
+  }
+
+  /** Save a policy with its claims, then pull the list back from the server. */
+  async function saveInsurancePolicy(policy: InsurancePolicy) {
+    if (!insuranceAction) return { ok: false, error: 'ยังไม่พร้อมใช้งาน' };
+    const result = await insuranceAction({
+      id: policy.id,
+      ticketId: t.id,
+      policy: {
+        plate: t.plate,
+        planName: policy.planName,
+        price: policy.price,
+        bigPieces: policy.bigPieces,
+        smallPieces: policy.smallPieces,
+        terms: policy.terms,
+        soldAt: policy.soldAt || null,
+        startsAt: policy.startsAt || null,
+        endsAt: policy.endsAt || null,
+        notes: policy.notes,
+      },
+      claims: policy.claims.map((c) => ({
+        claimedAt: c.claimedAt || null,
+        bigUsed: c.bigUsed,
+        smallUsed: c.smallUsed,
+        detail: c.detail,
+        technician: c.technician,
+      })),
+    });
+    if (result.ok) router.refresh();
+    return result;
+  }
+
+  async function deleteInsurancePolicy(id: number) {
+    if (!insuranceDeleteAction) return { ok: false, error: 'ยังไม่พร้อมใช้งาน' };
+    const result = await insuranceDeleteAction(id);
     if (result.ok) router.refresh();
     return result;
   }
@@ -466,29 +524,19 @@ export function TicketDetail({
       return [...prev, entry];
     });
   }
+  /**
+   * ประกัน used to add a ticket_item at ราคา 0 here. It has its own record now
+   * (migration 0023), because the cover can be bought months after the ticket
+   * closed and a ticket line would have moved that job’s numbers.
+   */
   function toggleExtra(name: string) {
     const current = t.extras?.[name] || {};
-    const nowChecked = !current.checked;
-    let items = t.items;
-    if (name === 'ประกัน') {
-      if (nowChecked && !items.some((i) => i.autoInsurance)) {
-        items = [
-          ...items,
-          {
-            category: 'ประกัน',
-            booked: 'ประกัน',
-            bookedPrice: 0,
-            sold: 'ประกัน',
-            soldPrice: 0,
-            autoInsurance: true,
-          },
-        ];
-      } else if (!nowChecked) {
-        items = items.filter((i) => !i.autoInsurance);
-      }
-    }
-    setT({ ...t, items, extras: { ...t.extras, [name]: { ...current, checked: nowChecked } } });
+    setT({
+      ...t,
+      extras: { ...t.extras, [name]: { ...current, checked: !current.checked } },
+    });
   }
+
   function updateExtraDetail(name: string, key: string, val: unknown) {
     setT({ ...t, extras: { ...t.extras, [name]: { ...(t.extras?.[name] || {}), [key]: val } } });
   }
@@ -825,6 +873,25 @@ export function TicketDetail({
                     setSlideType={setSlideType}
                     updateSlideLeg={updateSlideLeg}
                     shareLink={shareLink}
+                    insurance={
+                      // A policy is a child row of a saved ticket, like a visit.
+                      isNew || !insuranceAction
+                        ? undefined
+                        : () => (
+                            <InsuranceSection
+                              t={t}
+                              // Server-owned: from initialTicket, not the draft.
+                              policies={initialTicket.insurancePolicies ?? []}
+                              forPlate={initialTicket.insuranceForPlate ?? []}
+                              plans={insurancePlans}
+                              technicians={options.technicians}
+                              canDelete={canDo('list.delete')}
+                              onSave={saveInsurancePolicy}
+                              onDelete={deleteInsurancePolicy}
+                              onPrint={printInsuranceReceipt}
+                            />
+                          )
+                    }
                     serviceVisits={
                       // A visit is a child row of a saved ticket, so there is
                       // nothing for it to hang off until the ticket has an id.
@@ -1158,6 +1225,7 @@ export function TicketDetail({
           showCompanyInfo={showCompanyInfo}
           showDisclaimer={showDisclaimer}
           serviceVisit={printVisit}
+          insurancePolicy={printPolicy}
           technicianOptions={options.technicians}
         />
       </div>

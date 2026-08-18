@@ -7,6 +7,7 @@ import type {
   CarModel,
   CorporateBuyer,
   FilmPriceRow,
+  InsurancePlan,
   OptionListName,
   PriceMatrixRow,
   RetailCustomer,
@@ -47,6 +48,9 @@ export function TicketDetailClient({
   extrasAction,
   serviceVisitAction,
   serviceVisitDeleteAction,
+  insurancePlans,
+  insuranceAction,
+  insuranceDeleteAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -83,7 +87,6 @@ export function TicketDetailClient({
   extrasAction?: (input: {
     ticketId: string;
     extras: Record<string, unknown>;
-    insurance: boolean;
   }) => Promise<{ ok: boolean; error?: string }>;
   serviceVisitAction?: (input: {
     id?: number;
@@ -92,6 +95,14 @@ export function TicketDetailClient({
     points: { seq: number; position: string; detail: string; note: string }[];
   }) => Promise<{ ok: boolean; error?: string; id?: number }>;
   serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  insurancePlans?: InsurancePlan[];
+  insuranceAction?: (input: {
+    id?: number;
+    ticketId: string;
+    policy: Record<string, unknown>;
+    claims: Record<string, unknown>[];
+  }) => Promise<{ ok: boolean; error?: string; id?: number }>;
+  insuranceDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -120,6 +131,9 @@ export function TicketDetailClient({
       extrasAction={extrasAction}
       serviceVisitAction={serviceVisitAction}
       serviceVisitDeleteAction={serviceVisitDeleteAction}
+      insurancePlans={insurancePlans}
+      insuranceAction={insuranceAction}
+      insuranceDeleteAction={insuranceDeleteAction}
     />
   );
 }

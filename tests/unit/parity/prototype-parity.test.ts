@@ -109,6 +109,8 @@ const ACCEPTED_ABSENCES: Record<string, string> = {
     'divergence: the prototype stamped manual withdrawals with the literal "คุณ (ผ่านระบบ)" because it had no user identity. The port records the real signed-in user name.',
   'สินค้าที่จอง...':
     'divergence: the ticket form had TWO cheer-up baselines — this "สินค้าที่จองไว้ตอนแรก" picker and สินค้าที่สนใจ — which fed two figures that could disagree with each other. The trial run asked for the duplicate to go; สินค้าที่สนใจ is the only baseline now. `ticket_items.booked` is still read and written so older tickets keep what they recorded.',
+  'ในสินค้า/การติดตั้งให้อัตโนมัติแล้ว':
+    'divergence: ticking ประกัน used to add a ticket_item at ราคา 0, and this was the note that said so. ประกัน is its own record now (migration 0023) because the cover is often bought months after the ticket closed, and a ticket line would have moved that finished job’s revenue. Nothing is added to สินค้า/การติดตั้ง any more, so the note would be a lie.',
   'เลือกบริการ...':
     'divergence: งานบริการ picked its product from the `service_items` option list through a ManagedDropdown, which was the last place in Book งาน where a product name could be invented on the spot — a name with no stock record, no cost and no price, printed straight onto a customer ใบงานขาย. Every ชนิดสินค้า now picks from สต็อกสินค้า through the same ProductPicker, whose placeholder is "สินค้าที่ขาย...". Existing services move into stock via supabase/repair-categories-and-services.sql.',
   'ที่อยู่ (นิติบุคคล)':
