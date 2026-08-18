@@ -82,8 +82,14 @@ export function ExtrasSection({
                   <i className="fa-solid fa-trash"></i>
                 </button>
               </div>
+              {/* #3F6B33 below, rather than the #4C7A3E used for figures
+                  elsewhere: this line sits on a section fill, where #4C7A3E
+                  measures 4.35:1 on the tech tone and 4.44:1 on the document
+                  tone — just under AA. #3F6B33 is already
+                  SECTION_TONES.payment.ink, so it is the same green the form is
+                  built from, at 5.39:1 worst case. */}
               {ex.checked && name === 'ประกัน' && (
-                <p className="text-xs mt-1.5 ml-6" style={{ color: '#4C7A3E' }}>
+                <p className="text-xs mt-1.5 ml-6" style={{ color: '#3F6B33' }}>
                   <i className="fa-solid fa-circle-check mr-1.5"></i>เพิ่มรายการ &quot;ประกัน&quot;
                   ในสินค้า/การติดตั้งให้อัตโนมัติแล้ว
                 </p>

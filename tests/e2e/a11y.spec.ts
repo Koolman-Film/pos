@@ -30,21 +30,27 @@ const KNOWN_ISSUES: { id: string; reason: string }[] = [];
  * decision for the design owner, and it is written down with numbers so that
  * decision can be made on evidence.
  *
- * The two that matter most in practice:
- *   --ink-faint (#b5aaa1) on white  →  2.27:1  (hint text, placeholders, metadata)
- *   --ink-soft  (#8b7f76) on white  →  3.89:1  (secondary labels)
- * Darkening --ink-faint to about #8a7f76 and --ink-soft to about #6f635b would
- * clear AA while staying in the same warm-grey family.
+ * RESOLVED for the two that mattered most. `--ink-faint` (#b5aaa1, 2.27:1 on
+ * white) and `--ink-soft` (#8b7f76, 3.89:1) were tolerable while they only sat
+ * on white and --paper, but the numbered form sections put them on five tinted
+ * fills where they fell to 1.96-2.13 and 3.36-3.65 and failed on 26 nodes. Both
+ * are now darkened, staying on the same warm-grey ramp:
+ *   --ink-soft   #6f635b   worst 5.02:1 across all seven surfaces
+ *   --ink-faint  #726b65   worst 4.52:1
+ *
+ * Note the earlier suggestion here of #8a7f76 for --ink-faint was measured and
+ * does NOT clear AA — 3.90:1 on white, 3.37:1 on the lightest section fill. The
+ * cost of a value that does is that soft and faint now sit close together, so
+ * the hierarchy between a secondary label and a hint is carried more by size and
+ * weight than by colour.
  *
  * Anything NOT in this list still fails the test — that is the point. A new
  * low-contrast pair introduced by the port is a regression, and stays one.
  */
 const INHERITED_CONTRAST_PAIRS = new Set([
-  '#b5aaa1 on #faf7f3', // 2.13 — faint text on the paper background
-  '#b5aaa1 on #ffffff', // 2.27 — faint text on cards
+  // The four light-theme --ink-soft / --ink-faint pairs that used to live here
+  // are gone: those two tokens were darkened, so the colours no longer exist.
   '#6f6a69 on #211a18', // 3.21 — dark-theme faint text
-  '#8b7f76 on #faf7f3', // 3.64 — soft text on paper
-  '#8b7f76 on #ffffff', // 3.89 — soft text on cards
   '#9e5d69 on #f3e3e6', // 4.01 — the danger pill
   '#4c7a3e on #e6efdc', // 4.26 — the success pill
   '#858180 on #211a18', // 4.44 — dark-theme soft text
