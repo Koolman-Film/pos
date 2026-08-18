@@ -6,13 +6,14 @@ import { useMemo, useState } from 'react';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
+import { fmtThaiDate } from '@/lib/domain/format';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
 import { PrintJobSheet, type PrintMode } from './PrintJobSheet';
 import { serializeTicket } from './serialize';
 import { ExtrasSection } from './detail/ExtrasSection';
-import { InsuranceSection } from './detail/InsuranceSection';
+import { EXPIRY_WARNING_DAYS, InsuranceSection, daysLeft } from './detail/InsuranceSection';
 import { FormSection, SECTION_TONES } from './detail/FormSection';
 import { ItemsSection } from './detail/ItemsSection';
 import { NotesSection } from './detail/NotesSection';
@@ -194,6 +195,17 @@ export function TicketDetail({
   // flag is not something the form edits, and reading it from the draft would
   // let a stray field() call appear to unlock the ticket on screen.
   const locked = !isNew && !!initialTicket.locked;
+
+  /**
+   * ประกันของรถคันนี้ที่ใกล้หมดอายุ — the same 30-day window the dashboard warns
+   * on, repeated here because this is the screen open when the customer is at
+   * the counter. Read across the CAR, not just this ticket: the cover may have
+   * been sold on an earlier job.
+   */
+  const expiringPolicies = (initialTicket.insuranceForPlate ?? [])
+    .map((p) => ({ policy: p, days: daysLeft(p.endsAt) }))
+    .filter((x) => x.days != null && x.days <= EXPIRY_WARNING_DAYS)
+    .sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
 
   /**
    * บันทึก ข้อมูลเพิ่มเติม on a CLOSED ticket.
@@ -738,6 +750,28 @@ export function TicketDetail({
             stay visible — this is still the record of the job — but nothing in
             them can be changed or saved until an admin reopens it.
           */}
+          {expiringPolicies.length > 0 && (
+            <div
+              className="rounded-2xl p-4 mb-5"
+              style={{ background: '#FBF0DF', border: '1.5px solid #E2C48A' }}
+            >
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <i className="fa-solid fa-shield-halved"></i>ประกันของรถคันนี้ใกล้หมดอายุ
+              </p>
+              {expiringPolicies.map(({ policy, days }) => (
+                <p key={policy.id} className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                  {policy.planName || 'ประกัน'} · หมดอายุ{' '}
+                  {policy.endsAt ? fmtThaiDate(new Date(`${policy.endsAt}T00:00:00`)) : '-'}
+                  {days != null && days < 0
+                    ? ' (หมดอายุแล้ว)'
+                    : days === 0
+                      ? ' (วันนี้)'
+                      : ` (อีก ${days} วัน)`}
+                </p>
+              ))}
+            </div>
+          )}
+
           {locked && (
             <div
               className="rounded-2xl p-4 mb-5"

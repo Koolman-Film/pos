@@ -274,3 +274,56 @@ export async function setFilmPriceAction(input: {
   }
   revalidatePath('/stock');
 }
+
+/**
+ * แผนประกัน — the branch price list behind the ประกัน picker on a ticket.
+ *
+ * A plan is only ever a STARTING POINT: selling one copies its price and cover
+ * onto the policy (migration 0023), so editing a plan here changes what the next
+ * sale offers and nothing that has already been sold. That is why this can be a
+ * plain edit with no versioning.
+ *
+ * Gated on `stock.editDelete` — the same capability that lets someone change a
+ * product's price, which is the same kind of decision.
+ */
+export async function saveInsurancePlanAction(input: {
+  id?: number;
+  shop?: string | null;
+  name: string;
+  price: number;
+  bigPieces: number;
+  smallPieces: number;
+  months: number;
+  terms?: string;
+  active?: boolean;
+}): Promise<void> {
+  await requireCapability('stock.editDelete');
+  const supabase = await createClient();
+  const row = {
+    shop_id: input.shop || null,
+    name: input.name.trim(),
+    price: Number(input.price) || 0,
+    big_pieces: Number(input.bigPieces) || 0,
+    small_pieces: Number(input.smallPieces) || 0,
+    months: Number(input.months) || 0,
+    terms: input.terms?.trim() ?? '',
+    active: input.active ?? true,
+  };
+  const { error } = input.id
+    ? await supabase.from('insurance_plans').update(row).eq('id', input.id)
+    : await supabase.from('insurance_plans').insert(row);
+  if (error) throw error;
+  revalidatePath('/stock');
+  // The ticket's ประกัน picker reads this list.
+  revalidatePath('/tickets');
+}
+
+/** ลบแผนประกัน. Policies already sold keep their own copy, so nothing is lost. */
+export async function deleteInsurancePlanAction(id: number): Promise<void> {
+  await requireCapability('stock.editDelete');
+  const supabase = await createClient();
+  const { error } = await supabase.from('insurance_plans').delete().eq('id', id);
+  if (error) throw error;
+  revalidatePath('/stock');
+  revalidatePath('/tickets');
+}

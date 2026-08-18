@@ -9,6 +9,7 @@ import {
 } from '@/components/stock/StockModule';
 
 import { updateOptionListAction } from '../optionListActions';
+import { loadInsurancePlans } from '../tickets/data';
 
 import {
   addProductAction,
@@ -18,6 +19,8 @@ import {
   saveProductAction,
   deleteProductAction,
   setFilmPriceAction,
+  saveInsurancePlanAction,
+  deleteInsurancePlanAction,
 } from './actions';
 
 async function optionValues(
@@ -133,6 +136,10 @@ export default async function StockPage() {
     }));
   }
 
+  // แผนประกัน — configuration, like the film price matrix, and edited here for
+  // the same reason: it is a price list, not part of any one job.
+  const insurancePlans = await loadInsurancePlans();
+
   // A serialisable map, NOT session.canDo. StockModule is a Client Component, and
   // handing it the closure makes React refuse to serialise the tree, which 500s
   // the whole /stock route. Only the keys this module actually gates on.
@@ -159,6 +166,7 @@ export default async function StockPage() {
       filmPositions={filmPositions}
       wrapPositions={wrapPositions}
       filmPriceMatrix={filmPriceMatrix}
+      insurancePlans={insurancePlans}
       actions={{
         addProduct: addProductAction,
         bulkImport: bulkImportAction,
@@ -167,6 +175,8 @@ export default async function StockPage() {
         saveProduct: saveProductAction,
         deleteProduct: deleteProductAction,
         setFilmPrice: setFilmPriceAction,
+        saveInsurancePlan: saveInsurancePlanAction,
+        deleteInsurancePlan: deleteInsurancePlanAction,
         updateOptionList: updateOptionListAction,
       }}
     />

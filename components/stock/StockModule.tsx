@@ -8,6 +8,7 @@ import { OptionManageProvider } from '@/components/ui/optionManage';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { fmt } from '@/lib/domain/format';
+import type { InsurancePlan } from '@/components/tickets/types';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
@@ -82,6 +83,8 @@ type StockActions = {
   saveProduct?: (input: any) => Promise<void>;
   deleteProduct?: (id: number) => Promise<void>;
   setFilmPrice?: (input: FilmPriceEntry) => Promise<void>;
+  saveInsurancePlan?: (input: any) => Promise<void>;
+  deleteInsurancePlan?: (id: number) => Promise<void>;
   /** Persists หมวดหมู่ (ชนิดสินค้า). Without it the picker only edits state. */
   updateOptionList?: (
     listKey: string,
@@ -104,6 +107,7 @@ export function StockModule({
   filmPositions = [],
   wrapPositions = [],
   filmPriceMatrix = [],
+  insurancePlans = [],
   actions = {},
 }: {
   stock: StockItem[];
@@ -126,6 +130,8 @@ export function StockModule({
   filmPositions?: string[];
   wrapPositions?: string[];
   filmPriceMatrix?: FilmPriceEntry[];
+  /** แผนประกันฟิล์มกันรอย — the list a ticket picks from (migration 0023). */
+  insurancePlans?: InsurancePlan[];
   actions?: StockActions;
 }) {
   // Deny by default when neither form is supplied, so a wiring mistake hides
@@ -159,6 +165,54 @@ export function StockModule({
     void actions.updateOptionList?.('product_categories', next);
   }
   const [priceMatrix, setPriceMatrix] = useState<FilmPriceEntry[]>(filmPriceMatrix);
+
+  /**
+   * แผนประกัน. Optimistic local state, persisted through the actions below.
+   *
+   * Editing a plan is safe in a way editing a product price is not: selling a
+   * policy COPIES the plan (migration 0023), so nothing already sold follows
+   * the change and there is no versioning to keep.
+   */
+  const [plans, setPlans] = useState<InsurancePlan[]>(insurancePlans);
+  const blankPlan = (): InsurancePlan => ({
+    id: 0,
+    shop: null,
+    name: '',
+    price: 0,
+    bigPieces: 2,
+    smallPieces: 20,
+    months: 12,
+    terms: '',
+    active: true,
+  });
+  const [planDraft, setPlanDraft] = useState<InsurancePlan | null>(null);
+
+  async function savePlan() {
+    if (!planDraft || !planDraft.name.trim()) return;
+    await actions.saveInsurancePlan?.({
+      id: planDraft.id || undefined,
+      shop: planDraft.shop,
+      name: planDraft.name,
+      price: planDraft.price,
+      bigPieces: planDraft.bigPieces,
+      smallPieces: planDraft.smallPieces,
+      months: planDraft.months,
+      terms: planDraft.terms,
+      active: planDraft.active,
+    });
+    setPlans((prev) =>
+      planDraft.id
+        ? prev.map((p) => (p.id === planDraft.id ? planDraft : p))
+        : [...prev, { ...planDraft, id: Math.max(0, ...prev.map((p) => p.id)) + 1 }],
+    );
+    setPlanDraft(null);
+  }
+
+  async function removePlan(plan: InsurancePlan) {
+    if (!window.confirm(`ลบแผนประกัน "${plan.name}"?`)) return;
+    await actions.deleteInsurancePlan?.(plan.id);
+    setPlans((prev) => prev.filter((p) => p.id !== plan.id));
+  }
   const [priceProdCat, setPriceProdCat] = useState('ฟิล์มกรองแสง');
   const [priceProd, setPriceProd] = useState('');
 
@@ -559,6 +613,14 @@ export function StockModule({
                 <i className="fa-solid fa-tags"></i>ตั้งราคาฟิล์ม/กันรอย
               </button>
             )}
+            {can('stock.editDelete') && (
+              <button
+                onClick={() => setPanel(panel === 'insurance' ? null : 'insurance')}
+                className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'insurance' ? 'btn-primary' : 'btn-outline'}`}
+              >
+                <i className="fa-solid fa-shield-halved"></i>ตั้งราคาประกัน
+              </button>
+            )}
             {can('stock.addProduct') && (
               <button
                 onClick={() => setPanel(panel === 'bulk' ? null : 'bulk')}
@@ -716,6 +778,189 @@ export function StockModule({
                   ยืนยันนำเข้า {bulkRows.filter((r) => r.valid).length} รายการ
                 </button>
               </>
+            )}
+          </div>
+        )}
+
+        {panel === 'insurance' && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-1">ตั้งราคาประกันฟิล์มกันรอย</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+              แก้ไขได้ตลอด ประกันที่ขายไปแล้วเก็บราคาและความคุ้มครองของตัวเองไว้ จึงไม่กระทบย้อนหลัง
+            </p>
+
+            <div className="overflow-x-auto mb-3">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ color: 'var(--ink-soft)' }}>
+                    <th className="text-left font-medium py-2">แผน</th>
+                    <th className="text-right font-medium py-2">ราคา</th>
+                    <th className="text-center font-medium py-2">ความคุ้มครอง</th>
+                    <th className="text-center font-medium py-2">ระยะเวลา</th>
+                    <th className="text-center font-medium py-2">สถานะ</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plans.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="py-3 text-xs"
+                        style={{ color: 'var(--ink-faint)' }}
+                      >
+                        ยังไม่มีแผนประกัน
+                      </td>
+                    </tr>
+                  )}
+                  {plans.map((p) => (
+                    <tr key={p.id} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td className="py-2 font-medium">{p.name}</td>
+                      <td className="py-2 text-right">{fmt(p.price)}</td>
+                      <td className="py-2 text-center text-xs">
+                        {p.bigPieces} ชิ้นใหญ่, {p.smallPieces} ชิ้นเล็ก
+                      </td>
+                      <td className="py-2 text-center text-xs">{p.months} เดือน</td>
+                      <td className="py-2 text-center text-xs">
+                        {p.active ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                      </td>
+                      <td className="py-2 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => setPlanDraft({ ...p })}
+                          className="btn-outline text-xs px-2.5 py-1 rounded-lg mr-1.5"
+                          aria-label={`แก้ไขแผนประกัน ${p.name}`}
+                        >
+                          <i className="fa-solid fa-pen"></i>
+                        </button>
+                        <button
+                          onClick={() => removePlan(p)}
+                          className="text-xs px-2"
+                          style={{ color: '#B23A48' }}
+                          aria-label={`ลบแผนประกัน ${p.name}`}
+                        >
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {planDraft ? (
+              <div className="rounded-xl p-3" style={{ background: 'var(--paper)' }}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                  <div className="sm:col-span-3">
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ชื่อแผน
+                    </label>
+                    <input
+                      aria-label="ชื่อแผนประกัน"
+                      value={planDraft.name}
+                      onChange={(e) => setPlanDraft({ ...planDraft, name: e.target.value })}
+                      placeholder="เช่น ประกันฟิล์มกันรอย 1 ปี"
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ราคา (บาท)
+                    </label>
+                    <input
+                      aria-label="ราคาแผนประกัน"
+                      type="number"
+                      value={planDraft.price}
+                      onChange={(e) =>
+                        setPlanDraft({ ...planDraft, price: Number(e.target.value) })
+                      }
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ความคุ้มครอง — ชิ้นใหญ่
+                    </label>
+                    <input
+                      aria-label="ชิ้นใหญ่"
+                      type="number"
+                      value={planDraft.bigPieces}
+                      onChange={(e) =>
+                        setPlanDraft({ ...planDraft, bigPieces: Number(e.target.value) })
+                      }
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ชิ้นเล็ก
+                    </label>
+                    <input
+                      aria-label="ชิ้นเล็ก"
+                      type="number"
+                      value={planDraft.smallPieces}
+                      onChange={(e) =>
+                        setPlanDraft({ ...planDraft, smallPieces: Number(e.target.value) })
+                      }
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ระยะเวลา (เดือน)
+                    </label>
+                    <input
+                      aria-label="ระยะเวลาคุ้มครอง"
+                      type="number"
+                      value={planDraft.months}
+                      onChange={(e) =>
+                        setPlanDraft({ ...planDraft, months: Number(e.target.value) })
+                      }
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      เงื่อนไขเพิ่มเติม
+                    </label>
+                    <input
+                      aria-label="เงื่อนไขแผนประกัน"
+                      value={planDraft.terms}
+                      onChange={(e) => setPlanDraft({ ...planDraft, terms: e.target.value })}
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm mb-3">
+                  <input
+                    type="checkbox"
+                    checked={planDraft.active}
+                    onChange={(e) => setPlanDraft({ ...planDraft, active: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  เปิดให้เลือกในใบงาน
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPlanDraft(null)}
+                    className="btn-outline flex-1 rounded-lg py-2 text-sm"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    onClick={savePlan}
+                    className="btn-primary flex-1 rounded-lg py-2 text-sm font-semibold"
+                  >
+                    บันทึกแผน
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setPlanDraft(blankPlan())}
+                className="btn-outline text-sm px-3.5 py-2 rounded-xl font-semibold"
+              >
+                <i className="fa-solid fa-plus mr-1.5"></i>เพิ่มแผนประกัน
+              </button>
             )}
           </div>
         )}

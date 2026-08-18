@@ -35,6 +35,20 @@ export type StockByCategory = { name: string; qty: number };
 /** One bar in the "งานทั้งหมด" breakdown (prototype `statusList`). */
 export type StatusTotal = { key: string; count: number; pct: number };
 
+/**
+ * ประกันที่ใกล้หมดอายุใน 30 วัน.
+ *
+ * "As of now" like the bookings window, not a period total: a policy running
+ * out next week is a call to make today, whatever month the dashboard shows.
+ */
+export type ExpiringInsurance = {
+  ticketId: string;
+  plate: string;
+  planName: string;
+  endsAt: string;
+  daysLeft: number;
+};
+
 /** A booking inside the next-7-days window (prototype `upcoming`). */
 export type UpcomingTicket = {
   id: string;
@@ -90,6 +104,7 @@ export type DashboardProps = {
   totalJobs?: number;
   statusTotals?: StatusTotal[];
   upcoming?: UpcomingTicket[];
+  expiringInsurance?: ExpiringInsurance[];
   pendingApprovals?: PendingApprovals;
   recentJobs?: RecentJob[];
   /** Capability check, for the `list.createNew` button. Denies by default. */
@@ -122,6 +137,7 @@ export function Dashboard({
   totalJobs = 0,
   statusTotals = [],
   upcoming = [],
+  expiringInsurance = [],
   pendingApprovals,
   recentJobs = [],
   canDo = () => false,
@@ -467,6 +483,40 @@ export function Dashboard({
           </div>
         </div>
 
+        {/*
+          ประกันใกล้หมดอายุ. Sits beside the bookings because it is the same kind
+          of list: a short queue of customers somebody should ring this week.
+        */}
+        {expiringInsurance.length > 0 && (
+          <div className="card p-5 lg:col-span-4">
+            <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
+              <i className="fa-solid fa-shield-halved" style={{ color: '#B26A00' }}></i>
+              ประกันใกล้หมดอายุ (ภายใน 30 วัน) ({expiringInsurance.length})
+            </p>
+            <div className="flex flex-col max-h-[26rem] overflow-y-auto scrollbar-thin">
+              {expiringInsurance.map((p) => (
+                <Link
+                  key={`${p.ticketId}-${p.endsAt}-${p.plate}`}
+                  href={`/tickets/${p.ticketId}`}
+                  className="row-hover rounded-xl px-2.5 py-2 flex items-center justify-between gap-2"
+                >
+                  <span className="min-w-0">
+                    <span className="text-xs font-semibold block">{p.plate || p.ticketId}</span>
+                    <span className="text-xs block" style={{ color: 'var(--ink-soft)' }}>
+                      {p.planName || 'ประกัน'} · หมด {fmtThaiDate(new Date(`${p.endsAt}T00:00:00`))}
+                    </span>
+                  </span>
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0"
+                    style={{ background: '#FBF0DF', color: '#B26A00' }}
+                  >
+                    {p.daysLeft === 0 ? 'หมดวันนี้' : `อีก ${p.daysLeft} วัน`}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="card p-5 lg:col-span-4">
           <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
             <i className="fa-solid fa-calendar-week" style={{ color: 'var(--primary)' }}></i>

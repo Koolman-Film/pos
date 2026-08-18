@@ -49,6 +49,7 @@ export default async function DashboardPage({
     { data: stockRows },
     { data: shopRows },
     { data: statusRows },
+    { data: policyRows },
   ] = await Promise.all([
     supabase
       .from('tickets')
@@ -75,6 +76,12 @@ export default async function DashboardPage({
       .from('statuses')
       .select('key, short, bg, text_color, dot, sort_order')
       .order('sort_order'),
+    // ประกัน is not on any ticket (migration 0023), so revenue and the expiry
+    // warning both have to read the policies themselves.
+    supabase
+      .from('insurance_policies')
+      .select('id, ticket_id, plate, plan_name, price, sold_at, ends_at')
+      .order('ends_at', { ascending: true }),
   ]);
 
   // ---- Shop options for the filter (names + access) ----
@@ -187,12 +194,59 @@ export default async function DashboardPage({
   // Shop-scoped but period-independent: the 7-day booking window and the
   // receivables/payables lists are "as of now" figures, not period totals.
   const shopTickets = tickets.filter((t) => inShop(t.shop));
+  // A policy carries no shop of its own; it belongs to the shop of its job.
+  const shopByTicketId = new Map(tickets.map((t) => [t.id, t.shop]));
   const visibleTickets = shopTickets.filter((t) => inPeriod(t.dropOff));
 
   const arItems = computeReceivables(tickets, orders, customers, shopFilter);
   const apItems = computePayables(expenses, shopFilter);
 
-  const revenue = visibleTickets.reduce((s, t) => s + ticketTotal(t), 0);
+  /*
+    ประกัน sells two ways — with the install, or months later on a closed
+    ticket — so it is its own record with its own วันที่ขาย and is never part
+    of a ticket total (migration 0023). Revenue therefore adds the policies
+    sold in the period on top of the tickets delivered in it.
+  */
+  type PolicyRow = {
+    id: number;
+    ticket_id: string;
+    plate: string;
+    plan_name: string;
+    price: number;
+    sold_at: string | null;
+    ends_at: string | null;
+  };
+  const policies = ((policyRows ?? []) as unknown as PolicyRow[]).filter((p) =>
+    inShop(shopByTicketId.get(p.ticket_id) ?? ''),
+  );
+  const insuranceRevenue = policies
+    .filter((p) => inPeriod(p.sold_at ? new Date(`${p.sold_at}T00:00:00`) : null))
+    .reduce((s, p) => s + num(p.price), 0);
+
+  const revenue = visibleTickets.reduce((s, t) => s + ticketTotal(t), 0) + insuranceRevenue;
+
+  /*
+    ประกันใกล้หมดอายุ — the 30-day window the shop asked for.
+
+    Read "as of now" rather than through the period filter, like the bookings
+    window and the receivables list: a policy expiring next week is something
+    to ring the customer about today, whatever month the dashboard is showing.
+  */
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const expiringInsurance = policies
+    .filter((p) => p.ends_at)
+    .map((p) => ({
+      ticketId: p.ticket_id,
+      plate: p.plate,
+      planName: p.plan_name,
+      endsAt: p.ends_at as string,
+      daysLeft: Math.round(
+        (new Date(`${p.ends_at}T00:00:00`).getTime() - today.getTime()) / 86_400_000,
+      ),
+    }))
+    // Already-expired ones stay off: the point is the call you can still make.
+    .filter((p) => p.daysLeft >= 0 && p.daysLeft <= 30)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
 
   const paidExpenses = expenses.filter(
     (e) => inShop(e.shop) && e.status === 'จ่ายแล้ว' && inPeriod(e.paidAt),
@@ -348,6 +402,7 @@ export default async function DashboardPage({
       upcoming={upcoming}
       pendingApprovals={pendingApprovals}
       recentJobs={recentJobs}
+      expiringInsurance={expiringInsurance}
       canDo={session.canDo}
       onUpdateTicketStatus={updateTicketStatus}
       filter={
