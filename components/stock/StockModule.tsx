@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -144,6 +145,7 @@ export function StockModule({
   // `.app-shell` subtree — Task 1's print CSS hides `.app-shell` and shows only
   // `.print-area`, so a nested print-area would be hidden with it. Portaling
   // needs `document`, which is absent during SSR, hence the mount gate.
+  const router = useRouter();
   const mounted = useIsMounted();
 
   const [categoriesState, setCategoriesState] = useState<string[]>(productCategories);
@@ -167,13 +169,18 @@ export function StockModule({
   const [priceMatrix, setPriceMatrix] = useState<FilmPriceEntry[]>(filmPriceMatrix);
 
   /**
-   * แผนประกัน. Optimistic local state, persisted through the actions below.
+   * แผนประกัน — read straight from the server, NOT held in local state.
+   *
+   * The optimistic version invented an id for a row it had just added, and a
+   * shop that edited or deleted that row before reloading would have hit a
+   * different plan or none at all. A price list is edited a few times a year;
+   * a round-trip is the right price for the list always being the real one.
    *
    * Editing a plan is safe in a way editing a product price is not: selling a
    * policy COPIES the plan (migration 0023), so nothing already sold follows
    * the change and there is no versioning to keep.
    */
-  const [plans, setPlans] = useState<InsurancePlan[]>(insurancePlans);
+  const plans = insurancePlans;
   const blankPlan = (): InsurancePlan => ({
     id: 0,
     shop: null,
@@ -200,18 +207,14 @@ export function StockModule({
       terms: planDraft.terms,
       active: planDraft.active,
     });
-    setPlans((prev) =>
-      planDraft.id
-        ? prev.map((p) => (p.id === planDraft.id ? planDraft : p))
-        : [...prev, { ...planDraft, id: Math.max(0, ...prev.map((p) => p.id)) + 1 }],
-    );
     setPlanDraft(null);
+    router.refresh();
   }
 
   async function removePlan(plan: InsurancePlan) {
     if (!window.confirm(`ลบแผนประกัน "${plan.name}"?`)) return;
     await actions.deleteInsurancePlan?.(plan.id);
-    setPlans((prev) => prev.filter((p) => p.id !== plan.id));
+    router.refresh();
   }
   const [priceProdCat, setPriceProdCat] = useState('ฟิล์มกรองแสง');
   const [priceProd, setPriceProd] = useState('');

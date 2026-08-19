@@ -2,6 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+// StockModule refreshes the server list after a write; there is no app-router
+// context under jsdom. Test-environment concern only.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+}));
+
 import { StockModule, type StockItem } from '@/components/stock/StockModule';
 
 const stock: StockItem[] = [
@@ -271,5 +277,82 @@ describe('StockModule — ชนิดสินค้า that is not in the mana
       // is how "จอ" stops being orphaned.
       expect.arrayContaining([...categories, 'จอ', 'กล้องติดรถยนต์']),
     );
+  });
+});
+
+/**
+ * แผนประกัน is a price list, and the list on screen has to be the one in the
+ * database. The first version kept it in local state and invented an id for a
+ * row it had just added — a shop that edited or deleted that row before
+ * reloading would have hit a different plan, or none.
+ */
+describe('StockModule — ตั้งราคาประกัน', () => {
+  const plans = [
+    {
+      id: 41,
+      shop: null,
+      name: 'ประกันฟิล์มกันรอย 1 ปี',
+      price: 3000,
+      bigPieces: 2,
+      smallPieces: 20,
+      months: 12,
+      terms: '',
+      active: true,
+    },
+  ];
+
+  it('edits and deletes by the id the database gave the row', async () => {
+    const user = userEvent.setup();
+    const saveInsurancePlan = vi.fn(async () => {});
+    const deleteInsurancePlan = vi.fn(async () => {});
+    render(
+      <StockModule
+        stock={stock}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        insurancePlans={plans}
+        actions={{ saveInsurancePlan, deleteInsurancePlan }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /ตั้งราคาประกัน/ }));
+    await user.click(screen.getByLabelText('แก้ไขแผนประกัน ประกันฟิล์มกันรอย 1 ปี'));
+    await user.clear(screen.getByLabelText('ราคาแผนประกัน'));
+    await user.type(screen.getByLabelText('ราคาแผนประกัน'), '3500');
+    await user.click(screen.getByRole('button', { name: 'บันทึกแผน' }));
+
+    expect(saveInsurancePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 41, price: 3500 }),
+    );
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await user.click(screen.getByLabelText('ลบแผนประกัน ประกันฟิล์มกันรอย 1 ปี'));
+    expect(deleteInsurancePlan).toHaveBeenCalledWith(41);
+  });
+
+  it('sends a brand-new plan without an id, so the database issues one', async () => {
+    const user = userEvent.setup();
+    // Typed through its argument so `mock.calls[0][0]` is the payload, not `never`.
+    const saveInsurancePlan = vi.fn(async (input: { id?: number; name: string }) => {
+      void input;
+    });
+    render(
+      <StockModule
+        stock={stock}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        insurancePlans={[]}
+        actions={{ saveInsurancePlan }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /ตั้งราคาประกัน/ }));
+    await user.click(screen.getByRole('button', { name: /เพิ่มแผนประกัน/ }));
+    await user.type(screen.getByLabelText('ชื่อแผนประกัน'), 'ประกัน 6 เดือน');
+    await user.click(screen.getByRole('button', { name: 'บันทึกแผน' }));
+
+    const sent = saveInsurancePlan.mock.calls[0][0];
+    expect(sent.id).toBeUndefined();
+    expect(sent.name).toBe('ประกัน 6 เดือน');
   });
 });
