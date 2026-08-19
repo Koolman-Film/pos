@@ -528,3 +528,57 @@ describe('ใบเคลมประกัน', () => {
     expect(screen.getByText(/1 ชิ้นใหญ่, 3 ชิ้นเล็ก/)).toBeInTheDocument();
   });
 });
+
+/**
+ * The financial documents are the ones a customer takes away, and some of those
+ * customers do not read Thai. Every heading therefore carries its English —
+ * under the Thai, smaller and greyer, so the Thai stays the label on a Thai
+ * shop’s receipt.
+ */
+describe('เอกสารการเงิน — ภาษาอังกฤษกำกับ', () => {
+  const renderDoc = (over = {}) =>
+    renderSheet(makeTicket({ items: [item()] }), 'doc', {
+      total: 29500,
+      paid: 29500,
+      payments: [{ type: 'ชำระส่วนที่เหลือ', method: 'เงินสด', amount: 29500, date: '2026-08-14' }],
+      ...over,
+    });
+
+  it('names the document in both languages', () => {
+    renderDoc();
+    expect(screen.getByText('ใบเสร็จรับเงิน')).toBeInTheDocument();
+    expect(screen.getByText('RECEIPT')).toBeInTheDocument();
+  });
+
+  it('translates the document name, not just the label', () => {
+    renderDoc({ docType: 'ใบเสนอราคา' });
+    expect(screen.getByText('QUOTATION')).toBeInTheDocument();
+  });
+
+  it('carries English on every heading a customer reads', () => {
+    renderDoc();
+    for (const en of [
+      'No.',
+      'Date',
+      'Customer',
+      'Issued by',
+      'Qty',
+      'Description',
+      'Unit Price',
+      'Amount',
+      'Grand Total',
+      'Payment Method',
+      'Signature',
+    ]) {
+      expect(screen.getAllByText(new RegExp(en)).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps the Thai as the heading and the English as the gloss', () => {
+    renderDoc();
+    // Same element, Thai first — not a second column and not a replacement.
+    const total = screen.getByText('ยอดรวมสุทธิ').textContent ?? '';
+    expect(total.startsWith('ยอดรวมสุทธิ')).toBe(true);
+    expect(total).toContain('Grand Total');
+  });
+});

@@ -88,6 +88,30 @@ export const QC_CHECKLIST_SECTIONS: { title: string; items: string[] }[] = [
 const DOC_ACCENT = '#7A2333';
 
 /**
+ * Thai heading with its English underneath, for the financial documents.
+ *
+ * Thai stays the label — this is a Thai shop issuing a Thai receipt — and the
+ * English rides along smaller and greyer. A customer who needs the English is
+ * the one who cannot read the line above it, so it has to be there without
+ * competing with it.
+ */
+function bi(th: string, en: string) {
+  return (
+    <>
+      {th}
+      <span style={{ fontWeight: 'normal', fontSize: 9, color: '#6B6B6B' }}> / {en}</span>
+    </>
+  );
+}
+
+/** The document name in English, for the band under the Thai one. */
+function docTypeEn(docType: string): string {
+  if (docType === 'ใบเสนอราคา') return 'QUOTATION';
+  if (docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') return 'TAX INVOICE / RECEIPT';
+  return 'RECEIPT';
+}
+
+/**
  * "มัดจำ" reads as a noun on its own; the printed line wants the act of paying
  * it. The other two types are already phrased that way ("ชำระส่วนที่เหลือ"), so
  * only the ones that are not get the verb.
@@ -1786,7 +1810,7 @@ export function PrintJobSheet({
         ];
       });
 
-    const totalRow = (label: string, value: string, strong = false) => (
+    const totalRow = (label: React.ReactNode, value: string, strong = false) => (
       <div
         style={{
           display: 'flex',
@@ -1840,6 +1864,9 @@ export function PrintJobSheet({
               <p style={{ margin: 0, fontSize: 20, fontWeight: 'bold', letterSpacing: 0.5 }}>
                 {docType}
               </p>
+              <p style={{ margin: '1px 0 0', fontSize: 10, letterSpacing: 1.5, opacity: 0.9 }}>
+                {docTypeEn(docType)}
+              </p>
             </div>
             {/* Own line each, off to the right. Run together on one line they
                 read as a single reference and the eye has to split them; the
@@ -1848,30 +1875,41 @@ export function PrintJobSheet({
               <p style={{ margin: 0, fontSize: 12 }}>
                 {/* The ticket id already carries the shop — JT-CM-00216. Prefixing
                     t.shop again printed RCT-CM-CM-00216 on every document. */}
-                เลขที่เอกสาร: {docPrefix}-{t.id.replace('JT-', '')}
+                {bi('เลขที่เอกสาร', 'No.')}: {docPrefix}-{t.id.replace('JT-', '')}
               </p>
               <p style={{ margin: '2px 0 0', fontSize: 12 }}>
-                วันที่เอกสาร: {fmtThaiDate(new Date())}
+                {bi('วันที่เอกสาร', 'Date')}: {fmtThaiDate(new Date())}
               </p>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 20, marginBottom: 14, fontSize: 11 }}>
             <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>ข้อมูลลูกค้า :</p>
+              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>
+                {bi('ข้อมูลลูกค้า', 'Customer')} :
+              </p>
               <p style={{ margin: 0, fontWeight: 'bold' }}>{buyerName || t.customer}</p>
               {isTaxInvoice && buyerAddress && <p style={{ margin: '2px 0 0' }}>{buyerAddress}</p>}
               {isTaxInvoice && buyerTaxId && (
-                <p style={{ margin: '2px 0 0' }}>เลขผู้เสียภาษี {buyerTaxId}</p>
+                <p style={{ margin: '2px 0 0' }}>
+                  {bi('เลขผู้เสียภาษี', 'Tax ID')} {buyerTaxId}
+                </p>
               )}
-              {t.phone && <p style={{ margin: '2px 0 0' }}>โทร {t.phone}</p>}
+              {t.phone && (
+                <p style={{ margin: '2px 0 0' }}>
+                  {bi('โทร', 'Tel')} {t.phone}
+                </p>
+              )}
               <p style={{ margin: '2px 0 0' }}>
-                รถ: {t.brand} {t.model} &middot; {t.plate}
+                {bi('รถ', 'Vehicle')}: {t.brand} {t.model} &middot; {t.plate}
               </p>
             </div>
             <div style={{ flex: 1, textAlign: 'right' }}>
               <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>
-                {isQuotation ? 'ผู้เสนอราคา :' : 'ผู้ออกใบเสร็จรับเงิน :'}
+                {isQuotation
+                  ? bi('ผู้เสนอราคา', 'Issued by')
+                  : bi('ผู้ออกใบเสร็จรับเงิน', 'Issued by')}{' '}
+                :
               </p>
               {/*
                 Branch first, legal entity under it. The customer knows the shop
@@ -1884,9 +1922,15 @@ export function PrintJobSheet({
                 <p style={{ margin: '2px 0 0' }}>{info.companyName}</p>
               )}
               {info.address && <p style={{ margin: '2px 0 0' }}>{info.address}</p>}
-              {info.phone && <p style={{ margin: '2px 0 0' }}>โทร {info.phone}</p>}
+              {info.phone && (
+                <p style={{ margin: '2px 0 0' }}>
+                  {bi('โทร', 'Tel')} {info.phone}
+                </p>
+              )}
               {showCompanyInfo && info.taxId && (
-                <p style={{ margin: '2px 0 0' }}>เลขผู้เสียภาษี {info.taxId}</p>
+                <p style={{ margin: '2px 0 0' }}>
+                  {bi('เลขผู้เสียภาษี', 'Tax ID')} {info.taxId}
+                </p>
               )}
             </div>
           </div>
@@ -1894,10 +1938,24 @@ export function PrintJobSheet({
           <table style={{ marginBottom: 12, fontSize: 11 }} className="doc-table">
             <thead>
               <tr>
-                <th style={{ width: 50, textAlign: 'center' }}>จำนวน</th>
-                <th>รายการ</th>
-                <th style={{ width: 100, textAlign: 'right' }}>ราคา</th>
-                <th style={{ width: 100, textAlign: 'right' }}>ยอดรวม</th>
+                {/* The English sits under each heading rather than beside it:
+                    the จำนวน column is 50px wide and a slash would wrap it. */}
+                <th style={{ width: 50, textAlign: 'center' }}>
+                  จำนวน
+                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Qty</div>
+                </th>
+                <th>
+                  รายการ
+                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Description</div>
+                </th>
+                <th style={{ width: 100, textAlign: 'right' }}>
+                  ราคา
+                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Unit Price</div>
+                </th>
+                <th style={{ width: 100, textAlign: 'right' }}>
+                  ยอดรวม
+                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Amount</div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1925,11 +1983,13 @@ export function PrintJobSheet({
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
             <div style={{ width: 260 }}>
-              {totalDiscount > 0 && totalRow('ยอดรวม', fmt(grossTotal))}
-              {totalDiscount > 0 && totalRow('ส่วนลดรวม', `-${fmt(totalDiscount)}`)}
-              {isTaxInvoice && totalRow('มูลค่าก่อนภาษี', fmt(total / 1.07))}
-              {isTaxInvoice && totalRow('ภาษีมูลค่าเพิ่ม 7%', fmt(total - total / 1.07))}
-              {totalRow('ยอดรวมสุทธิ', fmt(total), true)}
+              {totalDiscount > 0 && totalRow(bi('ยอดรวม', 'Subtotal'), fmt(grossTotal))}
+              {totalDiscount > 0 && totalRow(bi('ส่วนลดรวม', 'Discount'), `-${fmt(totalDiscount)}`)}
+              {isTaxInvoice &&
+                totalRow(bi('มูลค่าก่อนภาษี', 'Amount before VAT'), fmt(total / 1.07))}
+              {isTaxInvoice &&
+                totalRow(bi('ภาษีมูลค่าเพิ่ม 7%', 'VAT 7%'), fmt(total - total / 1.07))}
+              {totalRow(bi('ยอดรวมสุทธิ', 'Grand Total'), fmt(total), true)}
               <p
                 style={{
                   margin: '4px 0 0',
@@ -1961,7 +2021,9 @@ export function PrintJobSheet({
                   fontSize: 11,
                 }}
               >
-                <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>ช่องทางการชำระเงิน</p>
+                <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>
+                  {bi('ช่องทางการชำระเงิน', 'Payment Method')}
+                </p>
                 {/*
                   Only the channels the money actually came in by. Printing the
                   shop's whole list with empty boxes beside it said nothing —
@@ -1992,7 +2054,7 @@ export function PrintJobSheet({
                 </div>
                 {receivedPayments.length > 0 && (
                   <p style={{ margin: '6px 0 0', fontSize: 10, fontWeight: 'bold' }}>
-                    รายละเอียดการชำระเงิน
+                    {bi('รายละเอียดการชำระเงิน', 'Payment Details')}
                   </p>
                 )}
                 {receivedPayments.map((p, pi) => (
@@ -2003,7 +2065,13 @@ export function PrintJobSheet({
                   </p>
                 ))}
                 <p style={{ margin: '5px 0 0', fontWeight: 'bold' }}>
-                  {total - paid <= 0 ? 'ชำระครบแล้ว' : `คงเหลือ ${fmt(total - paid)} บาท`}
+                  {total - paid <= 0 ? (
+                    bi('ชำระครบแล้ว', 'Paid in full')
+                  ) : (
+                    <>
+                      {bi('คงเหลือ', 'Balance due')} {fmt(total - paid)} บาท
+                    </>
+                  )}
                 </p>
               </div>
             )}
@@ -2012,11 +2080,11 @@ export function PrintJobSheet({
                   the header already says — and the person signing is a member of
                   staff, not the company. */}
               <p style={{ margin: '26px 0 0' }}>
-                ลงชื่อ .............................................
+                {bi('ลงชื่อ', 'Signature')} .............................................
               </p>
               <p style={{ margin: '4px 0 0' }}>
-                {isQuotation ? 'ผู้เสนอราคา' : 'ผู้รับเงิน'} &middot; วันที่{' '}
-                {fmtThaiDate(new Date())}
+                {isQuotation ? bi('ผู้เสนอราคา', 'Quoted by') : bi('ผู้รับเงิน', 'Received by')}{' '}
+                &middot; {bi('วันที่', 'Date')} {fmtThaiDate(new Date())}
               </p>
             </div>
           </div>
@@ -2081,11 +2149,12 @@ export function PrintJobSheet({
             </div>
             <div style={{ flex: 1, textAlign: 'right' }}>
               <p style={{ margin: 0, fontSize: 12 }}>
-                เลขที่เอกสาร: INS-{t.id.replace('JT-', '')}
+                {bi('เลขที่เอกสาร', 'No.')}: INS-{t.id.replace('JT-', '')}
                 {v.id ? `-${v.id}` : ''}
               </p>
               <p style={{ margin: '2px 0 0', fontSize: 12 }}>
-                วันที่เอกสาร: {v.soldAt ? fmtThaiDate(new Date(v.soldAt)) : fmtThaiDate(new Date())}
+                {bi('วันที่เอกสาร', 'Date')}:{' '}
+                {v.soldAt ? fmtThaiDate(new Date(v.soldAt)) : fmtThaiDate(new Date())}
               </p>
             </div>
           </div>
@@ -2145,7 +2214,9 @@ export function PrintJobSheet({
               customer’s folder says what is left of the cover. */}
           {v.claims.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 'bold' }}>ประวัติการเคลม</p>
+              <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 'bold' }}>
+                {bi('ประวัติการเคลม', 'Claim History')}
+              </p>
               <table style={{ fontSize: 11 }}>
                 <tbody>
                   {v.claims.map((c, i) => (
@@ -2162,15 +2233,18 @@ export function PrintJobSheet({
                 </tbody>
               </table>
               <p style={{ margin: '4px 0 0', fontSize: 11, fontWeight: 'bold' }}>
-                คงเหลือ {v.bigPieces - usedBig} ชิ้นใหญ่, {v.smallPieces - usedSmall} ชิ้นเล็ก
+                {bi('คงเหลือ', 'Remaining')} {v.bigPieces - usedBig} ชิ้นใหญ่,{' '}
+                {v.smallPieces - usedSmall} ชิ้นเล็ก
               </p>
             </div>
           )}
 
           <div style={{ textAlign: 'right', fontSize: 11, marginTop: 24 }}>
-            <p style={{ margin: 0 }}>ลงชื่อ .............................................</p>
+            <p style={{ margin: 0 }}>
+              {bi('ลงชื่อ', 'Signature')} .............................................
+            </p>
             <p style={{ margin: '4px 0 0' }}>
-              ผู้รับเงิน &middot; วันที่{' '}
+              {bi('ผู้รับเงิน', 'Received by')} &middot; {bi('วันที่', 'Date')}{' '}
               {v.soldAt ? fmtThaiDate(new Date(v.soldAt)) : fmtThaiDate(new Date())}
             </p>
           </div>
