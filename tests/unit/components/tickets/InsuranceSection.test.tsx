@@ -62,6 +62,7 @@ function renderSection(over: Record<string, unknown> = {}) {
   // Typed through its argument so `mock.calls[0][0]` is the policy, not `never`.
   const onSave = vi.fn(async (p: InsurancePolicy) => ({ ok: true, id: p.id }));
   const onPrint = vi.fn();
+  const onPrintClaim = vi.fn();
   render(
     <InsuranceSection
       t={ticket()}
@@ -73,10 +74,11 @@ function renderSection(over: Record<string, unknown> = {}) {
       onSave={onSave}
       onDelete={vi.fn(async () => ({ ok: true }))}
       onPrint={onPrint}
+      onPrintClaim={onPrintClaim}
       {...over}
     />,
   );
-  return { onSave, onPrint };
+  return { onSave, onPrint, onPrintClaim };
 }
 
 describe('InsuranceSection — helpers', () => {
@@ -175,6 +177,7 @@ describe('InsuranceSection', () => {
         onSave={vi.fn(async () => ({ ok: true }))}
         onDelete={vi.fn(async () => ({ ok: true }))}
         onPrint={vi.fn()}
+        onPrintClaim={vi.fn()}
       />,
     );
     expect(screen.getByText(/เหลืออีก 10 วัน/)).toBeInTheDocument();
@@ -205,6 +208,43 @@ describe('InsuranceSection', () => {
     ]);
   });
 
+  it('prints the receipt and the claim sheet through separate buttons', async () => {
+    const user = userEvent.setup();
+    const p = policy();
+    const { onPrint, onPrintClaim } = renderSection({ policies: [p] });
+
+    await user.click(screen.getByLabelText('พิมพ์ใบเสร็จประกัน ประกันฟิล์มกันรอย 1 ปี'));
+    expect(onPrint).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }));
+
+    // The ใบเคลม button on the policy row is the BLANK sheet — the one the
+    // technician carries to the car before anything is recorded.
+    await user.click(screen.getByLabelText('พิมพ์ใบเคลมประกัน ประกันฟิล์มกันรอย 1 ปี'));
+    expect(onPrintClaim).toHaveBeenLastCalledWith(expect.objectContaining({ id: 7 }), null);
+  });
+
+  it('reprints one recorded claim from its own row', async () => {
+    const user = userEvent.setup();
+    const saved = policy({
+      claims: [
+        {
+          id: 3,
+          claimedAt: '2026-09-01',
+          bigUsed: 1,
+          smallUsed: 0,
+          detail: 'กันชนหน้า',
+          technician: 'ช่างเอก',
+        },
+      ],
+    });
+    const { onPrintClaim } = renderSection({ policies: [saved] });
+
+    await user.click(screen.getByLabelText('แก้ไขประกัน ประกันฟิล์มกันรอย 1 ปี'));
+    await user.click(screen.getByLabelText('พิมพ์ใบเคลมครั้งที่ 1'));
+    expect(onPrintClaim).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 7 }),
+      expect.objectContaining({ id: 3, detail: 'กันชนหน้า' }),
+    );
+  });
   it("lists the car's other policies, so the counter sees the whole history", () => {
     renderSection({
       policies: [policy()],

@@ -106,6 +106,7 @@ export function InsuranceSection({
   onSave,
   onDelete,
   onPrint,
+  onPrintClaim,
 }: {
   t: Ticket;
   /**
@@ -123,6 +124,12 @@ export function InsuranceSection({
   onDelete: (id: number) => Promise<{ ok: boolean; error?: string }>;
   /** Prints the ใบเสร็จค่าประกัน for one policy. */
   onPrint: (policy: InsurancePolicy) => void;
+  /**
+   * Prints the ใบเคลมประกัน — the ใบเซอร์วิส form with the cover on it. A null
+   * claim prints a blank one, which is the sheet the technician carries to the
+   * car; a recorded claim reprints what was written that day.
+   */
+  onPrintClaim: (policy: InsurancePolicy, claim: InsuranceClaim | null) => void;
 }) {
   const [draft, setDraft] = useState<InsurancePolicy | null>(null);
   const [saving, setSaving] = useState(false);
@@ -259,7 +266,14 @@ export function InsuranceSection({
                 className="btn-outline text-xs px-2.5 py-1 rounded-lg"
                 aria-label={`พิมพ์ใบเสร็จประกัน ${p.planName || 'ประกัน'}`}
               >
-                <i className="fa-solid fa-print"></i>
+                <i className="fa-solid fa-receipt mr-1"></i>ใบเสร็จ
+              </button>
+              <button
+                onClick={() => onPrintClaim(p, null)}
+                className="btn-outline text-xs px-2.5 py-1 rounded-lg"
+                aria-label={`พิมพ์ใบเคลมประกัน ${p.planName || 'ประกัน'}`}
+              >
+                <i className="fa-solid fa-clipboard-check mr-1"></i>ใบเคลม
               </button>
               {canDelete && (
                 <button
@@ -497,6 +511,17 @@ export function InsuranceSection({
                     )}
                   </select>
                 </div>
+                {/* Reprints the sheet for THIS claim. Only for one already saved:
+                    a row still being typed has nothing to print. */}
+                {draft.id && c.id && (
+                  <button
+                    onClick={() => onPrintClaim(draft, c)}
+                    className="btn-outline text-xs px-2.5 py-1 rounded-lg mt-1.5"
+                    aria-label={`พิมพ์ใบเคลมครั้งที่ ${i + 1}`}
+                  >
+                    <i className="fa-solid fa-print mr-1"></i>พิมพ์ใบเคลมครั้งนี้
+                  </button>
+                )}
               </div>
             ))}
             <button

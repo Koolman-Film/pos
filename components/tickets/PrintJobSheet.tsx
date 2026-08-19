@@ -10,10 +10,18 @@ import { itemNetPrice } from '@/lib/domain/tickets';
 import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } from './serviceForm';
 import { WRAP_CATEGORY, WRAP_OPTIONS } from './wrapOptions';
 
-import type { InsurancePolicy, ServiceVisit, ShopInfo, StockRow, Ticket } from './types';
+import type {
+  InsuranceClaim,
+  InsurancePolicy,
+  ServiceVisit,
+  ShopInfo,
+  StockRow,
+  Ticket,
+} from './types';
 import { coverageText } from './detail/InsuranceSection';
 
-export type PrintMode = 'job' | 'sale' | 'offsite' | 'doc' | 'service' | 'insurance' | null;
+export type PrintMode =
+  'job' | 'sale' | 'offsite' | 'doc' | 'service' | 'insurance' | 'claim' | null;
 
 /**
  * The pre-installation inspection sheet (ใบตรวจเช็คสภาพก่อนติดตั้ง), ported
@@ -208,6 +216,7 @@ export function PrintJobSheet({
   showDisclaimer,
   serviceVisit = null,
   insurancePolicy = null,
+  insuranceClaim = null,
   technicianOptions = [],
 }: {
   t: Ticket;
@@ -227,8 +236,13 @@ export function PrintJobSheet({
   showDisclaimer: boolean;
   /** The visit to print on the service sheet; null prints a blank one. */
   serviceVisit?: ServiceVisit | null;
-  /** The policy to print a ใบเสร็จค่าประกัน for. */
+  /** The policy behind a ใบเสร็จค่าประกัน or a ใบเคลมประกัน. */
   insurancePolicy?: InsurancePolicy | null;
+  /**
+   * The claim being printed on a ใบเคลมประกัน. null prints a blank one — the
+   * sheet you carry to the car before anything is recorded.
+   */
+  insuranceClaim?: InsuranceClaim | null;
   /** ทีมช่าง tick row — the shop's own list, not the paper form's old names. */
   technicianOptions?: string[];
 }) {
@@ -1412,7 +1426,7 @@ export function PrintJobSheet({
         ></div>
       </div>
     );
-  } else if (printMode === 'service') {
+  } else if (printMode === 'service' || printMode === 'claim') {
     /*
       ใบเซอร์วิส ลูกค้าหน้าร้าน, following the shop's paper form.
 
@@ -1422,6 +1436,16 @@ export function PrintJobSheet({
       prints the recorded answers instead — both ways of working, as asked.
     */
     const v = serviceVisit;
+    /*
+      ใบเคลมประกัน is the SAME sheet as the ใบเซอร์วิส — the technician does the
+      same walk-around and writes on the same boxes — with the cover printed at
+      the top so everyone can see what is left before anything is promised.
+      Building it as a second layout would have been two forms to keep in step.
+    */
+    const isClaim = printMode === 'claim';
+    const pol = insurancePolicy;
+    const usedBig = pol?.claims.reduce((n, c) => n + Number(c.bigUsed || 0), 0) ?? 0;
+    const usedSmall = pol?.claims.reduce((n, c) => n + Number(c.smallUsed || 0), 0) ?? 0;
     const mark = (on: boolean) => (
       <span
         style={{
@@ -1469,12 +1493,21 @@ export function PrintJobSheet({
       <div className="print-area">
         <div className="print-page">
           <h2 style={{ textAlign: 'center', margin: '0 0 10px', fontSize: 17 }}>
-            ใบเซอร์วิส ลูกค้าหน้าร้าน
+            {isClaim ? 'ใบเคลมประกันฟิล์มกันรอย' : 'ใบเซอร์วิส ลูกค้าหน้าร้าน'}
           </h2>
-          {v && (
+          {isClaim ? (
             <p style={{ textAlign: 'right', margin: '0 0 6px', fontSize: 11 }}>
-              ครั้งที่ <b>{v.visitNo}</b> &middot; ใบงาน {t.id}
+              ใบงาน {t.id}
+              {insuranceClaim?.claimedAt
+                ? ` · วันที่เคลม ${fmtThaiDate(new Date(insuranceClaim.claimedAt))}`
+                : ''}
             </p>
+          ) : (
+            v && (
+              <p style={{ textAlign: 'right', margin: '0 0 6px', fontSize: 11 }}>
+                ครั้งที่ <b>{v.visitNo}</b> &middot; ใบงาน {t.id}
+              </p>
+            )
           )}
 
           <div style={{ fontSize: 11, display: 'flex', flexWrap: 'wrap', gap: '5px 18px' }}>
@@ -1495,6 +1528,54 @@ export function PrintJobSheet({
             {line('สีรถ', t.color, 60)}
             {line('ทะเบียน', t.plate, 90)}
           </div>
+
+          {/* ข้อมูลประกัน. Boxed and ringed because it is the one thing on this
+              sheet that decides what the shop may do: how much cover is left,
+              and whether it has run out. */}
+          {isClaim && pol && (
+            <div
+              style={{
+                border: '1.5px solid #333',
+                borderRadius: 4,
+                padding: '6px 10px',
+                marginBottom: 8,
+                fontSize: 11,
+              }}
+            >
+              <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 'bold' }}>
+                ข้อมูลประกัน: {pol.planName || 'ประกันฟิล์มกันรอย'}
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px' }}>
+                {line('ความคุ้มครองทั้งหมด', coverageText(pol.bigPieces, pol.smallPieces), 150)}
+                {line('ใช้ไปแล้ว', `${usedBig} ชิ้นใหญ่, ${usedSmall} ชิ้นเล็ก`, 130)}
+                {line(
+                  'คงเหลือ',
+                  `${pol.bigPieces - usedBig} ชิ้นใหญ่, ${pol.smallPieces - usedSmall} ชิ้นเล็ก`,
+                  130,
+                )}
+                {line(
+                  'คุ้มครองถึง',
+                  pol.endsAt ? fmtThaiDate(new Date(`${pol.endsAt}T00:00:00`)) : '',
+                  110,
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px', marginTop: 4 }}>
+                {line(
+                  'เคลมครั้งนี้',
+                  insuranceClaim
+                    ? `${insuranceClaim.bigUsed} ชิ้นใหญ่, ${insuranceClaim.smallUsed} ชิ้นเล็ก`
+                    : '',
+                  150,
+                )}
+                {line('รายการที่เคลม', insuranceClaim?.detail ?? '', 260)}
+              </div>
+              {pol.terms && (
+                <p style={{ margin: '4px 0 0', fontSize: 10, color: '#555' }}>
+                  เงื่อนไข: {pol.terms}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* ฟิล์มที่ใช้ — the ชื่อสินค้า, which already states the thickness.
               The shop keeps one SKU per thickness, so a separate ประเภท /

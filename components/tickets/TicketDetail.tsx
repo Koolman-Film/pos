@@ -27,6 +27,7 @@ import type {
   CarModel,
   CorporateBuyer,
   FilmPriceRow,
+  InsuranceClaim,
   InsurancePlan,
   InsurancePolicy,
   OptionListName,
@@ -258,6 +259,7 @@ export function TicketDetail({
   const [printMode, setPrintMode] = useState<PrintMode>('job');
   const [printVisit, setPrintVisit] = useState<ServiceVisit | null>(null);
   const [printPolicy, setPrintPolicy] = useState<InsurancePolicy | null>(null);
+  const [printClaim, setPrintClaim] = useState<InsuranceClaim | null>(null);
 
   const productCategories = options.product_categories;
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? id;
@@ -326,7 +328,44 @@ export function TicketDetail({
   /** ใบเสร็จค่าประกัน — its own document, on the policy’s own date. */
   function printInsuranceReceipt(policy: InsurancePolicy) {
     setPrintPolicy(policy);
+    setPrintClaim(null);
     doPrint('insurance');
+  }
+
+  /**
+   * ใบเคลมประกัน — the ใบเซอร์วิส form with the cover printed on it.
+   *
+   * A claim IS a workshop visit, so the sheet is filled the same way: the
+   * recorded claim becomes a stand-in visit (its date, the technician who did
+   * it, its detail on the first จุดพิเศษ row) and the walk-around boxes print
+   * empty to be written on. `claim` null is the blank sheet you carry to the
+   * car before anything is recorded.
+   */
+  function printInsuranceClaim(policy: InsurancePolicy, claim: InsuranceClaim | null) {
+    setPrintPolicy(policy);
+    setPrintClaim(claim);
+    setPrintVisit(
+      claim
+        ? {
+            visitNo: 0,
+            plate: policy.plate || t.plate,
+            receivedAt: claim.claimedAt,
+            receivedTime: '',
+            deliveredAt: '',
+            deliveredTime: '',
+            salesBy: currentUserName,
+            qcBy: '',
+            technicians: claim.technician ? [claim.technician] : [],
+            filmProduct: '',
+            customerWaits: null,
+            overallOk: null,
+            checks: {},
+            notes: policy.notes,
+            points: claim.detail ? [{ seq: 1, position: '', detail: claim.detail, note: '' }] : [],
+          }
+        : null,
+    );
+    doPrint('claim');
   }
 
   /** Save a policy with its claims, then pull the list back from the server. */
@@ -923,6 +962,7 @@ export function TicketDetail({
                               onSave={saveInsurancePolicy}
                               onDelete={deleteInsurancePolicy}
                               onPrint={printInsuranceReceipt}
+                              onPrintClaim={printInsuranceClaim}
                             />
                           )
                     }
@@ -1260,6 +1300,7 @@ export function TicketDetail({
           showDisclaimer={showDisclaimer}
           serviceVisit={printVisit}
           insurancePolicy={printPolicy}
+          insuranceClaim={printClaim}
           technicianOptions={options.technicians}
         />
       </div>

@@ -456,3 +456,75 @@ describe('ใบเซอร์วิส', () => {
     expect(srcs).toHaveLength(3);
   });
 });
+
+/**
+ * ใบเคลมประกัน is the ใบเซอร์วิส form with the cover printed on it: the
+ * technician does the same walk-around, and everyone can see what is left
+ * before anything is promised. Two layouts would have been two forms to keep in
+ * step, so what matters here is that it stays the same sheet.
+ */
+describe('ใบเคลมประกัน', () => {
+  const pol = {
+    id: 4,
+    ticketId: 'JT-CM-00216',
+    plate: 'กก 999',
+    planName: 'ประกันฟิล์มกันรอย 1 ปี',
+    price: 3000,
+    bigPieces: 2,
+    smallPieces: 20,
+    terms: 'ไม่คุ้มครองอุบัติเหตุ',
+    soldAt: '2026-08-01',
+    startsAt: '2026-08-01',
+    endsAt: '2027-08-01',
+    notes: '',
+    claims: [
+      {
+        id: 1,
+        claimedAt: '2026-09-01',
+        bigUsed: 1,
+        smallUsed: 3,
+        detail: 'กันชนหน้า',
+        technician: 'ช่างเอก',
+      },
+    ],
+  };
+
+  const renderClaim = (over = {}) =>
+    renderSheet(makeTicket({ items: [item()] }), 'claim', {
+      insurancePolicy: pol,
+      technicianOptions: ['ช่างเอก', 'ช่างบอย'],
+      ...over,
+    });
+
+  it('carries the cover, what is used and what is left', () => {
+    renderClaim({ insuranceClaim: pol.claims[0] });
+    expect(screen.getByText('ใบเคลมประกันฟิล์มกันรอย')).toBeInTheDocument();
+    expect(screen.getByText(/ประกันฟิล์มกันรอย 1 ปี/)).toBeInTheDocument();
+    expect(screen.getByText(/ครอบคลุม 2 ชิ้นใหญ่, 20 ชิ้นเล็ก/)).toBeInTheDocument();
+    // 2 − 1 and 20 − 3: the figure the shop has to honour.
+    expect(screen.getByText(/1 ชิ้นใหญ่, 17 ชิ้นเล็ก/)).toBeInTheDocument();
+  });
+
+  it('is the same sheet as the ใบเซอร์วิส, boxes and all', () => {
+    renderClaim({ insuranceClaim: null });
+    // The walk-around tables and the ten numbered rows print blank, so the
+    // sheet can be filled in at the car.
+    expect(screen.getByText('Piano Black')).toBeInTheDocument();
+    expect(screen.getByText('Sunroof')).toBeInTheDocument();
+    for (const n of [1, 5, 10]) expect(screen.getByText(`${n}.`)).toBeInTheDocument();
+    const srcs = screen
+      .getAllByRole('img')
+      .map((el) => el.getAttribute('src'))
+      .filter((x) => x?.startsWith('/wrap/'));
+    expect(srcs).toHaveLength(3);
+  });
+
+  it('leaves this-claim blank on a sheet printed before anything is recorded', () => {
+    renderClaim({ insuranceClaim: null });
+    // Scoped to its own field: "ใช้ไปแล้ว" above it legitimately carries the
+    // running total of the claims already on the policy.
+    const row = screen.getByText('เคลมครั้งนี้');
+    expect(row.textContent?.replace('เคลมครั้งนี้', '').trim()).toBe('');
+    expect(screen.getByText(/1 ชิ้นใหญ่, 3 ชิ้นเล็ก/)).toBeInTheDocument();
+  });
+});
