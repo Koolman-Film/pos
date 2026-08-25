@@ -26,18 +26,29 @@ const stockQty = async () => {
   return Number(data!.qty);
 };
 
+/**
+ * The ticket-driven audit trail. Migration 0026 moved this path off
+ * `withdrawals` and into the `stock_movements` ledger, written by the
+ * move_stock RPC in the same statement as the arithmetic. `withdrawals` is
+ * still the manual stock-withdrawal flow, which is why it is not read here.
+ *
+ * `change` is signed the way the ledger stores it: negative is consumed,
+ * positive is returned. That is the opposite of the old `withdrawals.qty`,
+ * which counted withdrawals as positive and leaned on `type` to say which
+ * direction the stock actually moved.
+ */
 const movementLog = async () => {
   const { data } = await admin
-    .from('withdrawals')
-    .select('item, qty, type, withdrawn_by, status')
-    .like('type', `%${TICKET}%`)
+    .from('stock_movements')
+    .select('item_name, change, kind, document_id, qty_before, qty_after, moved_by_name')
+    .eq('document_id', TICKET)
     .order('id', { ascending: false });
-  return data ?? [];
+  return (data ?? []).map((r) => ({ ...r, change: Number(r.change) }));
 };
 
 /** Put the ticket and the stock row back, so the spec can run repeatedly. */
 async function resetFixture(qty: number) {
-  await admin.from('withdrawals').delete().like('type', `%${TICKET}%`);
+  await admin.from('stock_movements').delete().eq('document_id', TICKET);
   await admin.from('stock').update({ qty }).eq('sku', SKU);
   const { data: items } = await admin.from('ticket_items').select('id').eq('ticket_id', TICKET);
   for (const item of items ?? []) {
@@ -75,12 +86,16 @@ test('recording actual usage on a ticket decrements stock and writes an audit ro
   const log = await movementLog();
   expect(log).toHaveLength(1);
   expect(log[0]).toMatchObject({
-    item: PRODUCT,
-    qty: 2,
-    type: `ตัดสต็อกจากใบงาน (${TICKET})`,
-    status: 'อนุมัติแล้ว',
+    item_name: PRODUCT,
+    change: -2,
+    kind: 'ใบงาน',
+    document_id: TICKET,
   });
-  expect(log[0].withdrawn_by).toBe('แอดมินระบบ');
+  expect(log[0].moved_by_name).toBe('แอดมินระบบ');
+  // The before/after pair is the point of 0026: the ledger entry and the
+  // arithmetic are one statement, so these can never disagree with `stock.qty`.
+  expect(Number(log[0].qty_before)).toBe(15);
+  expect(Number(log[0].qty_after)).toBe(13);
 });
 
 test('the recorded quantity survives a reload, and re-saving does not double-count', async ({
@@ -121,7 +136,9 @@ test('revising the quantity downward returns the difference to stock', async ({ 
 
   const log = await movementLog();
   expect(log).toHaveLength(2);
-  // Newest first: the correction is a return of 4.
-  expect(log[0].qty).toBe(-4);
-  expect(log[0].type).toBe(`คืนสต็อกจากใบงาน (${TICKET})`);
+  // Newest first: the correction returns 4 to stock, so `change` is positive.
+  expect(log[0].change).toBe(4);
+  expect(log[0].kind).toBe('ใบงาน');
+  expect(Number(log[0].qty_before)).toBe(10);
+  expect(Number(log[0].qty_after)).toBe(14);
 });
