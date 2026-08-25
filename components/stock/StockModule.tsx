@@ -9,6 +9,7 @@ import { OptionManageProvider } from '@/components/ui/optionManage';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { findFilmPrice } from '@/lib/domain/filmPrice';
 import type { InsurancePlan } from '@/components/tickets/types';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -107,6 +108,8 @@ export type FilmPriceEntry = {
   position: string;
   carType: string;
   price: number;
+  /** '' = ราคากลางทุกสาขา; a shop id = ราคาเฉพาะสาขานั้น (migration 0029). */
+  shop?: string;
 };
 
 /**
@@ -268,12 +271,6 @@ export function StockModule({
     router.refresh();
   }
 
-  /** ล็อตของสาขาที่กำลังดูอยู่ — เรียงตามที่โหลดมา คือใหม่สุดก่อน. */
-  const lotRows = batches.filter((b) => {
-    const product = stock.find((x) => x.id === b.stockId);
-    return branchFilter === 'all' || product?.shop === branchFilter;
-  });
-
   /**
    * โอนไปสาขาอื่น. Opened from a product row, because a transfer is always
    * about one product — asking which product first would be a step the shop
@@ -324,16 +321,32 @@ export function StockModule({
   }
   const [priceProdCat, setPriceProdCat] = useState('ฟิล์มกรองแสง');
   const [priceProd, setPriceProd] = useState('');
+  /**
+   * Which price list is being edited: '' is the ราคากลาง every branch falls back
+   * to, a shop id is that branch’s own price (migration 0029). Before this
+   * existed there was one shared row, so setting one branch’s price silently
+   * changed all five.
+   */
+  const [priceShop, setPriceShop] = useState('');
 
+  function filmKey(category: string, product: string, position: string, carType: string) {
+    return { category, product, position, carType };
+  }
+  /** The price set for the scope being edited — blank if it inherits. */
   function getFilmPrice(category: string, product: string, position: string, carType: string) {
-    const m = priceMatrix.find(
-      (e) =>
-        e.category === category &&
-        e.product === product &&
-        e.position === position &&
-        e.carType === carType,
-    );
+    const m = findFilmPrice(priceMatrix, filmKey(category, product, position, carType), priceShop);
     return m ? m.price : '';
+  }
+  /** ราคากลาง shown behind an empty branch cell, so an admin sees what it inherits. */
+  function inheritedFilmPrice(
+    category: string,
+    product: string,
+    position: string,
+    carType: string,
+  ) {
+    if (!priceShop) return 0;
+    const m = findFilmPrice(priceMatrix, filmKey(category, product, position, carType), '');
+    return m ? m.price : 0;
   }
   async function setFilmPrice(
     category: string,
@@ -347,22 +360,24 @@ export function StockModule({
       product,
       position,
       carType,
+      shop: priceShop,
       price: Number(price) || 0,
     };
+    // Clearing a branch cell REMOVES the override rather than storing 0, so the
+    // branch goes back to quoting the ราคากลาง instead of quoting nothing.
+    const clearing = Boolean(priceShop) && entry.price <= 0;
     setPriceMatrix((prev) => {
-      const idx = prev.findIndex(
+      const rest = prev.filter(
         (e) =>
-          e.category === category &&
-          e.product === product &&
-          e.position === position &&
-          e.carType === carType,
+          !(
+            e.category === category &&
+            e.product === product &&
+            e.position === position &&
+            e.carType === carType &&
+            (e.shop || '') === priceShop
+          ),
       );
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = entry;
-        return copy;
-      }
-      return [...prev, entry];
+      return clearing ? rest : [...rest, entry];
     });
     await actions.setFilmPrice?.(entry);
   }
@@ -551,6 +566,12 @@ export function StockModule({
       (branchFilter === 'all' || m.shop === branchFilter) &&
       (ledgerKind === 'all' || m.kind === ledgerKind),
   );
+
+  /** ล็อตของสาขาที่กำลังดูอยู่ — เรียงตามที่โหลดมา คือใหม่สุดก่อน. */
+  const lotRows = batches.filter((b) => {
+    const product = stock.find((x) => x.id === b.stockId);
+    return branchFilter === 'all' || product?.shop === branchFilter;
+  });
 
   const [catFilter, setCatFilter] = useState('all');
   const [nameFilterSel, setNameFilterSel] = useState('all');
@@ -1260,7 +1281,7 @@ export function StockModule({
             <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
               ราคาแปรผันตาม ชื่อสินค้า &rarr; ตำแหน่งติดตั้ง &rarr; ประเภทรถ ตั้งค่าได้เฉพาะแอดมิน
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <div>
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   ชนิดสินค้า
@@ -1298,7 +1319,30 @@ export function StockModule({
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  ราคาของ
+                </label>
+                <select
+                  value={priceShop}
+                  aria-label="สาขาสำหรับตั้งราคา"
+                  onChange={(e) => setPriceShop(e.target.value)}
+                  className="field w-full text-sm px-3 py-2"
+                >
+                  <option value="">ราคากลาง (ทุกสาขา)</option>
+                  {accessibleShops.map((sh) => (
+                    <option key={sh.id} value={sh.id}>
+                      {sh.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
+              {priceShop
+                ? 'ราคาเฉพาะสาขานี้ ทับราคากลาง — เว้นว่างไว้ = ใช้ราคากลาง'
+                : 'ราคากลางใช้กับทุกสาขาที่ไม่ได้ตั้งราคาของตัวเอง'}
+            </p>
             {priceProd ? (
               <div className="overflow-x-auto">
                 <table style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -1342,11 +1386,19 @@ export function StockModule({
                             >
                               <input
                                 type="number"
+                                aria-label={`ราคา ${pos} ${ct}`}
                                 value={getFilmPrice(priceProdCat, priceProd, pos, ct)}
                                 onChange={(e) =>
                                   setFilmPrice(priceProdCat, priceProd, pos, ct, e.target.value)
                                 }
-                                placeholder="0"
+                                placeholder={String(
+                                  inheritedFilmPrice(priceProdCat, priceProd, pos, ct) || 0,
+                                )}
+                                title={
+                                  inheritedFilmPrice(priceProdCat, priceProd, pos, ct)
+                                    ? 'เว้นว่าง = ใช้ราคากลาง'
+                                    : undefined
+                                }
                                 className="field text-xs px-2 py-1.5 w-24"
                               />
                             </td>

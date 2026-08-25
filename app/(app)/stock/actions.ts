@@ -322,6 +322,8 @@ export async function setFilmPriceAction(input: {
   position: string;
   carType: string;
   price: number;
+  /** '' or omitted = ราคากลางทุกสาขา (migration 0029). */
+  shop?: string;
 }): Promise<void> {
   // The film-price matrix is admin-only in the prototype (reference :3134).
   const session = await getSessionContext();
@@ -330,26 +332,40 @@ export async function setFilmPriceAction(input: {
   }
   const supabase = await createClient();
   const price = Number(input.price) || 0;
-  const { data: existing } = await supabase
+  // NULL means ราคากลาง for every branch; a shop id overrides it for that one
+  // (migration 0029). The same product legitimately sells for different money
+  // at different branches, and one shared row silently rewrote them all.
+  const shop = input.shop || null;
+  if (shop && !session.accessibleShopIds.includes(shop)) {
+    throw new Error('forbidden: shop out of scope');
+  }
+
+  const query = supabase
     .from('film_price_matrix')
     .select('id')
     .eq('category', input.category)
     .eq('product', input.product)
     .eq('position', input.position)
-    .eq('car_type', input.carType)
-    .maybeSingle();
+    .eq('car_type', input.carType);
+  const { data: existing } = await (
+    shop ? query.eq('shop_id', shop) : query.is('shop_id', null)
+  ).maybeSingle();
+  // Clearing a branch cell DROPS the override instead of storing 0, so the
+  // branch goes back to the ราคากลาง rather than quoting nothing. A blank
+  // ราคากลาง has no such fallback, so it is stored as written.
+  const clearing = Boolean(shop) && price <= 0;
   if (existing) {
-    const { error } = await supabase
-      .from('film_price_matrix')
-      .update({ price })
-      .eq('id', existing.id);
+    const { error } = clearing
+      ? await supabase.from('film_price_matrix').delete().eq('id', existing.id)
+      : await supabase.from('film_price_matrix').update({ price }).eq('id', existing.id);
     if (error) throw error;
-  } else {
+  } else if (!clearing) {
     const { error } = await supabase.from('film_price_matrix').insert({
       category: input.category,
       product: input.product,
       position: input.position,
       car_type: input.carType,
+      shop_id: shop,
       price,
     });
     if (error) throw error;

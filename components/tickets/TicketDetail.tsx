@@ -7,6 +7,7 @@ import { getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { fmtThaiDate } from '@/lib/domain/format';
+import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
@@ -602,13 +603,15 @@ export function TicketDetail({
     const m = priceMatrix.find((p) => p.carType === t.carType && p.product === product);
     return m ? m.price : fallback;
   }
+  /**
+   * ราคาของสาขานี้ ถ้าไม่ได้ตั้งไว้จึงใช้ราคากลาง (migration 0029) — สินค้า
+   * ชื่อเดียวกันขายคนละราคาในแต่ละสาขาได้.
+   */
   function lookupFilmPrice(category: string, product: string, position: string, fallback: number) {
-    const m = filmPriceMatrix.find(
-      (p) =>
-        p.category === category &&
-        p.product === product &&
-        p.position === position &&
-        p.carType === t.carType,
+    const m = resolveFilmPrice(
+      filmPriceMatrix,
+      { category, product, position, carType: t.carType },
+      t.shop,
     );
     return m ? m.price : fallback;
   }

@@ -178,7 +178,9 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
     supabase.from('stock').select('id, name, short_name, category, shop_id, qty, cost, sell_price'),
     supabase.from('car_models').select('model, brand, car_type'),
     supabase.from('price_matrix').select('car_type, product, price'),
-    supabase.from('film_price_matrix').select('category, product, position, car_type, price'),
+    supabase
+      .from('film_price_matrix')
+      .select('category, product, position, car_type, price, shop_id'),
     supabase.from('retail_customers').select('id, name, phone'),
     supabase.from('corporate_buyers').select('name, address, tax_id'),
     supabase
@@ -234,6 +236,7 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
       position: p.position,
       carType: p.car_type,
       price: Number(p.price || 0),
+      shop: p.shop_id ?? '',
     })),
     retailCustomers: (customersRes.data ?? []).map((c) => ({
       id: c.id,

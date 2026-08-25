@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 // TicketDetail calls useRouter(); there is no app-router context under jsdom, so
 // mock next/navigation. This is a test-environment concern only.
@@ -320,5 +321,101 @@ describe('TicketDetail — ใบงานที่ปิดงานแล้�
     expect(sent.ticketId).toBe('JT-CM-00214');
     // Its own sale date, which is what keeps the money off the old job.
     expect(sent.policy.soldAt).toBeTruthy();
+  });
+});
+
+/**
+ * ราคาฟิล์มของสาขา (migration 0029).
+ *
+ * The same product legitimately sells for different money at different
+ * branches. The matrix holds a ราคากลาง and, optionally, a price for one
+ * branch; a ticket has to quote its OWN branch's price and fall back to the
+ * ราคากลาง only when that branch has not set one.
+ */
+describe('TicketDetail — ราคาฟิล์มแยกตามสาขา', () => {
+  const PRODUCT = 'ฟิล์ม 3M CRM 60%';
+  const matrix = [
+    {
+      category: 'ฟิล์มกรองแสง',
+      product: PRODUCT,
+      position: 'บานหน้า',
+      carType: 'เก๋งเล็ก',
+      price: 2500,
+      shop: '',
+    },
+    {
+      category: 'ฟิล์มกรองแสง',
+      product: PRODUCT,
+      position: 'บานหน้า',
+      carType: 'เก๋งเล็ก',
+      price: 2800,
+      shop: 'lpg',
+    },
+  ];
+
+  function renderAt(shop: string) {
+    const ticket = makeTicket({
+      shop,
+      items: [
+        {
+          category: 'ฟิล์มกรองแสง',
+          booked: '',
+          bookedPrice: 0,
+          sold: '',
+          soldPrice: 0,
+          positions: [{ position: 'บานหน้า', product: '', price: 0 }],
+        },
+      ],
+    });
+    return render(
+      <TicketDetail
+        {...baseProps(ticket)}
+        shops={[
+          { id: 'cm', name: 'FINNIX CM' },
+          { id: 'lpg', name: 'FINNIX ลำปาง' },
+        ]}
+        initialStock={[
+          {
+            id: 1,
+            name: PRODUCT,
+            shortName: '3M60',
+            category: 'ฟิล์มกรองแสง',
+            shop,
+            qty: 5,
+            cost: 800,
+            sellPrice: 1000,
+          },
+        ]}
+        filmPriceMatrix={matrix}
+      />,
+    );
+  }
+
+  async function pickProduct(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByLabelText('สินค้าประจำตำแหน่ง บานหน้า'));
+    await user.click(await screen.findByText(new RegExp(PRODUCT)));
+  }
+
+  /** The price box sitting beside the picker for that position. */
+  function positionPrice(): string {
+    const picker = screen.getByLabelText('สินค้าประจำตำแหน่ง บานหน้า');
+    const cell = picker.closest('div')?.parentElement;
+    const input = cell?.querySelector('input[type="number"]') as HTMLInputElement | null;
+    return input?.value ?? '(no price input)';
+  }
+
+  it("quotes the branch's own price when it has one", async () => {
+    const user = userEvent.setup();
+    renderAt('lpg');
+    await pickProduct(user);
+    expect(positionPrice()).toBe('2800');
+  });
+
+  it('falls back to the ราคากลาง at a branch that has not set its own', async () => {
+    const user = userEvent.setup();
+    renderAt('cm');
+    await pickProduct(user);
+    // 2500, NOT the 2800 ลำปาง charges and not the product's 1,000 sell price.
+    expect(positionPrice()).toBe('2500');
   });
 });

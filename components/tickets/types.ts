@@ -252,12 +252,20 @@ export type StockRow = {
 
 export type CarModel = { model: string; brand: string; carType: string };
 export type PriceMatrixRow = { carType: string; product: string; price: number };
+/**
+ * One cell of ตั้งราคาฟิล์ม/กันรอย.
+ *
+ * `shop` is '' for the ราคากลาง every branch falls back to, or a shop id for a
+ * branch that charges its own price (migration 0029) — the same product does
+ * sell for different money at different branches.
+ */
 export type FilmPriceRow = {
   category: string;
   product: string;
   position: string;
   carType: string;
   price: number;
+  shop?: string;
 };
 export type RetailCustomer = { id: number; name: string; phone: string };
 export type CorporateBuyer = { name: string; address: string; taxId: string };

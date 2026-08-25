@@ -130,13 +130,14 @@ export default async function StockPage() {
   if (isAdmin) {
     const { data: fp } = await supabase
       .from('film_price_matrix')
-      .select('category, product, position, car_type, price');
+      .select('category, product, position, car_type, price, shop_id');
     filmPriceMatrix = (fp ?? []).map((e) => ({
       category: e.category,
       product: e.product,
       position: e.position,
       carType: e.car_type,
       price: e.price,
+      shop: e.shop_id ?? '',
     }));
   }
 

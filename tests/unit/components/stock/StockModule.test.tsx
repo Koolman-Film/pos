@@ -597,3 +597,137 @@ describe('StockModule — โอนสาขา และ จุดสั่ง�
     );
   });
 });
+
+describe('StockModule — ตั้งราคาฟิล์ม แยกตามสาขา', () => {
+  const shops = [
+    { id: 'cm', name: 'เชียงใหม่' },
+    { id: 'lp', name: 'ลำปาง' },
+  ];
+  const matrix = [
+    {
+      category: 'ฟิล์มกรองแสง',
+      product: 'ฟิล์ม 3M CRM 60%',
+      position: 'บานหน้า',
+      carType: 'เก๋ง',
+      price: 2500,
+      shop: '',
+    },
+  ];
+
+  function renderPanel(setFilmPrice: (input: unknown) => Promise<void>) {
+    return render(
+      <StockModule
+        stock={stock}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        isAdmin={true}
+        accessibleShops={shops}
+        carTypes={['เก๋ง']}
+        filmPositions={['บานหน้า']}
+        filmPriceMatrix={matrix}
+        actions={{ setFilmPrice }}
+      />,
+    );
+  }
+
+  async function openGrid(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /ตั้งราคาฟิล์ม/ }));
+    await user.selectOptions(screen.getByLabelText('สินค้าสำหรับตั้งราคา'), 'ฟิล์ม 3M CRM 60%');
+  }
+
+  it('เก็บราคาไว้กับสาขาที่เลือก — ราคากลางไม่ถูกทับ', async () => {
+    // The bug this replaces: one shared row per combination, so setting ลำปาง's
+    // price rewrote เชียงใหม่'s with nothing on screen to say so.
+    const user = userEvent.setup();
+    const setFilmPrice = vi.fn(async () => {});
+    renderPanel(setFilmPrice);
+    await openGrid(user);
+
+    const cell = () => screen.getByLabelText('ราคา บานหน้า เก๋ง');
+    expect(cell()).toHaveValue(2500);
+
+    await user.selectOptions(screen.getByLabelText('สาขาสำหรับตั้งราคา'), 'lp');
+    // A branch that has not set its own price reads as EMPTY, with the ราคากลาง
+    // behind it as the placeholder — not as 2,500 already belonging to ลำปาง.
+    expect(cell()).toHaveValue(null);
+    expect(cell()).toHaveAttribute('placeholder', '2500');
+
+    await user.type(cell(), '2800');
+    expect(setFilmPrice).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shop: 'lp', price: 2800, product: 'ฟิล์ม 3M CRM 60%' }),
+    );
+
+    // …and the ราคากลาง is still 2,500 when you switch back to it.
+    await user.selectOptions(screen.getByLabelText('สาขาสำหรับตั้งราคา'), '');
+    expect(cell()).toHaveValue(2500);
+  });
+
+  it('ล้างช่องของสาขา = กลับไปใช้ราคากลาง', async () => {
+    const user = userEvent.setup();
+    const setFilmPrice = vi.fn(async () => {});
+    render(
+      <StockModule
+        stock={stock}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        isAdmin={true}
+        accessibleShops={shops}
+        carTypes={['เก๋ง']}
+        filmPositions={['บานหน้า']}
+        filmPriceMatrix={[...matrix, { ...matrix[0], price: 2800, shop: 'lp' }]}
+        actions={{ setFilmPrice }}
+      />,
+    );
+    await openGrid(user);
+    await user.selectOptions(screen.getByLabelText('สาขาสำหรับตั้งราคา'), 'lp');
+
+    const cell = () => screen.getByLabelText('ราคา บานหน้า เก๋ง');
+    expect(cell()).toHaveValue(2800);
+
+    await user.clear(cell());
+    // Cleared means "no override", not "sells for zero" — the row goes away and
+    // the branch quotes the ราคากลาง again.
+    expect(setFilmPrice).toHaveBeenLastCalledWith(
+      expect.objectContaining({ shop: 'lp', price: 0 }),
+    );
+    expect(cell()).toHaveValue(null);
+    expect(cell()).toHaveAttribute('placeholder', '2500');
+  });
+});
+
+describe('StockModule — ล็อตสินค้า', () => {
+  const batches = [
+    {
+      id: 1,
+      stockId: 1,
+      receivedAt: '2026-08-01',
+      supplier: '3M',
+      docNo: 'PO-001',
+      qtyReceived: 10,
+      qtyRemaining: 4,
+      unitCost: 850,
+      note: '',
+      receivedBy: 'แอดมินระบบ',
+    },
+  ];
+
+  it('lists a lot with what that round cost', async () => {
+    // Rendering the panel with lots in it is the whole point of this test: the
+    // filter reads the branch filter, and reading it before it is declared threw
+    // at module scope — a 500 on /stock that no test with an empty list could see.
+    const user = userEvent.setup();
+    render(
+      <StockModule
+        stock={stock}
+        batches={batches}
+        accessibleShops={[{ id: 'cm', name: 'เชียงใหม่' }]}
+        canDo={() => true}
+        canSeeStockPrices={true}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /ล็อตสินค้า/ }));
+    expect(screen.getByText(/PO-001/)).toBeInTheDocument();
+    expect(screen.getByText('3,400.00')).toBeInTheDocument();
+  });
+});

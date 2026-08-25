@@ -244,6 +244,7 @@ export type Database = {
       }
       film_price_matrix: {
         Row: {
+          shop_id: string | null
           car_type: string
           category: string
           id: number
@@ -252,6 +253,7 @@ export type Database = {
           product: string
         }
         Insert: {
+          shop_id?: string | null
           car_type: string
           category: string
           id?: never
@@ -260,6 +262,7 @@ export type Database = {
           product: string
         }
         Update: {
+          shop_id?: string | null
           car_type?: string
           category?: string
           id?: never
