@@ -37,8 +37,21 @@ function assertShopAccess(session: SessionContext, shopId: string): void {
   }
 }
 
+/**
+ * รับของเข้า. `supplier` and `docNo` are captured here because receiving is the
+ * only moment anyone knows them, and a lot without them cannot be traced back
+ * to the delivery it came from (migration 0027).
+ */
 export type AddProductInput =
-  | { mode: 'existing'; existingId: number; qty: number; cost: number; reason?: string }
+  | {
+      mode: 'existing';
+      existingId: number;
+      qty: number;
+      cost: number;
+      supplier?: string;
+      docNo?: string;
+      reason?: string;
+    }
   | {
       mode: 'new';
       newName: string;
@@ -49,6 +62,8 @@ export type AddProductInput =
       qty: number;
       cost: number;
       sellPrice: number;
+      supplier?: string;
+      docNo?: string;
     };
 
 export async function addProductAction(input: AddProductInput): Promise<void> {
@@ -65,41 +80,62 @@ export async function addProductAction(input: AddProductInput): Promise<void> {
     if (error || !row) throw new Error('stock item not found');
     assertShopAccess(session, row.shop_id);
 
-    // Relative, applied and LOGGED by the database in one statement
-    // (migration 0026). Receiving used to change the quantity and write
-    // nothing, so a delivery left no trace at all.
-    const { error: qtyErr } = await supabase.rpc('move_stock', {
-      p_changes: [{ id: row.id, change: Number(input.qty) }] as unknown as Json,
-      p_kind: 'รับเข้า',
-      p_document_id: '',
+    /*
+      One delivery, one LOT (migration 0027).
+
+      The cost of this round belongs to this round. It used to overwrite the
+      product's single `cost`, which told the shop that everything on the
+      shelf had been bought at the newest price. `stock.cost` is recomputed
+      from what the lots hold now, so it cannot say that any more.
+
+      A price-blind caller receives at cost 0 rather than being refused: the
+      goods arriving is the fact, and the price is filled in by someone who
+      can see prices.
+    */
+    const { error: recErr } = await supabase.rpc('receive_stock', {
+      p_stock_id: row.id,
+      p_qty: Number(input.qty),
+      p_unit_cost: canSeePrices ? Number(input.cost) || 0 : 0,
+      p_supplier: input.supplier ?? '',
+      p_doc_no: input.docNo ?? '',
       p_by_name: session.name,
       p_note: input.reason ?? '',
     });
-    if (qtyErr) throw qtyErr;
-
-    // Cost is a replacement, not a delta, so a plain update is right for it.
-    // Only a price-visible caller may move it; otherwise keep it as-is.
-    if (canSeePrices && Number(input.cost)) {
-      const { error: upErr } = await supabase
-        .from('stock')
-        .update({ cost: Number(input.cost) })
-        .eq('id', row.id);
-      if (upErr) throw upErr;
-    }
+    if (recErr) throw recErr;
   } else {
     assertShopAccess(session, input.shop);
-    const { error } = await supabase.from('stock').insert({
-      sku: input.sku?.trim() || `SKU-NEW-${Date.now()}`,
-      name: input.newName,
-      short_name: input.shortName ?? '',
-      category: input.category,
-      shop_id: input.shop,
-      qty: Number(input.qty),
-      min_qty: 5,
-      cost: canSeePrices ? Number(input.cost) || 0 : 0,
-      sell_price: canSeePrices ? Number(input.sellPrice) || 0 : 0,
-    });
+    // Created EMPTY, then received. A product that arrives with stock already
+    // on it would have a quantity no lot accounts for, and a cost that is the
+    // one number this migration exists to get rid of.
+    const { data: created, error } = await supabase
+      .from('stock')
+      .insert({
+        sku: input.sku?.trim() || `SKU-NEW-${Date.now()}`,
+        name: input.newName,
+        short_name: input.shortName ?? '',
+        category: input.category,
+        shop_id: input.shop,
+        qty: 0,
+        min_qty: 5,
+        cost: 0,
+        sell_price: canSeePrices ? Number(input.sellPrice) || 0 : 0,
+      })
+      .select('id')
+      .single();
     if (error) throw error;
+
+    if (created && Number(input.qty) > 0) {
+      const { error: recErr } = await supabase.rpc('receive_stock', {
+        p_stock_id: created.id,
+        p_qty: Number(input.qty),
+        p_unit_cost: canSeePrices ? Number(input.cost) || 0 : 0,
+        p_supplier: input.supplier ?? '',
+        p_doc_no: input.docNo ?? '',
+        p_by_name: session.name,
+        p_note: 'ล็อตแรกของสินค้าใหม่',
+      });
+      if (recErr) throw recErr;
+    }
   }
   revalidatePath('/stock');
 }

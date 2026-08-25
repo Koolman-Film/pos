@@ -25,6 +25,7 @@ const line = (over: Partial<SaleLine> = {}): SaleLine => ({
   category: 'ฟิล์มกันรอย',
   product: 'TPU กันรอยเกรดพรีเมียม',
   amount: 30000,
+  cost: 0,
   taxInvoiceNo: '',
   documents: [],
   ...over,
@@ -135,5 +136,48 @@ describe('RevenueModule', () => {
     const payload = exportAction.mock.calls[0][0];
     expect(payload.groups[0].rows).toHaveLength(1);
     expect(payload.groups[0].rows[0]['เลขที่ใบกำกับภาษี']).toBe('INV-CM-00216');
+  });
+});
+
+/**
+ * กำไรขั้นต้น. The cost comes from the LOTS a job actually drew on (migration
+ * 0027), so this is a real margin — and it is behind the same gate as stock
+ * prices, because it is the owner's figure rather than the counter's.
+ */
+describe('RevenueModule — กำไรขั้นต้น', () => {
+  it('shows margin against the real cost of the goods', () => {
+    renderModule([line({ amount: 30000, cost: 18000 })], { canSeeCost: true });
+    const card = screen.getByText('กำไรขั้นต้น').parentElement!;
+    expect(within(card).getByText('12,000.00')).toBeInTheDocument();
+    expect(within(card).getByText(/ต้นทุน 18,000.00/)).toBeInTheDocument();
+    expect(within(card).getByText(/40%/)).toBeInTheDocument();
+  });
+
+  it('keeps cost away from a caller who may not see stock prices', () => {
+    renderModule([line({ amount: 30000, cost: 18000 })]);
+    expect(screen.queryByText('กำไรขั้นต้น')).not.toBeInTheDocument();
+  });
+
+  it('adds the cost columns to the export only when they may be seen', async () => {
+    const user = userEvent.setup();
+    const exportAction = vi.fn(
+      async (payload: {
+        fileNameBase: string;
+        groups: { sheetName: string; rows: Record<string, string | number>[] }[];
+      }) => {
+        void payload;
+        return null;
+      },
+    );
+    renderModule([line({ amount: 30000, cost: 18000 })], {
+      canExport: true,
+      canSeeCost: true,
+      exportAction,
+    });
+
+    await user.click(screen.getByRole('button', { name: /Excel/ }));
+    const row = exportAction.mock.calls[0][0].groups[0].rows[0];
+    expect(row['ต้นทุน']).toBe(18000);
+    expect(row['กำไรขั้นต้น']).toBe(12000);
   });
 });

@@ -61,6 +61,25 @@ export type Withdrawal = {
 };
 
 /**
+ * One delivery (migration 0027).
+ *
+ * Each round of buying keeps its own cost, so "what did we pay that round"
+ * stays answerable while the goods are still on the shelf.
+ */
+export type StockBatch = {
+  id: number;
+  stockId: number;
+  receivedAt: string;
+  supplier: string;
+  docNo: string;
+  qtyReceived: number;
+  qtyRemaining: number;
+  unitCost: number;
+  note: string;
+  receivedBy: string;
+};
+
+/**
  * One line of the stock ledger (migration 0026).
  *
  * Carries the quantity BEFORE and AFTER, which is what lets the shop answer
@@ -75,6 +94,8 @@ export type StockMovement = {
   change: number;
   qtyBefore: number;
   qtyAfter: number;
+  /** What the goods that moved actually cost, from the lots (migration 0027). */
+  costTotal: number;
   note: string;
   movedAt: string;
   movedBy: string;
@@ -132,6 +153,7 @@ export function StockModule({
   filmPriceMatrix = [],
   insurancePlans = [],
   movements = [],
+  batches = [],
   actions = {},
 }: {
   stock: StockItem[];
@@ -158,6 +180,8 @@ export function StockModule({
   insurancePlans?: InsurancePlan[];
   /** สมุดบัญชีสต็อก, newest first (migration 0026). */
   movements?: StockMovement[];
+  /** ล็อตสินค้า, newest first (migration 0027). */
+  batches?: StockBatch[];
   actions?: StockActions;
 }) {
   // Deny by default when neither form is supplied, so a wiring mistake hides
@@ -236,6 +260,12 @@ export function StockModule({
     setPlanDraft(null);
     router.refresh();
   }
+
+  /** ล็อตของสาขาที่กำลังดูอยู่ — เรียงตามที่โหลดมา คือใหม่สุดก่อน. */
+  const lotRows = batches.filter((b) => {
+    const product = stock.find((x) => x.id === b.stockId);
+    return branchFilter === 'all' || product?.shop === branchFilter;
+  });
 
   async function decide(w: Withdrawal, approve: boolean) {
     const verb = approve ? 'อนุมัติ' : 'ไม่อนุมัติ';
@@ -325,6 +355,8 @@ export function StockModule({
     qty: 1,
     cost: 0,
     sellPrice: 0,
+    supplier: '',
+    docNo: '',
     serviceCount: '' as string | number,
     reason: 'ซื้อเพิ่ม',
   });
@@ -534,6 +566,8 @@ export function StockModule({
         qty: Number(addStk.qty),
         cost: Number(addStk.cost),
         sellPrice: Number(addStk.sellPrice),
+        supplier: addStk.supplier,
+        docNo: addStk.docNo,
       });
     } else {
       await actions.addProduct?.({
@@ -541,6 +575,8 @@ export function StockModule({
         existingId: addStk.existingId,
         qty: Number(addStk.qty),
         cost: Number(addStk.cost),
+        supplier: addStk.supplier,
+        docNo: addStk.docNo,
       });
     }
     setPanel(null);
@@ -661,6 +697,12 @@ export function StockModule({
                 <i className="fa-solid fa-tags"></i>ตั้งราคาฟิล์ม/กันรอย
               </button>
             )}
+            <button
+              onClick={() => setPanel(panel === 'lots' ? null : 'lots')}
+              className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'lots' ? 'btn-primary' : 'btn-outline'}`}
+            >
+              <i className="fa-solid fa-layer-group"></i>ล็อตสินค้า
+            </button>
             <button
               onClick={() => setPanel(panel === 'ledger' ? null : 'ledger')}
               className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'ledger' ? 'btn-primary' : 'btn-outline'}`}
@@ -836,6 +878,74 @@ export function StockModule({
           </div>
         )}
 
+        {panel === 'lots' && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-1">ล็อตสินค้า (ต้นทุนแต่ละรอบ)</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+              รับของแต่ละรอบเก็บราคาของรอบนั้น ใช้ของเก่าก่อน —
+              ต้นทุนเฉลี่ยของสินค้าคำนวณจากล็อตที่เหลือ
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ color: 'var(--ink-soft)' }}>
+                    <th className="text-left font-medium py-2">วันที่รับ</th>
+                    <th className="text-left font-medium py-2">สินค้า</th>
+                    <th className="text-left font-medium py-2">ผู้ขาย / ใบส่งของ</th>
+                    <th className="text-right font-medium py-2">รับมา</th>
+                    <th className="text-right font-medium py-2">เหลือ</th>
+                    {canSeePrices && <th className="text-right font-medium py-2">ต้นทุน/หน่วย</th>}
+                    {canSeePrices && <th className="text-right font-medium py-2">มูลค่าคงเหลือ</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {lotRows.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={canSeePrices ? 7 : 5}
+                        className="py-3 text-xs"
+                        style={{ color: 'var(--ink-faint)' }}
+                      >
+                        ยังไม่มีล็อตในสาขานี้
+                      </td>
+                    </tr>
+                  )}
+                  {lotRows.map((b) => {
+                    const product = stock.find((x) => x.id === b.stockId);
+                    return (
+                      <tr key={b.id} style={{ borderTop: '1px solid var(--line)' }}>
+                        <td className="py-2 whitespace-nowrap text-xs">
+                          {fmtThaiDate(new Date(`${b.receivedAt}T00:00:00`))}
+                        </td>
+                        <td className="py-2">{product?.name ?? `#${b.stockId}`}</td>
+                        <td className="py-2 text-xs">
+                          {[b.supplier, b.docNo].filter(Boolean).join(' · ') ||
+                            String.fromCharCode(8212)}
+                          {b.note && <div style={{ color: 'var(--ink-faint)' }}>{b.note}</div>}
+                        </td>
+                        <td className="py-2 text-right">{b.qtyReceived}</td>
+                        <td
+                          className="py-2 text-right font-semibold"
+                          style={{ color: b.qtyRemaining > 0 ? undefined : 'var(--ink-faint)' }}
+                        >
+                          {b.qtyRemaining}
+                        </td>
+                        {canSeePrices && <td className="py-2 text-right">{fmt(b.unitCost)}</td>}
+                        {canSeePrices && (
+                          <td className="py-2 text-right font-semibold">
+                            {fmt(b.qtyRemaining * b.unitCost)}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {panel === 'ledger' && (
           <div className="card p-5 mb-4 fade-page">
             <p className="text-sm font-semibold mb-1">ประวัติการเคลื่อนไหวสต็อก</p>
@@ -867,6 +977,7 @@ export function StockModule({
                     <th className="text-left font-medium py-2">เอกสาร</th>
                     <th className="text-right font-medium py-2">เปลี่ยน</th>
                     <th className="text-right font-medium py-2">ก่อน &rarr; หลัง</th>
+                    {canSeePrices && <th className="text-right font-medium py-2">ต้นทุน</th>}
                     <th className="text-left font-medium py-2">โดย</th>
                   </tr>
                 </thead>
@@ -874,7 +985,7 @@ export function StockModule({
                   {ledgerRows.length === 0 && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={canSeePrices ? 8 : 7}
                         className="py-3 text-xs"
                         style={{ color: 'var(--ink-faint)' }}
                       >
@@ -899,6 +1010,13 @@ export function StockModule({
                       <td className="py-2 text-right text-xs" style={{ color: 'var(--ink-soft)' }}>
                         {m.qtyBefore} &rarr; {m.qtyAfter}
                       </td>
+                      {/* The money the movement carried, taken from the lots it
+                          actually drew on — not a quantity times an average. */}
+                      {canSeePrices && (
+                        <td className="py-2 text-right text-xs">
+                          {m.costTotal ? fmt(Math.abs(m.costTotal)) : '—'}
+                        </td>
+                      )}
                       <td className="py-2 text-xs">{m.movedBy}</td>
                     </tr>
                   ))}
@@ -1349,6 +1467,32 @@ export function StockModule({
                   )}
                 </>
               )}
+              {/* Captured at the only moment anyone knows them. A lot without
+                  its supplier and invoice cannot be traced to the delivery. */}
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  ผู้ขาย
+                </label>
+                <input
+                  aria-label="ผู้ขาย"
+                  value={addStk.supplier}
+                  onChange={(e) => setAddStk({ ...addStk, supplier: e.target.value })}
+                  placeholder="เช่น 3M"
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  เลขที่ใบส่งของ
+                </label>
+                <input
+                  aria-label="เลขที่ใบส่งของ"
+                  value={addStk.docNo}
+                  onChange={(e) => setAddStk({ ...addStk, docNo: e.target.value })}
+                  placeholder="เช่น INV-4520"
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
               <div>
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   จำนวนที่รับเข้า

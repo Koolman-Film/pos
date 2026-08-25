@@ -44,12 +44,18 @@ export function RevenueModule({
   accessibleShops = [],
   canSeeAllShops = true,
   canExport = false,
+  canSeeCost = false,
   exportAction,
 }: {
   lines: SaleLine[];
   accessibleShops?: Shop[];
   canSeeAllShops?: boolean;
   canExport?: boolean;
+  /**
+   * ต้นทุนและกำไร are behind the same gate as stock prices (`seeStockPrices`).
+   * A salesperson reads their own takings; margin is the owner’s figure.
+   */
+  canSeeCost?: boolean;
   exportAction?: (payload: {
     fileNameBase: string;
     groups: { sheetName: string; rows: Record<string, string | number>[] }[];
@@ -86,6 +92,10 @@ export function RevenueModule({
   // A ticket selling three categories is ONE job, counted once.
   const jobCount = new Set(visible.map((l) => l.ticketId)).size;
   const taxTotal = visible.filter((l) => l.taxInvoiceNo).reduce((s, l) => s + l.amount, 0);
+  // Cost comes from the lots the jobs actually drew on (migration 0027), so
+  // this is a real margin rather than a quantity times an average.
+  const costTotal = visible.reduce((s, l) => s + l.cost, 0);
+  const margin = total - costTotal;
 
   const byCategory = categories
     .map((c) => {
@@ -110,6 +120,7 @@ export function RevenueModule({
       ชนิดสินค้า: l.category,
       สินค้า: l.product,
       ยอดขาย: l.amount,
+      ...(canSeeCost ? { ต้นทุน: l.cost, กำไรขั้นต้น: l.amount - l.cost } : {}),
       เลขที่ใบกำกับภาษี: l.taxInvoiceNo,
     }));
     const result = await exportAction({
@@ -152,7 +163,11 @@ export function RevenueModule({
         {periodCaption(period, periodValue, rangeStart, rangeEnd, new Date())}
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+      <div
+        className={`grid grid-cols-1 gap-3 mb-5 ${
+          canSeeCost ? 'sm:grid-cols-4' : 'sm:grid-cols-3'
+        }`}
+      >
         <div className="card p-4">
           <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
             ยอดขายรวม
@@ -177,6 +192,20 @@ export function RevenueModule({
             {total > 0 ? `${Math.round((taxTotal / total) * 100)}% ของยอดขาย` : '—'}
           </p>
         </div>
+        {canSeeCost && (
+          <div className="card p-4">
+            <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              กำไรขั้นต้น
+            </p>
+            <p className="text-2xl font-extrabold" style={{ color: '#2F7A4F' }}>
+              {fmt(margin)}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-faint)' }}>
+              ต้นทุน {fmt(costTotal)}
+              {total > 0 ? ` · ${Math.round((margin / total) * 100)}%` : ''}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* แยกตามชนิดสินค้า — the headline the shop asked for. */}

@@ -1339,8 +1339,97 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_batches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          created_by_name: string
+          doc_no: string
+          id: number
+          note: string
+          qty_received: number
+          qty_remaining: number
+          received_at: string
+          shop_id: string
+          stock_id: number
+          supplier: string
+          unit_cost: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          doc_no?: string
+          id?: never
+          note?: string
+          qty_received: number
+          qty_remaining: number
+          received_at?: string
+          shop_id: string
+          stock_id: number
+          supplier?: string
+          unit_cost?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          doc_no?: string
+          id?: never
+          note?: string
+          qty_received?: number
+          qty_remaining?: number
+          received_at?: string
+          shop_id?: string
+          stock_id?: number
+          supplier?: string
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_batches_stock_id_fkey"
+            columns: ["stock_id"]
+            isOneToOne: false
+            referencedRelation: "stock"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_movement_batches: {
+        Row: {
+          batch_id: number
+          id: number
+          movement_id: number
+          qty: number
+          unit_cost: number
+        }
+        Insert: {
+          batch_id: number
+          id?: never
+          movement_id: number
+          qty: number
+          unit_cost: number
+        }
+        Update: {
+          batch_id?: number
+          id?: never
+          movement_id?: number
+          qty?: number
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movement_batches_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "stock_movements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stock_movements: {
         Row: {
+          cost_total: number
           change: number
           document_id: string
           id: number
@@ -1356,6 +1445,7 @@ export type Database = {
           stock_id: number | null
         }
         Insert: {
+          cost_total?: number
           change: number
           document_id?: string
           id?: never
@@ -1371,6 +1461,7 @@ export type Database = {
           stock_id?: number | null
         }
         Update: {
+          cost_total?: number
           change?: number
           document_id?: string
           id?: never
@@ -1476,6 +1567,22 @@ export type Database = {
     Functions: {
       apply_stock_deltas: {
         Args: { p_changes: Json }
+        Returns: undefined
+      }
+      receive_stock: {
+        Args: {
+          p_by_name: string
+          p_doc_no: string
+          p_note?: string
+          p_qty: number
+          p_stock_id: number
+          p_supplier: string
+          p_unit_cost: number
+        }
+        Returns: number
+      }
+      refresh_stock_cost: {
+        Args: { p_stock_id: number }
         Returns: undefined
       }
       count_stock: {

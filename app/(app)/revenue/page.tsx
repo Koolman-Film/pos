@@ -31,6 +31,7 @@ export default async function RevenuePage() {
       accessibleShops={accessibleShops}
       canSeeAllShops={session.seesAllShops}
       canExport={session.canDo('accounting.export')}
+      canSeeCost={session.hasDashboardWidget('seeStockPrices')}
       exportAction={exportRevenue}
     />
   );

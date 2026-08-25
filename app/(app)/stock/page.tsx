@@ -7,6 +7,7 @@ import {
   type Withdrawal,
   type FilmPriceEntry,
   type StockMovement,
+  type StockBatch,
 } from '@/components/stock/StockModule';
 
 import { updateOptionListAction } from '../optionListActions';
@@ -143,7 +144,7 @@ export default async function StockPage() {
   const { data: moveRows } = await supabase
     .from('stock_movements')
     .select(
-      'id, item_name, shop_id, kind, document_id, change, qty_before, qty_after, note, moved_at, moved_by_name',
+      'id, item_name, shop_id, kind, document_id, change, qty_before, qty_after, cost_total, note, moved_at, moved_by_name',
     )
     .order('moved_at', { ascending: false })
     .limit(300);
@@ -156,9 +157,33 @@ export default async function StockPage() {
     change: Number(m.change || 0),
     qtyBefore: Number(m.qty_before || 0),
     qtyAfter: Number(m.qty_after || 0),
+    costTotal: Number(m.cost_total || 0),
     note: m.note,
     movedAt: m.moved_at,
     movedBy: m.moved_by_name,
+  }));
+
+  // ล็อตสินค้า (migration 0027) — what each round of buying cost, and how much
+  // of it is left. Capped like the ledger; the panel shows recent deliveries.
+  const { data: batchRows } = await supabase
+    .from('stock_batches')
+    .select(
+      'id, stock_id, received_at, supplier, doc_no, qty_received, qty_remaining, unit_cost, note, created_by_name',
+    )
+    .order('received_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(300);
+  const batches: StockBatch[] = (batchRows ?? []).map((b) => ({
+    id: b.id,
+    stockId: b.stock_id,
+    receivedAt: b.received_at,
+    supplier: b.supplier,
+    docNo: b.doc_no,
+    qtyReceived: Number(b.qty_received || 0),
+    qtyRemaining: Number(b.qty_remaining || 0),
+    unitCost: Number(b.unit_cost || 0),
+    note: b.note,
+    receivedBy: b.created_by_name,
   }));
 
   // แผนประกัน — configuration, like the film price matrix, and edited here for
@@ -194,6 +219,7 @@ export default async function StockPage() {
       filmPriceMatrix={filmPriceMatrix}
       insurancePlans={insurancePlans}
       movements={movements}
+      batches={batches}
       actions={{
         addProduct: addProductAction,
         bulkImport: bulkImportAction,
