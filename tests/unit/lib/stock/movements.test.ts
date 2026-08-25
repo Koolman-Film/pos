@@ -126,7 +126,7 @@ describe('applyStockMovements', () => {
 
   /** A Supabase double: enough of the chain to see what the call would send. */
   function fakeSupabase(rows: { id: number; name: string; qty: number }[]) {
-    const rpcCalls: { fn: string; args: { p_changes: Change[] } }[] = [];
+    const rpcCalls: { fn: string; args: { p_changes: Change[]; p_kind?: string } }[] = [];
     const inserted: Record<string, unknown>[][] = [];
     const supabase = {
       from(table: string) {
@@ -146,7 +146,7 @@ describe('applyStockMovements', () => {
         };
         return q;
       },
-      rpc(fn: string, args: { p_changes: Change[] }) {
+      rpc(fn: string, args: { p_changes: Change[]; p_kind?: string }) {
         rpcCalls.push({ fn, args });
         return Promise.resolve({ error: null });
       },
@@ -161,9 +161,11 @@ describe('applyStockMovements', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await applyStockMovements(supabase as any, { 'ฟิล์ม A': 2 }, source);
 
-    expect(rpcCalls[0].fn).toBe('apply_stock_deltas');
+    // One call moves the quantity AND writes the ledger entry (migration 0026).
+    expect(rpcCalls[0].fn).toBe('move_stock');
     // A change of -2, NOT the computed result 8. The row's own value decides.
     expect(rpcCalls[0].args.p_changes).toEqual([{ id: 7, change: -2 }]);
+    expect(rpcCalls[0].args.p_kind).toBe('ใบงาน');
   });
 
   it('adds back what a negative delta returns to the shelf', async () => {
@@ -184,10 +186,10 @@ describe('applyStockMovements', () => {
 
     // A renamed product is the usual cause, and it has to reach a human.
     expect(result.unmatched).toEqual(['ฟิล์มที่ถูกเปลี่ยนชื่อ']);
-    // Only the one that exists is moved...
+    // Only the one that exists moves, and only it gets a ledger entry — there
+    // is nothing honest to write about a quantity that never moved.
     expect(rpcCalls[0].args.p_changes).toEqual([{ id: 7, change: -1 }]);
-    // ...but BOTH are logged, so the movement is never lost.
-    expect(inserted[0]).toHaveLength(2);
+    expect(inserted).toHaveLength(0);
   });
 
   it('takes the oldest row when a branch still has two of one name', async () => {

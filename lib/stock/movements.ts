@@ -87,10 +87,10 @@ export function diffQtyMaps(before: QtyMap, after: QtyMap): QtyMap {
  * shop counted wrong or forgot to receive a delivery. Hiding it would be worse
  * than showing it.
  *
- * A product with no matching stock row at this shop is skipped for the decrement
- * (there is nothing to decrement) but STILL logged, so the movement is not lost
- * silently — that is the case where someone recorded usage of something the shop
- * does not carry, which is exactly what an audit trail is for.
+ * A product with no matching stock row at this shop cannot be decremented, and is
+ * RETURNED to the caller instead. There is nothing honest to write in a ledger
+ * about a quantity that never moved; what matters is that a human is told, which
+ * is what `unmatched` is for.
  */
 export async function applyStockMovements(
   supabase: Supabase,
@@ -114,42 +114,31 @@ export async function applyStockMovements(
   const byName = new Map<string, { id: number; name: string; qty: number }>();
   for (const r of rows ?? []) if (!byName.has(r.name)) byName.set(r.name, r);
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  const logRows = entries.map(([name, d]) => ({
-    item: name,
-    shop_id: source.shopId,
-    qty: d,
-    type: `${d > 0 ? 'ตัดสต็อก' : 'คืนสต็อก'}จาก${source.kind} (${source.documentId})`,
-    withdrawn_by: source.by,
-    withdrawn_at: today,
-    // Already happened, so it is recorded as approved rather than requested —
-    // matching the prototype, whose manual withdrawals were `รออนุมัติ` and whose
-    // automatic ones were `อนุมัติแล้ว`.
-    status: 'อนุมัติแล้ว',
-  }));
-
   /*
-    The arithmetic happens in the DATABASE (migration 0025), not here.
+    The arithmetic AND the ledger entry happen in the DATABASE, in one statement
+    (migration 0026).
 
     Reading `qty` and writing back `qty - d` is a lost update the moment two
     people save at once: both read 10, both write 8, and the shop is one short
-    with two successful writes to show for it. `qty = qty + change` is applied
-    to whatever the row holds at that instant, so both land.
+    with two successful writes to show for it. Writing the log separately is the
+    same class of mistake — it is how a movement ends up with no entry, or an
+    entry whose before/after disagrees with what actually happened.
   */
   const changes = entries
     .map(([name, d]) => ({ id: byName.get(name)?.id, change: -d }))
     .filter((c): c is { id: number; change: number } => typeof c.id === 'number');
 
-  await Promise.all([
-    changes.length > 0
-      ? supabase.rpc('apply_stock_deltas', { p_changes: changes as unknown as Json })
-      : null,
-    supabase.from('withdrawals').insert(logRows),
-  ]);
-
-  // Names with no product at this shop. They are logged above so the movement
-  // is never lost, but the caller has to be able to SAY so — silently skipping
-  // is how a renamed product stops being deducted without anyone noticing.
+  if (changes.length > 0) {
+    await supabase.rpc('move_stock', {
+      p_changes: changes as unknown as Json,
+      p_kind: source.kind,
+      p_document_id: source.documentId,
+      p_by_name: source.by,
+      p_note: '',
+    });
+  }
+  // Names with no product at this shop. Nothing moved, so there is nothing to put
+  // in the ledger; the caller has to SAY so instead — silently skipping is how a
+  // renamed product stops being deducted without anyone noticing.
   return { unmatched: names.filter((n) => !byName.has(n)) };
 }

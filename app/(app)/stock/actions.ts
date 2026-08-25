@@ -38,7 +38,7 @@ function assertShopAccess(session: SessionContext, shopId: string): void {
 }
 
 export type AddProductInput =
-  | { mode: 'existing'; existingId: number; qty: number; cost: number }
+  | { mode: 'existing'; existingId: number; qty: number; cost: number; reason?: string }
   | {
       mode: 'new';
       newName: string;
@@ -65,11 +65,15 @@ export async function addProductAction(input: AddProductInput): Promise<void> {
     if (error || !row) throw new Error('stock item not found');
     assertShopAccess(session, row.shop_id);
 
-    // The quantity is a RELATIVE change and is applied by the database
-    // (migration 0025). Reading it here and writing back `qty + n` loses one
-    // of two deliveries received at the same moment.
-    const { error: qtyErr } = await supabase.rpc('apply_stock_deltas', {
+    // Relative, applied and LOGGED by the database in one statement
+    // (migration 0026). Receiving used to change the quantity and write
+    // nothing, so a delivery left no trace at all.
+    const { error: qtyErr } = await supabase.rpc('move_stock', {
       p_changes: [{ id: row.id, change: Number(input.qty) }] as unknown as Json,
+      p_kind: 'รับเข้า',
+      p_document_id: '',
+      p_by_name: session.name,
+      p_note: input.reason ?? '',
     });
     if (qtyErr) throw qtyErr;
 
@@ -137,7 +141,11 @@ export async function bulkImportAction(rows: BulkImportRow[]): Promise<void> {
   revalidatePath('/stock');
 }
 
-export async function adjustStockAction(input: { id: number; counted: number }): Promise<void> {
+export async function adjustStockAction(input: {
+  id: number;
+  counted: number;
+  note?: string;
+}): Promise<void> {
   const session = await requireCapability('stock.adjustStock');
   const supabase = await createClient();
   const { data: row, error } = await supabase
@@ -147,10 +155,17 @@ export async function adjustStockAction(input: { id: number; counted: number }):
     .single();
   if (error || !row) throw new Error('stock item not found');
   assertShopAccess(session, row.shop_id);
-  const { error: upErr } = await supabase
-    .from('stock')
-    .update({ qty: Number(input.counted) })
-    .eq('id', row.id);
+
+  // A count is absolute, and the difference against what the system held is
+  // the movement. `count_stock` reads that difference inside the statement
+  // (migration 0026) — a stock count used to overwrite the number and leave
+  // no record of what it corrected.
+  const { error: upErr } = await supabase.rpc('count_stock', {
+    p_id: row.id,
+    p_counted: Number(input.counted),
+    p_by_name: session.name,
+    p_note: input.note ?? '',
+  });
   if (upErr) throw upErr;
   revalidatePath('/stock');
 }
@@ -171,8 +186,17 @@ export async function withdrawAction(input: {
   assertShopAccess(session, row.shop_id);
 
   const qty = Number(input.qty);
+  /*
+    The item physically leaves the shelf now, so the stock moves now. The
+    approval that follows is a MANAGER REVIEWING it, not a gate the goods wait
+    behind — and rejecting it returns the stock (see decideWithdrawal).
+
+    `stock_id` is stored so that return finds the right row even if the product
+    is renamed in between; the old row recorded only the name.
+  */
   const { error: insErr } = await supabase.from('withdrawals').insert({
     item: row.name,
+    stock_id: row.id,
     shop_id: row.shop_id,
     qty,
     type: input.type,
@@ -182,12 +206,16 @@ export async function withdrawAction(input: {
   });
   if (insErr) throw insErr;
 
-  // Relative, applied by the database (migration 0025), and NOT clamped at
-  // zero. Every other path already refused to clamp for the same reason: a
-  // negative figure means the shop counted wrong or missed a delivery, and a
-  // floor of zero makes that error permanent instead of visible.
-  const { error: upErr } = await supabase.rpc('apply_stock_deltas', {
+  // NOT clamped at zero. Every other path already refused to clamp for the
+  // same reason: a negative figure means the shop counted wrong or missed a
+  // delivery, and a floor of zero makes that error permanent instead of
+  // visible.
+  const { error: upErr } = await supabase.rpc('move_stock', {
     p_changes: [{ id: row.id, change: -qty }] as unknown as Json,
+    p_kind: 'เบิกใช้',
+    p_document_id: input.type,
+    p_by_name: session.name,
+    p_note: '',
   });
   if (upErr) throw upErr;
   revalidatePath('/stock');
@@ -341,4 +369,64 @@ export async function deleteInsurancePlanAction(id: number): Promise<void> {
   if (error) throw error;
   revalidatePath('/stock');
   revalidatePath('/tickets');
+}
+
+/**
+ * อนุมัติ / ไม่อนุมัติใบเบิก.
+ *
+ * The status pill existed from the start and nothing could ever change it — a
+ * withdrawal sat at "รออนุมัติ" for good. This is the decision it was waiting
+ * for.
+ *
+ * The goods already left the shelf when the withdrawal was recorded, so
+ * approving moves no stock. REJECTING does: it puts the quantity back and writes
+ * that return to the ledger, which is the only honest reading of "ไม่อนุมัติ" —
+ * the shop is saying the item should not have gone.
+ *
+ * Gated on `stock.approveWithdraw` (migration 0026), separate from
+ * `stock.withdraw`, so a หัวหน้าช่าง can take stock without signing off their
+ * own request.
+ */
+export async function decideWithdrawalAction(input: {
+  id: number;
+  approve: boolean;
+}): Promise<void> {
+  const session = await requireCapability('stock.approveWithdraw');
+  const supabase = await createClient();
+
+  const { data: row, error } = await supabase
+    .from('withdrawals')
+    .select('id, item, stock_id, shop_id, qty, status')
+    .eq('id', input.id)
+    .single();
+  if (error || !row) throw new Error('withdrawal not found');
+  assertShopAccess(session, row.shop_id);
+  // Deciding twice would return the stock twice. The first decision stands.
+  if (row.status !== 'รออนุมัติ') throw new Error('ใบเบิกนี้ตัดสินไปแล้ว');
+
+  const { error: upErr } = await supabase
+    .from('withdrawals')
+    .update({
+      status: input.approve ? 'อนุมัติแล้ว' : 'ไม่อนุมัติ',
+      decided_at: new Date().toISOString(),
+      decided_by: session.userId,
+    })
+    .eq('id', row.id)
+    // Re-checked in the WHERE as well as above: two managers pressing at once
+    // must not both get through.
+    .eq('status', 'รออนุมัติ');
+  if (upErr) throw upErr;
+
+  if (!input.approve && row.stock_id) {
+    const { error: moveErr } = await supabase.rpc('move_stock', {
+      p_changes: [{ id: row.stock_id, change: Number(row.qty) }] as unknown as Json,
+      p_kind: 'คืนจากใบเบิก',
+      p_document_id: String(row.id),
+      p_by_name: session.name,
+      p_note: 'ไม่อนุมัติใบเบิก',
+    });
+    if (moveErr) throw moveErr;
+  }
+
+  revalidatePath('/stock');
 }

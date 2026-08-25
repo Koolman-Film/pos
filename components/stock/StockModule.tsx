@@ -8,7 +8,7 @@ import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { fmt } from '@/lib/domain/format';
+import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import type { InsurancePlan } from '@/components/tickets/types';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -60,6 +60,26 @@ export type Withdrawal = {
   status: string;
 };
 
+/**
+ * One line of the stock ledger (migration 0026).
+ *
+ * Carries the quantity BEFORE and AFTER, which is what lets the shop answer
+ * "why did this drop from 20 to 8" instead of only seeing where it landed.
+ */
+export type StockMovement = {
+  id: number;
+  itemName: string;
+  shop: string;
+  kind: string;
+  documentId: string;
+  change: number;
+  qtyBefore: number;
+  qtyAfter: number;
+  note: string;
+  movedAt: string;
+  movedBy: string;
+};
+
 export type FilmPriceEntry = {
   category: string;
   product: string;
@@ -86,6 +106,8 @@ type StockActions = {
   setFilmPrice?: (input: FilmPriceEntry) => Promise<void>;
   saveInsurancePlan?: (input: any) => Promise<void>;
   deleteInsurancePlan?: (id: number) => Promise<void>;
+  /** อนุมัติ / ไม่อนุมัติใบเบิก — rejecting returns the stock. */
+  decideWithdrawal?: (input: { id: number; approve: boolean }) => Promise<void>;
   /** Persists หมวดหมู่ (ชนิดสินค้า). Without it the picker only edits state. */
   updateOptionList?: (
     listKey: string,
@@ -109,6 +131,7 @@ export function StockModule({
   wrapPositions = [],
   filmPriceMatrix = [],
   insurancePlans = [],
+  movements = [],
   actions = {},
 }: {
   stock: StockItem[];
@@ -133,6 +156,8 @@ export function StockModule({
   filmPriceMatrix?: FilmPriceEntry[];
   /** แผนประกันฟิล์มกันรอย — the list a ticket picks from (migration 0023). */
   insurancePlans?: InsurancePlan[];
+  /** สมุดบัญชีสต็อก, newest first (migration 0026). */
+  movements?: StockMovement[];
   actions?: StockActions;
 }) {
   // Deny by default when neither form is supplied, so a wiring mistake hides
@@ -193,6 +218,7 @@ export function StockModule({
     active: true,
   });
   const [planDraft, setPlanDraft] = useState<InsurancePlan | null>(null);
+  const [ledgerKind, setLedgerKind] = useState('all');
 
   async function savePlan() {
     if (!planDraft || !planDraft.name.trim()) return;
@@ -208,6 +234,13 @@ export function StockModule({
       active: planDraft.active,
     });
     setPlanDraft(null);
+    router.refresh();
+  }
+
+  async function decide(w: Withdrawal, approve: boolean) {
+    const verb = approve ? 'อนุมัติ' : 'ไม่อนุมัติ';
+    if (!window.confirm(`${verb}ใบเบิก "${w.item}" จำนวน ${w.qty}?`)) return;
+    await actions.decideWithdrawal?.({ id: w.id, approve });
     router.refresh();
   }
 
@@ -431,6 +464,18 @@ export function StockModule({
   const [editForm, setEditForm] = useState<StockItem | null>(null);
   const [search, setSearch] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
+
+  /**
+   * The ledger, scoped to the branch filter already on screen and to one kind
+   * of movement when asked. Read-only: it is a record, and a record that can be
+   * edited is not one.
+   */
+  const ledgerRows = movements.filter(
+    (m) =>
+      (branchFilter === 'all' || m.shop === branchFilter) &&
+      (ledgerKind === 'all' || m.kind === ledgerKind),
+  );
+
   const [catFilter, setCatFilter] = useState('all');
   const [nameFilterSel, setNameFilterSel] = useState('all');
   // "ต่ำกว่าขั้นต่ำ" — the ใกล้หมด card counts these but there was no way to list
@@ -616,6 +661,12 @@ export function StockModule({
                 <i className="fa-solid fa-tags"></i>ตั้งราคาฟิล์ม/กันรอย
               </button>
             )}
+            <button
+              onClick={() => setPanel(panel === 'ledger' ? null : 'ledger')}
+              className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'ledger' ? 'btn-primary' : 'btn-outline'}`}
+            >
+              <i className="fa-solid fa-clock-rotate-left"></i>ประวัติสต็อก
+            </button>
             {can('stock.editDelete') && (
               <button
                 onClick={() => setPanel(panel === 'insurance' ? null : 'insurance')}
@@ -782,6 +833,78 @@ export function StockModule({
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {panel === 'ledger' && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-1">ประวัติการเคลื่อนไหวสต็อก</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+              ทุกครั้งที่จำนวนเปลี่ยน พร้อมจำนวนก่อน/หลัง — รับเข้า, ตัดจากใบงาน, เบิกใช้, ปรับสต็อก
+            </p>
+
+            <select
+              aria-label="กรองตามประเภทการเคลื่อนไหว"
+              value={ledgerKind}
+              onChange={(e) => setLedgerKind(e.target.value)}
+              className="field text-xs px-2.5 py-1.5 mb-3"
+            >
+              <option value="all">ทุกประเภท</option>
+              {[...new Set(movements.map((m) => m.kind))].map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ color: 'var(--ink-soft)' }}>
+                    <th className="text-left font-medium py-2">วันที่</th>
+                    <th className="text-left font-medium py-2">สินค้า</th>
+                    <th className="text-left font-medium py-2">ประเภท</th>
+                    <th className="text-left font-medium py-2">เอกสาร</th>
+                    <th className="text-right font-medium py-2">เปลี่ยน</th>
+                    <th className="text-right font-medium py-2">ก่อน &rarr; หลัง</th>
+                    <th className="text-left font-medium py-2">โดย</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledgerRows.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-3 text-xs"
+                        style={{ color: 'var(--ink-faint)' }}
+                      >
+                        ยังไม่มีประวัติในสาขานี้
+                      </td>
+                    </tr>
+                  )}
+                  {ledgerRows.map((m) => (
+                    <tr key={m.id} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td className="py-2 whitespace-nowrap text-xs">
+                        {fmtThaiDate(new Date(m.movedAt))}
+                      </td>
+                      <td className="py-2">{m.itemName}</td>
+                      <td className="py-2 text-xs">{m.kind}</td>
+                      <td className="py-2 text-xs">{m.documentId || String.fromCharCode(8212)}</td>
+                      <td
+                        className="py-2 text-right font-semibold"
+                        style={{ color: m.change < 0 ? '#B23A48' : '#4C7A3E' }}
+                      >
+                        {m.change > 0 ? `+${m.change}` : m.change}
+                      </td>
+                      <td className="py-2 text-right text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        {m.qtyBefore} &rarr; {m.qtyAfter}
+                      </td>
+                      <td className="py-2 text-xs">{m.movedBy}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -1813,13 +1936,37 @@ export function StockModule({
                     {shopName(w.shop)} &middot; {w.type} &middot; {w.by} &middot; {w.date}
                   </p>
                 </div>
-                <StatusPill
-                  label={w.status}
-                  colorMap={{
-                    รออนุมัติ: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
-                    อนุมัติแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
-                  }}
-                />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <StatusPill
+                    label={w.status}
+                    colorMap={{
+                      รออนุมัติ: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
+                      อนุมัติแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
+                      ไม่อนุมัติ: { bg: '#FBEAEC', text: '#B23A48', dot: '#D08A94' },
+                    }}
+                  />
+                  {/* The pill used to be the whole story — nothing in the app
+                      could ever change it. Rejecting returns the stock. */}
+                  {w.status === 'รออนุมัติ' && can('stock.approveWithdraw') && (
+                    <>
+                      <button
+                        onClick={() => decide(w, true)}
+                        className="btn-outline text-xs px-2.5 py-1 rounded-lg"
+                        aria-label={`อนุมัติใบเบิก ${w.item}`}
+                      >
+                        อนุมัติ
+                      </button>
+                      <button
+                        onClick={() => decide(w, false)}
+                        className="text-xs px-2.5 py-1 rounded-lg"
+                        style={{ color: '#B23A48' }}
+                        aria-label={`ไม่อนุมัติใบเบิก ${w.item}`}
+                      >
+                        ไม่อนุมัติ
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>

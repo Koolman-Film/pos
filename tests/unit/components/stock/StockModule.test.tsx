@@ -356,3 +356,142 @@ describe('StockModule — ตั้งราคาประกัน', () => {
     expect(sent.name).toBe('ประกัน 6 เดือน');
   });
 });
+
+/**
+ * "รออนุมัติ" was a pill and nothing else — no button in the app could ever
+ * change it, so every withdrawal sat pending for good. The goods leave the shelf
+ * when the withdrawal is recorded, so approving moves nothing; REJECTING is the
+ * one that has to put the stock back.
+ */
+describe('StockModule — อนุมัติใบเบิก', () => {
+  const pending = [
+    {
+      id: 5,
+      item: 'ฟิล์ม 3M CRM 60%',
+      shop: 'cm',
+      qty: 2,
+      type: 'สินค้าตัวอย่าง',
+      by: 'คุณเอ',
+      date: '1 ก.ค. 2569',
+      status: 'รออนุมัติ',
+    },
+  ];
+
+  function renderWithdrawals(over: Record<string, unknown> = {}) {
+    const decideWithdrawal = vi.fn(async () => {});
+    render(
+      <StockModule
+        stock={stock}
+        withdrawals={pending}
+        accessibleShops={[{ id: 'cm', name: 'เชียงใหม่' }]}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        actions={{ decideWithdrawal }}
+        {...over}
+      />,
+    );
+    return { decideWithdrawal };
+  }
+
+  it('offers a decision on a pending withdrawal', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { decideWithdrawal } = renderWithdrawals();
+
+    await user.click(screen.getByLabelText('อนุมัติใบเบิก ฟิล์ม 3M CRM 60%'));
+    expect(decideWithdrawal).toHaveBeenCalledWith({ id: 5, approve: true });
+  });
+
+  it('sends the rejection, which is what returns the stock', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { decideWithdrawal } = renderWithdrawals();
+
+    await user.click(screen.getByLabelText('ไม่อนุมัติใบเบิก ฟิล์ม 3M CRM 60%'));
+    expect(decideWithdrawal).toHaveBeenCalledWith({ id: 5, approve: false });
+  });
+
+  it('keeps the decision away from someone who may only request', () => {
+    // A หัวหน้าช่าง can take stock; signing off their own request is a different
+    // permission (migration 0026).
+    renderWithdrawals({ canDo: (k: string) => k !== 'stock.approveWithdraw' });
+    expect(screen.queryByLabelText(/^อนุมัติใบเบิก/)).not.toBeInTheDocument();
+  });
+
+  it('offers nothing on a withdrawal already decided', () => {
+    renderWithdrawals({ withdrawals: [{ ...pending[0], status: 'อนุมัติแล้ว' }] });
+    expect(screen.queryByLabelText(/^อนุมัติใบเบิก/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The ledger is the answer to "why did this drop from 20 to 8". Every row
+ * carries the quantity before and after, so a balance can be walked back to a
+ * date instead of only showing where it landed.
+ */
+describe('StockModule — ประวัติสต็อก', () => {
+  const movements = [
+    {
+      id: 1,
+      itemName: 'ฟิล์ม 3M CRM 60%',
+      shop: 'cm',
+      kind: 'รับเข้า',
+      documentId: '',
+      change: 10,
+      qtyBefore: 5,
+      qtyAfter: 15,
+      note: 'ล็อตใหม่',
+      movedAt: '2026-08-01T03:00:00Z',
+      movedBy: 'แอดมินระบบ',
+    },
+    {
+      id: 2,
+      itemName: 'ฟิล์ม 3M CRM 60%',
+      shop: 'lp',
+      kind: 'ใบงาน',
+      documentId: 'JT-LP-00003',
+      change: -2,
+      qtyBefore: 15,
+      qtyAfter: 13,
+      note: '',
+      movedAt: '2026-08-02T03:00:00Z',
+      movedBy: 'ช่างเอก',
+    },
+  ];
+
+  it('shows what each movement did, and where it left the count', async () => {
+    const user = userEvent.setup();
+    render(
+      <StockModule
+        stock={stock}
+        movements={movements}
+        accessibleShops={[{ id: 'cm', name: 'เชียงใหม่' }]}
+        canDo={() => true}
+        canSeeStockPrices={false}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /ประวัติสต็อก/ }));
+    expect(screen.getByText('+10')).toBeInTheDocument();
+    expect(screen.getByText(/5 → 15/)).toBeInTheDocument();
+    expect(screen.getByText('JT-LP-00003')).toBeInTheDocument();
+  });
+
+  it('narrows to one kind of movement', async () => {
+    const user = userEvent.setup();
+    render(
+      <StockModule
+        stock={stock}
+        movements={movements}
+        accessibleShops={[{ id: 'cm', name: 'เชียงใหม่' }]}
+        canDo={() => true}
+        canSeeStockPrices={false}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /ประวัติสต็อก/ }));
+    await user.selectOptions(screen.getByLabelText('กรองตามประเภทการเคลื่อนไหว'), 'รับเข้า');
+    expect(screen.getByText('+10')).toBeInTheDocument();
+    expect(screen.queryByText('JT-LP-00003')).not.toBeInTheDocument();
+  });
+});

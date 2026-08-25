@@ -1,4 +1,4 @@
-# Release runbook — post-trial fixes (migrations 0012–0025)
+# Release runbook — post-trial fixes (migrations 0012–0026)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
 
@@ -28,7 +28,7 @@ dashboard and the accounting page.
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0025 only
+npx supabase db push                     # applies 0012 … 0026 only
 ```
 
 ### No CLI? Paste the files instead
@@ -48,10 +48,11 @@ it twice changes nothing, and each records its versions in
 | 7     | `supabase/release-0023.sql`                   | a normal connection                        |
 | 8     | `supabase/release-0024.sql`                   | a normal connection                        |
 | 9     | `supabase/release-0025.sql`                   | a normal connection                        |
-| 10    | `supabase/repair-categories-and-services.sql` | a normal connection                        |
+| 10    | `supabase/release-0026.sql`                   | a normal connection                        |
+| 11    | `supabase/repair-categories-and-services.sql` | a normal connection                        |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all ten in order
+already been handed over. If nothing has been run yet, running all eleven in order
 is still correct.
 
 The last step is a one-time DATA repair, not schema. It folds every ชนิดสินค้า that
@@ -87,6 +88,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0023_insurance`                | ประกันเป็นบันทึกของตัวเอง: `insurance_plans` (ตารางราคา), `insurance_policies` (หนึ่งแถวต่อการขาย เก็บสำเนาของแผน) และ `insurance_claims`, พร้อม `save_insurance_policy()`. ย้ายรายการ ประกัน ที่อยู่ใน `ticket_items` เดิมมาเป็นกรมธรรม์แล้วลบทิ้ง และตัดครึ่งประกันออกจาก `save_ticket_extras`.                                    | ปานกลาง — ยอดรวมของใบงานที่เคยมีบรรทัดประกันจะลดลง และไปนับเป็นรายได้ประกันตามวันที่เดิมแทน |
 | `0024_revenue_report`           | `ticket_documents` — บันทึกว่าออกใบเสร็จ/ใบกำกับภาษี/ใบเสนอราคาให้ใครแล้ว (หนึ่งแถวต่อชนิดเอกสารต่อใบงาน พิมพ์ซ้ำไม่นับใหม่) พร้อม `record_ticket_document()` และเปิดเมนู `revenue` ให้ admin/exec.                                                                                                                                  | ต่ำ. เพิ่มล้วน — ประวัติเริ่มนับจากวันที่รัน ไม่มีข้อมูลย้อนหลัง                            |
 | `0025_stock_integrity`          | `apply_stock_deltas()` — ให้ฐานข้อมูลบวกลบจำนวนสต็อกเอง แทนที่จะอ่านมาคำนวณในเบราว์เซอร์แล้วเขียนทับ (บันทึกพร้อมกันสองคนแล้วตัวเลขหาย) และ unique index (สาขา, ชื่อสินค้า) — ข้ามพร้อม NOTICE ถ้ายังมีชื่อซ้ำ                                                                                                                       | ต่ำ. เพิ่ม function + index; ไม่แก้ข้อมูลเดิม                                               |
+| `0026_stock_ledger`             | `stock_movements` — สมุดบัญชีสต็อก ทุกการเคลื่อนไหวพร้อมจำนวนก่อน/หลัง อ้างสินค้าด้วย id, `move_stock()` / `count_stock()` ที่ย้ายของและลงบัญชีในคำสั่งเดียว, `withdrawals` ได้คอลัมน์ตัดสินใจ และ capability `stock.approveWithdraw`                                                                                                | ต่ำ. เพิ่มล้วน — สมุดบัญชีเริ่มนับจากวันที่รัน                                              |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

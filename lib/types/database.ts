@@ -1339,8 +1339,67 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_movements: {
+        Row: {
+          change: number
+          document_id: string
+          id: number
+          item_name: string
+          kind: string
+          moved_at: string
+          moved_by: string | null
+          moved_by_name: string
+          note: string
+          qty_after: number
+          qty_before: number
+          shop_id: string
+          stock_id: number | null
+        }
+        Insert: {
+          change: number
+          document_id?: string
+          id?: never
+          item_name?: string
+          kind: string
+          moved_at?: string
+          moved_by?: string | null
+          moved_by_name?: string
+          note?: string
+          qty_after: number
+          qty_before: number
+          shop_id: string
+          stock_id?: number | null
+        }
+        Update: {
+          change?: number
+          document_id?: string
+          id?: never
+          item_name?: string
+          kind?: string
+          moved_at?: string
+          moved_by?: string | null
+          moved_by_name?: string
+          note?: string
+          qty_after?: number
+          qty_before?: number
+          shop_id?: string
+          stock_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_stock_id_fkey"
+            columns: ["stock_id"]
+            isOneToOne: false
+            referencedRelation: "stock"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       withdrawals: {
         Row: {
+          decided_at: string | null
+          decided_by: string | null
+          stock_id: number | null
           id: number
           item: string
           qty: number
@@ -1351,6 +1410,9 @@ export type Database = {
           withdrawn_by: string
         }
         Insert: {
+          decided_at?: string | null
+          decided_by?: string | null
+          stock_id?: number | null
           id?: never
           item: string
           qty: number
@@ -1361,6 +1423,9 @@ export type Database = {
           withdrawn_by: string
         }
         Update: {
+          decided_at?: string | null
+          decided_by?: string | null
+          stock_id?: number | null
           id?: never
           item?: string
           qty?: number
@@ -1411,6 +1476,20 @@ export type Database = {
     Functions: {
       apply_stock_deltas: {
         Args: { p_changes: Json }
+        Returns: undefined
+      }
+      count_stock: {
+        Args: { p_by_name: string; p_counted: number; p_id: number; p_note?: string }
+        Returns: undefined
+      }
+      move_stock: {
+        Args: {
+          p_by_name: string
+          p_changes: Json
+          p_document_id: string
+          p_kind: string
+          p_note?: string
+        }
         Returns: undefined
       }
       current_user_can: { Args: { cap: string }; Returns: boolean }

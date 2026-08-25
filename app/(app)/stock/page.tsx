@@ -6,6 +6,7 @@ import {
   type StockItem,
   type Withdrawal,
   type FilmPriceEntry,
+  type StockMovement,
 } from '@/components/stock/StockModule';
 
 import { updateOptionListAction } from '../optionListActions';
@@ -21,6 +22,7 @@ import {
   setFilmPriceAction,
   saveInsurancePlanAction,
   deleteInsurancePlanAction,
+  decideWithdrawalAction,
 } from './actions';
 
 async function optionValues(
@@ -136,6 +138,29 @@ export default async function StockPage() {
     }));
   }
 
+  // สมุดบัญชีสต็อก (migration 0026). Capped: the ledger grows for ever and the
+  // panel is a "what happened lately" list, not an archive browser.
+  const { data: moveRows } = await supabase
+    .from('stock_movements')
+    .select(
+      'id, item_name, shop_id, kind, document_id, change, qty_before, qty_after, note, moved_at, moved_by_name',
+    )
+    .order('moved_at', { ascending: false })
+    .limit(300);
+  const movements: StockMovement[] = (moveRows ?? []).map((m) => ({
+    id: m.id,
+    itemName: m.item_name,
+    shop: m.shop_id,
+    kind: m.kind,
+    documentId: m.document_id,
+    change: Number(m.change || 0),
+    qtyBefore: Number(m.qty_before || 0),
+    qtyAfter: Number(m.qty_after || 0),
+    note: m.note,
+    movedAt: m.moved_at,
+    movedBy: m.moved_by_name,
+  }));
+
   // แผนประกัน — configuration, like the film price matrix, and edited here for
   // the same reason: it is a price list, not part of any one job.
   const insurancePlans = await loadInsurancePlans();
@@ -150,6 +175,7 @@ export default async function StockPage() {
     'stock.editDelete': session.canDo('stock.editDelete'),
     'stock.export': session.canDo('stock.export'),
     'options.manage': session.canDo('options.manage'),
+    'stock.approveWithdraw': session.canDo('stock.approveWithdraw'),
   };
 
   return (
@@ -167,6 +193,7 @@ export default async function StockPage() {
       wrapPositions={wrapPositions}
       filmPriceMatrix={filmPriceMatrix}
       insurancePlans={insurancePlans}
+      movements={movements}
       actions={{
         addProduct: addProductAction,
         bulkImport: bulkImportAction,
@@ -177,6 +204,7 @@ export default async function StockPage() {
         setFilmPrice: setFilmPriceAction,
         saveInsurancePlan: saveInsurancePlanAction,
         deleteInsurancePlan: deleteInsurancePlanAction,
+        decideWithdrawal: decideWithdrawalAction,
         updateOptionList: updateOptionListAction,
       }}
     />
