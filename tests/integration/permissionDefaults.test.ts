@@ -170,15 +170,16 @@ describe('reset_permissions_to_defaults', () => {
       .select('role_id, permission_type, permission_key');
 
     const rows = data as PermRow[];
-    // 8 nav + 10 dashboard widgets/other + 20 module capabilities, for each role.
+    // 9 nav + 10 dashboard widgets/other + 21 module capabilities, for each role.
     // Migrations 0012 and 0016-0017 moved these: 0012 adds the `customers` nav
     // and `list.delete` / `list.restore` / `customers.edit`, 0016 adds
-    // `options.manage`, 0017 adds `list.unlock`.
+    // `options.manage`, 0017 adds `list.unlock`, 0024 adds the `revenue` nav and
+    // 0026 adds `stock.approveWithdraw`.
     for (const role of ['admin', 'exec', 'sales', 'tech']) {
       const forRole = rows.filter((r) => r.role_id === role);
-      expect(forRole.filter((r) => r.permission_type === 'nav')).toHaveLength(8);
+      expect(forRole.filter((r) => r.permission_type === 'nav')).toHaveLength(9);
       expect(forRole.filter((r) => r.permission_type === 'dashboard_widget')).toHaveLength(10);
-      expect(forRole.filter((r) => r.permission_type === 'module_capability')).toHaveLength(20);
+      expect(forRole.filter((r) => r.permission_type === 'module_capability')).toHaveLength(21);
     }
   });
 });

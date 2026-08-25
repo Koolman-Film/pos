@@ -6,16 +6,20 @@ import { useMemo, useState } from 'react';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
+import { fmtThaiDate } from '@/lib/domain/format';
+import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
-import { PrintJobSheet, type PrintMode } from './PrintJobSheet';
+import { PrintJobSheet, docPrefixFor, type PrintMode } from './PrintJobSheet';
 import { serializeTicket } from './serialize';
 import { ExtrasSection } from './detail/ExtrasSection';
+import { EXPIRY_WARNING_DAYS, InsuranceSection, daysLeft } from './detail/InsuranceSection';
 import { FormSection, SECTION_TONES } from './detail/FormSection';
 import { ItemsSection } from './detail/ItemsSection';
 import { NotesSection } from './detail/NotesSection';
 import { PaymentsSection } from './detail/PaymentsSection';
+import { ServiceVisitsSection } from './detail/ServiceVisitsSection';
 import { TechSection } from './detail/TechSection';
 import { VehicleInfoSection } from './detail/VehicleInfoSection';
 import { WrapOptionsSection } from './detail/WrapOptionsSection';
@@ -24,9 +28,13 @@ import type {
   CarModel,
   CorporateBuyer,
   FilmPriceRow,
+  InsuranceClaim,
+  InsurancePlan,
+  InsurancePolicy,
   OptionListName,
   PriceMatrixRow,
   RetailCustomer,
+  ServiceVisit,
   Shop,
   ShopInfo,
   StockRow,
@@ -39,7 +47,17 @@ import type {
 
 type Options = Record<OptionListName, string[]>;
 
-export type SaveResult = { ok: boolean; error?: string; id?: string };
+export type SaveResult = {
+  ok: boolean;
+  error?: string;
+  id?: string;
+  /**
+   * Saved, but some materials could not be deducted — the product was renamed or
+   * removed since the usage was recorded. Not an error; a message somebody has to
+   * read, because the alternative is stock quietly drifting.
+   */
+  stockWarning?: string;
+};
 
 /**
  * The job-ticket detail / new-ticket form.
@@ -69,6 +87,15 @@ export function TicketDetail({
   deleteAction,
   unlockAction,
   attachmentUrlAction,
+  corporateBuyerAction,
+  carModelAction,
+  extrasAction,
+  serviceVisitAction,
+  serviceVisitDeleteAction,
+  insurancePlans = [],
+  insuranceAction,
+  insuranceDeleteAction,
+  documentAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -95,6 +122,57 @@ export function TicketDetail({
   unlockAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
   /** Signed-URL minter for the slips and QC photos stored on this ticket. */
   attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
+  /** Persists ข้อมูลนิติบุคคล for the financial document. */
+  corporateBuyerAction?: (input: {
+    name: string;
+    address: string;
+    taxId: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  /** Persists รุ่นรถ → ยี่ห้อ/ประเภทรถ so the next ticket autofills them. */
+  carModelAction?: (input: {
+    model: string;
+    brand: string;
+    carType: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Saves ข้อมูลเพิ่มเติม on its own. The only write a CLOSED ticket accepts —
+   * service visits and a later ประกัน happen after delivery (migration 0022).
+   */
+  extrasAction?: (input: {
+    ticketId: string;
+    extras: Record<string, unknown>;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  /** Records one ใบเซอร์วิส visit against this ticket (migration 0020). */
+  serviceVisitAction?: (input: {
+    id?: number;
+    ticketId: string;
+    visit: Record<string, unknown>;
+    points: { seq: number; position: string; detail: string; note: string }[];
+  }) => Promise<{ ok: boolean; error?: string; id?: number }>;
+  serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  /** แผนประกัน the branch sells, for the picker (migration 0023). */
+  insurancePlans?: InsurancePlan[];
+  /** Records one กรมธรรม์ประกัน against this ticket, with its claims. */
+  insuranceAction?: (input: {
+    id?: number;
+    ticketId: string;
+    policy: Record<string, unknown>;
+    claims: Record<string, unknown>[];
+  }) => Promise<{ ok: boolean; error?: string; id?: number }>;
+  insuranceDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Records that a ใบเสร็จ / ใบกำกับภาษี was issued (migration 0024), so
+   * โมดูลรายได้ can say which sales carry a tax invoice.
+   */
+  documentAction?: (input: {
+    ticketId: string;
+    docType: string;
+    docNo: string;
+    buyerName: string;
+    buyerTaxId: string;
+    buyerAddress: string;
+    amount: number;
+  }) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
@@ -112,14 +190,27 @@ export function TicketDetail({
   }
   const opt = (name: OptionListName) => (values: string[]) => setOption(name, values);
 
-  // Secondary registries. These update in-session so the form behaves like the
-  // prototype; full persistence of these config tables is out of scope for the
-  // three named ticket server actions (flagged in the task report).
+  /*
+    Registries the form edits as a side effect of doing a job. Each is optimistic
+    in state AND written to its table, except where noted:
+
+    - `stock` is a PREVIEW ONLY — see updateActualQty. The server moves stock on
+      save, because only it can diff against what is stored.
+    - `priceMatrix` is deliberately session-local. `commitPrice` fires on every
+      keystroke in the sold-price box, so persisting it would let a one-off
+      discount — or the "3" on the way to typing "3000" — become the standard
+      price for that ประเภทรถ + สินค้า on every future ticket. Film prices have a
+      proper editor in สต็อกสินค้า → ตั้งราคาฟิล์ม/กันรอย, which does persist.
+    - `retailCustomers` is written by the ticket save itself
+      (`resolveRetailCustomerId`), keyed on name + phone.
+  */
   const [stock, setStock] = useState<StockRow[]>(initialStock);
   const [carModels, setCarModels] = useState<CarModel[]>(initialCarModels);
   const [priceMatrix, setPriceMatrix] = useState<PriceMatrixRow[]>(initialPriceMatrix);
   const [retailCustomers, setRetailCustomers] = useState<RetailCustomer[]>(initialRetailCustomers);
   const [corporateBuyers, setCorporateBuyers] = useState<CorporateBuyer[]>(initialCorporateBuyers);
+  const [savingBuyer, setSavingBuyer] = useState(false);
+  const [buyerSaveMsg, setBuyerSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -130,6 +221,45 @@ export function TicketDetail({
   // flag is not something the form edits, and reading it from the draft would
   // let a stray field() call appear to unlock the ticket on screen.
   const locked = !isNew && !!initialTicket.locked;
+
+  /**
+   * ประกันของรถคันนี้ที่ใกล้หมดอายุ — the same 30-day window the dashboard warns
+   * on, repeated here because this is the screen open when the customer is at
+   * the counter. Read across the CAR, not just this ticket: the cover may have
+   * been sold on an earlier job.
+   */
+  const expiringPolicies = (initialTicket.insuranceForPlate ?? [])
+    .map((p) => ({ policy: p, days: daysLeft(p.endsAt) }))
+    .filter((x) => x.days != null && x.days <= EXPIRY_WARNING_DAYS)
+    .sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
+
+  /**
+   * บันทึก ข้อมูลเพิ่มเติม on a CLOSED ticket.
+   *
+   * The main save button is hidden while locked and the database would refuse
+   * it anyway, so this narrow path exists instead: it writes `extras` and
+   * nothing else (migration 0022). Only rendered when the ticket is locked —
+   * an open ticket saves its extras with everything else.
+   */
+  const [savingExtras, setSavingExtras] = useState(false);
+  const [extrasSaved, setExtrasSaved] = useState(false);
+  async function saveExtras() {
+    if (!extrasAction) return;
+    setSaveError(null);
+    setExtrasSaved(false);
+    setSavingExtras(true);
+    const result = await extrasAction({
+      ticketId: t.id,
+      extras: (t.extras ?? {}) as Record<string, unknown>,
+    });
+    setSavingExtras(false);
+    if (!result.ok) {
+      setSaveError(result.error || 'บันทึกข้อมูลเพิ่มเติมไม่สำเร็จ');
+      return;
+    }
+    setExtrasSaved(true);
+    router.refresh();
+  }
 
   async function unlock() {
     if (!unlockAction) return;
@@ -152,6 +282,9 @@ export function TicketDetail({
   const [buyerAddress, setBuyerAddress] = useState('');
   const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [printMode, setPrintMode] = useState<PrintMode>('job');
+  const [printVisit, setPrintVisit] = useState<ServiceVisit | null>(null);
+  const [printPolicy, setPrintPolicy] = useState<InsurancePolicy | null>(null);
+  const [printClaim, setPrintClaim] = useState<InsuranceClaim | null>(null);
 
   const productCategories = options.product_categories;
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? id;
@@ -170,6 +303,154 @@ export function TicketDetail({
     setDocType(dt);
     setShowCompanyInfo(dt === 'ใบกำกับภาษี/ใบเสร็จรับเงิน');
   }
+  /**
+   * ใบเซอร์วิส — one recorded visit, or a blank sheet when given null.
+   *
+   * The visit has to be in state before the print portal renders, hence the
+   * separate setter rather than reusing `doPrint` alone.
+   */
+  function printServiceSheet(visit: ServiceVisit | null) {
+    setPrintVisit(visit);
+    doPrint('service');
+  }
+
+  /** Save a visit, then pull the ticket's list back from the server. */
+  async function saveServiceVisit(visit: ServiceVisit) {
+    if (!serviceVisitAction) return { ok: false, error: 'ยังไม่พร้อมใช้งาน' };
+    const result = await serviceVisitAction({
+      id: visit.id,
+      ticketId: t.id,
+      visit: {
+        plate: t.plate,
+        receivedAt: visit.receivedAt || null,
+        receivedTime: visit.receivedTime,
+        deliveredAt: visit.deliveredAt || null,
+        deliveredTime: visit.deliveredTime,
+        salesBy: visit.salesBy,
+        qcBy: visit.qcBy,
+        technicians: visit.technicians,
+        filmProduct: visit.filmProduct,
+        customerWaits: visit.customerWaits,
+        overallOk: visit.overallOk,
+        checks: visit.checks,
+        notes: visit.notes,
+      },
+      points: visit.points,
+    });
+    // The list lives on the server-rendered ticket, so a refresh is what shows
+    // the new visit — and the visit_no the database actually issued.
+    if (result.ok) router.refresh();
+    return result;
+  }
+
+  async function deleteServiceVisit(id: number) {
+    if (!serviceVisitDeleteAction) return { ok: false, error: 'ยังไม่พร้อมใช้งาน' };
+    const result = await serviceVisitDeleteAction(id);
+    if (result.ok) router.refresh();
+    return result;
+  }
+
+  /** ใบเสร็จค่าประกัน — its own document, on the policy’s own date. */
+  function printInsuranceReceipt(policy: InsurancePolicy) {
+    setPrintPolicy(policy);
+    setPrintClaim(null);
+    doPrint('insurance');
+  }
+
+  /**
+   * ใบเคลมประกัน — the ใบเซอร์วิส form with the cover printed on it.
+   *
+   * A claim IS a workshop visit, so the sheet is filled the same way: the
+   * recorded claim becomes a stand-in visit (its date, the technician who did
+   * it, its detail on the first จุดพิเศษ row) and the walk-around boxes print
+   * empty to be written on. `claim` null is the blank sheet you carry to the
+   * car before anything is recorded.
+   */
+  function printInsuranceClaim(policy: InsurancePolicy, claim: InsuranceClaim | null) {
+    setPrintPolicy(policy);
+    setPrintClaim(claim);
+    setPrintVisit(
+      claim
+        ? {
+            visitNo: 0,
+            plate: policy.plate || t.plate,
+            receivedAt: claim.claimedAt,
+            receivedTime: '',
+            deliveredAt: '',
+            deliveredTime: '',
+            salesBy: currentUserName,
+            qcBy: '',
+            technicians: claim.technician ? [claim.technician] : [],
+            filmProduct: '',
+            customerWaits: null,
+            overallOk: null,
+            checks: {},
+            notes: policy.notes,
+            points: claim.detail ? [{ seq: 1, position: '', detail: claim.detail, note: '' }] : [],
+          }
+        : null,
+    );
+    doPrint('claim');
+  }
+
+  /** Save a policy with its claims, then pull the list back from the server. */
+  async function saveInsurancePolicy(policy: InsurancePolicy) {
+    if (!insuranceAction) return { ok: false, error: 'ยังไม่พร้อมใช้งาน' };
+    const result = await insuranceAction({
+      id: policy.id,
+      ticketId: t.id,
+      policy: {
+        plate: t.plate,
+        planName: policy.planName,
+        price: policy.price,
+        bigPieces: policy.bigPieces,
+        smallPieces: policy.smallPieces,
+        terms: policy.terms,
+        soldAt: policy.soldAt || null,
+        startsAt: policy.startsAt || null,
+        endsAt: policy.endsAt || null,
+        notes: policy.notes,
+      },
+      claims: policy.claims.map((c) => ({
+        claimedAt: c.claimedAt || null,
+        bigUsed: c.bigUsed,
+        smallUsed: c.smallUsed,
+        detail: c.detail,
+        technician: c.technician,
+      })),
+    });
+    if (result.ok) router.refresh();
+    return result;
+  }
+
+  async function deleteInsurancePolicy(id: number) {
+    if (!insuranceDeleteAction) return { ok: false, error: 'ยังไม่พร้อมใช้งาน' };
+    const result = await insuranceDeleteAction(id);
+    if (result.ok) router.refresh();
+    return result;
+  }
+
+  /**
+   * ออกเอกสารการเงิน — record it, then print it.
+   *
+   * The record is what lets โมดูลรายได้ answer "which sales did we issue a
+   * ใบกำกับภาษี for". It is fired and not awaited: the customer is standing
+   * at the counter waiting for the paper, and a reporting row is not worth
+   * making them wait for — or worth cancelling the print over if it fails.
+   */
+  function issueDocument() {
+    void documentAction?.({
+      ticketId: t.id,
+      docType,
+      docNo: `${docPrefixFor(docType)}-${t.id.replace('JT-', '')}`,
+      buyerName: buyerName || t.customer,
+      buyerTaxId,
+      buyerAddress,
+      amount: total,
+    });
+    doPrint('doc');
+  }
+
   function doPrint(mode: PrintMode) {
     setPrintMode(mode);
     setTimeout(() => {
@@ -193,6 +474,11 @@ export function TicketDetail({
         return;
       }
       window.__hasUnsavedFormChanges = false;
+      // The save worked, so this is not an error banner — but the shop has to
+      // SEE it, and the next line navigates away. A product renamed after its
+      // usage was recorded stops being deducted, and stock drifts from then on
+      // unless somebody fixes the name.
+      if (result.stockWarning) window.alert(result.stockWarning);
       router.push('/tickets');
       router.refresh();
     } catch (e) {
@@ -254,6 +540,11 @@ export function TicketDetail({
     if (match) setT({ ...t, model: v, brand: match.brand, carType: match.carType });
     else setT({ ...t, model: v });
   }
+  /**
+   * Teaches the รุ่นรถ registry so the next ticket for the same model fills in
+   * ยี่ห้อ and ประเภทรถ by itself. Optimistic locally, then persisted — it used
+   * to be local only, so the lesson lasted until the page reloaded.
+   */
   function commitModelRegistry(brand: string, carType: string) {
     if (!t.model) return;
     setCarModels((prev) => {
@@ -268,18 +559,59 @@ export function TicketDetail({
       }
       return [...prev, entry];
     });
+    // Fire and forget: the registry is a convenience, and a failed write must
+    // not interrupt someone filling in a ticket. The action ignores half-filled
+    // rows rather than storing a model with no brand.
+    void carModelAction?.({ model: t.model, brand, carType });
+  }
+
+  /** ข้อมูลนิติบุคคล — the button says it saves for next time, so it must. */
+  async function saveBuyer() {
+    const name = buyerName.trim();
+    if (!name) {
+      setBuyerSaveMsg({ ok: false, text: 'กรุณากรอกชื่อลูกค้าในเอกสารก่อนบันทึก' });
+      return;
+    }
+    setCorporateBuyers((prev) => {
+      const idx = prev.findIndex((x) => x.name === name);
+      const entry = { name, address: buyerAddress, taxId: buyerTaxId };
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = entry;
+        return copy;
+      }
+      return [...prev, entry];
+    });
+    if (!corporateBuyerAction) {
+      setBuyerSaveMsg({ ok: true, text: 'บันทึกไว้ในหน้านี้แล้ว' });
+      return;
+    }
+    setSavingBuyer(true);
+    const result = await corporateBuyerAction({
+      name,
+      address: buyerAddress,
+      taxId: buyerTaxId,
+    });
+    setSavingBuyer(false);
+    setBuyerSaveMsg(
+      result.ok
+        ? { ok: true, text: 'บันทึกแล้ว — ครั้งหน้าเลือกจากรายการได้เลย' }
+        : { ok: false, text: result.error || 'บันทึกไม่สำเร็จ' },
+    );
   }
   function lookupPrice(product: string, fallback: number) {
     const m = priceMatrix.find((p) => p.carType === t.carType && p.product === product);
     return m ? m.price : fallback;
   }
+  /**
+   * ราคาของสาขานี้ ถ้าไม่ได้ตั้งไว้จึงใช้ราคากลาง (migration 0029) — สินค้า
+   * ชื่อเดียวกันขายคนละราคาในแต่ละสาขาได้.
+   */
   function lookupFilmPrice(category: string, product: string, position: string, fallback: number) {
-    const m = filmPriceMatrix.find(
-      (p) =>
-        p.category === category &&
-        p.product === product &&
-        p.position === position &&
-        p.carType === t.carType,
+    const m = resolveFilmPrice(
+      filmPriceMatrix,
+      { category, product, position, carType: t.carType },
+      t.shop,
     );
     return m ? m.price : fallback;
   }
@@ -296,29 +628,19 @@ export function TicketDetail({
       return [...prev, entry];
     });
   }
+  /**
+   * ประกัน used to add a ticket_item at ราคา 0 here. It has its own record now
+   * (migration 0023), because the cover can be bought months after the ticket
+   * closed and a ticket line would have moved that job’s numbers.
+   */
   function toggleExtra(name: string) {
     const current = t.extras?.[name] || {};
-    const nowChecked = !current.checked;
-    let items = t.items;
-    if (name === 'ประกัน') {
-      if (nowChecked && !items.some((i) => i.autoInsurance)) {
-        items = [
-          ...items,
-          {
-            category: 'ประกัน',
-            booked: 'ประกัน',
-            bookedPrice: 0,
-            sold: 'ประกัน',
-            soldPrice: 0,
-            autoInsurance: true,
-          },
-        ];
-      } else if (!nowChecked) {
-        items = items.filter((i) => !i.autoInsurance);
-      }
-    }
-    setT({ ...t, items, extras: { ...t.extras, [name]: { ...current, checked: nowChecked } } });
+    setT({
+      ...t,
+      extras: { ...t.extras, [name]: { ...current, checked: !current.checked } },
+    });
   }
+
   function updateExtraDetail(name: string, key: string, val: unknown) {
     setT({ ...t, extras: { ...t.extras, [name]: { ...(t.extras?.[name] || {}), [key]: val } } });
   }
@@ -520,6 +842,28 @@ export function TicketDetail({
             stay visible — this is still the record of the job — but nothing in
             them can be changed or saved until an admin reopens it.
           */}
+          {expiringPolicies.length > 0 && (
+            <div
+              className="rounded-2xl p-4 mb-5"
+              style={{ background: '#FBF0DF', border: '1.5px solid #E2C48A' }}
+            >
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <i className="fa-solid fa-shield-halved"></i>ประกันของรถคันนี้ใกล้หมดอายุ
+              </p>
+              {expiringPolicies.map(({ policy, days }) => (
+                <p key={policy.id} className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                  {policy.planName || 'ประกัน'} · หมดอายุ{' '}
+                  {policy.endsAt ? fmtThaiDate(new Date(`${policy.endsAt}T00:00:00`)) : '-'}
+                  {days != null && days < 0
+                    ? ' (หมดอายุแล้ว)'
+                    : days === 0
+                      ? ' (วันนี้)'
+                      : ` (อีก ${days} วัน)`}
+                </p>
+              ))}
+            </div>
+          )}
+
           {locked && (
             <div
               className="rounded-2xl p-4 mb-5"
@@ -597,8 +941,6 @@ export function TicketDetail({
                 setFilmPositions={opt('film_positions')}
                 wrapPositions={options.wrap_positions}
                 setWrapPositions={opt('wrap_positions')}
-                serviceItems={options.service_items}
-                setServiceItems={opt('service_items')}
                 addItem={addItem}
                 removeItem={removeItem}
                 updateItem={updateItem}
@@ -629,18 +971,101 @@ export function TicketDetail({
                   setCategoryNote={setCategoryNote}
                 />
 
-                <ExtrasSection
-                  t={t}
-                  extraOptions={options.extra_options}
-                  setExtraOptions={opt('extra_options')}
-                  slideTypes={options.slide_types}
-                  stock={stock}
-                  toggleExtra={toggleExtra}
-                  updateExtraDetail={updateExtraDetail}
-                  setSlideType={setSlideType}
-                  updateSlideLeg={updateSlideLeg}
-                  shareLink={shareLink}
-                />
+                {/*
+                  pointerEvents back on: this one block escapes the lock. A
+                  car comes back for service — and sometimes buys ประกัน —
+                  long after the ticket was delivered, paid and closed, so
+                  freezing this along with the money made the shop ask an
+                  admin to reopen a finished job just to write down a visit.
+                */}
+                <div style={locked ? { pointerEvents: 'auto', opacity: 1 } : undefined}>
+                  {locked && (
+                    <p
+                      className="text-xs mb-2 flex items-center gap-1.5"
+                      style={{ color: '#4C7A3E' }}
+                    >
+                      <i className="fa-solid fa-lock-open"></i>
+                      ส่วนนี้ยังแก้ไขได้แม้ใบงานปิดแล้ว (เซอร์วิส / ประกัน)
+                    </p>
+                  )}
+                  <ExtrasSection
+                    t={t}
+                    extraOptions={options.extra_options}
+                    setExtraOptions={opt('extra_options')}
+                    slideTypes={options.slide_types}
+                    stock={stock}
+                    toggleExtra={toggleExtra}
+                    updateExtraDetail={updateExtraDetail}
+                    setSlideType={setSlideType}
+                    updateSlideLeg={updateSlideLeg}
+                    shareLink={shareLink}
+                    insurance={
+                      // A policy is a child row of a saved ticket, like a visit.
+                      isNew || !insuranceAction
+                        ? undefined
+                        : () => (
+                            <InsuranceSection
+                              t={t}
+                              // Server-owned: from initialTicket, not the draft.
+                              policies={initialTicket.insurancePolicies ?? []}
+                              forPlate={initialTicket.insuranceForPlate ?? []}
+                              plans={insurancePlans}
+                              technicians={options.technicians}
+                              canDelete={canDo('list.delete')}
+                              onSave={saveInsurancePolicy}
+                              onDelete={deleteInsurancePolicy}
+                              onPrint={printInsuranceReceipt}
+                              onPrintClaim={printInsuranceClaim}
+                            />
+                          )
+                    }
+                    serviceVisits={
+                      // A visit is a child row of a saved ticket, so there is
+                      // nothing for it to hang off until the ticket has an id.
+                      isNew || !serviceVisitAction
+                        ? undefined
+                        : ({ entitled, filmProduct, assignedTechnicians }) => (
+                            <ServiceVisitsSection
+                              t={t}
+                              // Server-owned: from initialTicket, not the draft.
+                              visits={initialTicket.serviceVisits ?? []}
+                              visitsForPlate={initialTicket.serviceVisitsForPlate ?? 0}
+                              entitled={entitled}
+                              technicians={options.technicians}
+                              setTechnicians={opt('technicians')}
+                              currentUserName={currentUserName}
+                              filmProduct={filmProduct}
+                              assignedTechnicians={assignedTechnicians}
+                              canDelete={canDo('list.delete')}
+                              onSave={saveServiceVisit}
+                              onDelete={deleteServiceVisit}
+                              onPrint={printServiceSheet}
+                            />
+                          )
+                    }
+                  />
+                  {/* Its own save: the ticket-wide one is gone while locked. */}
+                  {locked && extrasAction && (
+                    <div className="flex items-center gap-3 mt-3">
+                      <button
+                        onClick={saveExtras}
+                        disabled={savingExtras}
+                        className="btn-primary rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2"
+                        style={{ opacity: savingExtras ? 0.7 : 1 }}
+                      >
+                        <i
+                          className={`fa-solid ${savingExtras ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}
+                        ></i>
+                        {savingExtras ? 'กำลังบันทึก...' : 'บันทึกข้อมูลเพิ่มเติม'}
+                      </button>
+                      {extrasSaved && (
+                        <span className="text-xs" style={{ color: '#4C7A3E' }}>
+                          <i className="fa-solid fa-circle-check mr-1"></i>บันทึกแล้ว
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </FormSection>
 
@@ -808,25 +1233,35 @@ export function TicketDetail({
                     className="field w-full text-xs px-2.5 py-1.5 mb-2"
                   />
                   <button
-                    onClick={() => {
-                      if (!buyerName.trim()) return;
-                      setCorporateBuyers((prev) => {
-                        const idx = prev.findIndex((x) => x.name === buyerName);
-                        const entry = { name: buyerName, address: buyerAddress, taxId: buyerTaxId };
-                        if (idx >= 0) {
-                          const copy = [...prev];
-                          copy[idx] = entry;
-                          return copy;
-                        }
-                        return [...prev, entry];
-                      });
-                    }}
+                    onClick={saveBuyer}
+                    disabled={savingBuyer}
                     className="btn-outline w-full text-xs py-1.5 rounded-lg"
-                    style={{ borderColor: '#2563EB', color: '#1D4ED8' }}
+                    style={{
+                      borderColor: '#2563EB',
+                      color: '#1D4ED8',
+                      opacity: savingBuyer ? 0.7 : 1,
+                    }}
                   >
-                    <i className="fa-solid fa-floppy-disk mr-1.5"></i>
-                    บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป
+                    <i
+                      className={`fa-solid ${savingBuyer ? 'fa-spinner fa-spin' : 'fa-floppy-disk'} mr-1.5`}
+                    ></i>
+                    {savingBuyer ? 'กำลังบันทึก...' : 'บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป'}
                   </button>
+                  {/* The button's whole promise is that this survives. Saying so
+                      out loud is the difference between a saved buyer and one
+                      that only looked saved. */}
+                  {buyerSaveMsg && (
+                    <p
+                      className="text-xs mt-1.5"
+                      role="status"
+                      style={{ color: buyerSaveMsg.ok ? '#3F6B33' : '#B23A48' }}
+                    >
+                      <i
+                        className={`fa-solid ${buyerSaveMsg.ok ? 'fa-circle-check' : 'fa-triangle-exclamation'} mr-1`}
+                      ></i>
+                      {buyerSaveMsg.text}
+                    </p>
+                  )}
                 </div>
               )}
               <label
@@ -854,7 +1289,7 @@ export function TicketDetail({
                 แสดงข้อความแจ้งเตือนตรวจเช็ครอบคัน
               </label>
               <button
-                onClick={() => doPrint('doc')}
+                onClick={issueDocument}
                 className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
                 style={{ background: '#2563EB', color: '#fff' }}
               >
@@ -916,6 +1351,10 @@ export function TicketDetail({
           buyerAddress={buyerAddress}
           showCompanyInfo={showCompanyInfo}
           showDisclaimer={showDisclaimer}
+          serviceVisit={printVisit}
+          insurancePolicy={printPolicy}
+          insuranceClaim={printClaim}
+          technicianOptions={options.technicians}
         />
       </div>
     </OptionManageProvider>

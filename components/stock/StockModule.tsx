@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -7,7 +8,9 @@ import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { fmt } from '@/lib/domain/format';
+import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { findFilmPrice } from '@/lib/domain/filmPrice';
+import type { InsurancePlan } from '@/components/tickets/types';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
@@ -58,12 +61,55 @@ export type Withdrawal = {
   status: string;
 };
 
+/**
+ * One delivery (migration 0027).
+ *
+ * Each round of buying keeps its own cost, so "what did we pay that round"
+ * stays answerable while the goods are still on the shelf.
+ */
+export type StockBatch = {
+  id: number;
+  stockId: number;
+  receivedAt: string;
+  supplier: string;
+  docNo: string;
+  qtyReceived: number;
+  qtyRemaining: number;
+  unitCost: number;
+  note: string;
+  receivedBy: string;
+};
+
+/**
+ * One line of the stock ledger (migration 0026).
+ *
+ * Carries the quantity BEFORE and AFTER, which is what lets the shop answer
+ * "why did this drop from 20 to 8" instead of only seeing where it landed.
+ */
+export type StockMovement = {
+  id: number;
+  itemName: string;
+  shop: string;
+  kind: string;
+  documentId: string;
+  change: number;
+  qtyBefore: number;
+  qtyAfter: number;
+  /** What the goods that moved actually cost, from the lots (migration 0027). */
+  costTotal: number;
+  note: string;
+  movedAt: string;
+  movedBy: string;
+};
+
 export type FilmPriceEntry = {
   category: string;
   product: string;
   position: string;
   carType: string;
   price: number;
+  /** '' = ราคากลางทุกสาขา; a shop id = ราคาเฉพาะสาขานั้น (migration 0029). */
+  shop?: string;
 };
 
 /**
@@ -82,6 +128,22 @@ type StockActions = {
   saveProduct?: (input: any) => Promise<void>;
   deleteProduct?: (id: number) => Promise<void>;
   setFilmPrice?: (input: FilmPriceEntry) => Promise<void>;
+  saveInsurancePlan?: (input: any) => Promise<void>;
+  deleteInsurancePlan?: (id: number) => Promise<void>;
+  /** อนุมัติ / ไม่อนุมัติใบเบิก — rejecting returns the stock. */
+  decideWithdrawal?: (input: { id: number; approve: boolean }) => Promise<void>;
+  /** โอนสต็อกไปสาขาอื่น — ต้นทุนไปกับของ (migration 0028). */
+  transferStock?: (input: {
+    id: number;
+    toShop: string;
+    qty: number;
+    note?: string;
+  }) => Promise<void>;
+  /** Persists หมวดหมู่ (ชนิดสินค้า). Without it the picker only edits state. */
+  updateOptionList?: (
+    listKey: string,
+    values: string[],
+  ) => Promise<{ ok: boolean; error?: string }>;
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -99,6 +161,9 @@ export function StockModule({
   filmPositions = [],
   wrapPositions = [],
   filmPriceMatrix = [],
+  insurancePlans = [],
+  movements = [],
+  batches = [],
   actions = {},
 }: {
   stock: StockItem[];
@@ -121,6 +186,12 @@ export function StockModule({
   filmPositions?: string[];
   wrapPositions?: string[];
   filmPriceMatrix?: FilmPriceEntry[];
+  /** แผนประกันฟิล์มกันรอย — the list a ticket picks from (migration 0023). */
+  insurancePlans?: InsurancePlan[];
+  /** สมุดบัญชีสต็อก, newest first (migration 0026). */
+  movements?: StockMovement[];
+  /** ล็อตสินค้า, newest first (migration 0027). */
+  batches?: StockBatch[];
   actions?: StockActions;
 }) {
   // Deny by default when neither form is supplied, so a wiring mistake hides
@@ -133,22 +204,149 @@ export function StockModule({
   // `.app-shell` subtree — Task 1's print CSS hides `.app-shell` and shows only
   // `.print-area`, so a nested print-area would be hidden with it. Portaling
   // needs `document`, which is absent during SSR, hence the mount gate.
+  const router = useRouter();
   const mounted = useIsMounted();
 
-  const [categories, setCategories] = useState<string[]>(productCategories);
+  const [categoriesState, setCategoriesState] = useState<string[]>(productCategories);
+  /**
+   * Every ชนิดสินค้า that is either in the managed list OR already carried by a
+   * product on this page.
+   *
+   * A bulk import can bring in a category nobody added to the list — "จอ" was
+   * one — and those products then edited as if they had no category at all, the
+   * dropdown showing the first entry instead. The list is what you may PICK; the
+   * stock is what exists. The picker has to offer both.
+   */
+  const categories = [
+    ...new Set([...categoriesState, ...stock.map((s) => s.category).filter(Boolean)]),
+  ];
+  /** Optimistic locally, persisted through the shared option-list action. */
+  function setCategories(next: string[]) {
+    setCategoriesState(next);
+    void actions.updateOptionList?.('product_categories', next);
+  }
   const [priceMatrix, setPriceMatrix] = useState<FilmPriceEntry[]>(filmPriceMatrix);
+
+  /**
+   * แผนประกัน — read straight from the server, NOT held in local state.
+   *
+   * The optimistic version invented an id for a row it had just added, and a
+   * shop that edited or deleted that row before reloading would have hit a
+   * different plan or none at all. A price list is edited a few times a year;
+   * a round-trip is the right price for the list always being the real one.
+   *
+   * Editing a plan is safe in a way editing a product price is not: selling a
+   * policy COPIES the plan (migration 0023), so nothing already sold follows
+   * the change and there is no versioning to keep.
+   */
+  const plans = insurancePlans;
+  const blankPlan = (): InsurancePlan => ({
+    id: 0,
+    shop: null,
+    name: '',
+    price: 0,
+    bigPieces: 2,
+    smallPieces: 20,
+    months: 12,
+    terms: '',
+    active: true,
+  });
+  const [planDraft, setPlanDraft] = useState<InsurancePlan | null>(null);
+  const [ledgerKind, setLedgerKind] = useState('all');
+
+  async function savePlan() {
+    if (!planDraft || !planDraft.name.trim()) return;
+    await actions.saveInsurancePlan?.({
+      id: planDraft.id || undefined,
+      shop: planDraft.shop,
+      name: planDraft.name,
+      price: planDraft.price,
+      bigPieces: planDraft.bigPieces,
+      smallPieces: planDraft.smallPieces,
+      months: planDraft.months,
+      terms: planDraft.terms,
+      active: planDraft.active,
+    });
+    setPlanDraft(null);
+    router.refresh();
+  }
+
+  /**
+   * โอนไปสาขาอื่น. Opened from a product row, because a transfer is always
+   * about one product — asking which product first would be a step the shop
+   * has already taken by finding the row.
+   */
+  const [transferFor, setTransferFor] = useState<StockItem | null>(null);
+  const [transferTo, setTransferTo] = useState('');
+  const [transferQty, setTransferQty] = useState(1);
+  const [transferNote, setTransferNote] = useState('');
+  const [transferError, setTransferError] = useState<string | null>(null);
+
+  function startTransfer(item: StockItem) {
+    setTransferError(null);
+    setTransferFor(item);
+    setTransferTo(accessibleShops.find((sh) => sh.id !== item.shop)?.id ?? '');
+    setTransferQty(1);
+    setTransferNote('');
+  }
+
+  async function submitTransfer() {
+    if (!transferFor || !transferTo) return;
+    setTransferError(null);
+    try {
+      await actions.transferStock?.({
+        id: transferFor.id,
+        toShop: transferTo,
+        qty: Number(transferQty),
+        note: transferNote,
+      });
+      setTransferFor(null);
+      router.refresh();
+    } catch (e) {
+      setTransferError(e instanceof Error ? e.message : 'โอนไม่สำเร็จ');
+    }
+  }
+
+  async function decide(w: Withdrawal, approve: boolean) {
+    const verb = approve ? 'อนุมัติ' : 'ไม่อนุมัติ';
+    if (!window.confirm(`${verb}ใบเบิก "${w.item}" จำนวน ${w.qty}?`)) return;
+    await actions.decideWithdrawal?.({ id: w.id, approve });
+    router.refresh();
+  }
+
+  async function removePlan(plan: InsurancePlan) {
+    if (!window.confirm(`ลบแผนประกัน "${plan.name}"?`)) return;
+    await actions.deleteInsurancePlan?.(plan.id);
+    router.refresh();
+  }
   const [priceProdCat, setPriceProdCat] = useState('ฟิล์มกรองแสง');
   const [priceProd, setPriceProd] = useState('');
+  /**
+   * Which price list is being edited: '' is the ราคากลาง every branch falls back
+   * to, a shop id is that branch’s own price (migration 0029). Before this
+   * existed there was one shared row, so setting one branch’s price silently
+   * changed all five.
+   */
+  const [priceShop, setPriceShop] = useState('');
 
+  function filmKey(category: string, product: string, position: string, carType: string) {
+    return { category, product, position, carType };
+  }
+  /** The price set for the scope being edited — blank if it inherits. */
   function getFilmPrice(category: string, product: string, position: string, carType: string) {
-    const m = priceMatrix.find(
-      (e) =>
-        e.category === category &&
-        e.product === product &&
-        e.position === position &&
-        e.carType === carType,
-    );
+    const m = findFilmPrice(priceMatrix, filmKey(category, product, position, carType), priceShop);
     return m ? m.price : '';
+  }
+  /** ราคากลาง shown behind an empty branch cell, so an admin sees what it inherits. */
+  function inheritedFilmPrice(
+    category: string,
+    product: string,
+    position: string,
+    carType: string,
+  ) {
+    if (!priceShop) return 0;
+    const m = findFilmPrice(priceMatrix, filmKey(category, product, position, carType), '');
+    return m ? m.price : 0;
   }
   async function setFilmPrice(
     category: string,
@@ -162,22 +360,24 @@ export function StockModule({
       product,
       position,
       carType,
+      shop: priceShop,
       price: Number(price) || 0,
     };
+    // Clearing a branch cell REMOVES the override rather than storing 0, so the
+    // branch goes back to quoting the ราคากลาง instead of quoting nothing.
+    const clearing = Boolean(priceShop) && entry.price <= 0;
     setPriceMatrix((prev) => {
-      const idx = prev.findIndex(
+      const rest = prev.filter(
         (e) =>
-          e.category === category &&
-          e.product === product &&
-          e.position === position &&
-          e.carType === carType,
+          !(
+            e.category === category &&
+            e.product === product &&
+            e.position === position &&
+            e.carType === carType &&
+            (e.shop || '') === priceShop
+          ),
       );
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = entry;
-        return copy;
-      }
-      return [...prev, entry];
+      return clearing ? rest : [...rest, entry];
     });
     await actions.setFilmPrice?.(entry);
   }
@@ -213,6 +413,9 @@ export function StockModule({
     qty: 1,
     cost: 0,
     sellPrice: 0,
+    min: 5,
+    supplier: '',
+    docNo: '',
     serviceCount: '' as string | number,
     reason: 'ซื้อเพิ่ม',
   });
@@ -319,8 +522,11 @@ export function StockModule({
   async function confirmBulkImport() {
     const validRows = bulkRows.filter((r) => r.valid);
     if (validRows.length === 0) return;
+    // Categories arriving from the spreadsheet join the managed list for real.
+    // This used to be a setState only, which is how "จอ" ended up on fifteen
+    // products and in no dropdown anywhere.
     const newCats = [...new Set(validRows.map((r) => r.category))].filter(
-      (c) => !categories.includes(c),
+      (c) => c && !categories.includes(c),
     );
     if (newCats.length) setCategories([...categories, ...newCats]);
     await actions.bulkImport?.(
@@ -349,6 +555,24 @@ export function StockModule({
   const [editForm, setEditForm] = useState<StockItem | null>(null);
   const [search, setSearch] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
+
+  /**
+   * The ledger, scoped to the branch filter already on screen and to one kind
+   * of movement when asked. Read-only: it is a record, and a record that can be
+   * edited is not one.
+   */
+  const ledgerRows = movements.filter(
+    (m) =>
+      (branchFilter === 'all' || m.shop === branchFilter) &&
+      (ledgerKind === 'all' || m.kind === ledgerKind),
+  );
+
+  /** ล็อตของสาขาที่กำลังดูอยู่ — เรียงตามที่โหลดมา คือใหม่สุดก่อน. */
+  const lotRows = batches.filter((b) => {
+    const product = stock.find((x) => x.id === b.stockId);
+    return branchFilter === 'all' || product?.shop === branchFilter;
+  });
+
   const [catFilter, setCatFilter] = useState('all');
   const [nameFilterSel, setNameFilterSel] = useState('all');
   // "ต่ำกว่าขั้นต่ำ" — the ใกล้หมด card counts these but there was no way to list
@@ -407,6 +631,9 @@ export function StockModule({
         qty: Number(addStk.qty),
         cost: Number(addStk.cost),
         sellPrice: Number(addStk.sellPrice),
+        min: Number(addStk.min),
+        supplier: addStk.supplier,
+        docNo: addStk.docNo,
       });
     } else {
       await actions.addProduct?.({
@@ -414,23 +641,12 @@ export function StockModule({
         existingId: addStk.existingId,
         qty: Number(addStk.qty),
         cost: Number(addStk.cost),
+        supplier: addStk.supplier,
+        docNo: addStk.docNo,
       });
     }
     setPanel(null);
-    setAddStk({
-      mode: 'existing',
-      existingId: stock[0]?.id ?? 0,
-      newName: '',
-      shortName: '',
-      sku: '',
-      category: '',
-      shop: accessibleShops[0]?.id || 'cm',
-      qty: 1,
-      cost: 0,
-      sellPrice: 0,
-      serviceCount: '',
-      reason: 'ซื้อเพิ่ม',
-    });
+    setAddStk(blankAddStock());
   }
 
   function startEdit(s: StockItem) {
@@ -545,6 +761,26 @@ export function StockModule({
                 className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'price' ? 'btn-primary' : 'btn-outline'}`}
               >
                 <i className="fa-solid fa-tags"></i>ตั้งราคาฟิล์ม/กันรอย
+              </button>
+            )}
+            <button
+              onClick={() => setPanel(panel === 'lots' ? null : 'lots')}
+              className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'lots' ? 'btn-primary' : 'btn-outline'}`}
+            >
+              <i className="fa-solid fa-layer-group"></i>ล็อตสินค้า
+            </button>
+            <button
+              onClick={() => setPanel(panel === 'ledger' ? null : 'ledger')}
+              className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'ledger' ? 'btn-primary' : 'btn-outline'}`}
+            >
+              <i className="fa-solid fa-clock-rotate-left"></i>ประวัติสต็อก
+            </button>
+            {can('stock.editDelete') && (
+              <button
+                onClick={() => setPanel(panel === 'insurance' ? null : 'insurance')}
+                className={`text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2 ${panel === 'insurance' ? 'btn-primary' : 'btn-outline'}`}
+              >
+                <i className="fa-solid fa-shield-halved"></i>ตั้งราคาประกัน
               </button>
             )}
             {can('stock.addProduct') && (
@@ -708,13 +944,344 @@ export function StockModule({
           </div>
         )}
 
+        {panel === 'lots' && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-1">ล็อตสินค้า (ต้นทุนแต่ละรอบ)</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+              รับของแต่ละรอบเก็บราคาของรอบนั้น ใช้ของเก่าก่อน —
+              ต้นทุนเฉลี่ยของสินค้าคำนวณจากล็อตที่เหลือ
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ color: 'var(--ink-soft)' }}>
+                    <th className="text-left font-medium py-2">วันที่รับ</th>
+                    <th className="text-left font-medium py-2">สินค้า</th>
+                    <th className="text-left font-medium py-2">ผู้ขาย / ใบส่งของ</th>
+                    <th className="text-right font-medium py-2">รับมา</th>
+                    <th className="text-right font-medium py-2">เหลือ</th>
+                    {canSeePrices && <th className="text-right font-medium py-2">ต้นทุน/หน่วย</th>}
+                    {canSeePrices && <th className="text-right font-medium py-2">มูลค่าคงเหลือ</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {lotRows.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={canSeePrices ? 7 : 5}
+                        className="py-3 text-xs"
+                        style={{ color: 'var(--ink-faint)' }}
+                      >
+                        ยังไม่มีล็อตในสาขานี้
+                      </td>
+                    </tr>
+                  )}
+                  {lotRows.map((b) => {
+                    const product = stock.find((x) => x.id === b.stockId);
+                    return (
+                      <tr key={b.id} style={{ borderTop: '1px solid var(--line)' }}>
+                        <td className="py-2 whitespace-nowrap text-xs">
+                          {fmtThaiDate(new Date(`${b.receivedAt}T00:00:00`))}
+                        </td>
+                        <td className="py-2">{product?.name ?? `#${b.stockId}`}</td>
+                        <td className="py-2 text-xs">
+                          {[b.supplier, b.docNo].filter(Boolean).join(' · ') ||
+                            String.fromCharCode(8212)}
+                          {b.note && <div style={{ color: 'var(--ink-faint)' }}>{b.note}</div>}
+                        </td>
+                        <td className="py-2 text-right">{b.qtyReceived}</td>
+                        <td
+                          className="py-2 text-right font-semibold"
+                          style={{ color: b.qtyRemaining > 0 ? undefined : 'var(--ink-faint)' }}
+                        >
+                          {b.qtyRemaining}
+                        </td>
+                        {canSeePrices && <td className="py-2 text-right">{fmt(b.unitCost)}</td>}
+                        {canSeePrices && (
+                          <td className="py-2 text-right font-semibold">
+                            {fmt(b.qtyRemaining * b.unitCost)}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {panel === 'ledger' && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-1">ประวัติการเคลื่อนไหวสต็อก</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+              ทุกครั้งที่จำนวนเปลี่ยน พร้อมจำนวนก่อน/หลัง — รับเข้า, ตัดจากใบงาน, เบิกใช้, ปรับสต็อก
+            </p>
+
+            <select
+              aria-label="กรองตามประเภทการเคลื่อนไหว"
+              value={ledgerKind}
+              onChange={(e) => setLedgerKind(e.target.value)}
+              className="field text-xs px-2.5 py-1.5 mb-3"
+            >
+              <option value="all">ทุกประเภท</option>
+              {[...new Set(movements.map((m) => m.kind))].map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ color: 'var(--ink-soft)' }}>
+                    <th className="text-left font-medium py-2">วันที่</th>
+                    <th className="text-left font-medium py-2">สินค้า</th>
+                    <th className="text-left font-medium py-2">ประเภท</th>
+                    <th className="text-left font-medium py-2">เอกสาร</th>
+                    <th className="text-right font-medium py-2">เปลี่ยน</th>
+                    <th className="text-right font-medium py-2">ก่อน &rarr; หลัง</th>
+                    {canSeePrices && <th className="text-right font-medium py-2">ต้นทุน</th>}
+                    <th className="text-left font-medium py-2">โดย</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledgerRows.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={canSeePrices ? 8 : 7}
+                        className="py-3 text-xs"
+                        style={{ color: 'var(--ink-faint)' }}
+                      >
+                        ยังไม่มีประวัติในสาขานี้
+                      </td>
+                    </tr>
+                  )}
+                  {ledgerRows.map((m) => (
+                    <tr key={m.id} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td className="py-2 whitespace-nowrap text-xs">
+                        {fmtThaiDate(new Date(m.movedAt))}
+                      </td>
+                      <td className="py-2">{m.itemName}</td>
+                      <td className="py-2 text-xs">{m.kind}</td>
+                      <td className="py-2 text-xs">{m.documentId || String.fromCharCode(8212)}</td>
+                      <td
+                        className="py-2 text-right font-semibold"
+                        style={{ color: m.change < 0 ? '#B23A48' : '#4C7A3E' }}
+                      >
+                        {m.change > 0 ? `+${m.change}` : m.change}
+                      </td>
+                      <td className="py-2 text-right text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        {m.qtyBefore} &rarr; {m.qtyAfter}
+                      </td>
+                      {/* The money the movement carried, taken from the lots it
+                          actually drew on — not a quantity times an average. */}
+                      {canSeePrices && (
+                        <td className="py-2 text-right text-xs">
+                          {m.costTotal ? fmt(Math.abs(m.costTotal)) : '—'}
+                        </td>
+                      )}
+                      <td className="py-2 text-xs">{m.movedBy}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {panel === 'insurance' && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-1">ตั้งราคาประกันฟิล์มกันรอย</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+              แก้ไขได้ตลอด ประกันที่ขายไปแล้วเก็บราคาและความคุ้มครองของตัวเองไว้ จึงไม่กระทบย้อนหลัง
+            </p>
+
+            <div className="overflow-x-auto mb-3">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ color: 'var(--ink-soft)' }}>
+                    <th className="text-left font-medium py-2">แผน</th>
+                    <th className="text-right font-medium py-2">ราคา</th>
+                    <th className="text-center font-medium py-2">ความคุ้มครอง</th>
+                    <th className="text-center font-medium py-2">ระยะเวลา</th>
+                    <th className="text-center font-medium py-2">สถานะ</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plans.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="py-3 text-xs"
+                        style={{ color: 'var(--ink-faint)' }}
+                      >
+                        ยังไม่มีแผนประกัน
+                      </td>
+                    </tr>
+                  )}
+                  {plans.map((p) => (
+                    <tr key={p.id} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td className="py-2 font-medium">{p.name}</td>
+                      <td className="py-2 text-right">{fmt(p.price)}</td>
+                      <td className="py-2 text-center text-xs">
+                        {p.bigPieces} ชิ้นใหญ่, {p.smallPieces} ชิ้นเล็ก
+                      </td>
+                      <td className="py-2 text-center text-xs">{p.months} เดือน</td>
+                      <td className="py-2 text-center text-xs">
+                        {p.active ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                      </td>
+                      <td className="py-2 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => setPlanDraft({ ...p })}
+                          className="btn-outline text-xs px-2.5 py-1 rounded-lg mr-1.5"
+                          aria-label={`แก้ไขแผนประกัน ${p.name}`}
+                        >
+                          <i className="fa-solid fa-pen"></i>
+                        </button>
+                        <button
+                          onClick={() => removePlan(p)}
+                          className="text-xs px-2"
+                          style={{ color: '#B23A48' }}
+                          aria-label={`ลบแผนประกัน ${p.name}`}
+                        >
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {planDraft ? (
+              <div className="rounded-xl p-3" style={{ background: 'var(--paper)' }}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                  <div className="sm:col-span-3">
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ชื่อแผน
+                    </label>
+                    <input
+                      aria-label="ชื่อแผนประกัน"
+                      value={planDraft.name}
+                      onChange={(e) => setPlanDraft({ ...planDraft, name: e.target.value })}
+                      placeholder="เช่น ประกันฟิล์มกันรอย 1 ปี"
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ราคา (บาท)
+                    </label>
+                    <input
+                      aria-label="ราคาแผนประกัน"
+                      type="number"
+                      value={planDraft.price}
+                      onChange={(e) =>
+                        setPlanDraft({ ...planDraft, price: Number(e.target.value) })
+                      }
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ความคุ้มครอง — ชิ้นใหญ่
+                    </label>
+                    <input
+                      aria-label="ชิ้นใหญ่"
+                      type="number"
+                      value={planDraft.bigPieces}
+                      onChange={(e) =>
+                        setPlanDraft({ ...planDraft, bigPieces: Number(e.target.value) })
+                      }
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ชิ้นเล็ก
+                    </label>
+                    <input
+                      aria-label="ชิ้นเล็ก"
+                      type="number"
+                      value={planDraft.smallPieces}
+                      onChange={(e) =>
+                        setPlanDraft({ ...planDraft, smallPieces: Number(e.target.value) })
+                      }
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      ระยะเวลา (เดือน)
+                    </label>
+                    <input
+                      aria-label="ระยะเวลาคุ้มครอง"
+                      type="number"
+                      value={planDraft.months}
+                      onChange={(e) =>
+                        setPlanDraft({ ...planDraft, months: Number(e.target.value) })
+                      }
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      เงื่อนไขเพิ่มเติม
+                    </label>
+                    <input
+                      aria-label="เงื่อนไขแผนประกัน"
+                      value={planDraft.terms}
+                      onChange={(e) => setPlanDraft({ ...planDraft, terms: e.target.value })}
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm mb-3">
+                  <input
+                    type="checkbox"
+                    checked={planDraft.active}
+                    onChange={(e) => setPlanDraft({ ...planDraft, active: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  เปิดให้เลือกในใบงาน
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPlanDraft(null)}
+                    className="btn-outline flex-1 rounded-lg py-2 text-sm"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    onClick={savePlan}
+                    className="btn-primary flex-1 rounded-lg py-2 text-sm font-semibold"
+                  >
+                    บันทึกแผน
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setPlanDraft(blankPlan())}
+                className="btn-outline text-sm px-3.5 py-2 rounded-xl font-semibold"
+              >
+                <i className="fa-solid fa-plus mr-1.5"></i>เพิ่มแผนประกัน
+              </button>
+            )}
+          </div>
+        )}
+
         {panel === 'price' && (
           <div className="card p-5 mb-4 fade-page">
             <p className="text-sm font-semibold mb-1">ตั้งราคาฟิล์มกรองแสง / ฟิล์มกันรอย</p>
             <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
               ราคาแปรผันตาม ชื่อสินค้า &rarr; ตำแหน่งติดตั้ง &rarr; ประเภทรถ ตั้งค่าได้เฉพาะแอดมิน
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <div>
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   ชนิดสินค้า
@@ -752,7 +1319,30 @@ export function StockModule({
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  ราคาของ
+                </label>
+                <select
+                  value={priceShop}
+                  aria-label="สาขาสำหรับตั้งราคา"
+                  onChange={(e) => setPriceShop(e.target.value)}
+                  className="field w-full text-sm px-3 py-2"
+                >
+                  <option value="">ราคากลาง (ทุกสาขา)</option>
+                  {accessibleShops.map((sh) => (
+                    <option key={sh.id} value={sh.id}>
+                      {sh.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
+              {priceShop
+                ? 'ราคาเฉพาะสาขานี้ ทับราคากลาง — เว้นว่างไว้ = ใช้ราคากลาง'
+                : 'ราคากลางใช้กับทุกสาขาที่ไม่ได้ตั้งราคาของตัวเอง'}
+            </p>
             {priceProd ? (
               <div className="overflow-x-auto">
                 <table style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -796,11 +1386,19 @@ export function StockModule({
                             >
                               <input
                                 type="number"
+                                aria-label={`ราคา ${pos} ${ct}`}
                                 value={getFilmPrice(priceProdCat, priceProd, pos, ct)}
                                 onChange={(e) =>
                                   setFilmPrice(priceProdCat, priceProd, pos, ct, e.target.value)
                                 }
-                                placeholder="0"
+                                placeholder={String(
+                                  inheritedFilmPrice(priceProdCat, priceProd, pos, ct) || 0,
+                                )}
+                                title={
+                                  inheritedFilmPrice(priceProdCat, priceProd, pos, ct)
+                                    ? 'เว้นว่าง = ใช้ราคากลาง'
+                                    : undefined
+                                }
                                 className="field text-xs px-2 py-1.5 w-24"
                               />
                             </td>
@@ -879,6 +1477,7 @@ export function StockModule({
                       ชื่อสินค้าใหม่
                     </label>
                     <input
+                      aria-label="ชื่อสินค้าใหม่"
                       value={addStk.newName}
                       onChange={(e) => setAddStk({ ...addStk, newName: e.target.value })}
                       className="field w-full text-sm px-3 py-2"
@@ -950,6 +1549,21 @@ export function StockModule({
                       />
                     </div>
                   )}
+                  {/* จุดสั่งซื้อ. Every product ever added was born with a
+                      reorder point of 5, whatever it was — a roll of film and
+                      a set of speakers do not run low at the same number. */}
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      แจ้งเตือนเมื่อเหลือต่ำกว่า
+                    </label>
+                    <input
+                      aria-label="จุดสั่งซื้อ"
+                      type="number"
+                      value={addStk.min}
+                      onChange={(e) => setAddStk({ ...addStk, min: Number(e.target.value) })}
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
                   {addStk.category === 'ฟิล์มกันรอย' && (
                     <div>
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
@@ -966,6 +1580,32 @@ export function StockModule({
                   )}
                 </>
               )}
+              {/* Captured at the only moment anyone knows them. A lot without
+                  its supplier and invoice cannot be traced to the delivery. */}
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  ผู้ขาย
+                </label>
+                <input
+                  aria-label="ผู้ขาย"
+                  value={addStk.supplier}
+                  onChange={(e) => setAddStk({ ...addStk, supplier: e.target.value })}
+                  placeholder="เช่น 3M"
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  เลขที่ใบส่งของ
+                </label>
+                <input
+                  aria-label="เลขที่ใบส่งของ"
+                  value={addStk.docNo}
+                  onChange={(e) => setAddStk({ ...addStk, docNo: e.target.value })}
+                  placeholder="เช่น INV-4520"
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
               <div>
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   จำนวนที่รับเข้า
@@ -1477,6 +2117,16 @@ export function StockModule({
                                 >
                                   <i className="fa-solid fa-pen"></i>
                                 </button>
+                                {accessibleShops.length > 1 && actions.transferStock && (
+                                  <button
+                                    onClick={() => startTransfer(s)}
+                                    aria-label={`โอนสินค้า ${s.sku} ไปสาขาอื่น`}
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
+                                    style={{ background: 'var(--paper)', color: 'var(--primary)' }}
+                                  >
+                                    <i className="fa-solid fa-right-left"></i>
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => deleteStockItem(s.id)}
                                   aria-label={`ลบสินค้า ${s.sku}`}
@@ -1553,17 +2203,128 @@ export function StockModule({
                     {shopName(w.shop)} &middot; {w.type} &middot; {w.by} &middot; {w.date}
                   </p>
                 </div>
-                <StatusPill
-                  label={w.status}
-                  colorMap={{
-                    รออนุมัติ: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
-                    อนุมัติแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
-                  }}
-                />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <StatusPill
+                    label={w.status}
+                    colorMap={{
+                      รออนุมัติ: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
+                      อนุมัติแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
+                      ไม่อนุมัติ: { bg: '#FBEAEC', text: '#B23A48', dot: '#D08A94' },
+                    }}
+                  />
+                  {/* The pill used to be the whole story — nothing in the app
+                      could ever change it. Rejecting returns the stock. */}
+                  {w.status === 'รออนุมัติ' && can('stock.approveWithdraw') && (
+                    <>
+                      <button
+                        onClick={() => decide(w, true)}
+                        className="btn-outline text-xs px-2.5 py-1 rounded-lg"
+                        aria-label={`อนุมัติใบเบิก ${w.item}`}
+                      >
+                        อนุมัติ
+                      </button>
+                      <button
+                        onClick={() => decide(w, false)}
+                        className="text-xs px-2.5 py-1 rounded-lg"
+                        style={{ color: '#B23A48' }}
+                        aria-label={`ไม่อนุมัติใบเบิก ${w.item}`}
+                      >
+                        ไม่อนุมัติ
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         </div>
+
+        {/*
+          โอนไปสาขาอื่น. One act with two ends: the goods leave one branch and
+          arrive at another carrying the SAME lot costs, because they did not
+          become cheaper by being driven down the road (migration 0028).
+        */}
+        {transferFor && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-1">โอนสต็อกไปสาขาอื่น — {transferFor.name}</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+              {shopName(transferFor.shop)} · คงเหลือ {transferFor.qty} —
+              ต้นทุนของแต่ละล็อตจะถูกโอนไปด้วย
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  โอนไปสาขา
+                </label>
+                <select
+                  aria-label="สาขาปลายทาง"
+                  value={transferTo}
+                  onChange={(e) => setTransferTo(e.target.value)}
+                  className="field w-full text-sm px-3 py-2"
+                >
+                  {accessibleShops
+                    .filter((sh) => sh.id !== transferFor.shop)
+                    .map((sh) => (
+                      <option key={sh.id} value={sh.id}>
+                        {sh.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  จำนวน
+                </label>
+                <input
+                  aria-label="จำนวนที่โอน"
+                  type="number"
+                  value={transferQty}
+                  onChange={(e) => setTransferQty(Number(e.target.value))}
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  หมายเหตุ
+                </label>
+                <input
+                  aria-label="หมายเหตุการโอน"
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                  placeholder="เช่น ลูกค้ารอที่ลำพูน"
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
+            </div>
+
+            {transferError && (
+              <p
+                className="text-xs mb-3 px-2.5 py-1.5 rounded-lg"
+                role="alert"
+                style={{ background: '#FBEAEC', color: '#B23A48' }}
+              >
+                <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+                {transferError}
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTransferFor(null)}
+                className="btn-outline flex-1 rounded-lg py-2 text-sm"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={submitTransfer}
+                className="btn-primary flex-1 rounded-lg py-2 text-sm font-semibold"
+              >
+                ยืนยันการโอน
+              </button>
+            </div>
+          </div>
+        )}
 
         {mounted &&
           createPortal(

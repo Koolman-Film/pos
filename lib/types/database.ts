@@ -200,6 +200,7 @@ export type Database = {
           amount: number
           category: string
           description: string
+          doc_no: string | null
           due_at: string | null
           id: number
           paid_at: string | null
@@ -211,6 +212,7 @@ export type Database = {
           amount: number
           category: string
           description: string
+          doc_no?: string | null
           due_at?: string | null
           id?: never
           paid_at?: string | null
@@ -222,6 +224,7 @@ export type Database = {
           amount?: number
           category?: string
           description?: string
+          doc_no?: string | null
           due_at?: string | null
           id?: never
           paid_at?: string | null
@@ -241,6 +244,7 @@ export type Database = {
       }
       film_price_matrix: {
         Row: {
+          shop_id: string | null
           car_type: string
           category: string
           id: number
@@ -249,6 +253,7 @@ export type Database = {
           product: string
         }
         Insert: {
+          shop_id?: string | null
           car_type: string
           category: string
           id?: never
@@ -257,6 +262,7 @@ export type Database = {
           product: string
         }
         Update: {
+          shop_id?: string | null
           car_type?: string
           category?: string
           id?: never
@@ -265,6 +271,156 @@ export type Database = {
           product?: string
         }
         Relationships: []
+      }
+      insurance_claims: {
+        Row: {
+          big_used: number
+          claimed_at: string
+          created_at: string
+          created_by: string | null
+          detail: string
+          id: number
+          policy_id: number
+          small_used: number
+          technician: string
+        }
+        Insert: {
+          big_used?: number
+          claimed_at?: string
+          created_at?: string
+          created_by?: string | null
+          detail?: string
+          id?: never
+          policy_id: number
+          small_used?: number
+          technician?: string
+        }
+        Update: {
+          big_used?: number
+          claimed_at?: string
+          created_at?: string
+          created_by?: string | null
+          detail?: string
+          id?: never
+          policy_id?: number
+          small_used?: number
+          technician?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_claims_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_policies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insurance_plans: {
+        Row: {
+          active: boolean
+          big_pieces: number
+          id: number
+          months: number
+          name: string
+          price: number
+          shop_id: string | null
+          small_pieces: number
+          sort_order: number
+          terms: string
+        }
+        Insert: {
+          active?: boolean
+          big_pieces?: number
+          id?: never
+          months?: number
+          name: string
+          price?: number
+          shop_id?: string | null
+          small_pieces?: number
+          sort_order?: number
+          terms?: string
+        }
+        Update: {
+          active?: boolean
+          big_pieces?: number
+          id?: never
+          months?: number
+          name?: string
+          price?: number
+          shop_id?: string | null
+          small_pieces?: number
+          sort_order?: number
+          terms?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_plans_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insurance_policies: {
+        Row: {
+          big_pieces: number
+          created_at: string
+          created_by: string | null
+          ends_at: string | null
+          id: number
+          notes: string
+          plan_name: string
+          plate: string
+          price: number
+          small_pieces: number
+          sold_at: string
+          starts_at: string | null
+          terms: string
+          ticket_id: string
+        }
+        Insert: {
+          big_pieces?: number
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          id?: never
+          notes?: string
+          plan_name?: string
+          plate?: string
+          price?: number
+          small_pieces?: number
+          sold_at?: string
+          starts_at?: string | null
+          terms?: string
+          ticket_id: string
+        }
+        Update: {
+          big_pieces?: number
+          created_at?: string
+          created_by?: string | null
+          ends_at?: string | null
+          id?: never
+          notes?: string
+          plan_name?: string
+          plate?: string
+          price?: number
+          small_pieces?: number
+          sold_at?: string
+          starts_at?: string | null
+          terms?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_policies_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       option_lists: {
         Row: {
@@ -634,6 +790,112 @@ export type Database = {
           },
         ]
       }
+      service_visits: {
+        Row: {
+          checks: Json
+          created_at: string
+          created_by: string | null
+          customer_waits: boolean | null
+          delivered_at: string | null
+          delivered_time: string
+          film_product: string
+          id: number
+          notes: string
+          overall_ok: boolean | null
+          plate: string
+          qc_by: string
+          received_at: string | null
+          received_time: string
+          sales_by: string
+          technicians: Json
+          ticket_id: string
+          visit_no: number
+        }
+        Insert: {
+          checks?: Json
+          created_at?: string
+          created_by?: string | null
+          customer_waits?: boolean | null
+          delivered_at?: string | null
+          delivered_time?: string
+          film_product?: string
+          id?: never
+          notes?: string
+          overall_ok?: boolean | null
+          plate?: string
+          qc_by?: string
+          received_at?: string | null
+          received_time?: string
+          sales_by?: string
+          technicians?: Json
+          ticket_id: string
+          visit_no: number
+        }
+        Update: {
+          checks?: Json
+          created_at?: string
+          created_by?: string | null
+          customer_waits?: boolean | null
+          delivered_at?: string | null
+          delivered_time?: string
+          film_product?: string
+          id?: never
+          notes?: string
+          overall_ok?: boolean | null
+          plate?: string
+          qc_by?: string
+          received_at?: string | null
+          received_time?: string
+          sales_by?: string
+          technicians?: Json
+          ticket_id?: string
+          visit_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_visits_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_visit_points: {
+        Row: {
+          detail: string
+          id: number
+          note: string
+          position: string
+          seq: number
+          visit_id: number
+        }
+        Insert: {
+          detail?: string
+          id?: never
+          note?: string
+          position?: string
+          seq: number
+          visit_id: number
+        }
+        Update: {
+          detail?: string
+          id?: never
+          note?: string
+          position?: string
+          seq?: number
+          visit_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_visit_points_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "service_visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shops: {
         Row: {
           id: string
@@ -722,6 +984,56 @@ export type Database = {
             columns: ["shop_id"]
             isOneToOne: false
             referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_documents: {
+        Row: {
+          amount: number
+          buyer_address: string
+          buyer_name: string
+          buyer_tax_id: string
+          created_at: string
+          doc_no: string
+          doc_type: string
+          id: number
+          issued_at: string
+          issued_by: string | null
+          ticket_id: string
+        }
+        Insert: {
+          amount?: number
+          buyer_address?: string
+          buyer_name?: string
+          buyer_tax_id?: string
+          created_at?: string
+          doc_no?: string
+          doc_type: string
+          id?: never
+          issued_at?: string
+          issued_by?: string | null
+          ticket_id: string
+        }
+        Update: {
+          amount?: number
+          buyer_address?: string
+          buyer_name?: string
+          buyer_tax_id?: string
+          created_at?: string
+          doc_no?: string
+          doc_type?: string
+          id?: never
+          issued_at?: string
+          issued_by?: string | null
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_documents_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
             referencedColumns: ["id"]
           },
         ]
@@ -1030,8 +1342,158 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_batches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          created_by_name: string
+          doc_no: string
+          id: number
+          note: string
+          qty_received: number
+          qty_remaining: number
+          received_at: string
+          shop_id: string
+          stock_id: number
+          supplier: string
+          unit_cost: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          doc_no?: string
+          id?: never
+          note?: string
+          qty_received: number
+          qty_remaining: number
+          received_at?: string
+          shop_id: string
+          stock_id: number
+          supplier?: string
+          unit_cost?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string
+          doc_no?: string
+          id?: never
+          note?: string
+          qty_received?: number
+          qty_remaining?: number
+          received_at?: string
+          shop_id?: string
+          stock_id?: number
+          supplier?: string
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_batches_stock_id_fkey"
+            columns: ["stock_id"]
+            isOneToOne: false
+            referencedRelation: "stock"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_movement_batches: {
+        Row: {
+          batch_id: number
+          id: number
+          movement_id: number
+          qty: number
+          unit_cost: number
+        }
+        Insert: {
+          batch_id: number
+          id?: never
+          movement_id: number
+          qty: number
+          unit_cost: number
+        }
+        Update: {
+          batch_id?: number
+          id?: never
+          movement_id?: number
+          qty?: number
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movement_batches_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "stock_movements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_movements: {
+        Row: {
+          cost_total: number
+          change: number
+          document_id: string
+          id: number
+          item_name: string
+          kind: string
+          moved_at: string
+          moved_by: string | null
+          moved_by_name: string
+          note: string
+          qty_after: number
+          qty_before: number
+          shop_id: string
+          stock_id: number | null
+        }
+        Insert: {
+          cost_total?: number
+          change: number
+          document_id?: string
+          id?: never
+          item_name?: string
+          kind: string
+          moved_at?: string
+          moved_by?: string | null
+          moved_by_name?: string
+          note?: string
+          qty_after: number
+          qty_before: number
+          shop_id: string
+          stock_id?: number | null
+        }
+        Update: {
+          cost_total?: number
+          change?: number
+          document_id?: string
+          id?: never
+          item_name?: string
+          kind?: string
+          moved_at?: string
+          moved_by?: string | null
+          moved_by_name?: string
+          note?: string
+          qty_after?: number
+          qty_before?: number
+          shop_id?: string
+          stock_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_stock_id_fkey"
+            columns: ["stock_id"]
+            isOneToOne: false
+            referencedRelation: "stock"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       withdrawals: {
         Row: {
+          decided_at: string | null
+          decided_by: string | null
+          stock_id: number | null
           id: number
           item: string
           qty: number
@@ -1042,6 +1504,9 @@ export type Database = {
           withdrawn_by: string
         }
         Insert: {
+          decided_at?: string | null
+          decided_by?: string | null
+          stock_id?: number | null
           id?: never
           item: string
           qty: number
@@ -1052,6 +1517,9 @@ export type Database = {
           withdrawn_by: string
         }
         Update: {
+          decided_at?: string | null
+          decided_by?: string | null
+          stock_id?: number | null
           id?: never
           item?: string
           qty?: number
@@ -1100,11 +1568,56 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_stock_deltas: {
+        Args: { p_changes: Json }
+        Returns: undefined
+      }
+      transfer_stock: {
+        Args: {
+          p_by_name: string
+          p_from_stock_id: number
+          p_note?: string
+          p_qty: number
+          p_to_shop_id: string
+        }
+        Returns: number
+      }
+      receive_stock: {
+        Args: {
+          p_by_name: string
+          p_doc_no: string
+          p_note?: string
+          p_qty: number
+          p_stock_id: number
+          p_supplier: string
+          p_unit_cost: number
+        }
+        Returns: number
+      }
+      refresh_stock_cost: {
+        Args: { p_stock_id: number }
+        Returns: undefined
+      }
+      count_stock: {
+        Args: { p_by_name: string; p_counted: number; p_id: number; p_note?: string }
+        Returns: undefined
+      }
+      move_stock: {
+        Args: {
+          p_by_name: string
+          p_changes: Json
+          p_document_id: string
+          p_kind: string
+          p_note?: string
+        }
+        Returns: undefined
+      }
       current_user_can: { Args: { cap: string }; Returns: boolean }
       current_user_has_nav: { Args: { nav_key: string }; Returns: boolean }
       current_user_role: { Args: never; Returns: string }
       current_user_sees_all_shops: { Args: never; Returns: boolean }
       current_user_shops: { Args: never; Returns: string[] }
+      next_expense_doc_no: { Args: { p_date: string; p_shop: string }; Returns: string }
       reset_permissions_to_defaults: { Args: never; Returns: undefined }
       save_order_children: {
         Args: {
@@ -1117,8 +1630,32 @@ export type Database = {
         }
         Returns: undefined
       }
+      save_service_visit: {
+        Args: { p_id: number; p_points: Json; p_ticket_id: string; p_visit: Json }
+        Returns: number
+      }
       save_ticket_children: {
         Args: { p_items: Json; p_payments: Json; p_ticket_id: string }
+        Returns: undefined
+      }
+      record_ticket_document: {
+        Args: {
+          p_amount: number
+          p_buyer_address: string
+          p_buyer_name: string
+          p_buyer_tax_id: string
+          p_doc_no: string
+          p_doc_type: string
+          p_ticket_id: string
+        }
+        Returns: undefined
+      }
+      save_insurance_policy: {
+        Args: { p_claims: Json; p_id: number; p_policy: Json; p_ticket_id: string }
+        Returns: number
+      }
+      save_ticket_extras: {
+        Args: { p_extras: Json; p_ticket_id: string }
         Returns: undefined
       }
     }

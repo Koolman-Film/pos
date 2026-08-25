@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { diffQtyMaps, sumQtyMaps } from '@/lib/stock/movements';
+import { applyStockMovements, diffQtyMaps, sumQtyMaps } from '@/lib/stock/movements';
 
 /**
  * The arithmetic behind automatic stock movement. Getting a sign wrong here means
@@ -112,5 +112,103 @@ describe('wholesale net quantity (sold minus returned)', () => {
 
   it('ignores a return naming a product that is not on the order', () => {
     expect(net({ A: 5 }, { Z: 1 })).toEqual({ A: 5, Z: -1 });
+  });
+});
+
+/**
+ * `applyStockMovements` used to read `qty` into JavaScript, subtract, and write
+ * the result back — a lost update the moment two people saved at once. It now
+ * hands the database a relative change, and reports the products it could not
+ * find instead of skipping them in silence.
+ */
+describe('applyStockMovements', () => {
+  type Change = { id: number; change: number };
+
+  /** A Supabase double: enough of the chain to see what the call would send. */
+  function fakeSupabase(rows: { id: number; name: string; qty: number }[]) {
+    const rpcCalls: { fn: string; args: { p_changes: Change[]; p_kind?: string } }[] = [];
+    const inserted: Record<string, unknown>[][] = [];
+    const supabase = {
+      from(table: string) {
+        if (table === 'withdrawals') {
+          return {
+            insert(payload: Record<string, unknown>[]) {
+              inserted.push(payload);
+              return Promise.resolve({ error: null });
+            },
+          };
+        }
+        const q = {
+          select: () => q,
+          eq: () => q,
+          in: () => q,
+          order: () => Promise.resolve({ data: rows }),
+        };
+        return q;
+      },
+      rpc(fn: string, args: { p_changes: Change[]; p_kind?: string }) {
+        rpcCalls.push({ fn, args });
+        return Promise.resolve({ error: null });
+      },
+    };
+    return { supabase, rpcCalls, inserted };
+  }
+
+  const source = { kind: 'ใบงาน', documentId: 'JT-CM-00216', by: 'ผู้ทดสอบ', shopId: 'cm' };
+
+  it('sends a relative change so two concurrent saves both land', async () => {
+    const { supabase, rpcCalls } = fakeSupabase([{ id: 7, name: 'ฟิล์ม A', qty: 10 }]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await applyStockMovements(supabase as any, { 'ฟิล์ม A': 2 }, source);
+
+    // One call moves the quantity AND writes the ledger entry (migration 0026).
+    expect(rpcCalls[0].fn).toBe('move_stock');
+    // A change of -2, NOT the computed result 8. The row's own value decides.
+    expect(rpcCalls[0].args.p_changes).toEqual([{ id: 7, change: -2 }]);
+    expect(rpcCalls[0].args.p_kind).toBe('ใบงาน');
+  });
+
+  it('adds back what a negative delta returns to the shelf', async () => {
+    const { supabase, rpcCalls } = fakeSupabase([{ id: 7, name: 'ฟิล์ม A', qty: 10 }]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await applyStockMovements(supabase as any, { 'ฟิล์ม A': -3 }, source);
+    expect(rpcCalls[0].args.p_changes).toEqual([{ id: 7, change: 3 }]);
+  });
+
+  it('names the products it could not find instead of skipping them quietly', async () => {
+    const { supabase, rpcCalls, inserted } = fakeSupabase([{ id: 7, name: 'ฟิล์ม A', qty: 10 }]);
+    const result = await applyStockMovements(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      supabase as any,
+      { 'ฟิล์ม A': 1, ฟิล์มที่ถูกเปลี่ยนชื่อ: 2 },
+      source,
+    );
+
+    // A renamed product is the usual cause, and it has to reach a human.
+    expect(result.unmatched).toEqual(['ฟิล์มที่ถูกเปลี่ยนชื่อ']);
+    // Only the one that exists moves, and only it gets a ledger entry — there
+    // is nothing honest to write about a quantity that never moved.
+    expect(rpcCalls[0].args.p_changes).toEqual([{ id: 7, change: -1 }]);
+    expect(inserted).toHaveLength(0);
+  });
+
+  it('takes the oldest row when a branch still has two of one name', async () => {
+    // Migration 0025 adds a unique index; this is the rule for data older than it.
+    const { supabase, rpcCalls } = fakeSupabase([
+      { id: 4, name: 'ฟิล์ม A', qty: 10 },
+      { id: 9, name: 'ฟิล์ม A', qty: 3 },
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await applyStockMovements(supabase as any, { 'ฟิล์ม A': 1 }, source);
+    expect(rpcCalls[0].args.p_changes).toEqual([{ id: 4, change: -1 }]);
+  });
+
+  it('does nothing at all when there is no movement', async () => {
+    const { supabase, rpcCalls, inserted } = fakeSupabase([{ id: 7, name: 'ฟิล์ม A', qty: 10 }]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await applyStockMovements(supabase as any, {}, source);
+    expect(result.unmatched).toEqual([]);
+    expect(rpcCalls).toHaveLength(0);
+    expect(inserted).toHaveLength(0);
   });
 });

@@ -26,9 +26,10 @@ import type { Shop } from '@/components/ui/PeriodShopFilter';
  *     arrays directly. Here the expense/petty-cash rows arrive as props from the
  *     Server Component page (the source of truth is the `expenses` and
  *     `petty_cash` tables); every mutation calls a Server Action and the page
- *     re-renders via `revalidatePath`. Only the *config* lists (`expenseCategories`
- *     / `paymentSources`, edited inline through `ManagedDropdown`) are kept as
- *     in-session local state — persisting those is the Permissions module's job.
+ *     re-renders via `revalidatePath`. The *config* lists (`expenseCategories` /
+ *     `paymentSources`, edited inline through `ManagedDropdown`) are optimistic
+ *     in local state and written through `updateOptionListAction`. They used to
+ *     be local ONLY — an entry added here was gone on the next load.
  *   - The gate: the plan's test passes `canDo` as a function, but a Server
  *     Component cannot hand a closure to a Client Component (only serializable
  *     props cross the boundary — see the Sidebar/Commission precedent). So the
@@ -50,6 +51,12 @@ import type { Shop } from '@/components/ui/PeriodShopFilter';
 /** An expense row flattened for display (prototype shape). */
 export type ExpenseView = {
   id: number;
+  /**
+   * เลขที่เอกสาร — POS-LPG-6908001, issued by the database on insert
+   * (migration 0019) and never recomputed. Blank only for a row created before
+   * that migration ran.
+   */
+  docNo?: string;
   shop: string;
   desc: string;
   category: string;
@@ -162,6 +169,7 @@ export function AccountingModule({
   attachmentUrlAction,
   attachAction,
   detachAction,
+  updateOptionListAction,
   accessibleShops = [],
   canSeeAllShops = true,
 }: {
@@ -188,6 +196,14 @@ export function AccountingModule({
     attachments: UploadedAttachment[],
   ) => Promise<{ ok: boolean; error?: string }>;
   detachAction?: (attachmentId: number) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Persists หมวดค่าใช้จ่าย / จ่ายจาก. Without it the pickers only edit React
+   * state, so an entry added here was gone on the next load.
+   */
+  updateOptionListAction?: (
+    listKey: string,
+    values: string[],
+  ) => Promise<{ ok: boolean; error?: string }>;
   accessibleShops?: Shop[];
   canSeeAllShops?: boolean;
 }) {
@@ -199,8 +215,19 @@ export function AccountingModule({
   const firstShop = accessibleShops[0]?.id || '';
   const shopName = (id: string) => accessibleShops.find((s) => s.id === id)?.name || id;
 
-  const [expenseCategories, setExpenseCategories] = useState<string[]>(expenseCategoriesProp);
-  const [paymentSources, setPaymentSources] = useState<string[]>(paymentSourcesProp);
+  // Optimistic locally, persisted through the shared option-list action. Both
+  // pickers used to hand ManagedDropdown a bare setState, so "+ เพิ่มตัวเลือกใหม่"
+  // added an entry that survived exactly until the page reloaded.
+  const [expenseCategories, setExpenseCategoriesState] = useState<string[]>(expenseCategoriesProp);
+  const [paymentSources, setPaymentSourcesState] = useState<string[]>(paymentSourcesProp);
+  function setExpenseCategories(next: string[]) {
+    setExpenseCategoriesState(next);
+    void updateOptionListAction?.('expense_categories', next);
+  }
+  function setPaymentSources(next: string[]) {
+    setPaymentSourcesState(next);
+    void updateOptionListAction?.('payment_sources', next);
+  }
   const [isPending, startTransition] = useTransition();
 
   // Gates the body-level print portal below; document does not exist during SSR.
@@ -312,6 +339,7 @@ export function AccountingModule({
       groups: exportGroups.map((g) => ({
         sheetName: shopName(g.shopId),
         rows: g.items.map((e) => ({
+          เลขที่เอกสาร: e.docNo ?? '',
           วันที่: e.date ?? '',
           กลุ่มค่าใช้จ่าย: e.category,
           รายละเอียด: e.desc,
@@ -1257,6 +1285,14 @@ export function AccountingModule({
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{e.desc}</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
+                      {/* The reference someone quotes when they ring up about
+                          this expense, so it leads the line. */}
+                      {e.docNo && (
+                        <>
+                          <span style={{ fontFamily: 'monospace' }}>{e.docNo}</span>
+                          {' · '}
+                        </>
+                      )}
                       {e.category} &middot; {e.source} &middot; {e.date}
                     </p>
                     {/*
@@ -1350,6 +1386,7 @@ export function AccountingModule({
                       <tr>
                         <th>วันที่</th>
                         <th>กลุ่มค่าใช้จ่าย</th>
+                        <th>เลขที่เอกสาร</th>
                         <th>รายละเอียด</th>
                         <th>จ่ายจาก</th>
                         <th>สถานะ</th>
@@ -1361,6 +1398,7 @@ export function AccountingModule({
                         <tr key={e.id}>
                           <td>{e.date}</td>
                           <td>{e.category}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{e.docNo || '-'}</td>
                           <td>{e.desc}</td>
                           <td>{e.source}</td>
                           <td>{e.status}</td>

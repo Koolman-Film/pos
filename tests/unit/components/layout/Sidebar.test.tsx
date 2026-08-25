@@ -26,7 +26,8 @@ describe('Sidebar', () => {
     // this component, so every entry has to exist before they start. Asserting
     // the ids AND that each is individually gated is what keeps a later
     // "gate the whole group on one key" refactor from going unnoticed.
-    // `customers` (ทะเบียนลูกค้า) joined after the trial run.
+    // `customers` (ทะเบียนลูกค้า) joined after the trial run, `revenue` (รายได้)
+    // with the sales report.
     expect(NAV_ITEMS.map((i) => i.id)).toEqual([
       'dashboard',
       'list',
@@ -35,6 +36,7 @@ describe('Sidebar', () => {
       'stock',
       'commission',
       'accounting',
+      'revenue',
       'permissions',
     ]);
 

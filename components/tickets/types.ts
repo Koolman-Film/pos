@@ -39,6 +39,109 @@ export type TicketExtra = {
 
 export type StatusHistoryEntry = { status: string; date: Date };
 
+/** One numbered row of จุดพิเศษลูกค้าต้องการแก้ไข on the service sheet. */
+export type ServiceVisitPoint = {
+  seq: number;
+  position: string;
+  detail: string;
+  note: string;
+};
+
+/**
+ * One visit the car actually made, recorded against the ticket that entitled it
+ * (migration 0020).
+ *
+ * The ticket's `extras.Service` holds the ENTITLEMENT — how many visits were
+ * sold and when the next one is due. This is the record of what happened: when
+ * the car came in, who worked on it, what was checked and what was fixed.
+ */
+export type ServiceVisit = {
+  /** Absent until saved. */
+  id?: number;
+  /** 1..N within the ticket, issued by the database. */
+  visitNo: number;
+  plate: string;
+  receivedAt: string;
+  receivedTime: string;
+  deliveredAt: string;
+  deliveredTime: string;
+  salesBy: string;
+  qcBy: string;
+  technicians: string[];
+  /**
+   * ชื่อสินค้าฟิล์มที่ใช้ — a snapshot, so an old sheet reprints the film that
+   * was actually fitted. The SKU name already carries the thickness, so there is
+   * nothing else to record.
+   */
+  filmProduct: string;
+  /** null = nobody has said yet, which is not the same as "ไม่รอ". */
+  customerWaits: boolean | null;
+  overallOk: boolean | null;
+  /** Part name -> result, keyed by the SERVICE_*_PARTS lists. */
+  checks: Record<string, string>;
+  notes: string;
+  points: ServiceVisitPoint[];
+};
+
+/**
+ * แผนประกัน — the branch price list the counter picks from (migration 0023).
+ *
+ * Cover is two counts, not a sentence: "ครอบคลุม 2 ชิ้นใหญ่, 20 ชิ้นเล็ก" is
+ * `bigPieces` and `smallPieces`, which is what lets the shop answer "เหลือกี่
+ * ชิ้น" once claims start coming in. `terms` carries anything else the plan says.
+ */
+export type InsurancePlan = {
+  id: number;
+  /** null/undefined = ทุกสาขา. */
+  shop?: string | null;
+  name: string;
+  price: number;
+  bigPieces: number;
+  smallPieces: number;
+  months: number;
+  terms: string;
+  active: boolean;
+};
+
+/** การเคลมหนึ่งครั้ง — หักจำนวนชิ้นออกจากความคุ้มครอง. */
+export type InsuranceClaim = {
+  id?: number;
+  claimedAt: string;
+  bigUsed: number;
+  smallUsed: number;
+  detail: string;
+  technician: string;
+};
+
+/**
+ * กรมธรรม์ที่ขายแล้ว — one sale, with its own date and its own money.
+ *
+ * Never part of the ticket total, whenever it was sold: ประกัน can be bought
+ * with the install or months later on a closed ticket, and one rule for both is
+ * what keeps a finished job from having its numbers moved. Revenue is read from
+ * `soldAt`.
+ *
+ * Every field is a SNAPSHOT of the plan at the moment of sale. Editing a plan
+ * next year must not reach backwards into what a customer already bought.
+ */
+export type InsurancePolicy = {
+  /** Absent until saved. */
+  id?: number;
+  ticketId?: string;
+  plate: string;
+  planName: string;
+  price: number;
+  bigPieces: number;
+  smallPieces: number;
+  terms: string;
+  /** วันที่ขาย — the revenue date, not necessarily the ticket’s. */
+  soldAt: string;
+  startsAt: string;
+  endsAt: string;
+  notes: string;
+  claims: InsuranceClaim[];
+};
+
 export type Ticket = {
   id: string;
   shop: string;
@@ -84,6 +187,20 @@ export type Ticket = {
    * like an upload does, and it is what gets shared with the customer when set.
    */
   qcAlbumUrl?: string;
+  /** Visits recorded against this ticket, newest first. */
+  serviceVisits?: ServiceVisit[];
+  /**
+   * How many visits this PLATE has had across every ticket. The entitlement is
+   * per ticket, but "รถคันนี้เซอร์วิสไปกี่ครั้ง" is a question about the car.
+   */
+  serviceVisitsForPlate?: number;
+  /** ประกันที่ขายจากใบงานนี้ ใหม่สุดก่อน (migration 0023). */
+  insurancePolicies?: InsurancePolicy[];
+  /**
+   * ประกันทุกฉบับของทะเบียนนี้ ข้ามใบงาน — "รถคันนี้เคยทำประกันอะไรไว้บ้าง".
+   * Each carries its own ticket id so the list can link back.
+   */
+  insuranceForPlate?: InsurancePolicy[];
   createdBy?: string;
   statusHistory?: StatusHistoryEntry[];
   installConfirmed?: boolean;
@@ -135,12 +252,20 @@ export type StockRow = {
 
 export type CarModel = { model: string; brand: string; carType: string };
 export type PriceMatrixRow = { carType: string; product: string; price: number };
+/**
+ * One cell of ตั้งราคาฟิล์ม/กันรอย.
+ *
+ * `shop` is '' for the ราคากลาง every branch falls back to, or a shop id for a
+ * branch that charges its own price (migration 0029) — the same product does
+ * sell for different money at different branches.
+ */
 export type FilmPriceRow = {
   category: string;
   product: string;
   position: string;
   carType: string;
   price: number;
+  shop?: string;
 };
 export type RetailCustomer = { id: number; name: string; phone: string };
 export type CorporateBuyer = { name: string; address: string; taxId: string };

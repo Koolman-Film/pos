@@ -26,6 +26,7 @@ const PRODUCT_B = 'ทดสอบสินค้าเคลื่อนไห�
 const DOC = 'JT-MOVE-0001';
 
 async function removeFixtures() {
+  await admin.from('stock_movements').delete().in('item_name', [PRODUCT_A, PRODUCT_B]);
   await admin.from('withdrawals').delete().like('type', `%${DOC}%`);
   await admin.from('withdrawals').delete().in('item', [PRODUCT_A, PRODUCT_B, 'ไม่มีในสต็อก']);
   await admin.from('stock').delete().in('sku', [SKU_A, SKU_B]);
@@ -63,11 +64,18 @@ const qtyOf = async (sku: string) => {
   return Number(data!.qty);
 };
 
+/**
+ * The ledger, newest first. It replaced `withdrawals` as the audit trail in
+ * migration 0026: keyed by stock_id, carrying before/after, and written by the
+ * same statement that moves the quantity.
+ */
 const logFor = async (item: string) => {
   const { data } = await admin
-    .from('withdrawals')
-    .select('item, shop_id, qty, type, withdrawn_by, status, withdrawn_at')
-    .eq('item', item)
+    .from('stock_movements')
+    .select(
+      'item_name, shop_id, kind, document_id, change, qty_before, qty_after, moved_by_name, moved_at',
+    )
+    .eq('item_name', item)
     .order('id', { ascending: false });
   return data ?? [];
 };
@@ -86,7 +94,7 @@ describe('applyStockMovements (live database)', () => {
   });
   afterAll(removeFixtures);
 
-  it('decrements stock by a positive delta and logs it as ตัดสต็อก / อนุมัติแล้ว', async () => {
+  it('decrements stock and writes the before/after into the ledger', async () => {
     await applyStockMovements(admin as never, { [PRODUCT_A]: 3 }, source);
 
     expect(await qtyOf(SKU_A)).toBe(17);
@@ -94,25 +102,28 @@ describe('applyStockMovements (live database)', () => {
     const log = await logFor(PRODUCT_A);
     expect(log).toHaveLength(1);
     expect(log[0]).toMatchObject({
-      item: PRODUCT_A,
+      item_name: PRODUCT_A,
       shop_id: 'cm',
-      qty: 3,
-      type: `ตัดสต็อกจากใบงาน (${DOC})`,
-      withdrawn_by: 'ช่างทดสอบ',
-      // Automatic movements record something that already happened, so they are
-      // approved on arrival — unlike a manual withdrawal request.
-      status: 'อนุมัติแล้ว',
+      kind: 'ใบงาน',
+      document_id: DOC,
+      // Signed the way stock moves: consuming is negative.
+      change: -3,
+      // The pair that makes the ledger answer "why did this drop".
+      qty_before: 20,
+      qty_after: 17,
+      moved_by_name: 'ช่างทดสอบ',
     });
   });
 
-  it('returns stock on a negative delta and logs it as คืนสต็อก', async () => {
+  it('returns stock on a negative delta, and the ledger says so', async () => {
     await applyStockMovements(admin as never, { [PRODUCT_A]: -4 }, source);
 
     expect(await qtyOf(SKU_A)).toBe(24);
 
     const log = await logFor(PRODUCT_A);
-    expect(log[0].qty).toBe(-4);
-    expect(log[0].type).toBe(`คืนสต็อกจากใบงาน (${DOC})`);
+    expect(log[0].change).toBe(4);
+    expect(log[0].qty_before).toBe(20);
+    expect(log[0].qty_after).toBe(24);
   });
 
   it('only touches the stock row for the movement shop', async () => {
@@ -141,12 +152,13 @@ describe('applyStockMovements (live database)', () => {
     await admin.from('stock').delete().eq('sku', 'SKU-MOVE-C');
   });
 
-  it('logs a product the shop does not stock, rather than losing the movement', async () => {
-    await applyStockMovements(admin as never, { ไม่มีในสต็อก: 2 }, source);
+  it('reports a product the shop does not stock instead of a phantom entry', async () => {
+    const result = await applyStockMovements(admin as never, { ไม่มีในสต็อก: 2 }, source);
 
-    const log = await logFor('ไม่มีในสต็อก');
-    expect(log).toHaveLength(1);
-    expect(log[0].qty).toBe(2);
+    // Nothing moved, so there is nothing honest to put in a ledger — but the
+    // caller is told, and puts it in front of a human.
+    expect(result.unmatched).toEqual(['ไม่มีในสต็อก']);
+    expect(await logFor('ไม่มีในสต็อก')).toHaveLength(0);
   });
 
   it('does nothing at all for an empty delta', async () => {
@@ -177,7 +189,7 @@ describe('applyStockMovements (live database)', () => {
     expect(await logFor(PRODUCT_A)).toHaveLength(3);
   });
 
-  it('uses the ขายส่ง wording for a wholesale source', async () => {
+  it('records the source module and its document on the entry', async () => {
     await applyStockMovements(
       admin as never,
       { [PRODUCT_A]: 1 },
@@ -190,13 +202,14 @@ describe('applyStockMovements (live database)', () => {
     );
 
     const log = await logFor(PRODUCT_A);
-    expect(log[0].type).toBe('ตัดสต็อกจากขายส่ง (WS-MOVE-0001)');
-    expect(log[0].withdrawn_by).toBe('ระบบ (ขายส่ง)');
+    expect(log[0].kind).toBe('ขายส่ง');
+    expect(log[0].document_id).toBe('WS-MOVE-0001');
+    expect(log[0].moved_by_name).toBe('ระบบ (ขายส่ง)');
   });
 
-  it('stamps the movement with today’s date', async () => {
+  it('stamps the movement with when it happened', async () => {
     await applyStockMovements(admin as never, { [PRODUCT_A]: 1 }, source);
     const log = await logFor(PRODUCT_A);
-    expect(log[0].withdrawn_at).toBe(new Date().toISOString().slice(0, 10));
+    expect(String(log[0].moved_at).slice(0, 10)).toBe(new Date().toISOString().slice(0, 10));
   });
 });

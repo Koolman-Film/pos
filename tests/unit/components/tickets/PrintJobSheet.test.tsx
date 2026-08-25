@@ -291,13 +291,294 @@ describe('เอกสารทางการเงิน', () => {
     expect(screen.getByText(/^วันที่เอกสาร:/)).toBeInTheDocument();
   });
 
-  it('ticks the channels the money actually arrived by', () => {
+  it('lists only the channels the money actually arrived by', () => {
     renderDoc();
     const box = screen.getByText('ช่องทางการชำระเงิน').parentElement!;
-    // All three of the shop's channels print; only the used one is ticked.
-    expect(within(box).getByText('เงินสด')).toBeInTheDocument();
-    expect(within(box).getByText('บัตรเครดิต')).toBeInTheDocument();
+    // A receipt records what happened; the shop's other two channels have no
+    // business on it, and empty boxes beside them said nothing.
+    expect(within(box).getByText('โอนเงิน')).toBeInTheDocument();
+    expect(within(box).queryByText('เงินสด')).not.toBeInTheDocument();
+    expect(within(box).queryByText('บัตรเครดิต')).not.toBeInTheDocument();
     expect(within(box).getAllByText('✓')).toHaveLength(1);
     expect(within(box).getByText(/ชำระมัดจำ 3,000.00 บาท \(โอนเงิน\)/)).toBeInTheDocument();
+  });
+
+  it('keeps a channel that has since been dropped from the shop settings', () => {
+    // The receipt is a record of that day. Reading the channels off the payments
+    // rather than จัดการสิทธิ์ means an old document still reads correctly.
+    renderDoc({
+      shopInfo: { cm: { ...shopInfo.cm, paymentChannels: ['เงินสด'] } },
+    });
+    const box = screen.getByText('ช่องทางการชำระเงิน').parentElement!;
+    expect(within(box).getByText('โอนเงิน')).toBeInTheDocument();
+  });
+});
+
+/**
+ * The three car outlines the technician marks up. They were inline base64 in
+ * the prototype (~520KB), so the port replaced them with dashed boxes reading
+ * "แผนผังตัวรถ" and left a note to re-add them as assets — which meant the
+ * printed ใบเช็ครถ had nowhere to record where a scratch actually was.
+ */
+describe('ใบเช็ครถ — แผนผังตัวรถ', () => {
+  const diagrams = ['/wrap/wrap-interior.png', '/wrap/wrap-body.png', '/wrap/wrap-exterior.png'];
+
+  it('prints all three diagrams, in the order the paper form has them', () => {
+    renderSheet(makeTicket({ items: [item()] }), 'job');
+
+    const srcs = screen
+      .getAllByRole('img')
+      .map((el) => el.getAttribute('src'))
+      .filter((s) => s?.startsWith('/wrap/'));
+    expect(srcs).toEqual(diagrams);
+  });
+
+  it('replaces the placeholder boxes rather than sitting beside them', () => {
+    renderSheet(makeTicket({ items: [item()] }), 'job');
+    expect(screen.queryByText(/^แผนผังตัวรถ \(/)).not.toBeInTheDocument();
+  });
+
+  it('spells out what the L/R/B/F on the drawings mean', () => {
+    renderSheet(makeTicket({ items: [item()] }), 'job');
+    // The letters are part of the artwork; only Thai readers of the sheet need
+    // telling which is which.
+    expect(screen.getByText(/L = ซ้าย/)).toBeInTheDocument();
+    expect(screen.getByText(/B = หลัง/)).toBeInTheDocument();
+  });
+
+  it('keeps both part tables on the sheet alongside the drawings', () => {
+    renderSheet(makeTicket({ items: [item()] }), 'job');
+    expect(screen.getByText('ภายในตัวรถ')).toBeInTheDocument();
+    expect(screen.getByText('ภายนอกตัวรถ')).toBeInTheDocument();
+    expect(screen.getByText('Piano Black')).toBeInTheDocument();
+    expect(screen.getByText('ล้อหลังขวา')).toBeInTheDocument();
+  });
+
+  it('leaves them off a ticket with no ฟิล์มกันรอย work', () => {
+    renderSheet(
+      makeTicket({ items: [item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม 3M' })] }),
+      'job',
+    );
+    expect(screen.queryByAltText(/แผนผัง/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * ใบเซอร์วิส ลูกค้าหน้าร้าน. Two ways of working had to keep working: print a
+ * blank sheet and fill it in at the car, or record the visit here and print it
+ * filled. Both come off the same form so a filed stack reads consistently.
+ */
+describe('ใบเซอร์วิส', () => {
+  const visit = {
+    id: 1,
+    visitNo: 2,
+    plate: 'กก 999',
+    receivedAt: '2026-08-20',
+    receivedTime: '09:00',
+    deliveredAt: '2026-08-20',
+    deliveredTime: '16:30',
+    salesBy: 'พนักงานขาย',
+    qcBy: 'ช่างเอก',
+    technicians: ['ช่างเอก'],
+    filmProduct: 'TPU กันรอยเกรดพรีเมียม 195',
+    customerWaits: true,
+    overallOk: true,
+    checks: { 'หน้าจอ 1': 'ปกติ', Sunroof: 'ผิดปกติ' },
+    notes: 'ลูกค้าขอเร่ง',
+    points: [{ seq: 1, position: 'กันชนหน้า', detail: 'ฟิล์มเผยอ', note: 'แก้แล้ว' }],
+  };
+
+  const renderService = (over = {}) =>
+    renderSheet(makeTicket({ items: [item()] }), 'service', {
+      technicianOptions: ['ช่างเอก', 'ช่างบอย'],
+      ...over,
+    });
+
+  it('takes the customer and car straight from the ticket', () => {
+    renderService({ serviceVisit: visit });
+    expect(screen.getByText('ใบเซอร์วิส ลูกค้าหน้าร้าน')).toBeInTheDocument();
+    expect(screen.getByText('คุณ ปรีชา')).toBeInTheDocument();
+    expect(screen.getByText('กก 999')).toBeInTheDocument();
+  });
+
+  it('prints a recorded visit with its number, checks and points', () => {
+    renderService({ serviceVisit: visit });
+    expect(screen.getByText('2')).toBeInTheDocument(); // ครั้งที่
+    expect(screen.getByText('ปกติ')).toBeInTheDocument();
+    expect(screen.getByText('ผิดปกติ')).toBeInTheDocument();
+    expect(screen.getByText('กันชนหน้า')).toBeInTheDocument();
+    expect(screen.getByText('ฟิล์มเผยอ')).toBeInTheDocument();
+  });
+
+  it('prints a blank sheet when no visit is given', () => {
+    renderService({ serviceVisit: null });
+    // Still headed with the car, because that much is known either way.
+    expect(screen.getByText('กก 999')).toBeInTheDocument();
+    // ...and nothing a technician has to write at the car is pre-answered.
+    expect(screen.queryByText('ฟิล์มเผยอ')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^ครั้งที่/)).not.toBeInTheDocument();
+  });
+
+  it('lists ทีมช่าง from the shop, not the names the paper form was printed with', () => {
+    renderService({ serviceVisit: visit });
+    // Scoped to the tick row: ช่างเอก is also this visit's QC person.
+    const row = screen.getByText('ทีมช่าง :').parentElement!;
+    expect(within(row).getByText('ช่างเอก')).toBeInTheDocument();
+    expect(within(row).getByText('ช่างบอย')).toBeInTheDocument();
+    // Every technician prints, ticked or not, and only the one who worked is
+    // ticked — the same rule as the wrap sheet's Option row.
+    expect(within(row).getAllByText('✓')).toHaveLength(1);
+    // The paper form's own seven names are gone.
+    expect(screen.queryByText('จอจอ')).not.toBeInTheDocument();
+  });
+
+  it('always prints all ten จุดพิเศษ rows so the sheet can be written on', () => {
+    renderService({ serviceVisit: visit });
+    for (const n of [1, 5, 10]) expect(screen.getByText(`${n}.`)).toBeInTheDocument();
+  });
+
+  it('names the film by its ชื่อสินค้า, which already states the thickness', () => {
+    renderService({ serviceVisit: visit });
+    // One SKU per thickness, so a separate ประเภท / ความหนา / รหัสสี row would
+    // only ask for the same fact three times.
+    expect(screen.getByText('ฟิล์มที่ใช้')).toBeInTheDocument();
+    expect(screen.getByText('TPU กันรอยเกรดพรีเมียม 195')).toBeInTheDocument();
+    expect(screen.queryByText('ความหนา')).not.toBeInTheDocument();
+    expect(screen.queryByText('รหัสสี')).not.toBeInTheDocument();
+  });
+
+  it('carries the same car diagrams as the ใบเช็ครถ', () => {
+    renderService({ serviceVisit: null });
+    const srcs = screen
+      .getAllByRole('img')
+      .map((el) => el.getAttribute('src'))
+      .filter((s) => s?.startsWith('/wrap/'));
+    expect(srcs).toHaveLength(3);
+  });
+});
+
+/**
+ * ใบเคลมประกัน is the ใบเซอร์วิส form with the cover printed on it: the
+ * technician does the same walk-around, and everyone can see what is left
+ * before anything is promised. Two layouts would have been two forms to keep in
+ * step, so what matters here is that it stays the same sheet.
+ */
+describe('ใบเคลมประกัน', () => {
+  const pol = {
+    id: 4,
+    ticketId: 'JT-CM-00216',
+    plate: 'กก 999',
+    planName: 'ประกันฟิล์มกันรอย 1 ปี',
+    price: 3000,
+    bigPieces: 2,
+    smallPieces: 20,
+    terms: 'ไม่คุ้มครองอุบัติเหตุ',
+    soldAt: '2026-08-01',
+    startsAt: '2026-08-01',
+    endsAt: '2027-08-01',
+    notes: '',
+    claims: [
+      {
+        id: 1,
+        claimedAt: '2026-09-01',
+        bigUsed: 1,
+        smallUsed: 3,
+        detail: 'กันชนหน้า',
+        technician: 'ช่างเอก',
+      },
+    ],
+  };
+
+  const renderClaim = (over = {}) =>
+    renderSheet(makeTicket({ items: [item()] }), 'claim', {
+      insurancePolicy: pol,
+      technicianOptions: ['ช่างเอก', 'ช่างบอย'],
+      ...over,
+    });
+
+  it('carries the cover, what is used and what is left', () => {
+    renderClaim({ insuranceClaim: pol.claims[0] });
+    expect(screen.getByText('ใบเคลมประกันฟิล์มกันรอย')).toBeInTheDocument();
+    expect(screen.getByText(/ประกันฟิล์มกันรอย 1 ปี/)).toBeInTheDocument();
+    expect(screen.getByText(/ครอบคลุม 2 ชิ้นใหญ่, 20 ชิ้นเล็ก/)).toBeInTheDocument();
+    // 2 − 1 and 20 − 3: the figure the shop has to honour.
+    expect(screen.getByText(/1 ชิ้นใหญ่, 17 ชิ้นเล็ก/)).toBeInTheDocument();
+  });
+
+  it('is the same sheet as the ใบเซอร์วิส, boxes and all', () => {
+    renderClaim({ insuranceClaim: null });
+    // The walk-around tables and the ten numbered rows print blank, so the
+    // sheet can be filled in at the car.
+    expect(screen.getByText('Piano Black')).toBeInTheDocument();
+    expect(screen.getByText('Sunroof')).toBeInTheDocument();
+    for (const n of [1, 5, 10]) expect(screen.getByText(`${n}.`)).toBeInTheDocument();
+    const srcs = screen
+      .getAllByRole('img')
+      .map((el) => el.getAttribute('src'))
+      .filter((x) => x?.startsWith('/wrap/'));
+    expect(srcs).toHaveLength(3);
+  });
+
+  it('leaves this-claim blank on a sheet printed before anything is recorded', () => {
+    renderClaim({ insuranceClaim: null });
+    // Scoped to its own field: "ใช้ไปแล้ว" above it legitimately carries the
+    // running total of the claims already on the policy.
+    const row = screen.getByText('เคลมครั้งนี้');
+    expect(row.textContent?.replace('เคลมครั้งนี้', '').trim()).toBe('');
+    expect(screen.getByText(/1 ชิ้นใหญ่, 3 ชิ้นเล็ก/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The financial documents are the ones a customer takes away, and some of those
+ * customers do not read Thai. Every heading therefore carries its English —
+ * under the Thai, smaller and greyer, so the Thai stays the label on a Thai
+ * shop’s receipt.
+ */
+describe('เอกสารการเงิน — ภาษาอังกฤษกำกับ', () => {
+  const renderDoc = (over = {}) =>
+    renderSheet(makeTicket({ items: [item()] }), 'doc', {
+      total: 29500,
+      paid: 29500,
+      payments: [{ type: 'ชำระส่วนที่เหลือ', method: 'เงินสด', amount: 29500, date: '2026-08-14' }],
+      ...over,
+    });
+
+  it('names the document in both languages', () => {
+    renderDoc();
+    expect(screen.getByText('ใบเสร็จรับเงิน')).toBeInTheDocument();
+    expect(screen.getByText('RECEIPT')).toBeInTheDocument();
+  });
+
+  it('translates the document name, not just the label', () => {
+    renderDoc({ docType: 'ใบเสนอราคา' });
+    expect(screen.getByText('QUOTATION')).toBeInTheDocument();
+  });
+
+  it('carries English on every heading a customer reads', () => {
+    renderDoc();
+    for (const en of [
+      'No.',
+      'Date',
+      'Customer',
+      'Issued by',
+      'Qty',
+      'Description',
+      'Unit Price',
+      'Amount',
+      'Grand Total',
+      'Payment Method',
+      'Signature',
+    ]) {
+      expect(screen.getAllByText(new RegExp(en)).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps the Thai as the heading and the English as the gloss', () => {
+    renderDoc();
+    // Same element, Thai first — not a second column and not a replacement.
+    const total = screen.getByText('ยอดรวมสุทธิ').textContent ?? '';
+    expect(total.startsWith('ยอดรวมสุทธิ')).toBe(true);
+    expect(total).toContain('Grand Total');
   });
 });

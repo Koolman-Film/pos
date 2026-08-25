@@ -89,8 +89,6 @@ function renderItems(t: Ticket) {
       setFilmPositions={vi.fn()}
       wrapPositions={['เต็มคัน']}
       setWrapPositions={vi.fn()}
-      serviceItems={[]}
-      setServiceItems={vi.fn()}
       addItem={vi.fn()}
       removeItem={vi.fn()}
       updateItem={vi.fn()}
@@ -142,5 +140,104 @@ describe('ItemsSection product options', () => {
       .map((o) => o.textContent ?? '');
     expect(labels[0]).toContain('3M60');
     expect(labels[1]).toContain('FNCT40');
+  });
+});
+
+/**
+ * Same defect the stock module had. A `<select>` whose value matches no option
+ * renders the FIRST one, so an older ticket carrying a ชนิดสินค้า that has since
+ * left the managed list read as whatever happens to sit at the top — while the
+ * per-category notes, the technician block and the printed sheets all still
+ * keyed off the real value.
+ */
+describe('ItemsSection — a ชนิดสินค้า outside the managed list', () => {
+  const withCategory = (category: string) =>
+    ({
+      ...ticket,
+      items: [{ category, booked: '', bookedPrice: 0, sold: '', soldPrice: 0, positions: [] }],
+    }) as unknown as Ticket;
+
+  it('keeps the item’s own category selected and selectable', () => {
+    // `renderItems` supplies productCategories = [ฟิล์มกรองแสง, เครื่องเสียง].
+    renderItems(withCategory('จอ'));
+
+    const select = screen.getByLabelText('ชนิดสินค้า') as HTMLSelectElement;
+    expect(select.value).toBe('จอ');
+    expect(screen.getByRole('option', { name: 'จอ' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'ฟิล์มกรองแสง' })).toBeInTheDocument();
+  });
+
+  it('does not duplicate a category that is in the list', () => {
+    renderItems(withCategory('ฟิล์มกรองแสง'));
+    expect(screen.getAllByRole('option', { name: 'ฟิล์มกรองแสง' })).toHaveLength(1);
+  });
+});
+
+/**
+ * Book งาน offers product names from สต็อกสินค้า and from nowhere else.
+ *
+ * งานบริการ was the exception: a ManagedDropdown over the `service_items` option
+ * list, and the last place in the ticket form where a product name could be
+ * invented on the spot. A name typed there existed in no stock record, so it had
+ * no cost, no price and nothing to reconcile against — and it went straight onto
+ * a customer's ใบงานขาย.
+ */
+describe('ItemsSection — งานบริการ reads stock like every other category', () => {
+  const serviceStock: StockRow[] = [
+    {
+      id: 9,
+      name: 'ล้างรถ',
+      shortName: 'ล้างรถ',
+      category: 'งานบริการ',
+      shop: 'cm',
+      qty: 0,
+      cost: 0,
+      sellPrice: 0,
+    },
+  ];
+  const serviceTicket = {
+    ...ticket,
+    items: [
+      { category: 'งานบริการ', booked: '', bookedPrice: 0, sold: '', soldPrice: 0, positions: [] },
+    ],
+  } as unknown as Ticket;
+
+  const renderService = (stockRows: StockRow[]) =>
+    render(
+      <ItemsSection
+        t={serviceTicket}
+        stock={stockRows}
+        productCategories={['งานบริการ']}
+        filmPositions={[]}
+        setFilmPositions={vi.fn()}
+        wrapPositions={[]}
+        setWrapPositions={vi.fn()}
+        addItem={vi.fn()}
+        removeItem={vi.fn()}
+        updateItem={vi.fn()}
+        updateItemFields={vi.fn()}
+        updateFilmPositions={vi.fn()}
+        lookupPrice={(_p, fallback) => fallback}
+        lookupFilmPrice={(_c, _p, _pos, fallback) => fallback}
+        commitPrice={vi.fn()}
+      />,
+    );
+
+  it('offers the services that exist in stock, and no way to invent one', async () => {
+    const user = userEvent.setup();
+    renderService(serviceStock);
+
+    await user.click(screen.getByRole('combobox', { name: 'สินค้าที่ขายจริง' }));
+    expect(
+      within(screen.getByRole('listbox')).getByRole('option', { name: /ล้างรถ/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('+ เพิ่มตัวเลือกใหม่...')).not.toBeInTheDocument();
+  });
+
+  it('sends the user to สต็อกสินค้า when the category has no products at all', () => {
+    renderService([]);
+    // งานบริการ used to be exempt from this warning because it did not read
+    // stock; now that it does, an empty list needs the same way out.
+    expect(screen.getByText(/ยังไม่มีสินค้าหมวด/)).toBeInTheDocument();
   });
 });

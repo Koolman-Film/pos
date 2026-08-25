@@ -1,4 +1,5 @@
 import type { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/types/database';
 
 /**
  * Automatic stock movement — the port of the prototype's two inline stock-sync
@@ -20,6 +21,16 @@ import type { createClient } from '@/lib/supabase/server';
  */
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * What a movement could not do.
+ *
+ * `unmatched` are product names with no stock row at that shop — usually a
+ * product renamed after the ticket recorded its usage. The movement is still
+ * logged, but the quantity could not be deducted, and the caller is expected to
+ * tell somebody rather than let it pass.
+ */
+export type StockMovementResult = { unmatched: string[] };
 
 /** Product name -> quantity. The shape of `ticket_items.actual_qty`. */
 export type QtyMap = Record<string, number>;
@@ -76,53 +87,58 @@ export function diffQtyMaps(before: QtyMap, after: QtyMap): QtyMap {
  * shop counted wrong or forgot to receive a delivery. Hiding it would be worse
  * than showing it.
  *
- * A product with no matching stock row at this shop is skipped for the decrement
- * (there is nothing to decrement) but STILL logged, so the movement is not lost
- * silently — that is the case where someone recorded usage of something the shop
- * does not carry, which is exactly what an audit trail is for.
+ * A product with no matching stock row at this shop cannot be decremented, and is
+ * RETURNED to the caller instead. There is nothing honest to write in a ledger
+ * about a quantity that never moved; what matters is that a human is told, which
+ * is what `unmatched` is for.
  */
 export async function applyStockMovements(
   supabase: Supabase,
   delta: QtyMap,
   source: StockMovementSource,
-): Promise<void> {
+): Promise<StockMovementResult> {
   const entries = Object.entries(delta).filter(([, d]) => d !== 0);
-  if (entries.length === 0) return;
+  if (entries.length === 0) return { unmatched: [] };
 
   const names = entries.map(([name]) => name);
   const { data: rows } = await supabase
     .from('stock')
     .select('id, name, qty')
     .eq('shop_id', source.shopId)
-    .in('name', names);
+    .in('name', names)
+    // Deterministic when a branch still carries two rows under one name: the
+    // oldest wins, every time. Migration 0025 adds a unique index so this can
+    // only matter on data that predates it.
+    .order('id', { ascending: true });
 
-  const byName = new Map((rows ?? []).map((r) => [r.name, r]));
-  const today = new Date().toISOString().slice(0, 10);
+  const byName = new Map<string, { id: number; name: string; qty: number }>();
+  for (const r of rows ?? []) if (!byName.has(r.name)) byName.set(r.name, r);
 
-  const logRows = entries.map(([name, d]) => ({
-    item: name,
-    shop_id: source.shopId,
-    qty: d,
-    type: `${d > 0 ? 'ตัดสต็อก' : 'คืนสต็อก'}จาก${source.kind} (${source.documentId})`,
-    withdrawn_by: source.by,
-    withdrawn_at: today,
-    // Already happened, so it is recorded as approved rather than requested —
-    // matching the prototype, whose manual withdrawals were `รออนุมัติ` and whose
-    // automatic ones were `อนุมัติแล้ว`.
-    status: 'อนุมัติแล้ว',
-  }));
+  /*
+    The arithmetic AND the ledger entry happen in the DATABASE, in one statement
+    (migration 0026).
 
-  await Promise.all([
-    ...entries.flatMap(([name, d]) => {
-      const row = byName.get(name);
-      if (!row) return [];
-      return [
-        supabase
-          .from('stock')
-          .update({ qty: Number(row.qty) - d })
-          .eq('id', row.id),
-      ];
-    }),
-    supabase.from('withdrawals').insert(logRows),
-  ]);
+    Reading `qty` and writing back `qty - d` is a lost update the moment two
+    people save at once: both read 10, both write 8, and the shop is one short
+    with two successful writes to show for it. Writing the log separately is the
+    same class of mistake — it is how a movement ends up with no entry, or an
+    entry whose before/after disagrees with what actually happened.
+  */
+  const changes = entries
+    .map(([name, d]) => ({ id: byName.get(name)?.id, change: -d }))
+    .filter((c): c is { id: number; change: number } => typeof c.id === 'number');
+
+  if (changes.length > 0) {
+    await supabase.rpc('move_stock', {
+      p_changes: changes as unknown as Json,
+      p_kind: source.kind,
+      p_document_id: source.documentId,
+      p_by_name: source.by,
+      p_note: '',
+    });
+  }
+  // Names with no product at this shop. Nothing moved, so there is nothing to put
+  // in the ledger; the caller has to SAY so instead — silently skipping is how a
+  // renamed product stops being deducted without anyone noticing.
+  return { unmatched: names.filter((n) => !byName.has(n)) };
 }

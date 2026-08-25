@@ -34,6 +34,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: 'fa-file-invoice-dollar',
     href: '/accounting',
   },
+  { id: 'revenue', label: 'รายได้', icon: 'fa-sack-dollar', href: '/revenue' },
   { id: 'permissions', label: 'จัดการสิทธิ์', icon: 'fa-user-shield', href: '/permissions' },
 ];
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 // TicketDetail calls useRouter(); there is no app-router context under jsdom, so
 // mock next/navigation. This is a test-environment concern only.
@@ -227,5 +228,194 @@ describe('TicketDetail — external QC album link', () => {
       'href',
       'https://drive.google.com/x',
     );
+  });
+});
+
+/**
+ * A closed ticket (ส่งมอบแล้ว + ชำระครบ) is frozen so its numbers cannot move
+ * months after the money did. But the job does not end at delivery — the car
+ * comes back to be serviced, and the customer may take ประกัน afterwards. Both
+ * live in ข้อมูลเพิ่มเติม, so that block alone stays open.
+ */
+describe('TicketDetail — ใบงานที่ปิดงานแล้ว', () => {
+  const closed = () =>
+    makeTicket({
+      locked: true,
+      status: 'ส่งมอบแล้ว',
+      extras: { Service: { checked: true } },
+    });
+
+  const props = () => ({
+    ...baseProps(closed()),
+    initialOptions: options({ extra_options: ['Service', 'ประกัน'] }),
+    extrasAction: vi.fn(async () => ({ ok: true })),
+    // Typed, so `mock.calls[0][0]` is the policy payload and not `never`.
+    // Typed through its argument, so `mock.calls[0][0]` is the policy payload
+    // rather than `never`.
+    insuranceAction: vi.fn(
+      async (input: { ticketId: string; policy: Record<string, unknown> }) => ({
+        ok: true,
+        id: 1,
+        ticketId: input.ticketId,
+      }),
+    ),
+    insuranceDeleteAction: vi.fn(async () => ({ ok: true })),
+    insurancePlans: [
+      {
+        id: 1,
+        name: 'ประกันฟิล์มกันรอย 1 ปี',
+        price: 3000,
+        bigPieces: 2,
+        smallPieces: 20,
+        months: 12,
+        terms: '',
+        active: true,
+      },
+    ],
+  });
+
+  it('freezes the rest of the ticket but not ข้อมูลเพิ่มเติม', () => {
+    const { container } = render(<TicketDetail {...props()} />);
+
+    expect(screen.getByText(/ใบงานนี้ปิดงานแล้ว/)).toBeInTheDocument();
+    // The guard that greys out everything else is still in place...
+    const guard = container.querySelector('[aria-disabled="true"]') as HTMLElement;
+    expect(guard.style.pointerEvents).toBe('none');
+    // ...and the ข้อมูลเพิ่มเติม block reaches back through it.
+    expect(screen.getByText(/ส่วนนี้ยังแก้ไขได้แม้ใบงานปิดแล้ว/)).toBeInTheDocument();
+  });
+
+  it('saves ข้อมูลเพิ่มเติม on its own, without touching the frozen parts', async () => {
+    const p = props();
+    render(<TicketDetail {...p} />);
+
+    // The ticket-wide save is gone; this one is not.
+    expect(screen.queryByRole('button', { name: /^บันทึกใบงาน/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /บันทึกข้อมูลเพิ่มเติม/ }));
+
+    await vi.waitFor(() =>
+      expect(p.extrasAction).toHaveBeenCalledWith({
+        ticketId: 'JT-CM-00214',
+        extras: { Service: { checked: true } },
+      }),
+    );
+  });
+
+  it('takes a ประกัน sale on a closed ticket without touching its total', async () => {
+    const p = props();
+    render(<TicketDetail {...p} />);
+
+    // Unticked extras are folded away until the section is opened.
+    fireEvent.click(screen.getByRole('button', { name: /^ข้อมูลเพิ่มเติม/ }));
+    fireEvent.click(screen.getByLabelText('ประกัน'));
+
+    // Ticking it opens the policy form — it does NOT add a line to
+    // สินค้า/การติดตั้ง any more, which is what used to move a closed
+    // ticket's revenue.
+    fireEvent.click(screen.getByRole('button', { name: /บันทึกประกันฉบับใหม่/ }));
+    expect(screen.getByLabelText('ราคาประกัน')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^บันทึกประกัน$/ }));
+    await vi.waitFor(() => expect(p.insuranceAction).toHaveBeenCalled());
+    const sent = p.insuranceAction.mock.calls[0][0];
+    expect(sent.ticketId).toBe('JT-CM-00214');
+    // Its own sale date, which is what keeps the money off the old job.
+    expect(sent.policy.soldAt).toBeTruthy();
+  });
+});
+
+/**
+ * ราคาฟิล์มของสาขา (migration 0029).
+ *
+ * The same product legitimately sells for different money at different
+ * branches. The matrix holds a ราคากลาง and, optionally, a price for one
+ * branch; a ticket has to quote its OWN branch's price and fall back to the
+ * ราคากลาง only when that branch has not set one.
+ */
+describe('TicketDetail — ราคาฟิล์มแยกตามสาขา', () => {
+  const PRODUCT = 'ฟิล์ม 3M CRM 60%';
+  const matrix = [
+    {
+      category: 'ฟิล์มกรองแสง',
+      product: PRODUCT,
+      position: 'บานหน้า',
+      carType: 'เก๋งเล็ก',
+      price: 2500,
+      shop: '',
+    },
+    {
+      category: 'ฟิล์มกรองแสง',
+      product: PRODUCT,
+      position: 'บานหน้า',
+      carType: 'เก๋งเล็ก',
+      price: 2800,
+      shop: 'lpg',
+    },
+  ];
+
+  function renderAt(shop: string) {
+    const ticket = makeTicket({
+      shop,
+      items: [
+        {
+          category: 'ฟิล์มกรองแสง',
+          booked: '',
+          bookedPrice: 0,
+          sold: '',
+          soldPrice: 0,
+          positions: [{ position: 'บานหน้า', product: '', price: 0 }],
+        },
+      ],
+    });
+    return render(
+      <TicketDetail
+        {...baseProps(ticket)}
+        shops={[
+          { id: 'cm', name: 'FINNIX CM' },
+          { id: 'lpg', name: 'FINNIX ลำปาง' },
+        ]}
+        initialStock={[
+          {
+            id: 1,
+            name: PRODUCT,
+            shortName: '3M60',
+            category: 'ฟิล์มกรองแสง',
+            shop,
+            qty: 5,
+            cost: 800,
+            sellPrice: 1000,
+          },
+        ]}
+        filmPriceMatrix={matrix}
+      />,
+    );
+  }
+
+  async function pickProduct(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByLabelText('สินค้าประจำตำแหน่ง บานหน้า'));
+    await user.click(await screen.findByText(new RegExp(PRODUCT)));
+  }
+
+  /** The price box sitting beside the picker for that position. */
+  function positionPrice(): string {
+    const picker = screen.getByLabelText('สินค้าประจำตำแหน่ง บานหน้า');
+    const cell = picker.closest('div')?.parentElement;
+    const input = cell?.querySelector('input[type="number"]') as HTMLInputElement | null;
+    return input?.value ?? '(no price input)';
+  }
+
+  it("quotes the branch's own price when it has one", async () => {
+    const user = userEvent.setup();
+    renderAt('lpg');
+    await pickProduct(user);
+    expect(positionPrice()).toBe('2800');
+  });
+
+  it('falls back to the ราคากลาง at a branch that has not set its own', async () => {
+    const user = userEvent.setup();
+    renderAt('cm');
+    await pickProduct(user);
+    // 2500, NOT the 2800 ลำปาง charges and not the product's 1,000 sell price.
+    expect(positionPrice()).toBe('2500');
   });
 });

@@ -6,7 +6,12 @@ import {
   type StockItem,
   type Withdrawal,
   type FilmPriceEntry,
+  type StockMovement,
+  type StockBatch,
 } from '@/components/stock/StockModule';
+
+import { updateOptionListAction } from '../optionListActions';
+import { loadInsurancePlans } from '../tickets/data';
 
 import {
   addProductAction,
@@ -16,6 +21,10 @@ import {
   saveProductAction,
   deleteProductAction,
   setFilmPriceAction,
+  saveInsurancePlanAction,
+  deleteInsurancePlanAction,
+  decideWithdrawalAction,
+  transferStockAction,
 } from './actions';
 
 async function optionValues(
@@ -121,15 +130,67 @@ export default async function StockPage() {
   if (isAdmin) {
     const { data: fp } = await supabase
       .from('film_price_matrix')
-      .select('category, product, position, car_type, price');
+      .select('category, product, position, car_type, price, shop_id');
     filmPriceMatrix = (fp ?? []).map((e) => ({
       category: e.category,
       product: e.product,
       position: e.position,
       carType: e.car_type,
       price: e.price,
+      shop: e.shop_id ?? '',
     }));
   }
+
+  // สมุดบัญชีสต็อก (migration 0026). Capped: the ledger grows for ever and the
+  // panel is a "what happened lately" list, not an archive browser.
+  const { data: moveRows } = await supabase
+    .from('stock_movements')
+    .select(
+      'id, item_name, shop_id, kind, document_id, change, qty_before, qty_after, cost_total, note, moved_at, moved_by_name',
+    )
+    .order('moved_at', { ascending: false })
+    .limit(300);
+  const movements: StockMovement[] = (moveRows ?? []).map((m) => ({
+    id: m.id,
+    itemName: m.item_name,
+    shop: m.shop_id,
+    kind: m.kind,
+    documentId: m.document_id,
+    change: Number(m.change || 0),
+    qtyBefore: Number(m.qty_before || 0),
+    qtyAfter: Number(m.qty_after || 0),
+    costTotal: Number(m.cost_total || 0),
+    note: m.note,
+    movedAt: m.moved_at,
+    movedBy: m.moved_by_name,
+  }));
+
+  // ล็อตสินค้า (migration 0027) — what each round of buying cost, and how much
+  // of it is left. Capped like the ledger; the panel shows recent deliveries.
+  const { data: batchRows } = await supabase
+    .from('stock_batches')
+    .select(
+      'id, stock_id, received_at, supplier, doc_no, qty_received, qty_remaining, unit_cost, note, created_by_name',
+    )
+    .order('received_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(300);
+  const batches: StockBatch[] = (batchRows ?? []).map((b) => ({
+    id: b.id,
+    stockId: b.stock_id,
+    receivedAt: b.received_at,
+    supplier: b.supplier,
+    docNo: b.doc_no,
+    qtyReceived: Number(b.qty_received || 0),
+    qtyRemaining: Number(b.qty_remaining || 0),
+    unitCost: Number(b.unit_cost || 0),
+    note: b.note,
+    receivedBy: b.created_by_name,
+  }));
+
+  // แผนประกัน — configuration, like the film price matrix, and edited here for
+  // the same reason: it is a price list, not part of any one job.
+  const insurancePlans = await loadInsurancePlans();
 
   // A serialisable map, NOT session.canDo. StockModule is a Client Component, and
   // handing it the closure makes React refuse to serialise the tree, which 500s
@@ -141,6 +202,7 @@ export default async function StockPage() {
     'stock.editDelete': session.canDo('stock.editDelete'),
     'stock.export': session.canDo('stock.export'),
     'options.manage': session.canDo('options.manage'),
+    'stock.approveWithdraw': session.canDo('stock.approveWithdraw'),
   };
 
   return (
@@ -157,6 +219,9 @@ export default async function StockPage() {
       filmPositions={filmPositions}
       wrapPositions={wrapPositions}
       filmPriceMatrix={filmPriceMatrix}
+      insurancePlans={insurancePlans}
+      movements={movements}
+      batches={batches}
       actions={{
         addProduct: addProductAction,
         bulkImport: bulkImportAction,
@@ -165,6 +230,11 @@ export default async function StockPage() {
         saveProduct: saveProductAction,
         deleteProduct: deleteProductAction,
         setFilmPrice: setFilmPriceAction,
+        saveInsurancePlan: saveInsurancePlanAction,
+        deleteInsurancePlan: deleteInsurancePlanAction,
+        decideWithdrawal: decideWithdrawalAction,
+        transferStock: transferStockAction,
+        updateOptionList: updateOptionListAction,
       }}
     />
   );

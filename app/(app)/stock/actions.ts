@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { getSessionContext, type SessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/types/database';
 
 /**
  * Server actions for the Stock module.
@@ -36,8 +37,21 @@ function assertShopAccess(session: SessionContext, shopId: string): void {
   }
 }
 
+/**
+ * รับของเข้า. `supplier` and `docNo` are captured here because receiving is the
+ * only moment anyone knows them, and a lot without them cannot be traced back
+ * to the delivery it came from (migration 0027).
+ */
 export type AddProductInput =
-  | { mode: 'existing'; existingId: number; qty: number; cost: number }
+  | {
+      mode: 'existing';
+      existingId: number;
+      qty: number;
+      cost: number;
+      supplier?: string;
+      docNo?: string;
+      reason?: string;
+    }
   | {
       mode: 'new';
       newName: string;
@@ -48,6 +62,10 @@ export type AddProductInput =
       qty: number;
       cost: number;
       sellPrice: number;
+      /** จุดสั่งซื้อ. Was hard-coded to 5 for every product ever created. */
+      min?: number;
+      supplier?: string;
+      docNo?: string;
     };
 
 export async function addProductAction(input: AddProductInput): Promise<void> {
@@ -63,27 +81,63 @@ export async function addProductAction(input: AddProductInput): Promise<void> {
       .single();
     if (error || !row) throw new Error('stock item not found');
     assertShopAccess(session, row.shop_id);
-    const patch: { qty: number; cost?: number } = {
-      qty: row.qty + Number(input.qty),
-    };
-    // Only a price-visible caller may move the cost; otherwise keep it as-is.
-    if (canSeePrices && Number(input.cost)) patch.cost = Number(input.cost);
-    const { error: upErr } = await supabase.from('stock').update(patch).eq('id', row.id);
-    if (upErr) throw upErr;
+
+    /*
+      One delivery, one LOT (migration 0027).
+
+      The cost of this round belongs to this round. It used to overwrite the
+      product's single `cost`, which told the shop that everything on the
+      shelf had been bought at the newest price. `stock.cost` is recomputed
+      from what the lots hold now, so it cannot say that any more.
+
+      A price-blind caller receives at cost 0 rather than being refused: the
+      goods arriving is the fact, and the price is filled in by someone who
+      can see prices.
+    */
+    const { error: recErr } = await supabase.rpc('receive_stock', {
+      p_stock_id: row.id,
+      p_qty: Number(input.qty),
+      p_unit_cost: canSeePrices ? Number(input.cost) || 0 : 0,
+      p_supplier: input.supplier ?? '',
+      p_doc_no: input.docNo ?? '',
+      p_by_name: session.name,
+      p_note: input.reason ?? '',
+    });
+    if (recErr) throw recErr;
   } else {
     assertShopAccess(session, input.shop);
-    const { error } = await supabase.from('stock').insert({
-      sku: input.sku?.trim() || `SKU-NEW-${Date.now()}`,
-      name: input.newName,
-      short_name: input.shortName ?? '',
-      category: input.category,
-      shop_id: input.shop,
-      qty: Number(input.qty),
-      min_qty: 5,
-      cost: canSeePrices ? Number(input.cost) || 0 : 0,
-      sell_price: canSeePrices ? Number(input.sellPrice) || 0 : 0,
-    });
+    // Created EMPTY, then received. A product that arrives with stock already
+    // on it would have a quantity no lot accounts for, and a cost that is the
+    // one number this migration exists to get rid of.
+    const { data: created, error } = await supabase
+      .from('stock')
+      .insert({
+        sku: input.sku?.trim() || `SKU-NEW-${Date.now()}`,
+        name: input.newName,
+        short_name: input.shortName ?? '',
+        category: input.category,
+        shop_id: input.shop,
+        qty: 0,
+        min_qty: Number(input.min) || 5,
+        cost: 0,
+        sell_price: canSeePrices ? Number(input.sellPrice) || 0 : 0,
+      })
+      .select('id')
+      .single();
     if (error) throw error;
+
+    if (created && Number(input.qty) > 0) {
+      const { error: recErr } = await supabase.rpc('receive_stock', {
+        p_stock_id: created.id,
+        p_qty: Number(input.qty),
+        p_unit_cost: canSeePrices ? Number(input.cost) || 0 : 0,
+        p_supplier: input.supplier ?? '',
+        p_doc_no: input.docNo ?? '',
+        p_by_name: session.name,
+        p_note: 'ล็อตแรกของสินค้าใหม่',
+      });
+      if (recErr) throw recErr;
+    }
   }
   revalidatePath('/stock');
 }
@@ -97,6 +151,7 @@ export type BulkImportRow = {
   qty: number;
   cost: number;
   sellPrice: number;
+  min?: number;
 };
 
 export async function bulkImportAction(rows: BulkImportRow[]): Promise<void> {
@@ -116,7 +171,7 @@ export async function bulkImportAction(rows: BulkImportRow[]): Promise<void> {
       category: r.category,
       shop_id: r.shop,
       qty: Number(r.qty) || 0,
-      min_qty: 5,
+      min_qty: Number(r.min) || 5,
       cost: canSeePrices ? Number(r.cost) || 0 : 0,
       sell_price: canSeePrices ? Number(r.sellPrice) || 0 : 0,
     })),
@@ -125,7 +180,11 @@ export async function bulkImportAction(rows: BulkImportRow[]): Promise<void> {
   revalidatePath('/stock');
 }
 
-export async function adjustStockAction(input: { id: number; counted: number }): Promise<void> {
+export async function adjustStockAction(input: {
+  id: number;
+  counted: number;
+  note?: string;
+}): Promise<void> {
   const session = await requireCapability('stock.adjustStock');
   const supabase = await createClient();
   const { data: row, error } = await supabase
@@ -135,10 +194,17 @@ export async function adjustStockAction(input: { id: number; counted: number }):
     .single();
   if (error || !row) throw new Error('stock item not found');
   assertShopAccess(session, row.shop_id);
-  const { error: upErr } = await supabase
-    .from('stock')
-    .update({ qty: Number(input.counted) })
-    .eq('id', row.id);
+
+  // A count is absolute, and the difference against what the system held is
+  // the movement. `count_stock` reads that difference inside the statement
+  // (migration 0026) — a stock count used to overwrite the number and leave
+  // no record of what it corrected.
+  const { error: upErr } = await supabase.rpc('count_stock', {
+    p_id: row.id,
+    p_counted: Number(input.counted),
+    p_by_name: session.name,
+    p_note: input.note ?? '',
+  });
   if (upErr) throw upErr;
   revalidatePath('/stock');
 }
@@ -159,8 +225,17 @@ export async function withdrawAction(input: {
   assertShopAccess(session, row.shop_id);
 
   const qty = Number(input.qty);
+  /*
+    The item physically leaves the shelf now, so the stock moves now. The
+    approval that follows is a MANAGER REVIEWING it, not a gate the goods wait
+    behind — and rejecting it returns the stock (see decideWithdrawal).
+
+    `stock_id` is stored so that return finds the right row even if the product
+    is renamed in between; the old row recorded only the name.
+  */
   const { error: insErr } = await supabase.from('withdrawals').insert({
     item: row.name,
+    stock_id: row.id,
     shop_id: row.shop_id,
     qty,
     type: input.type,
@@ -170,10 +245,17 @@ export async function withdrawAction(input: {
   });
   if (insErr) throw insErr;
 
-  const { error: upErr } = await supabase
-    .from('stock')
-    .update({ qty: Math.max(0, row.qty - qty) })
-    .eq('id', row.id);
+  // NOT clamped at zero. Every other path already refused to clamp for the
+  // same reason: a negative figure means the shop counted wrong or missed a
+  // delivery, and a floor of zero makes that error permanent instead of
+  // visible.
+  const { error: upErr } = await supabase.rpc('move_stock', {
+    p_changes: [{ id: row.id, change: -qty }] as unknown as Json,
+    p_kind: 'เบิกใช้',
+    p_document_id: input.type,
+    p_by_name: session.name,
+    p_note: '',
+  });
   if (upErr) throw upErr;
   revalidatePath('/stock');
 }
@@ -240,6 +322,8 @@ export async function setFilmPriceAction(input: {
   position: string;
   carType: string;
   price: number;
+  /** '' or omitted = ราคากลางทุกสาขา (migration 0029). */
+  shop?: string;
 }): Promise<void> {
   // The film-price matrix is admin-only in the prototype (reference :3134).
   const session = await getSessionContext();
@@ -248,29 +332,203 @@ export async function setFilmPriceAction(input: {
   }
   const supabase = await createClient();
   const price = Number(input.price) || 0;
-  const { data: existing } = await supabase
+  // NULL means ราคากลาง for every branch; a shop id overrides it for that one
+  // (migration 0029). The same product legitimately sells for different money
+  // at different branches, and one shared row silently rewrote them all.
+  const shop = input.shop || null;
+  if (shop && !session.accessibleShopIds.includes(shop)) {
+    throw new Error('forbidden: shop out of scope');
+  }
+
+  const query = supabase
     .from('film_price_matrix')
     .select('id')
     .eq('category', input.category)
     .eq('product', input.product)
     .eq('position', input.position)
-    .eq('car_type', input.carType)
-    .maybeSingle();
+    .eq('car_type', input.carType);
+  const { data: existing } = await (
+    shop ? query.eq('shop_id', shop) : query.is('shop_id', null)
+  ).maybeSingle();
+  // Clearing a branch cell DROPS the override instead of storing 0, so the
+  // branch goes back to the ราคากลาง rather than quoting nothing. A blank
+  // ราคากลาง has no such fallback, so it is stored as written.
+  const clearing = Boolean(shop) && price <= 0;
   if (existing) {
-    const { error } = await supabase
-      .from('film_price_matrix')
-      .update({ price })
-      .eq('id', existing.id);
+    const { error } = clearing
+      ? await supabase.from('film_price_matrix').delete().eq('id', existing.id)
+      : await supabase.from('film_price_matrix').update({ price }).eq('id', existing.id);
     if (error) throw error;
-  } else {
+  } else if (!clearing) {
     const { error } = await supabase.from('film_price_matrix').insert({
       category: input.category,
       product: input.product,
       position: input.position,
       car_type: input.carType,
+      shop_id: shop,
       price,
     });
     if (error) throw error;
   }
+  revalidatePath('/stock');
+}
+
+/**
+ * แผนประกัน — the branch price list behind the ประกัน picker on a ticket.
+ *
+ * A plan is only ever a STARTING POINT: selling one copies its price and cover
+ * onto the policy (migration 0023), so editing a plan here changes what the next
+ * sale offers and nothing that has already been sold. That is why this can be a
+ * plain edit with no versioning.
+ *
+ * Gated on `stock.editDelete` — the same capability that lets someone change a
+ * product's price, which is the same kind of decision.
+ */
+export async function saveInsurancePlanAction(input: {
+  id?: number;
+  shop?: string | null;
+  name: string;
+  price: number;
+  bigPieces: number;
+  smallPieces: number;
+  months: number;
+  terms?: string;
+  active?: boolean;
+}): Promise<void> {
+  await requireCapability('stock.editDelete');
+  const supabase = await createClient();
+  const row = {
+    shop_id: input.shop || null,
+    name: input.name.trim(),
+    price: Number(input.price) || 0,
+    big_pieces: Number(input.bigPieces) || 0,
+    small_pieces: Number(input.smallPieces) || 0,
+    months: Number(input.months) || 0,
+    terms: input.terms?.trim() ?? '',
+    active: input.active ?? true,
+  };
+  const { error } = input.id
+    ? await supabase.from('insurance_plans').update(row).eq('id', input.id)
+    : await supabase.from('insurance_plans').insert(row);
+  if (error) throw error;
+  revalidatePath('/stock');
+  // The ticket's ประกัน picker reads this list.
+  revalidatePath('/tickets');
+}
+
+/** ลบแผนประกัน. Policies already sold keep their own copy, so nothing is lost. */
+export async function deleteInsurancePlanAction(id: number): Promise<void> {
+  await requireCapability('stock.editDelete');
+  const supabase = await createClient();
+  const { error } = await supabase.from('insurance_plans').delete().eq('id', id);
+  if (error) throw error;
+  revalidatePath('/stock');
+  revalidatePath('/tickets');
+}
+
+/**
+ * อนุมัติ / ไม่อนุมัติใบเบิก.
+ *
+ * The status pill existed from the start and nothing could ever change it — a
+ * withdrawal sat at "รออนุมัติ" for good. This is the decision it was waiting
+ * for.
+ *
+ * The goods already left the shelf when the withdrawal was recorded, so
+ * approving moves no stock. REJECTING does: it puts the quantity back and writes
+ * that return to the ledger, which is the only honest reading of "ไม่อนุมัติ" —
+ * the shop is saying the item should not have gone.
+ *
+ * Gated on `stock.approveWithdraw` (migration 0026), separate from
+ * `stock.withdraw`, so a หัวหน้าช่าง can take stock without signing off their
+ * own request.
+ */
+export async function decideWithdrawalAction(input: {
+  id: number;
+  approve: boolean;
+}): Promise<void> {
+  const session = await requireCapability('stock.approveWithdraw');
+  const supabase = await createClient();
+
+  const { data: row, error } = await supabase
+    .from('withdrawals')
+    .select('id, item, stock_id, shop_id, qty, status')
+    .eq('id', input.id)
+    .single();
+  if (error || !row) throw new Error('withdrawal not found');
+  assertShopAccess(session, row.shop_id);
+  // Deciding twice would return the stock twice. The first decision stands.
+  if (row.status !== 'รออนุมัติ') throw new Error('ใบเบิกนี้ตัดสินไปแล้ว');
+
+  const { error: upErr } = await supabase
+    .from('withdrawals')
+    .update({
+      status: input.approve ? 'อนุมัติแล้ว' : 'ไม่อนุมัติ',
+      decided_at: new Date().toISOString(),
+      decided_by: session.userId,
+    })
+    .eq('id', row.id)
+    // Re-checked in the WHERE as well as above: two managers pressing at once
+    // must not both get through.
+    .eq('status', 'รออนุมัติ');
+  if (upErr) throw upErr;
+
+  if (!input.approve && row.stock_id) {
+    const { error: moveErr } = await supabase.rpc('move_stock', {
+      p_changes: [{ id: row.stock_id, change: Number(row.qty) }] as unknown as Json,
+      p_kind: 'คืนจากใบเบิก',
+      p_document_id: String(row.id),
+      p_by_name: session.name,
+      p_note: 'ไม่อนุมัติใบเบิก',
+    });
+    if (moveErr) throw moveErr;
+  }
+
+  revalidatePath('/stock');
+}
+
+/**
+ * โอนสต็อกระหว่างสาขา.
+ *
+ * Moving stock between branches had no operation: the shop withdrew at one and
+ * added at the other, which left two unrelated records and let the goods arrive
+ * at a price somebody typed from memory. `transfer_stock` (migration 0028) does
+ * it as one act — FIFO out of the source, the same lots and the same unit costs
+ * in at the destination, both ends in the ledger pointing at each other.
+ *
+ * Gated on `stock.editDelete`: deciding that a branch's inventory belongs
+ * somewhere else is the same level of authority as changing a product, and it is
+ * already the manager-level key in this module.
+ *
+ * BOTH shops are re-checked against the caller's access. RLS would scope the
+ * reads, but the function writes to the destination too, and a caller must not
+ * be able to push stock into a branch they cannot see.
+ */
+export async function transferStockAction(input: {
+  id: number;
+  toShop: string;
+  qty: number;
+  note?: string;
+}): Promise<void> {
+  const session = await requireCapability('stock.editDelete');
+  const supabase = await createClient();
+
+  const { data: row, error } = await supabase
+    .from('stock')
+    .select('id, shop_id')
+    .eq('id', input.id)
+    .single();
+  if (error || !row) throw new Error('stock item not found');
+  assertShopAccess(session, row.shop_id);
+  assertShopAccess(session, input.toShop);
+
+  const { error: moveErr } = await supabase.rpc('transfer_stock', {
+    p_from_stock_id: row.id,
+    p_to_shop_id: input.toShop,
+    p_qty: Number(input.qty),
+    p_by_name: session.name,
+    p_note: input.note ?? '',
+  });
+  if (moveErr) throw moveErr;
+
   revalidatePath('/stock');
 }

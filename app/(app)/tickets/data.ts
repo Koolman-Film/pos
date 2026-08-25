@@ -5,6 +5,8 @@ import type {
   CarModel,
   CorporateBuyer,
   FilmPriceRow,
+  InsurancePlan,
+  InsurancePolicy,
   OptionListName,
   PriceMatrixRow,
   RetailCustomer,
@@ -176,7 +178,9 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
     supabase.from('stock').select('id, name, short_name, category, shop_id, qty, cost, sell_price'),
     supabase.from('car_models').select('model, brand, car_type'),
     supabase.from('price_matrix').select('car_type, product, price'),
-    supabase.from('film_price_matrix').select('category, product, position, car_type, price'),
+    supabase
+      .from('film_price_matrix')
+      .select('category, product, position, car_type, price, shop_id'),
     supabase.from('retail_customers').select('id, name, phone'),
     supabase.from('corporate_buyers').select('name, address, tax_id'),
     supabase
@@ -232,6 +236,7 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
       position: p.position,
       carType: p.car_type,
       price: Number(p.price || 0),
+      shop: p.shop_id ?? '',
     })),
     retailCustomers: (customersRes.data ?? []).map((c) => ({
       id: c.id,
@@ -299,6 +304,194 @@ type DetailRow = {
   }[];
 };
 
+type ServiceVisitRow = {
+  id: number;
+  visit_no: number;
+  plate: string;
+  received_at: string | null;
+  received_time: string;
+  delivered_at: string | null;
+  delivered_time: string;
+  sales_by: string;
+  qc_by: string;
+  technicians: string[] | null;
+  film_product: string;
+  customer_waits: boolean | null;
+  overall_ok: boolean | null;
+  checks: Record<string, string> | null;
+  notes: string;
+  service_visit_points: { seq: number; position: string; detail: string; note: string }[] | null;
+};
+
+/**
+ * The visits recorded against a ticket, plus how many this plate has had in
+ * total. Two queries because they answer two different questions: the ticket's
+ * own list drives "ครั้งที่ 2 / 10", the plate count drives "รถคันนี้เซอร์วิสไป
+ * กี่ครั้ง" across every job it has ever had.
+ */
+async function loadServiceVisits(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ticketId: string,
+  plate: string,
+): Promise<{ visits: Ticket['serviceVisits']; forPlate: number }> {
+  const { data } = await supabase
+    .from('service_visits')
+    .select(
+      'id, visit_no, plate, received_at, received_time, delivered_at, delivered_time, ' +
+        'sales_by, qc_by, technicians, film_product, ' +
+        'customer_waits, overall_ok, checks, notes, ' +
+        'service_visit_points(seq, position, detail, note)',
+    )
+    .eq('ticket_id', ticketId)
+    .order('visit_no', { ascending: false });
+
+  const visits = ((data ?? []) as unknown as ServiceVisitRow[]).map((v) => ({
+    id: v.id,
+    visitNo: v.visit_no,
+    plate: v.plate,
+    receivedAt: v.received_at ?? '',
+    receivedTime: v.received_time ?? '',
+    deliveredAt: v.delivered_at ?? '',
+    deliveredTime: v.delivered_time ?? '',
+    salesBy: v.sales_by ?? '',
+    qcBy: v.qc_by ?? '',
+    technicians: v.technicians ?? [],
+    filmProduct: v.film_product ?? '',
+    customerWaits: v.customer_waits,
+    overallOk: v.overall_ok,
+    checks: v.checks ?? {},
+    notes: v.notes ?? '',
+    points: (v.service_visit_points ?? [])
+      .map((p) => ({ seq: p.seq, position: p.position, detail: p.detail, note: p.note }))
+      .sort((a, b) => a.seq - b.seq),
+  }));
+
+  // A blank plate would count every other blank-plate ticket's visits as this
+  // car's, so it reports only what this ticket carries.
+  let forPlate = visits.length;
+  if (plate.trim()) {
+    const { count } = await supabase
+      .from('service_visits')
+      .select('id', { count: 'exact', head: true })
+      .eq('plate', plate);
+    forPlate = count ?? visits.length;
+  }
+  return { visits, forPlate };
+}
+
+type InsurancePolicyRow = {
+  id: number;
+  ticket_id: string;
+  plate: string;
+  plan_name: string;
+  price: number;
+  big_pieces: number;
+  small_pieces: number;
+  terms: string;
+  sold_at: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  notes: string;
+  insurance_claims:
+    | {
+        id: number;
+        claimed_at: string;
+        big_used: number;
+        small_used: number;
+        detail: string;
+        technician: string;
+      }[]
+    | null;
+};
+
+const POLICY_SELECT =
+  'id, ticket_id, plate, plan_name, price, big_pieces, small_pieces, terms, ' +
+  'sold_at, starts_at, ends_at, notes, ' +
+  'insurance_claims(id, claimed_at, big_used, small_used, detail, technician)';
+
+function toPolicy(p: InsurancePolicyRow): InsurancePolicy {
+  return {
+    id: p.id,
+    ticketId: p.ticket_id,
+    plate: p.plate ?? '',
+    planName: p.plan_name ?? '',
+    price: Number(p.price || 0),
+    bigPieces: Number(p.big_pieces || 0),
+    smallPieces: Number(p.small_pieces || 0),
+    terms: p.terms ?? '',
+    soldAt: p.sold_at ?? '',
+    startsAt: p.starts_at ?? '',
+    endsAt: p.ends_at ?? '',
+    notes: p.notes ?? '',
+    claims: (p.insurance_claims ?? [])
+      .map((c) => ({
+        id: c.id,
+        claimedAt: c.claimed_at ?? '',
+        bigUsed: Number(c.big_used || 0),
+        smallUsed: Number(c.small_used || 0),
+        detail: c.detail ?? '',
+        technician: c.technician ?? '',
+      }))
+      .sort((a, b) => (a.claimedAt < b.claimedAt ? 1 : -1)),
+  };
+}
+
+/**
+ * ประกันของใบงานนี้ และของรถคันนี้ทั้งหมด.
+ *
+ * Two reads for the same reason the service visits need two: the ticket owns
+ * the policies sold through it, but "รถคันนี้เคยทำประกันอะไรไว้" is a question
+ * about the CAR, and a car comes back on new tickets. A blank plate would match
+ * every other blank-plate ticket, so it falls back to this ticket alone.
+ */
+async function loadInsurance(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ticketId: string,
+  plate: string,
+): Promise<{ policies: InsurancePolicy[]; forPlate: InsurancePolicy[] }> {
+  const { data } = await supabase
+    .from('insurance_policies')
+    .select(POLICY_SELECT)
+    .eq('ticket_id', ticketId)
+    .order('sold_at', { ascending: false });
+  const policies = ((data ?? []) as unknown as InsurancePolicyRow[]).map(toPolicy);
+
+  if (!plate.trim()) return { policies, forPlate: policies };
+
+  const { data: byPlate } = await supabase
+    .from('insurance_policies')
+    .select(POLICY_SELECT)
+    .eq('plate', plate)
+    .order('sold_at', { ascending: false });
+  return {
+    policies,
+    forPlate: ((byPlate ?? []) as unknown as InsurancePolicyRow[]).map(toPolicy),
+  };
+}
+
+/** แผนประกันที่สาขานี้เลือกได้ — ทุกสาขา (shop_id null) บวกของสาขาเอง. */
+export async function loadInsurancePlans(shop?: string): Promise<InsurancePlan[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('insurance_plans')
+    .select('id, shop_id, name, price, big_pieces, small_pieces, months, terms, active')
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  return (data ?? [])
+    .filter((p) => !shop || p.shop_id == null || p.shop_id === shop)
+    .map((p) => ({
+      id: p.id,
+      shop: p.shop_id,
+      name: p.name,
+      price: Number(p.price || 0),
+      bigPieces: Number(p.big_pieces || 0),
+      smallPieces: Number(p.small_pieces || 0),
+      months: Number(p.months || 0),
+      terms: p.terms ?? '',
+      active: p.active,
+    }));
+}
+
 export async function loadTicket(id: string): Promise<Ticket | null> {
   const supabase = await createClient();
   const { data } = await supabase
@@ -319,6 +512,9 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
   const meta = (rawExtras.__meta as ExtraMeta) || {};
   const extras = { ...rawExtras };
   delete (extras as Record<string, unknown>).__meta;
+
+  const service = await loadServiceVisits(supabase, t.id, t.plate);
+  const insurance = await loadInsurance(supabase, t.id, t.plate);
 
   return {
     id: t.id,
@@ -343,6 +539,10 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     createdBy: meta.createdBy ?? '',
     qcPhotos: meta.qcPhotos ?? [],
     qcAlbumUrl: meta.qcAlbumUrl ?? '',
+    serviceVisits: service.visits,
+    serviceVisitsForPlate: service.forPlate,
+    insurancePolicies: insurance.policies,
+    insuranceForPlate: insurance.forPlate,
     installConfirmed: !!meta.installConfirmed,
     installConfirmedAt: meta.installConfirmedAt ?? '',
     locked: !!t.locked,
@@ -404,5 +604,7 @@ export function blankTicket(shop: string): Ticket {
     wrapOptions: [],
     qcPhotos: [],
     qcAlbumUrl: '',
+    serviceVisits: [],
+    serviceVisitsForPlate: 0,
   };
 }

@@ -7,11 +7,21 @@ import { fmt, fmtThaiDate, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
+import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } from './serviceForm';
 import { WRAP_CATEGORY, WRAP_OPTIONS } from './wrapOptions';
 
-import type { ShopInfo, StockRow, Ticket } from './types';
+import type {
+  InsuranceClaim,
+  InsurancePolicy,
+  ServiceVisit,
+  ShopInfo,
+  StockRow,
+  Ticket,
+} from './types';
+import { coverageText } from './detail/InsuranceSection';
 
-export type PrintMode = 'job' | 'sale' | 'offsite' | 'doc' | null;
+export type PrintMode =
+  'job' | 'sale' | 'offsite' | 'doc' | 'service' | 'insurance' | 'claim' | null;
 
 /**
  * The pre-installation inspection sheet (ใบตรวจเช็คสภาพก่อนติดตั้ง), ported
@@ -78,6 +88,43 @@ export const QC_CHECKLIST_SECTIONS: { title: string; items: string[] }[] = [
 const DOC_ACCENT = '#7A2333';
 
 /**
+ * Thai heading with its English underneath, for the financial documents.
+ *
+ * Thai stays the label — this is a Thai shop issuing a Thai receipt — and the
+ * English rides along smaller and greyer. A customer who needs the English is
+ * the one who cannot read the line above it, so it has to be there without
+ * competing with it.
+ */
+function bi(th: string, en: string) {
+  return (
+    <>
+      {th}
+      <span style={{ fontWeight: 'normal', fontSize: 9, color: '#6B6B6B' }}> / {en}</span>
+    </>
+  );
+}
+
+/**
+ * เลขที่เอกสาร prefix — RCT / INV / QT.
+ *
+ * Exported because the number that gets PRINTED and the number that gets
+ * RECORDED (migration 0024) have to be the same string; the customer quotes it
+ * back off the paper.
+ */
+export function docPrefixFor(docType: string): string {
+  if (docType === 'ใบเสนอราคา') return 'QT';
+  if (docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') return 'INV';
+  return 'RCT';
+}
+
+/** The document name in English, for the band under the Thai one. */
+function docTypeEn(docType: string): string {
+  if (docType === 'ใบเสนอราคา') return 'QUOTATION';
+  if (docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') return 'TAX INVOICE / RECEIPT';
+  return 'RECEIPT';
+}
+
+/**
  * "มัดจำ" reads as a noun on its own; the printed line wants the act of paying
  * it. The other two types are already phrased that way ("ชำระส่วนที่เหลือ"), so
  * only the ones that are not get the verb.
@@ -87,6 +134,29 @@ function paymentLabel(type: string): string {
   if (!label) return 'รับชำระ';
   return label.startsWith('ชำระ') ? label : `ชำระ${label}`;
 }
+
+/**
+ * The car outlines the technician marks up on the ใบเช็ครถ, in the order the
+ * paper form has them: interior, then both flanks, then rear and front.
+ *
+ * Extracted from the prototype, where they were three inline base64 PNGs
+ * totalling ~520KB — which is why the port dropped them for dashed placeholder
+ * boxes and left a note to re-add them as assets. As /public files reduced to a
+ * 32-colour palette they come to 84KB, and the browser caches them across every
+ * sheet printed instead of re-parsing them out of the bundle each time.
+ *
+ * `maxWidth` keeps each drawing at a sane size on a wide screen; the print sheet
+ * is narrow enough that `width: 100%` governs there.
+ */
+const WRAP_DIAGRAMS = [
+  { src: '/wrap/wrap-interior.png', alt: 'แผนผังภายในตัวรถ (คอนโซลหน้า)', maxWidth: 330 },
+  { src: '/wrap/wrap-body.png', alt: 'แผนผังตัวรถด้านข้าง ซ้าย (L) และขวา (R)', maxWidth: 300 },
+  {
+    src: '/wrap/wrap-exterior.png',
+    alt: 'แผนผังตัวรถด้านหลัง (B) และด้านหน้า (F)',
+    maxWidth: 330,
+  },
+] as const;
 
 /**
  * The ภายในตัวรถ grid on the ใบเช็ครถ — the interior parts a wrap job touches.
@@ -160,11 +230,10 @@ const stepBadge: CSSProperties = {
  * app shell and shows only `.print-area`. Guarded by a `mounted` state because
  * `document.body` only exists client-side.
  *
- * NOTE (judgment call): the prototype's wrap (ฟิล์มกันรอย) QC checklist embeds
- * three multi-hundred-KB base64 car-diagram images inline. Embedding those in a
- * client bundle would bloat it by ~600KB, so the diagram slots render as labeled
- * placeholder boxes here; the functional interior/exterior part-checklist tables
- * are ported verbatim. Flagged for human review — re-add as /public assets.
+ * The wrap (ฟิล์มกันรอย) sheet's three car diagrams were inline base64 in the
+ * prototype (~520KB), so the port left labelled placeholder boxes and a note to
+ * re-add them as assets. Done: they are /public/wrap PNGs now, palette-reduced
+ * to 84KB in total — see WRAP_DIAGRAMS.
  */
 export function PrintJobSheet({
   t,
@@ -182,6 +251,10 @@ export function PrintJobSheet({
   buyerAddress,
   showCompanyInfo,
   showDisclaimer,
+  serviceVisit = null,
+  insurancePolicy = null,
+  insuranceClaim = null,
+  technicianOptions = [],
 }: {
   t: Ticket;
   printMode: PrintMode;
@@ -198,6 +271,17 @@ export function PrintJobSheet({
   buyerAddress: string;
   showCompanyInfo: boolean;
   showDisclaimer: boolean;
+  /** The visit to print on the service sheet; null prints a blank one. */
+  serviceVisit?: ServiceVisit | null;
+  /** The policy behind a ใบเสร็จค่าประกัน or a ใบเคลมประกัน. */
+  insurancePolicy?: InsurancePolicy | null;
+  /**
+   * The claim being printed on a ใบเคลมประกัน. null prints a blank one — the
+   * sheet you carry to the car before anything is recorded.
+   */
+  insuranceClaim?: InsuranceClaim | null;
+  /** ทีมช่าง tick row — the shop's own list, not the paper form's old names. */
+  technicianOptions?: string[];
 }) {
   const mounted = useIsMounted();
   if (!mounted || !printMode) return null;
@@ -775,23 +859,39 @@ export function PrintJobSheet({
                 ))}
               </tbody>
             </table>
+            {/*
+              The shop's own car diagrams, back where they belong. They were
+              inline base64 in the prototype (three of them, ~520KB), so the port
+              left labelled dashed boxes in their place and flagged it. They live
+              in /public/wrap now, palette-reduced to 84KB all told, which is
+              what makes them cheap enough to ship.
+
+              Layout follows the paper form: the drawings run down the left, the
+              two part tables stack on the right. The L / R / B / F letters are
+              part of the artwork.
+            */}
             <div style={{ display: 'flex', gap: 14, marginBottom: 12, alignItems: 'flex-start' }}>
-              <div
-                style={{
-                  flex: 1,
-                  minHeight: 150,
-                  border: '1px dashed #999',
-                  borderRadius: 6,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10,
-                  color: '#999',
-                }}
-              >
-                แผนผังตัวรถ (สำหรับทำเครื่องหมายจุดที่ตรวจพบ)
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {WRAP_DIAGRAMS.map((d) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={d.src}
+                    src={d.src}
+                    alt={d.alt}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      maxWidth: d.maxWidth,
+                      marginBottom: 6,
+                    }}
+                  />
+                ))}
+                <p style={{ margin: '2px 0 0', fontSize: 9, color: '#555' }}>
+                  L = ซ้าย &middot; R = ขวา &middot; F = หน้า &middot; B = หลัง &middot;
+                  ทำเครื่องหมายบนภาพตรงจุดที่ตรวจพบ
+                </p>
               </div>
-              <div style={{ width: 200, flexShrink: 0 }}>
+              <div style={{ width: 210, flexShrink: 0 }}>
                 <p
                   style={{
                     fontSize: 12,
@@ -802,7 +902,7 @@ export function PrintJobSheet({
                 >
                   ภายในตัวรถ
                 </p>
-                <table style={{ fontSize: 10 }}>
+                <table style={{ fontSize: 10, marginBottom: 12 }}>
                   <tbody>
                     {WRAP_INTERIOR_PARTS.map(([left, right]) => (
                       <tr key={left}>
@@ -812,25 +912,6 @@ export function PrintJobSheet({
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 14, marginBottom: 16, alignItems: 'flex-start' }}>
-              <div
-                style={{
-                  flex: 1,
-                  minHeight: 150,
-                  border: '1px dashed #999',
-                  borderRadius: 6,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10,
-                  color: '#999',
-                }}
-              >
-                แผนผังตัวรถ (ด้านนอก)
-              </div>
-              <div style={{ flex: 1 }}>
                 <p
                   style={{
                     fontSize: 12,
@@ -841,7 +922,7 @@ export function PrintJobSheet({
                 >
                   ภายนอกตัวรถ
                 </p>
-                <table style={{ fontSize: 11, marginBottom: 10, width: 200 }}>
+                <table style={{ fontSize: 10 }}>
                   <tbody>
                     <tr>
                       <td>ล้อหน้าซ้าย</td>
@@ -1382,6 +1463,319 @@ export function PrintJobSheet({
         ></div>
       </div>
     );
+  } else if (printMode === 'service' || printMode === 'claim') {
+    /*
+      ใบเซอร์วิส ลูกค้าหน้าร้าน, following the shop's paper form.
+
+      `serviceVisit` null means a blank sheet: the header still comes from the
+      ticket (the car and customer are known either way), and everything the
+      technician fills in at the car is left empty to write on. With a visit it
+      prints the recorded answers instead — both ways of working, as asked.
+    */
+    const v = serviceVisit;
+    /*
+      ใบเคลมประกัน is the SAME sheet as the ใบเซอร์วิส — the technician does the
+      same walk-around and writes on the same boxes — with the cover printed at
+      the top so everyone can see what is left before anything is promised.
+      Building it as a second layout would have been two forms to keep in step.
+    */
+    const isClaim = printMode === 'claim';
+    const pol = insurancePolicy;
+    const usedBig = pol?.claims.reduce((n, c) => n + Number(c.bigUsed || 0), 0) ?? 0;
+    const usedSmall = pol?.claims.reduce((n, c) => n + Number(c.smallUsed || 0), 0) ?? 0;
+    const mark = (on: boolean) => (
+      <span
+        style={{
+          display: 'inline-block',
+          width: 13,
+          height: 13,
+          border: '1.5px solid #333',
+          borderRadius: 999,
+          textAlign: 'center',
+          lineHeight: '11px',
+          fontSize: 10,
+          fontWeight: 'bold',
+          flexShrink: 0,
+        }}
+      >
+        {on ? '✓' : ' '}
+      </span>
+    );
+    const line = (label: string, value: string, width: number) => (
+      <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+        {label}
+        <span
+          style={{
+            display: 'inline-block',
+            minWidth: width,
+            borderBottom: '1px solid #555',
+            fontWeight: 'bold',
+            paddingLeft: 3,
+          }}
+        >
+          {value || ' '}
+        </span>
+      </span>
+    );
+    const checkCell = (part: string) => (
+      <tr key={part}>
+        <td style={{ padding: '2px 6px' }}>{part}</td>
+        <td style={{ padding: '2px 6px', fontWeight: 'bold', width: 90 }}>
+          {v?.checks?.[part] || ' '}
+        </td>
+      </tr>
+    );
+
+    content = (
+      <div className="print-area">
+        <div className="print-page">
+          <h2 style={{ textAlign: 'center', margin: '0 0 10px', fontSize: 17 }}>
+            {isClaim ? 'ใบเคลมประกันฟิล์มกันรอย' : 'ใบเซอร์วิส ลูกค้าหน้าร้าน'}
+          </h2>
+          {isClaim ? (
+            <p style={{ textAlign: 'right', margin: '0 0 6px', fontSize: 11 }}>
+              ใบงาน {t.id}
+              {insuranceClaim?.claimedAt
+                ? ` · วันที่เคลม ${fmtThaiDate(new Date(insuranceClaim.claimedAt))}`
+                : ''}
+            </p>
+          ) : (
+            v && (
+              <p style={{ textAlign: 'right', margin: '0 0 6px', fontSize: 11 }}>
+                ครั้งที่ <b>{v.visitNo}</b> &middot; ใบงาน {t.id}
+              </p>
+            )
+          )}
+
+          <div style={{ fontSize: 11, display: 'flex', flexWrap: 'wrap', gap: '5px 18px' }}>
+            {line('ชื่อลูกค้า', t.customer, 150)}
+            {line('เบอร์โทร', t.phone, 110)}
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '5px 18px',
+              margin: '5px 0 10px',
+            }}
+          >
+            {line('ยี่ห้อรถ', t.brand, 90)}
+            {line('รุ่นรถ', t.model, 90)}
+            {line('สีรถ', t.color, 60)}
+            {line('ทะเบียน', t.plate, 90)}
+          </div>
+
+          {/* ข้อมูลประกัน. Boxed and ringed because it is the one thing on this
+              sheet that decides what the shop may do: how much cover is left,
+              and whether it has run out. */}
+          {isClaim && pol && (
+            <div
+              style={{
+                border: '1.5px solid #333',
+                borderRadius: 4,
+                padding: '6px 10px',
+                marginBottom: 8,
+                fontSize: 11,
+              }}
+            >
+              <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 'bold' }}>
+                ข้อมูลประกัน: {pol.planName || 'ประกันฟิล์มกันรอย'}
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px' }}>
+                {line('ความคุ้มครองทั้งหมด', coverageText(pol.bigPieces, pol.smallPieces), 150)}
+                {line('ใช้ไปแล้ว', `${usedBig} ชิ้นใหญ่, ${usedSmall} ชิ้นเล็ก`, 130)}
+                {line(
+                  'คงเหลือ',
+                  `${pol.bigPieces - usedBig} ชิ้นใหญ่, ${pol.smallPieces - usedSmall} ชิ้นเล็ก`,
+                  130,
+                )}
+                {line(
+                  'คุ้มครองถึง',
+                  pol.endsAt ? fmtThaiDate(new Date(`${pol.endsAt}T00:00:00`)) : '',
+                  110,
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px', marginTop: 4 }}>
+                {line(
+                  'เคลมครั้งนี้',
+                  insuranceClaim
+                    ? `${insuranceClaim.bigUsed} ชิ้นใหญ่, ${insuranceClaim.smallUsed} ชิ้นเล็ก`
+                    : '',
+                  150,
+                )}
+                {line('รายการที่เคลม', insuranceClaim?.detail ?? '', 260)}
+              </div>
+              {pol.terms && (
+                <p style={{ margin: '4px 0 0', fontSize: 10, color: '#555' }}>
+                  เงื่อนไข: {pol.terms}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ฟิล์มที่ใช้ — the ชื่อสินค้า, which already states the thickness.
+              The shop keeps one SKU per thickness, so a separate ประเภท /
+              ความหนา / รหัสสี row only asked for the same fact three times. */}
+          <table style={{ fontSize: 11, marginBottom: 8 }}>
+            <tbody>
+              <tr>
+                <td style={{ fontWeight: 'bold', fontSize: 13, width: 100 }}>ฟิล์มที่ใช้</td>
+                <td colSpan={7} style={{ fontWeight: 'bold' }}>
+                  {v?.filmProduct || ' '}
+                </td>
+              </tr>
+              <tr>
+                <td style={{ fontWeight: 'bold' }}>เซลล์รับรถ</td>
+                <td colSpan={2} style={{ fontWeight: 'bold' }}>
+                  {v?.salesBy || ' '}
+                </td>
+                <td colSpan={2} style={{ fontWeight: 'bold', textAlign: 'center' }}>
+                  QC ผู้รับผิดชอบ
+                </td>
+                <td colSpan={3} style={{ fontWeight: 'bold' }}>
+                  {v?.qcBy || ' '}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div
+            style={{
+              fontSize: 11,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '5px 16px',
+              marginBottom: 10,
+            }}
+          >
+            {line('วันรับรถ', v?.receivedAt ? fmtThaiDate(new Date(v.receivedAt)) : '', 100)}
+            {line('เวลารับรถ', v?.receivedTime ?? '', 60)}
+            {line('วันส่งมอบรถ', v?.deliveredAt ? fmtThaiDate(new Date(v.deliveredAt)) : '', 100)}
+            {line('เวลาส่งมอบรถ', v?.deliveredTime ?? '', 60)}
+          </div>
+
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            {/* Same drawings as the ใบเช็ครถ — the technician marks the car up
+                by hand here too, on either kind of sheet. */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {WRAP_DIAGRAMS.map((d) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={d.src}
+                  src={d.src}
+                  alt={d.alt}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    maxWidth: d.maxWidth,
+                    marginBottom: 6,
+                  }}
+                />
+              ))}
+              <p style={{ margin: '2px 0 0', fontSize: 9, color: '#555' }}>
+                L = ซ้าย &middot; R = ขวา &middot; F = หน้า &middot; B = หลัง
+              </p>
+            </div>
+
+            <div style={{ width: 230, flexShrink: 0 }}>
+              <table style={{ fontSize: 10, marginBottom: 10 }}>
+                <thead>
+                  <tr>
+                    <th colSpan={2} style={{ textAlign: 'center' }}>
+                      ภายในรถ
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>{SERVICE_INTERIOR_PARTS.map(checkCell)}</tbody>
+              </table>
+              <table style={{ fontSize: 10, marginBottom: 10 }}>
+                <thead>
+                  <tr>
+                    <th colSpan={2} style={{ textAlign: 'center' }}>
+                      ภายนอกรถ
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>{SERVICE_EXTERIOR_PARTS.map(checkCell)}</tbody>
+              </table>
+
+              <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 'bold' }}>
+                เช็คสภาพงาน รอบคัน
+                {v?.overallOk === true ? ' — ปกติ' : v?.overallOk === false ? ' — พบปัญหา' : ''}
+              </p>
+              <p
+                style={{
+                  margin: '0 0 8px',
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                ลูกค้า {mark(v?.customerWaits === true)} รอ {mark(v?.customerWaits === false)} ไม่รอ
+              </p>
+
+              <table style={{ fontSize: 9 }}>
+                <thead>
+                  <tr>
+                    <th colSpan={4} style={{ textAlign: 'center' }}>
+                      จุดพิเศษลูกค้าต้องการแก้ไข
+                    </th>
+                  </tr>
+                  <tr>
+                    <th style={{ width: 22 }}>จุด</th>
+                    <th>ตำแหน่ง</th>
+                    <th>รายละเอียด</th>
+                    <th>หมายเหตุ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: SERVICE_POINT_ROWS }, (_, i) => i + 1).map((seq) => {
+                    const p = v?.points?.find((x) => x.seq === seq);
+                    return (
+                      <tr key={seq}>
+                        <td style={{ textAlign: 'center' }}>{seq}.</td>
+                        <td>{p?.position || ' '}</td>
+                        <td>{p?.detail || ' '}</td>
+                        <td>{p?.note || ' '}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ทีมช่าง — the shop's own technician list, not the seven names the
+              paper form was printed with years ago. */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: '6px 16px',
+              marginTop: 10,
+              fontSize: 12,
+            }}
+          >
+            <span style={{ fontWeight: 'bold' }}>ทีมช่าง :</span>
+            {technicianOptions.map((name) => (
+              <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                {mark(!!v?.technicians?.includes(name))}
+                {name}
+              </span>
+            ))}
+          </div>
+
+          {v?.notes && (
+            <p style={{ margin: '8px 0 0', fontSize: 11 }}>
+              <b>หมายเหตุ:</b> {v.notes}
+            </p>
+          )}
+        </div>
+      </div>
+    );
   } else if (printMode === 'doc') {
     // Every row's price BEFORE its discount, so "ส่วนลดรวม" has something to be
     // subtracted from — `total` is already net.
@@ -1391,14 +1785,13 @@ export function PrintJobSheet({
     const totalDiscount = grossTotal - total;
     const isTaxInvoice = docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
     const isQuotation = docType === 'ใบเสนอราคา';
-    const docPrefix = isQuotation ? 'QT' : isTaxInvoice ? 'INV' : 'RCT';
-    // Tick boxes for the shop's own channels, ticked from what was actually
-    // received. A channel used once but since removed from the shop's list still
-    // shows, otherwise the document would claim money arrived by nothing.
-    const usedMethods = new Set(receivedPayments.map((p) => p.method).filter(Boolean));
-    const channels = [
-      ...new Set([...(info.paymentChannels ?? []).filter(Boolean), ...usedMethods]),
-    ];
+    const docPrefix = docPrefixFor(docType);
+    // Only the channels money actually arrived by, in the order it arrived.
+    // The shop's full list used to print with empty boxes beside the unused
+    // ones, which is a form to fill in — a receipt records what happened. Read
+    // off the payments rather than the shop's configured list, so a channel
+    // dropped from จัดการสิทธิ์ after the fact still appears on the old receipt.
+    const usedChannels = [...new Set(receivedPayments.map((p) => p.method).filter(Boolean))];
 
     // One row per product, with the positions it covers folded into a quantity.
     const lines = t.items
@@ -1430,7 +1823,7 @@ export function PrintJobSheet({
         ];
       });
 
-    const totalRow = (label: string, value: string, strong = false) => (
+    const totalRow = (label: React.ReactNode, value: string, strong = false) => (
       <div
         style={{
           display: 'flex',
@@ -1455,50 +1848,81 @@ export function PrintJobSheet({
         <div className="print-page">
           {/* The title band. The sample the shop brought in leads with the
               document's name rather than the shop's, which is also what makes a
-              receipt findable in a stack of them. */}
+              receipt findable in a stack of them.
+
+              Three columns so the band keeps its place in the middle of the
+              page while shrinking to the width of the title: an empty column
+              balances the เลขที่ / วันที่ block on the right. A band stretched
+              across the full width made the title look like a section heading
+              rather than the name of the document. */}
           <div
             style={{
-              background: DOC_ACCENT,
-              color: '#fff',
-              borderRadius: 6,
-              padding: '10px 16px',
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: 12,
               marginBottom: 14,
-              textAlign: 'center',
             }}
-            className="doc-band"
           >
-            <p style={{ margin: 0, fontSize: 20, fontWeight: 'bold', letterSpacing: 0.5 }}>
-              {docType}
-            </p>
-            {/* Own line each, under the title. Run together on one line they
+            <div style={{ flex: 1 }} />
+            <div
+              style={{
+                background: DOC_ACCENT,
+                color: '#fff',
+                borderRadius: 6,
+                padding: '8px 22px',
+                textAlign: 'center',
+              }}
+              className="doc-band"
+            >
+              <p style={{ margin: 0, fontSize: 20, fontWeight: 'bold', letterSpacing: 0.5 }}>
+                {docType}
+              </p>
+              <p style={{ margin: '1px 0 0', fontSize: 10, letterSpacing: 1.5, opacity: 0.9 }}>
+                {docTypeEn(docType)}
+              </p>
+            </div>
+            {/* Own line each, off to the right. Run together on one line they
                 read as a single reference and the eye has to split them; the
                 number is what gets quoted on the phone. */}
-            <p style={{ margin: '4px 0 0', fontSize: 12 }}>
-              {/* The ticket id already carries the shop — JT-CM-00216. Prefixing
-                  t.shop again printed RCT-CM-CM-00216 on every document. */}
-              เลขที่เอกสาร: {docPrefix}-{t.id.replace('JT-', '')}
-            </p>
-            <p style={{ margin: '1px 0 0', fontSize: 12 }}>
-              วันที่เอกสาร: {fmtThaiDate(new Date())}
-            </p>
+            <div style={{ flex: 1, textAlign: 'right' }}>
+              <p style={{ margin: 0, fontSize: 12 }}>
+                {/* The ticket id already carries the shop — JT-CM-00216. Prefixing
+                    t.shop again printed RCT-CM-CM-00216 on every document. */}
+                {bi('เลขที่เอกสาร', 'No.')}: {docPrefix}-{t.id.replace('JT-', '')}
+              </p>
+              <p style={{ margin: '2px 0 0', fontSize: 12 }}>
+                {bi('วันที่เอกสาร', 'Date')}: {fmtThaiDate(new Date())}
+              </p>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 20, marginBottom: 14, fontSize: 11 }}>
             <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>ข้อมูลลูกค้า :</p>
+              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>
+                {bi('ข้อมูลลูกค้า', 'Customer')} :
+              </p>
               <p style={{ margin: 0, fontWeight: 'bold' }}>{buyerName || t.customer}</p>
               {isTaxInvoice && buyerAddress && <p style={{ margin: '2px 0 0' }}>{buyerAddress}</p>}
               {isTaxInvoice && buyerTaxId && (
-                <p style={{ margin: '2px 0 0' }}>เลขผู้เสียภาษี {buyerTaxId}</p>
+                <p style={{ margin: '2px 0 0' }}>
+                  {bi('เลขผู้เสียภาษี', 'Tax ID')} {buyerTaxId}
+                </p>
               )}
-              {t.phone && <p style={{ margin: '2px 0 0' }}>โทร {t.phone}</p>}
+              {t.phone && (
+                <p style={{ margin: '2px 0 0' }}>
+                  {bi('โทร', 'Tel')} {t.phone}
+                </p>
+              )}
               <p style={{ margin: '2px 0 0' }}>
-                รถ: {t.brand} {t.model} &middot; {t.plate}
+                {bi('รถ', 'Vehicle')}: {t.brand} {t.model} &middot; {t.plate}
               </p>
             </div>
             <div style={{ flex: 1, textAlign: 'right' }}>
               <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>
-                {isQuotation ? 'ผู้เสนอราคา :' : 'ผู้ออกใบเสร็จรับเงิน :'}
+                {isQuotation
+                  ? bi('ผู้เสนอราคา', 'Issued by')
+                  : bi('ผู้ออกใบเสร็จรับเงิน', 'Issued by')}{' '}
+                :
               </p>
               {/*
                 Branch first, legal entity under it. The customer knows the shop
@@ -1511,9 +1935,15 @@ export function PrintJobSheet({
                 <p style={{ margin: '2px 0 0' }}>{info.companyName}</p>
               )}
               {info.address && <p style={{ margin: '2px 0 0' }}>{info.address}</p>}
-              {info.phone && <p style={{ margin: '2px 0 0' }}>โทร {info.phone}</p>}
+              {info.phone && (
+                <p style={{ margin: '2px 0 0' }}>
+                  {bi('โทร', 'Tel')} {info.phone}
+                </p>
+              )}
               {showCompanyInfo && info.taxId && (
-                <p style={{ margin: '2px 0 0' }}>เลขผู้เสียภาษี {info.taxId}</p>
+                <p style={{ margin: '2px 0 0' }}>
+                  {bi('เลขผู้เสียภาษี', 'Tax ID')} {info.taxId}
+                </p>
               )}
             </div>
           </div>
@@ -1521,10 +1951,24 @@ export function PrintJobSheet({
           <table style={{ marginBottom: 12, fontSize: 11 }} className="doc-table">
             <thead>
               <tr>
-                <th style={{ width: 50, textAlign: 'center' }}>จำนวน</th>
-                <th>รายการ</th>
-                <th style={{ width: 100, textAlign: 'right' }}>ราคา</th>
-                <th style={{ width: 100, textAlign: 'right' }}>ยอดรวม</th>
+                {/* The English sits under each heading rather than beside it:
+                    the จำนวน column is 50px wide and a slash would wrap it. */}
+                <th style={{ width: 50, textAlign: 'center' }}>
+                  จำนวน
+                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Qty</div>
+                </th>
+                <th>
+                  รายการ
+                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Description</div>
+                </th>
+                <th style={{ width: 100, textAlign: 'right' }}>
+                  ราคา
+                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Unit Price</div>
+                </th>
+                <th style={{ width: 100, textAlign: 'right' }}>
+                  ยอดรวม
+                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Amount</div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1552,11 +1996,13 @@ export function PrintJobSheet({
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
             <div style={{ width: 260 }}>
-              {totalDiscount > 0 && totalRow('ยอดรวม', fmt(grossTotal))}
-              {totalDiscount > 0 && totalRow('ส่วนลดรวม', `-${fmt(totalDiscount)}`)}
-              {isTaxInvoice && totalRow('มูลค่าก่อนภาษี', fmt(total / 1.07))}
-              {isTaxInvoice && totalRow('ภาษีมูลค่าเพิ่ม 7%', fmt(total - total / 1.07))}
-              {totalRow('ยอดรวมสุทธิ', fmt(total), true)}
+              {totalDiscount > 0 && totalRow(bi('ยอดรวม', 'Subtotal'), fmt(grossTotal))}
+              {totalDiscount > 0 && totalRow(bi('ส่วนลดรวม', 'Discount'), `-${fmt(totalDiscount)}`)}
+              {isTaxInvoice &&
+                totalRow(bi('มูลค่าก่อนภาษี', 'Amount before VAT'), fmt(total / 1.07))}
+              {isTaxInvoice &&
+                totalRow(bi('ภาษีมูลค่าเพิ่ม 7%', 'VAT 7%'), fmt(total - total / 1.07))}
+              {totalRow(bi('ยอดรวมสุทธิ', 'Grand Total'), fmt(total), true)}
               <p
                 style={{
                   margin: '4px 0 0',
@@ -1571,20 +2017,33 @@ export function PrintJobSheet({
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', marginBottom: 12 }}>
+          {/*
+            2:1, not 50/50. A channel here is the shop's full deposit line —
+            "ธนาคารกสิกรไทย เลขบัญชี 236-1-38053-6 ชื่อบัญชี หจก.คูลมาน ลำปาง" —
+            and half a page wrapped it across three lines. The signature needs a
+            line and two words; the money needs the room.
+          */}
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', marginBottom: 12 }}>
             {!isQuotation && (
               <div
                 style={{
-                  flex: 1,
+                  flex: 2,
                   border: '1px solid #666',
                   borderRadius: 6,
                   padding: '8px 10px',
                   fontSize: 11,
                 }}
               >
-                <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>ช่องทางการชำระเงิน</p>
+                <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>
+                  {bi('ช่องทางการชำระเงิน', 'Payment Method')}
+                </p>
+                {/*
+                  Only the channels the money actually came in by. Printing the
+                  shop's whole list with empty boxes beside it said nothing —
+                  a receipt records what happened, it is not a form to fill in.
+                */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
-                  {channels.map((m) => (
+                  {usedChannels.map((m) => (
                     <span key={m} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                       <span
                         style={{
@@ -1597,9 +2056,10 @@ export function PrintJobSheet({
                           lineHeight: '11px',
                           fontSize: 11,
                           fontWeight: 'bold',
+                          flexShrink: 0,
                         }}
                       >
-                        {usedMethods.has(m) ? '✓' : ' '}
+                        ✓
                       </span>
                       {m}
                     </span>
@@ -1607,7 +2067,7 @@ export function PrintJobSheet({
                 </div>
                 {receivedPayments.length > 0 && (
                   <p style={{ margin: '6px 0 0', fontSize: 10, fontWeight: 'bold' }}>
-                    รายละเอียดการชำระเงิน
+                    {bi('รายละเอียดการชำระเงิน', 'Payment Details')}
                   </p>
                 )}
                 {receivedPayments.map((p, pi) => (
@@ -1618,7 +2078,13 @@ export function PrintJobSheet({
                   </p>
                 ))}
                 <p style={{ margin: '5px 0 0', fontWeight: 'bold' }}>
-                  {total - paid <= 0 ? 'ชำระครบแล้ว' : `คงเหลือ ${fmt(total - paid)} บาท`}
+                  {total - paid <= 0 ? (
+                    bi('ชำระครบแล้ว', 'Paid in full')
+                  ) : (
+                    <>
+                      {bi('คงเหลือ', 'Balance due')} {fmt(total - paid)} บาท
+                    </>
+                  )}
                 </p>
               </div>
             )}
@@ -1627,11 +2093,11 @@ export function PrintJobSheet({
                   the header already says — and the person signing is a member of
                   staff, not the company. */}
               <p style={{ margin: '26px 0 0' }}>
-                ลงชื่อ .............................................
+                {bi('ลงชื่อ', 'Signature')} .............................................
               </p>
               <p style={{ margin: '4px 0 0' }}>
-                {isQuotation ? 'ผู้เสนอราคา' : 'ผู้รับเงิน'} &middot; วันที่{' '}
-                {fmtThaiDate(new Date())}
+                {isQuotation ? bi('ผู้เสนอราคา', 'Quoted by') : bi('ผู้รับเงิน', 'Received by')}{' '}
+                &middot; {bi('วันที่', 'Date')} {fmtThaiDate(new Date())}
               </p>
             </div>
           </div>
@@ -1652,6 +2118,149 @@ export function PrintJobSheet({
               ยกเว้นความเสียหายอยู่ในการรับประกันสินค้า
             </p>
           )}
+        </div>
+      </div>
+    );
+  } else if (printMode === 'insurance' && insurancePolicy) {
+    /*
+      ใบเสร็จค่าประกัน — its own receipt, because a policy is its own sale.
+
+      ประกัน is not on the ticket’s ใบเสร็จ whenever it was bought: with the
+      install or a year later, the money belongs to the day the policy was
+      sold, and one document per sale is what keeps that straight. Same band
+      and same layout as the financial document, so a customer holding both
+      recognises them as coming from the same shop.
+    */
+    const v = insurancePolicy;
+    const usedBig = v.claims.reduce((n, c) => n + Number(c.bigUsed || 0), 0);
+    const usedSmall = v.claims.reduce((n, c) => n + Number(c.smallUsed || 0), 0);
+    const row = (label: string, value: string) => (
+      <tr>
+        <td style={{ padding: '4px 8px', width: 150, fontWeight: 'bold' }}>{label}</td>
+        <td style={{ padding: '4px 8px' }}>{value || ' '}</td>
+      </tr>
+    );
+
+    content = (
+      <div className="print-area">
+        <div className="print-page">
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 14 }}>
+            <div style={{ flex: 1 }} />
+            <div
+              style={{
+                background: DOC_ACCENT,
+                color: '#fff',
+                borderRadius: 6,
+                padding: '8px 22px',
+                textAlign: 'center',
+              }}
+              className="doc-band"
+            >
+              <p style={{ margin: 0, fontSize: 20, fontWeight: 'bold', letterSpacing: 0.5 }}>
+                ใบเสร็จค่าประกัน
+              </p>
+            </div>
+            <div style={{ flex: 1, textAlign: 'right' }}>
+              <p style={{ margin: 0, fontSize: 12 }}>
+                {bi('เลขที่เอกสาร', 'No.')}: INS-{t.id.replace('JT-', '')}
+                {v.id ? `-${v.id}` : ''}
+              </p>
+              <p style={{ margin: '2px 0 0', fontSize: 12 }}>
+                {bi('วันที่เอกสาร', 'Date')}:{' '}
+                {v.soldAt ? fmtThaiDate(new Date(v.soldAt)) : fmtThaiDate(new Date())}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 20, marginBottom: 14, fontSize: 11 }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>ข้อมูลลูกค้า :</p>
+              <p style={{ margin: 0, fontWeight: 'bold' }}>{t.customer}</p>
+              {t.phone && <p style={{ margin: '2px 0 0' }}>โทร {t.phone}</p>}
+              <p style={{ margin: '2px 0 0' }}>
+                รถ: {t.brand} {t.model} &middot; {v.plate || t.plate}
+              </p>
+            </div>
+            <div style={{ flex: 1, textAlign: 'right' }}>
+              <p style={{ margin: '0 0 3px', fontWeight: 'bold', fontSize: 12 }}>ผู้ออกใบเสร็จ :</p>
+              <p style={{ margin: 0, fontWeight: 'bold' }}>{shopName(t.shop)}</p>
+              {info.address && <p style={{ margin: '2px 0 0' }}>{info.address}</p>}
+              {info.phone && <p style={{ margin: '2px 0 0' }}>โทร {info.phone}</p>}
+            </div>
+          </div>
+
+          <table style={{ fontSize: 11, marginBottom: 12 }}>
+            <tbody>
+              {row('แผนประกัน', v.planName || 'ประกันฟิล์มกันรอย')}
+              {row('ความคุ้มครอง', coverageText(v.bigPieces, v.smallPieces))}
+              {row(
+                'ระยะเวลาคุ้มครอง',
+                `${v.startsAt ? fmtThaiDate(new Date(v.startsAt)) : '-'} ถึง ${
+                  v.endsAt ? fmtThaiDate(new Date(v.endsAt)) : '-'
+                }`,
+              )}
+              {row('ใบงานอ้างอิง', t.id)}
+              {v.terms ? row('เงื่อนไข', v.terms) : null}
+              {v.notes ? row('หมายเหตุ', v.notes) : null}
+            </tbody>
+          </table>
+
+          <div
+            className="doc-total"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              background: DOC_ACCENT,
+              color: '#fff',
+              padding: '6px 10px',
+              borderRadius: 4,
+              fontSize: 13,
+              fontWeight: 'bold',
+              marginBottom: 14,
+            }}
+          >
+            <span>ยอดชำระค่าประกัน</span>
+            <span>{fmt(v.price)}</span>
+          </div>
+
+          {/* The claims already written against this policy, so the copy in the
+              customer’s folder says what is left of the cover. */}
+          {v.claims.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 'bold' }}>
+                {bi('ประวัติการเคลม', 'Claim History')}
+              </p>
+              <table style={{ fontSize: 11 }}>
+                <tbody>
+                  {v.claims.map((c, i) => (
+                    <tr key={i}>
+                      <td style={{ padding: '3px 8px', width: 110 }}>
+                        {c.claimedAt ? fmtThaiDate(new Date(c.claimedAt)) : '-'}
+                      </td>
+                      <td style={{ padding: '3px 8px' }}>{c.detail || '-'}</td>
+                      <td style={{ padding: '3px 8px', width: 150 }}>
+                        {c.bigUsed} ชิ้นใหญ่, {c.smallUsed} ชิ้นเล็ก
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{ margin: '4px 0 0', fontSize: 11, fontWeight: 'bold' }}>
+                {bi('คงเหลือ', 'Remaining')} {v.bigPieces - usedBig} ชิ้นใหญ่,{' '}
+                {v.smallPieces - usedSmall} ชิ้นเล็ก
+              </p>
+            </div>
+          )}
+
+          <div style={{ textAlign: 'right', fontSize: 11, marginTop: 24 }}>
+            <p style={{ margin: 0 }}>
+              {bi('ลงชื่อ', 'Signature')} .............................................
+            </p>
+            <p style={{ margin: '4px 0 0' }}>
+              {bi('ผู้รับเงิน', 'Received by')} &middot; {bi('วันที่', 'Date')}{' '}
+              {v.soldAt ? fmtThaiDate(new Date(v.soldAt)) : fmtThaiDate(new Date())}
+            </p>
+          </div>
         </div>
       </div>
     );

@@ -7,6 +7,7 @@ import type {
   CarModel,
   CorporateBuyer,
   FilmPriceRow,
+  InsurancePlan,
   OptionListName,
   PriceMatrixRow,
   RetailCustomer,
@@ -42,6 +43,15 @@ export function TicketDetailClient({
   deleteAction,
   unlockAction,
   attachmentUrlAction,
+  corporateBuyerAction,
+  carModelAction,
+  extrasAction,
+  serviceVisitAction,
+  serviceVisitDeleteAction,
+  insurancePlans,
+  insuranceAction,
+  insuranceDeleteAction,
+  documentAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -65,6 +75,44 @@ export function TicketDetailClient({
   deleteAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
   unlockAction?: (ticketId: string) => Promise<{ ok: boolean; error?: string }>;
   attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
+  corporateBuyerAction?: (input: {
+    name: string;
+    address: string;
+    taxId: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  carModelAction?: (input: {
+    model: string;
+    brand: string;
+    carType: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  extrasAction?: (input: {
+    ticketId: string;
+    extras: Record<string, unknown>;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  serviceVisitAction?: (input: {
+    id?: number;
+    ticketId: string;
+    visit: Record<string, unknown>;
+    points: { seq: number; position: string; detail: string; note: string }[];
+  }) => Promise<{ ok: boolean; error?: string; id?: number }>;
+  serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  insurancePlans?: InsurancePlan[];
+  insuranceAction?: (input: {
+    id?: number;
+    ticketId: string;
+    policy: Record<string, unknown>;
+    claims: Record<string, unknown>[];
+  }) => Promise<{ ok: boolean; error?: string; id?: number }>;
+  insuranceDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  documentAction?: (input: {
+    ticketId: string;
+    docType: string;
+    docNo: string;
+    buyerName: string;
+    buyerTaxId: string;
+    buyerAddress: string;
+    amount: number;
+  }) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -88,6 +136,15 @@ export function TicketDetailClient({
       deleteAction={deleteAction}
       unlockAction={unlockAction}
       attachmentUrlAction={attachmentUrlAction}
+      corporateBuyerAction={corporateBuyerAction}
+      carModelAction={carModelAction}
+      extrasAction={extrasAction}
+      serviceVisitAction={serviceVisitAction}
+      serviceVisitDeleteAction={serviceVisitDeleteAction}
+      insurancePlans={insurancePlans}
+      insuranceAction={insuranceAction}
+      insuranceDeleteAction={insuranceDeleteAction}
+      documentAction={documentAction}
     />
   );
 }

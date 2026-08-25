@@ -61,6 +61,7 @@ export function WholesaleDetail({
   onMarkBadDebt,
   onSaveCustomer,
   onBack,
+  updateOptionListAction,
 }: {
   order: WsOrder;
   /**
@@ -90,10 +91,23 @@ export function WholesaleDetail({
     phone: string;
     address: string;
   }) => Promise<number> | number;
+  /**
+   * Persists วิธีชำระเงิน. Without it the picker only edits React state, so a
+   * method added here was gone on the next load.
+   */
+  updateOptionListAction?: (
+    listKey: string,
+    values: string[],
+  ) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const can = canDo ?? ((k: string) => !!caps?.[k]);
   const [o, setO] = useState<WsOrder>(order);
-  const [methods, setMethods] = useState<string[]>(paymentMethods);
+  const [methods, setMethodsState] = useState<string[]>(paymentMethods);
+  /** Optimistic locally, persisted through the shared option-list action. */
+  function setMethods(next: string[]) {
+    setMethodsState(next);
+    void updateOptionListAction?.('payment_methods', next);
+  }
   const mounted = useIsMounted();
   const [printMode, setPrintMode] = useState<'invoice' | 'receipt' | null>(null);
 

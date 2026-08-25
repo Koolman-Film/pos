@@ -3,7 +3,15 @@ import { redirect } from 'next/navigation';
 import { TicketDetailClient } from '@/components/tickets/TicketDetailClient';
 import { getSessionContext } from '@/lib/auth/session';
 
-import { getTicketAttachmentUrl, saveTicket, updateOptionList } from '../actions';
+import {
+  getTicketAttachmentUrl,
+  deleteServiceVisit,
+  saveCarModel,
+  saveCorporateBuyer,
+  saveServiceVisit,
+  saveTicket,
+  updateOptionList,
+} from '../actions';
 import { blankTicket, loadDetailRegistries, loadShops, loadStatuses } from '../data';
 
 export default async function NewTicketPage({
@@ -58,6 +66,10 @@ export default async function NewTicketPage({
       saveAction={saveTicket}
       optionAction={updateOptionList}
       attachmentUrlAction={getTicketAttachmentUrl}
+      corporateBuyerAction={saveCorporateBuyer}
+      carModelAction={saveCarModel}
+      serviceVisitAction={saveServiceVisit}
+      serviceVisitDeleteAction={deleteServiceVisit}
     />
   );
 }

@@ -4,6 +4,8 @@ import { useState } from 'react';
 
 import { TimeSelect } from '@/components/ui/TimeSelect';
 
+import { findProductStock } from '../serviceForm';
+
 import type { StockRow, Ticket, TicketExtra } from '../types';
 
 type SlideLeg = { from?: string; to?: string; date?: string; time?: string };
@@ -20,6 +22,8 @@ export function ExtrasSection({
   setSlideType,
   updateSlideLeg,
   shareLink,
+  insurance,
+  serviceVisits,
 }: {
   t: Ticket;
   extraOptions: string[];
@@ -31,6 +35,22 @@ export function ExtrasSection({
   setSlideType: (st: string) => void;
   updateSlideLeg: (legIdx: number, key: string, val: unknown) => void;
   shareLink: (link?: string) => void;
+  /**
+   * Renders the service-visit record inside the Service extra. A render prop so
+   * this component stays a pure form and does not need the ticket actions.
+   */
+  /**
+   * Renders the ประกัน record inside the ประกัน extra. Same shape as
+   * `serviceVisits`: a render prop keeps this component a pure form.
+   */
+  insurance?: () => React.ReactNode;
+  serviceVisits?: (args: {
+    entitled: number;
+    /** ชื่อสินค้าฟิล์มที่ขาย — the SKU name already states the thickness. */
+    filmProduct: string;
+    /** ช่างที่รับผิดชอบหมวดฟิล์มกันรอย — seeds ทีมช่าง on a new visit. */
+    assignedTechnicians: string[];
+  }) => React.ReactNode;
 }) {
   const [showOptional, setShowOptional] = useState(false);
   const [addingExtra, setAddingExtra] = useState(false);
@@ -59,7 +79,7 @@ export function ExtrasSection({
           const ex: TicketExtra = t.extras?.[name] || {};
           if (!showOptional && !ex.checked) return null;
           const wrapItem = t.items.find((i) => i.category === 'ฟิล์มกันรอย' && i.sold);
-          const wrapStock = wrapItem ? stock.find((s) => s.name === wrapItem.sold) : null;
+          const wrapStock = wrapItem ? findProductStock(stock, wrapItem.sold) : null;
           const legs = (ex.legs as SlideLeg[]) || [];
           return (
             <div key={name} className="mb-3 group">
@@ -82,18 +102,7 @@ export function ExtrasSection({
                   <i className="fa-solid fa-trash"></i>
                 </button>
               </div>
-              {/* #3F6B33 below, rather than the #4C7A3E used for figures
-                  elsewhere: this line sits on a section fill, where #4C7A3E
-                  measures 4.35:1 on the tech tone and 4.44:1 on the document
-                  tone — just under AA. #3F6B33 is already
-                  SECTION_TONES.payment.ink, so it is the same green the form is
-                  built from, at 5.39:1 worst case. */}
-              {ex.checked && name === 'ประกัน' && (
-                <p className="text-xs mt-1.5 ml-6" style={{ color: '#3F6B33' }}>
-                  <i className="fa-solid fa-circle-check mr-1.5"></i>เพิ่มรายการ &quot;ประกัน&quot;
-                  ในสินค้า/การติดตั้งให้อัตโนมัติแล้ว
-                </p>
-              )}
+              {ex.checked && name === 'ประกัน' && insurance && insurance()}
               {ex.checked && name === 'นอกสถานที่' && (
                 <div className="mt-2 ml-6 flex flex-col gap-2">
                   <input
@@ -230,7 +239,7 @@ export function ExtrasSection({
                   {wrapItem ? (
                     <>
                       <p className="text-xs mb-2" style={{ color: 'var(--ink-soft)' }}>
-                        สินค้า: {wrapItem.sold}
+                        สินค้า: {wrapStock?.name ?? wrapItem.sold}
                       </p>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -267,6 +276,19 @@ export function ExtrasSection({
                       เพิ่มก่อนเพื่อดึงข้อมูลบริการ
                     </p>
                   )}
+                  {/*
+                    The visits themselves. Above this point the ticket only says
+                    how many were SOLD; this is the record of the ones that
+                    happened — which is what "รถคันนี้เซอร์วิสไปกี่ครั้งแล้ว"
+                    needs. Only rendered for a saved ticket: a visit is a child
+                    row and has nothing to hang off until the ticket has an id.
+                  */}
+                  {serviceVisits &&
+                    serviceVisits({
+                      entitled: Number(ex.serviceCount ?? wrapStock?.serviceCount ?? 0) || 0,
+                      filmProduct: wrapStock?.name ?? wrapItem?.sold ?? '',
+                      assignedTechnicians: t.techByCategory?.['ฟิล์มกันรอย'] ?? [],
+                    })}
                 </div>
               )}
             </div>
