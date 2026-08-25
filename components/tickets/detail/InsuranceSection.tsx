@@ -408,7 +408,12 @@ export function InsuranceSection({
               />
             </div>
           </div>
-          <p className="text-xs mb-2.5 font-semibold" style={{ color: '#4C7A3E' }}>
+          {/* #3F6B33, not the #4C7A3E used for figures on white: this panel
+              renders through ExtrasSection inside form section 2, whose items
+              fill is #EAF4F2 — #4C7A3E measures 4.50:1 there, on the AA line.
+              #3F6B33 is SECTION_TONES.payment.ink, the same green the form is
+              built from, at 5.57:1 on this fill. */}
+          <p className="text-xs mb-2.5 font-semibold" style={{ color: '#3F6B33' }}>
             {coverageText(draft.bigPieces, draft.smallPieces)}
           </p>
 

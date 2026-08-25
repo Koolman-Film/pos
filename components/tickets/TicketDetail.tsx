@@ -1058,8 +1058,10 @@ export function TicketDetail({
                         ></i>
                         {savingExtras ? 'กำลังบันทึก...' : 'บันทึกข้อมูลเพิ่มเติม'}
                       </button>
+                      {/* On section 2's items fill (#EAF4F2), where #4C7A3E
+                          is 4.50:1 — see InsuranceSection. */}
                       {extrasSaved && (
-                        <span className="text-xs" style={{ color: '#4C7A3E' }}>
+                        <span className="text-xs" style={{ color: '#3F6B33' }}>
                           <i className="fa-solid fa-circle-check mr-1"></i>บันทึกแล้ว
                         </span>
                       )}
