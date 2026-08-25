@@ -24,6 +24,7 @@ import {
   saveInsurancePlanAction,
   deleteInsurancePlanAction,
   decideWithdrawalAction,
+  transferStockAction,
 } from './actions';
 
 async function optionValues(
@@ -231,6 +232,7 @@ export default async function StockPage() {
         saveInsurancePlan: saveInsurancePlanAction,
         deleteInsurancePlan: deleteInsurancePlanAction,
         decideWithdrawal: decideWithdrawalAction,
+        transferStock: transferStockAction,
         updateOptionList: updateOptionListAction,
       }}
     />

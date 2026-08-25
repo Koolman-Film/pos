@@ -62,6 +62,8 @@ export type AddProductInput =
       qty: number;
       cost: number;
       sellPrice: number;
+      /** จุดสั่งซื้อ. Was hard-coded to 5 for every product ever created. */
+      min?: number;
       supplier?: string;
       docNo?: string;
     };
@@ -116,7 +118,7 @@ export async function addProductAction(input: AddProductInput): Promise<void> {
         category: input.category,
         shop_id: input.shop,
         qty: 0,
-        min_qty: 5,
+        min_qty: Number(input.min) || 5,
         cost: 0,
         sell_price: canSeePrices ? Number(input.sellPrice) || 0 : 0,
       })
@@ -149,6 +151,7 @@ export type BulkImportRow = {
   qty: number;
   cost: number;
   sellPrice: number;
+  min?: number;
 };
 
 export async function bulkImportAction(rows: BulkImportRow[]): Promise<void> {
@@ -168,7 +171,7 @@ export async function bulkImportAction(rows: BulkImportRow[]): Promise<void> {
       category: r.category,
       shop_id: r.shop,
       qty: Number(r.qty) || 0,
-      min_qty: 5,
+      min_qty: Number(r.min) || 5,
       cost: canSeePrices ? Number(r.cost) || 0 : 0,
       sell_price: canSeePrices ? Number(r.sellPrice) || 0 : 0,
     })),
@@ -463,6 +466,53 @@ export async function decideWithdrawalAction(input: {
     });
     if (moveErr) throw moveErr;
   }
+
+  revalidatePath('/stock');
+}
+
+/**
+ * โอนสต็อกระหว่างสาขา.
+ *
+ * Moving stock between branches had no operation: the shop withdrew at one and
+ * added at the other, which left two unrelated records and let the goods arrive
+ * at a price somebody typed from memory. `transfer_stock` (migration 0028) does
+ * it as one act — FIFO out of the source, the same lots and the same unit costs
+ * in at the destination, both ends in the ledger pointing at each other.
+ *
+ * Gated on `stock.editDelete`: deciding that a branch's inventory belongs
+ * somewhere else is the same level of authority as changing a product, and it is
+ * already the manager-level key in this module.
+ *
+ * BOTH shops are re-checked against the caller's access. RLS would scope the
+ * reads, but the function writes to the destination too, and a caller must not
+ * be able to push stock into a branch they cannot see.
+ */
+export async function transferStockAction(input: {
+  id: number;
+  toShop: string;
+  qty: number;
+  note?: string;
+}): Promise<void> {
+  const session = await requireCapability('stock.editDelete');
+  const supabase = await createClient();
+
+  const { data: row, error } = await supabase
+    .from('stock')
+    .select('id, shop_id')
+    .eq('id', input.id)
+    .single();
+  if (error || !row) throw new Error('stock item not found');
+  assertShopAccess(session, row.shop_id);
+  assertShopAccess(session, input.toShop);
+
+  const { error: moveErr } = await supabase.rpc('transfer_stock', {
+    p_from_stock_id: row.id,
+    p_to_shop_id: input.toShop,
+    p_qty: Number(input.qty),
+    p_by_name: session.name,
+    p_note: input.note ?? '',
+  });
+  if (moveErr) throw moveErr;
 
   revalidatePath('/stock');
 }

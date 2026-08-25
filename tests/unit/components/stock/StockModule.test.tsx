@@ -497,3 +497,103 @@ describe('StockModule — ประวัติสต็อก', () => {
     expect(screen.queryByText('JT-LP-00003')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * โอนไปสาขาอื่น and the reorder point.
+ *
+ * Transferring had no operation at all — the shop withdrew here and added there.
+ * And every product ever created was born with a reorder point of 5, whatever it
+ * was: a roll of film and a set of speakers do not run low at the same number.
+ */
+describe('StockModule — โอนสาขา และ จุดสั่งซื้อ', () => {
+  const shops = [
+    { id: 'cm', name: 'เชียงใหม่' },
+    { id: 'lp', name: 'ลำพูน' },
+  ];
+
+  it('sends the transfer to the branch that was chosen', async () => {
+    const user = userEvent.setup();
+    const transferStock = vi.fn(async () => {});
+    render(
+      <StockModule
+        stock={stock}
+        accessibleShops={shops}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        actions={{ transferStock }}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('โอนสินค้า SKU-FLM-3M60 ไปสาขาอื่น'));
+    await user.clear(screen.getByLabelText('จำนวนที่โอน'));
+    await user.type(screen.getByLabelText('จำนวนที่โอน'), '4');
+    await user.type(screen.getByLabelText('หมายเหตุการโอน'), 'ลูกค้ารอที่ลำพูน');
+    await user.click(screen.getByRole('button', { name: 'ยืนยันการโอน' }));
+
+    expect(transferStock).toHaveBeenCalledWith({
+      id: 1,
+      toShop: 'lp',
+      qty: 4,
+      note: 'ลูกค้ารอที่ลำพูน',
+    });
+  });
+
+  it('never offers the branch the goods are already at', async () => {
+    const user = userEvent.setup();
+    render(
+      <StockModule
+        stock={stock}
+        accessibleShops={shops}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        actions={{ transferStock: vi.fn(async () => {}) }}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('โอนสินค้า SKU-FLM-3M60 ไปสาขาอื่น'));
+    const options = Array.from(
+      (screen.getByLabelText('สาขาปลายทาง') as HTMLSelectElement).options,
+    ).map((o) => o.value);
+    expect(options).toEqual(['lp']);
+  });
+
+  it('hides the transfer from a shop that has nowhere to send it', () => {
+    render(
+      <StockModule
+        stock={stock}
+        accessibleShops={[shops[0]]}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        actions={{ transferStock: vi.fn(async () => {}) }}
+      />,
+    );
+    expect(screen.queryByLabelText(/^โอนสินค้า/)).not.toBeInTheDocument();
+  });
+
+  it('lets a new product set its own reorder point', async () => {
+    const user = userEvent.setup();
+    const addProduct = vi.fn(async () => {});
+    render(
+      <StockModule
+        stock={stock}
+        accessibleShops={shops}
+        canDo={() => true}
+        canSeeStockPrices={false}
+        productCategories={['ฟิล์มกรองแสง']}
+        actions={{ addProduct }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /เพิ่มสินค้า/ }));
+    await user.click(screen.getByRole('button', { name: 'ขึ้นทะเบียนสินค้าใหม่' }));
+    await user.type(screen.getByLabelText('ชื่อสินค้าใหม่'), 'ฟิล์มทดสอบ');
+    await user.clear(screen.getByLabelText('จุดสั่งซื้อ'));
+    await user.type(screen.getByLabelText('จุดสั่งซื้อ'), '12');
+    await user.type(screen.getByLabelText('ผู้ขาย'), '3M');
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+
+    expect(addProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ min: 12, supplier: '3M', newName: 'ฟิล์มทดสอบ' }),
+    );
+  });
+});

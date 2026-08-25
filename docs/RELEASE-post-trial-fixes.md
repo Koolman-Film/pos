@@ -1,4 +1,4 @@
-# Release runbook — post-trial fixes (migrations 0012–0027)
+# Release runbook — post-trial fixes (migrations 0012–0028)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
 
@@ -28,7 +28,7 @@ dashboard and the accounting page.
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0027 only
+npx supabase db push                     # applies 0012 … 0028 only
 ```
 
 ### No CLI? Paste the files instead
@@ -50,10 +50,11 @@ it twice changes nothing, and each records its versions in
 | 9     | `supabase/release-0025.sql`                   | a normal connection                        |
 | 10    | `supabase/release-0026.sql`                   | a normal connection                        |
 | 11    | `supabase/release-0027.sql`                   | a normal connection                        |
-| 12    | `supabase/repair-categories-and-services.sql` | a normal connection                        |
+| 12    | `supabase/release-0028.sql`                   | a normal connection                        |
+| 13    | `supabase/repair-categories-and-services.sql` | a normal connection                        |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all twelve in order
+already been handed over. If nothing has been run yet, running all thirteen in order
 is still correct.
 
 The last step is a one-time DATA repair, not schema. It folds every ชนิดสินค้า that
@@ -91,6 +92,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0025_stock_integrity`          | `apply_stock_deltas()` — ให้ฐานข้อมูลบวกลบจำนวนสต็อกเอง แทนที่จะอ่านมาคำนวณในเบราว์เซอร์แล้วเขียนทับ (บันทึกพร้อมกันสองคนแล้วตัวเลขหาย) และ unique index (สาขา, ชื่อสินค้า) — ข้ามพร้อม NOTICE ถ้ายังมีชื่อซ้ำ                                                                                                                       | ต่ำ. เพิ่ม function + index; ไม่แก้ข้อมูลเดิม                                               |
 | `0026_stock_ledger`             | `stock_movements` — สมุดบัญชีสต็อก ทุกการเคลื่อนไหวพร้อมจำนวนก่อน/หลัง อ้างสินค้าด้วย id, `move_stock()` / `count_stock()` ที่ย้ายของและลงบัญชีในคำสั่งเดียว, `withdrawals` ได้คอลัมน์ตัดสินใจ และ capability `stock.approveWithdraw`                                                                                                | ต่ำ. เพิ่มล้วน — สมุดบัญชีเริ่มนับจากวันที่รัน                                              |
 | `0027_stock_batches`            | `stock_batches` — รับของแต่ละรอบเป็นล็อตของตัวเอง พร้อมผู้ขาย/เลขที่ใบส่งของ, `stock_movement_batches` เก็บว่าตัดจากล็อตไหนราคาเท่าไหร่, `receive_stock()` และ `move_stock()` ตัดแบบ FIFO พร้อมคิดต้นทุน, `stock.cost` กลายเป็นค่าเฉลี่ยถ่วงน้ำหนักที่คำนวณเอง                                                                       | ปานกลาง — ของที่มีอยู่กลายเป็น "ล็อตยกมา" ล็อตเดียว และ `cost` เลิกพิมพ์เอง                 |
+| `0028_stock_transfer`           | `transfer_stock()` — โอนสต็อกระหว่างสาขาเป็นการกระทำเดียว ตัด FIFO ที่ต้นทาง แล้วสร้างล็อตปลายทางด้วยต้นทุนเดิม ลงสมุดบัญชีทั้งสองฝั่ง                                                                                                                                                                                               | ต่ำ. เพิ่ม function อย่างเดียว                                                              |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

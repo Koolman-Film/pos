@@ -198,3 +198,118 @@ describe('ต้นทุนตามล็อต (live database)', () => {
     expect(error).toBeTruthy();
   });
 });
+
+/**
+ * โอนระหว่างสาขา (migration 0028).
+ *
+ * The shop used to do this as a withdrawal at one branch and an addition at the
+ * other: two unrelated records, a broken history, and a price typed from memory
+ * at the far end. A transfer is one act, and the cost travels with the goods.
+ */
+describe('โอนสต็อกระหว่างสาขา (live database)', () => {
+  const DEST_SKU = `${SKU}-LP`;
+
+  async function removeTransferFixtures() {
+    const { data } = await admin.from('stock').select('id').in('sku', [SKU, DEST_SKU]);
+    const stockIds = (data ?? []).map((r) => r.id);
+    if (stockIds.length) {
+      const { data: moves } = await admin
+        .from('stock_movements')
+        .select('id')
+        .in('stock_id', stockIds);
+      const ids = (moves ?? []).map((m) => m.id);
+      if (ids.length) await admin.from('stock_movement_batches').delete().in('movement_id', ids);
+      await admin.from('stock_movements').delete().in('stock_id', stockIds);
+      await admin.from('stock_batches').delete().in('stock_id', stockIds);
+      await admin.from('stock').delete().in('id', stockIds);
+    }
+  }
+
+  beforeEach(async () => {
+    await removeTransferFixtures();
+    await seed();
+  });
+  afterAll(removeTransferFixtures);
+
+  const transfer = (id: number, qty: number) =>
+    admin.rpc('transfer_stock', {
+      p_from_stock_id: id,
+      p_to_shop_id: 'lp',
+      p_qty: qty,
+      p_by_name: 'ผู้ทดสอบ',
+      p_note: 'ทดสอบโอน',
+    });
+
+  it('carries each lot across at the price it was bought for', async () => {
+    const id = await stockId();
+    await receive(id, 10, 800, 'IN-A');
+    await receive(id, 10, 950, 'IN-B');
+
+    const { data: destId } = await transfer(id, 14);
+
+    // 10×800 + 4×950 — the same figure leaves one branch and arrives at the other.
+    const out = (await movements(id)).at(-1)!;
+    expect(out).toMatchObject({ kind: 'โอนออก', document_id: 'lp', cost_total: -11800 });
+
+    const { data: destMoves } = await admin
+      .from('stock_movements')
+      .select('kind, document_id, cost_total')
+      .eq('stock_id', destId as number)
+      .order('id');
+    expect(destMoves!.at(-1)).toMatchObject({
+      kind: 'โอนเข้า',
+      document_id: 'cm',
+      cost_total: 11800,
+    });
+
+    // The destination holds two lots, not one averaged one.
+    const { data: destLots } = await admin
+      .from('stock_batches')
+      .select('unit_cost, qty_remaining')
+      .eq('stock_id', destId as number)
+      .order('id');
+    expect(destLots).toEqual([
+      { unit_cost: 800, qty_remaining: 10 },
+      { unit_cost: 950, qty_remaining: 4 },
+    ]);
+  });
+
+  it('leaves each branch valued at what it actually holds', async () => {
+    const id = await stockId();
+    await receive(id, 10, 800, 'IN-A');
+    await receive(id, 10, 950, 'IN-B');
+    const { data: destId } = await transfer(id, 14);
+
+    // Source keeps six of the dearer lot; destination averages the two it got.
+    expect(await product(id)).toEqual({ qty: 6, cost: 950 });
+    const { data: dest } = await admin
+      .from('stock')
+      .select('qty, cost')
+      .eq('id', destId as number)
+      .single();
+    expect(dest).toEqual({ qty: 14, cost: 842.86 });
+  });
+
+  it('refuses to move more than the branch has', async () => {
+    const id = await stockId();
+    await receive(id, 5, 800, 'IN-A');
+    // Consumption may go negative — a miscount worth seeing. A transfer may not:
+    // it would create stock at the far end out of nothing.
+    const { error } = await transfer(id, 6);
+    expect(error).toBeTruthy();
+    expect(await product(id)).toMatchObject({ qty: 5 });
+  });
+
+  it('refuses a transfer to the branch it is already at', async () => {
+    const id = await stockId();
+    await receive(id, 5, 800, 'IN-A');
+    const { error } = await admin.rpc('transfer_stock', {
+      p_from_stock_id: id,
+      p_to_shop_id: 'cm',
+      p_qty: 1,
+      p_by_name: 'ผู้ทดสอบ',
+      p_note: '',
+    });
+    expect(error).toBeTruthy();
+  });
+});

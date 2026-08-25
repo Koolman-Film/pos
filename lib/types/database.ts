@@ -1569,6 +1569,16 @@ export type Database = {
         Args: { p_changes: Json }
         Returns: undefined
       }
+      transfer_stock: {
+        Args: {
+          p_by_name: string
+          p_from_stock_id: number
+          p_note?: string
+          p_qty: number
+          p_to_shop_id: string
+        }
+        Returns: number
+      }
       receive_stock: {
         Args: {
           p_by_name: string

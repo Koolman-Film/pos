@@ -129,6 +129,13 @@ type StockActions = {
   deleteInsurancePlan?: (id: number) => Promise<void>;
   /** อนุมัติ / ไม่อนุมัติใบเบิก — rejecting returns the stock. */
   decideWithdrawal?: (input: { id: number; approve: boolean }) => Promise<void>;
+  /** โอนสต็อกไปสาขาอื่น — ต้นทุนไปกับของ (migration 0028). */
+  transferStock?: (input: {
+    id: number;
+    toShop: string;
+    qty: number;
+    note?: string;
+  }) => Promise<void>;
   /** Persists หมวดหมู่ (ชนิดสินค้า). Without it the picker only edits state. */
   updateOptionList?: (
     listKey: string,
@@ -267,6 +274,42 @@ export function StockModule({
     return branchFilter === 'all' || product?.shop === branchFilter;
   });
 
+  /**
+   * โอนไปสาขาอื่น. Opened from a product row, because a transfer is always
+   * about one product — asking which product first would be a step the shop
+   * has already taken by finding the row.
+   */
+  const [transferFor, setTransferFor] = useState<StockItem | null>(null);
+  const [transferTo, setTransferTo] = useState('');
+  const [transferQty, setTransferQty] = useState(1);
+  const [transferNote, setTransferNote] = useState('');
+  const [transferError, setTransferError] = useState<string | null>(null);
+
+  function startTransfer(item: StockItem) {
+    setTransferError(null);
+    setTransferFor(item);
+    setTransferTo(accessibleShops.find((sh) => sh.id !== item.shop)?.id ?? '');
+    setTransferQty(1);
+    setTransferNote('');
+  }
+
+  async function submitTransfer() {
+    if (!transferFor || !transferTo) return;
+    setTransferError(null);
+    try {
+      await actions.transferStock?.({
+        id: transferFor.id,
+        toShop: transferTo,
+        qty: Number(transferQty),
+        note: transferNote,
+      });
+      setTransferFor(null);
+      router.refresh();
+    } catch (e) {
+      setTransferError(e instanceof Error ? e.message : 'โอนไม่สำเร็จ');
+    }
+  }
+
   async function decide(w: Withdrawal, approve: boolean) {
     const verb = approve ? 'อนุมัติ' : 'ไม่อนุมัติ';
     if (!window.confirm(`${verb}ใบเบิก "${w.item}" จำนวน ${w.qty}?`)) return;
@@ -355,6 +398,7 @@ export function StockModule({
     qty: 1,
     cost: 0,
     sellPrice: 0,
+    min: 5,
     supplier: '',
     docNo: '',
     serviceCount: '' as string | number,
@@ -566,6 +610,7 @@ export function StockModule({
         qty: Number(addStk.qty),
         cost: Number(addStk.cost),
         sellPrice: Number(addStk.sellPrice),
+        min: Number(addStk.min),
         supplier: addStk.supplier,
         docNo: addStk.docNo,
       });
@@ -1380,6 +1425,7 @@ export function StockModule({
                       ชื่อสินค้าใหม่
                     </label>
                     <input
+                      aria-label="ชื่อสินค้าใหม่"
                       value={addStk.newName}
                       onChange={(e) => setAddStk({ ...addStk, newName: e.target.value })}
                       className="field w-full text-sm px-3 py-2"
@@ -1451,6 +1497,21 @@ export function StockModule({
                       />
                     </div>
                   )}
+                  {/* จุดสั่งซื้อ. Every product ever added was born with a
+                      reorder point of 5, whatever it was — a roll of film and
+                      a set of speakers do not run low at the same number. */}
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      แจ้งเตือนเมื่อเหลือต่ำกว่า
+                    </label>
+                    <input
+                      aria-label="จุดสั่งซื้อ"
+                      type="number"
+                      value={addStk.min}
+                      onChange={(e) => setAddStk({ ...addStk, min: Number(e.target.value) })}
+                      className="field w-full text-sm px-3 py-2"
+                    />
+                  </div>
                   {addStk.category === 'ฟิล์มกันรอย' && (
                     <div>
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
@@ -2004,6 +2065,16 @@ export function StockModule({
                                 >
                                   <i className="fa-solid fa-pen"></i>
                                 </button>
+                                {accessibleShops.length > 1 && actions.transferStock && (
+                                  <button
+                                    onClick={() => startTransfer(s)}
+                                    aria-label={`โอนสินค้า ${s.sku} ไปสาขาอื่น`}
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center text-xs"
+                                    style={{ background: 'var(--paper)', color: 'var(--primary)' }}
+                                  >
+                                    <i className="fa-solid fa-right-left"></i>
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => deleteStockItem(s.id)}
                                   aria-label={`ลบสินค้า ${s.sku}`}
@@ -2115,6 +2186,93 @@ export function StockModule({
             ))}
           </div>
         </div>
+
+        {/*
+          โอนไปสาขาอื่น. One act with two ends: the goods leave one branch and
+          arrive at another carrying the SAME lot costs, because they did not
+          become cheaper by being driven down the road (migration 0028).
+        */}
+        {transferFor && (
+          <div className="card p-5 mb-4 fade-page">
+            <p className="text-sm font-semibold mb-1">โอนสต็อกไปสาขาอื่น — {transferFor.name}</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+              {shopName(transferFor.shop)} · คงเหลือ {transferFor.qty} —
+              ต้นทุนของแต่ละล็อตจะถูกโอนไปด้วย
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  โอนไปสาขา
+                </label>
+                <select
+                  aria-label="สาขาปลายทาง"
+                  value={transferTo}
+                  onChange={(e) => setTransferTo(e.target.value)}
+                  className="field w-full text-sm px-3 py-2"
+                >
+                  {accessibleShops
+                    .filter((sh) => sh.id !== transferFor.shop)
+                    .map((sh) => (
+                      <option key={sh.id} value={sh.id}>
+                        {sh.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  จำนวน
+                </label>
+                <input
+                  aria-label="จำนวนที่โอน"
+                  type="number"
+                  value={transferQty}
+                  onChange={(e) => setTransferQty(Number(e.target.value))}
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  หมายเหตุ
+                </label>
+                <input
+                  aria-label="หมายเหตุการโอน"
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                  placeholder="เช่น ลูกค้ารอที่ลำพูน"
+                  className="field w-full text-sm px-3 py-2"
+                />
+              </div>
+            </div>
+
+            {transferError && (
+              <p
+                className="text-xs mb-3 px-2.5 py-1.5 rounded-lg"
+                role="alert"
+                style={{ background: '#FBEAEC', color: '#B23A48' }}
+              >
+                <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+                {transferError}
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTransferFor(null)}
+                className="btn-outline flex-1 rounded-lg py-2 text-sm"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={submitTransfer}
+                className="btn-primary flex-1 rounded-lg py-2 text-sm font-semibold"
+              >
+                ยืนยันการโอน
+              </button>
+            </div>
+          </div>
+        )}
 
         {mounted &&
           createPortal(
