@@ -10,7 +10,7 @@ import { fmtThaiDate } from '@/lib/domain/format';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
-import { PrintJobSheet, type PrintMode } from './PrintJobSheet';
+import { PrintJobSheet, docPrefixFor, type PrintMode } from './PrintJobSheet';
 import { serializeTicket } from './serialize';
 import { ExtrasSection } from './detail/ExtrasSection';
 import { EXPIRY_WARNING_DAYS, InsuranceSection, daysLeft } from './detail/InsuranceSection';
@@ -84,6 +84,7 @@ export function TicketDetail({
   insurancePlans = [],
   insuranceAction,
   insuranceDeleteAction,
+  documentAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -148,6 +149,19 @@ export function TicketDetail({
     claims: Record<string, unknown>[];
   }) => Promise<{ ok: boolean; error?: string; id?: number }>;
   insuranceDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Records that a ใบเสร็จ / ใบกำกับภาษี was issued (migration 0024), so
+   * โมดูลรายได้ can say which sales carry a tax invoice.
+   */
+  documentAction?: (input: {
+    ticketId: string;
+    docType: string;
+    docNo: string;
+    buyerName: string;
+    buyerTaxId: string;
+    buyerAddress: string;
+    amount: number;
+  }) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
@@ -403,6 +417,27 @@ export function TicketDetail({
     const result = await insuranceDeleteAction(id);
     if (result.ok) router.refresh();
     return result;
+  }
+
+  /**
+   * ออกเอกสารการเงิน — record it, then print it.
+   *
+   * The record is what lets โมดูลรายได้ answer "which sales did we issue a
+   * ใบกำกับภาษี for". It is fired and not awaited: the customer is standing
+   * at the counter waiting for the paper, and a reporting row is not worth
+   * making them wait for — or worth cancelling the print over if it fails.
+   */
+  function issueDocument() {
+    void documentAction?.({
+      ticketId: t.id,
+      docType,
+      docNo: `${docPrefixFor(docType)}-${t.id.replace('JT-', '')}`,
+      buyerName: buyerName || t.customer,
+      buyerTaxId,
+      buyerAddress,
+      amount: total,
+    });
+    doPrint('doc');
   }
 
   function doPrint(mode: PrintMode) {
@@ -1236,7 +1271,7 @@ export function TicketDetail({
                 แสดงข้อความแจ้งเตือนตรวจเช็ครอบคัน
               </label>
               <button
-                onClick={() => doPrint('doc')}
+                onClick={issueDocument}
                 className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
                 style={{ background: '#2563EB', color: '#fff' }}
               >

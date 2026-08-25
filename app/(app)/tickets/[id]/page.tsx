@@ -12,6 +12,7 @@ import {
   saveServiceVisit,
   saveInsurancePolicy,
   deleteInsurancePolicy,
+  recordTicketDocument,
   saveTicket,
   saveTicketExtras,
   unlockTicket,
@@ -76,6 +77,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       insurancePlans={insurancePlans}
       insuranceAction={saveInsurancePolicy}
       insuranceDeleteAction={deleteInsurancePolicy}
+      documentAction={recordTicketDocument}
     />
   );
 }

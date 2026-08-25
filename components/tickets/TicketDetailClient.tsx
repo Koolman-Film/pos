@@ -51,6 +51,7 @@ export function TicketDetailClient({
   insurancePlans,
   insuranceAction,
   insuranceDeleteAction,
+  documentAction,
 }: {
   initialTicket: Ticket;
   isNew: boolean;
@@ -103,6 +104,15 @@ export function TicketDetailClient({
     claims: Record<string, unknown>[];
   }) => Promise<{ ok: boolean; error?: string; id?: number }>;
   insuranceDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  documentAction?: (input: {
+    ticketId: string;
+    docType: string;
+    docNo: string;
+    buyerName: string;
+    buyerTaxId: string;
+    buyerAddress: string;
+    amount: number;
+  }) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -134,6 +144,7 @@ export function TicketDetailClient({
       insurancePlans={insurancePlans}
       insuranceAction={insuranceAction}
       insuranceDeleteAction={insuranceDeleteAction}
+      documentAction={documentAction}
     />
   );
 }

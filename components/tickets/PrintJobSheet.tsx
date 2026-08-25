@@ -104,6 +104,19 @@ function bi(th: string, en: string) {
   );
 }
 
+/**
+ * เลขที่เอกสาร prefix — RCT / INV / QT.
+ *
+ * Exported because the number that gets PRINTED and the number that gets
+ * RECORDED (migration 0024) have to be the same string; the customer quotes it
+ * back off the paper.
+ */
+export function docPrefixFor(docType: string): string {
+  if (docType === 'ใบเสนอราคา') return 'QT';
+  if (docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') return 'INV';
+  return 'RCT';
+}
+
 /** The document name in English, for the band under the Thai one. */
 function docTypeEn(docType: string): string {
   if (docType === 'ใบเสนอราคา') return 'QUOTATION';
@@ -1772,7 +1785,7 @@ export function PrintJobSheet({
     const totalDiscount = grossTotal - total;
     const isTaxInvoice = docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
     const isQuotation = docType === 'ใบเสนอราคา';
-    const docPrefix = isQuotation ? 'QT' : isTaxInvoice ? 'INV' : 'RCT';
+    const docPrefix = docPrefixFor(docType);
     // Only the channels money actually arrived by, in the order it arrived.
     // The shop's full list used to print with empty boxes beside the unused
     // ones, which is a form to fill in — a receipt records what happened. Read

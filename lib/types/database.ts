@@ -985,6 +985,56 @@ export type Database = {
           },
         ]
       }
+      ticket_documents: {
+        Row: {
+          amount: number
+          buyer_address: string
+          buyer_name: string
+          buyer_tax_id: string
+          created_at: string
+          doc_no: string
+          doc_type: string
+          id: number
+          issued_at: string
+          issued_by: string | null
+          ticket_id: string
+        }
+        Insert: {
+          amount?: number
+          buyer_address?: string
+          buyer_name?: string
+          buyer_tax_id?: string
+          created_at?: string
+          doc_no?: string
+          doc_type: string
+          id?: never
+          issued_at?: string
+          issued_by?: string | null
+          ticket_id: string
+        }
+        Update: {
+          amount?: number
+          buyer_address?: string
+          buyer_name?: string
+          buyer_tax_id?: string
+          created_at?: string
+          doc_no?: string
+          doc_type?: string
+          id?: never
+          issued_at?: string
+          issued_by?: string | null
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_documents_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ticket_item_positions: {
         Row: {
           id: number
@@ -1383,6 +1433,18 @@ export type Database = {
       }
       save_ticket_children: {
         Args: { p_items: Json; p_payments: Json; p_ticket_id: string }
+        Returns: undefined
+      }
+      record_ticket_document: {
+        Args: {
+          p_amount: number
+          p_buyer_address: string
+          p_buyer_name: string
+          p_buyer_tax_id: string
+          p_doc_no: string
+          p_doc_type: string
+          p_ticket_id: string
+        }
         Returns: undefined
       }
       save_insurance_policy: {

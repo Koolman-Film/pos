@@ -597,3 +597,42 @@ export async function deleteInsurancePolicy(id: number): Promise<{ ok: boolean; 
   revalidatePath('/dashboard');
   return { ok: true };
 }
+
+/**
+ * บันทึกว่าออกเอกสารการเงินให้ลูกค้าแล้ว (migration 0024).
+ *
+ * Issuing a ใบเสร็จ or a ใบกำกับภาษี used to be a print and nothing more — the
+ * type and the buyer's นิติบุคคล details lived in React state until the screen
+ * closed. Nobody could answer "which sales did we issue a tax invoice for",
+ * which is the question the accountant asks every month, so โมดูลรายได้ reads
+ * this table.
+ *
+ * Called on the way to the printer. A failure must not stop the print: the
+ * document is what the customer is standing there waiting for, and a missing
+ * row is a reporting gap, not a lost sale.
+ */
+export async function recordTicketDocument(input: {
+  ticketId: string;
+  docType: string;
+  docNo: string;
+  buyerName: string;
+  buyerTaxId: string;
+  buyerAddress: string;
+  amount: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์ออกเอกสาร' };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('record_ticket_document', {
+    p_ticket_id: input.ticketId,
+    p_doc_type: input.docType,
+    p_doc_no: input.docNo,
+    p_buyer_name: input.buyerName,
+    p_buyer_tax_id: input.buyerTaxId,
+    p_buyer_address: input.buyerAddress,
+    p_amount: input.amount,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/revenue');
+  return { ok: true };
+}
