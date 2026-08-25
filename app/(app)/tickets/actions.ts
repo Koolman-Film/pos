@@ -18,7 +18,23 @@ type TicketInsert = Database['pos']['Tables']['tickets']['Insert'];
 type TicketUpdate = Database['pos']['Tables']['tickets']['Update'];
 import type { OptionListName, TicketSavePayload } from '@/components/tickets/types';
 
-export type SaveResult = { ok: boolean; error?: string; id?: string };
+export type SaveResult = {
+  ok: boolean;
+  error?: string;
+  id?: string;
+  /**
+   * The save worked but some materials could not be deducted — the product was
+   * renamed or removed since the usage was recorded. Not an error: the ticket is
+   * saved. It is a message somebody has to read, because the alternative is
+   * stock quietly drifting.
+   */
+  stockWarning?: string;
+};
+
+function stockWarningFor(unmatched: string[]): string | undefined {
+  if (unmatched.length === 0) return undefined;
+  return `บันทึกใบงานแล้ว แต่ตัดสต็อกไม่ได้ ${unmatched.length} รายการ (ไม่พบสินค้าในสาขานี้): ${unmatched.join(', ')}`;
+}
 
 /**
  * CORRECTION C2 — proxy auth is optimistic only; every server action re-checks.
@@ -123,6 +139,10 @@ async function writeTicketChildren(
  * record of what happened, and a stock row that could not be found is a data
  * problem to surface, not a reason to lose the technician's work. So this is
  * called after the write and its own failure is swallowed deliberately.
+ *
+ * It DOES return the product names it could not find, though. Skipping them in
+ * silence is how a renamed product quietly stops being deducted; the caller puts
+ * the names in the save result so somebody sees them.
  */
 async function syncTicketStock(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -130,19 +150,57 @@ async function syncTicketStock(
   p: TicketSavePayload,
   before: QtyMap,
   userName: string,
-): Promise<void> {
+): Promise<string[]> {
   const after = sumQtyMaps(p.items.map((it) => it.actualQty));
   const delta = diffQtyMaps(before, after);
-  if (Object.keys(delta).length === 0) return;
+  if (Object.keys(delta).length === 0) return [];
   try {
-    await applyStockMovements(supabase, delta, {
+    const result = await applyStockMovements(supabase, delta, {
       kind: 'ใบงาน',
       documentId: ticketId,
       by: userName || 'ระบบ (ใบงาน)',
       shopId: p.shop,
     });
+    return result.unmatched;
   } catch {
     // Intentionally non-fatal; see the note above.
+    return [];
+  }
+}
+
+/**
+ * Put a deleted ticket's materials back, or take them out again on restore.
+ *
+ * Deleting a ticket used to leave the stock deducted: the job was cancelled,
+ * the film went back on the shelf, and the system still counted it as used —
+ * a shortfall that never came back and that nobody could trace to a deletion.
+ *
+ * `sign` is -1 to return and +1 to consume again, so restore is the exact
+ * inverse of delete. Non-fatal like every other stock sync: the deletion
+ * itself already succeeded and is the record of what happened.
+ */
+async function reverseTicketStock(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ticketId: string,
+  shopId: string,
+  sign: 1 | -1,
+  userName: string,
+): Promise<void> {
+  const stored = await storedActualQty(supabase, ticketId);
+  const delta: QtyMap = {};
+  for (const [name, qty] of Object.entries(stored)) {
+    if (qty) delta[name] = qty * sign;
+  }
+  if (Object.keys(delta).length === 0) return;
+  try {
+    await applyStockMovements(supabase, delta, {
+      kind: sign === -1 ? 'ยกเลิกใบงาน' : 'กู้คืนใบงาน',
+      documentId: ticketId,
+      by: userName || 'ระบบ (ใบงาน)',
+      shopId,
+    });
+  } catch {
+    // Intentionally non-fatal; see syncTicketStock.
   }
 }
 
@@ -182,10 +240,10 @@ export async function createTicket(p: TicketSavePayload): Promise<SaveResult> {
     await writeTicketChildren(supabase, id, p);
     await supabase.from('ticket_status_history').insert({ ticket_id: id, status: p.status });
     // A new ticket has no stored quantities, so everything recorded is consumed.
-    await syncTicketStock(supabase, id, p, {}, session.name);
+    const unmatched = await syncTicketStock(supabase, id, p, {}, session.name);
     revalidatePath('/tickets');
     revalidatePath(`/tickets/${id}`);
-    return { ok: true, id };
+    return { ok: true, id, stockWarning: stockWarningFor(unmatched) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
@@ -230,7 +288,7 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
       .eq('id', id);
     if (error) throw new Error(error.message);
     await writeTicketChildren(supabase, p.id, p);
-    await syncTicketStock(supabase, p.id, p, before, session.name);
+    const unmatched = await syncTicketStock(supabase, p.id, p, before, session.name);
     // Closing the ticket is the LAST thing that happens, after the children are
     // written — `save_ticket_children` refuses to touch a locked ticket, so
     // setting the flag any earlier would block the same save that sets it.
@@ -242,7 +300,7 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
     }
     revalidatePath('/tickets');
     revalidatePath(`/tickets/${p.id}`);
-    return { ok: true, id: p.id };
+    return { ok: true, id: p.id, stockWarning: stockWarningFor(unmatched) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
@@ -278,6 +336,12 @@ export async function deleteTicket(ticketId: string): Promise<{ ok: boolean; err
   const session = await getSessionContext();
   if (!session.canDo('list.delete')) return { ok: false, error: 'ไม่มีสิทธิ์ลบใบงาน' };
   const supabase = await createClient();
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('shop_id')
+    .eq('id', ticketId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('tickets')
     .update({
@@ -287,6 +351,11 @@ export async function deleteTicket(ticketId: string): Promise<{ ok: boolean; err
     .eq('id', ticketId)
     .is('deleted_at', null);
   if (error) return { ok: false, error: error.message };
+
+  // The job is off; its materials go back on the shelf.
+  if (ticket?.shop_id) {
+    await reverseTicketStock(supabase, ticketId, ticket.shop_id, -1, session.name);
+  }
   revalidatePath('/tickets');
   revalidatePath(`/tickets/${ticketId}`);
   revalidatePath('/dashboard');
@@ -365,12 +434,23 @@ export async function restoreTicket(ticketId: string): Promise<{ ok: boolean; er
   const session = await getSessionContext();
   if (!session.canDo('list.restore')) return { ok: false, error: 'ไม่มีสิทธิ์กู้คืนใบงาน' };
   const supabase = await createClient();
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('shop_id')
+    .eq('id', ticketId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('tickets')
     .update({ deleted_at: null, deleted_by: null } as unknown as TicketUpdate)
     .eq('id', ticketId)
     .not('deleted_at', 'is', null);
   if (error) return { ok: false, error: error.message };
+
+  // Back on: the materials are consumed again, exactly as before.
+  if (ticket?.shop_id) {
+    await reverseTicketStock(supabase, ticketId, ticket.shop_id, 1, session.name);
+  }
   revalidatePath('/tickets');
   revalidatePath(`/tickets/${ticketId}`);
   revalidatePath('/dashboard');

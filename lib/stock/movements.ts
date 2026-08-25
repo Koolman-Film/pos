@@ -1,4 +1,5 @@
 import type { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/types/database';
 
 /**
  * Automatic stock movement — the port of the prototype's two inline stock-sync
@@ -20,6 +21,16 @@ import type { createClient } from '@/lib/supabase/server';
  */
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * What a movement could not do.
+ *
+ * `unmatched` are product names with no stock row at that shop — usually a
+ * product renamed after the ticket recorded its usage. The movement is still
+ * logged, but the quantity could not be deducted, and the caller is expected to
+ * tell somebody rather than let it pass.
+ */
+export type StockMovementResult = { unmatched: string[] };
 
 /** Product name -> quantity. The shape of `ticket_items.actual_qty`. */
 export type QtyMap = Record<string, number>;
@@ -85,18 +96,24 @@ export async function applyStockMovements(
   supabase: Supabase,
   delta: QtyMap,
   source: StockMovementSource,
-): Promise<void> {
+): Promise<StockMovementResult> {
   const entries = Object.entries(delta).filter(([, d]) => d !== 0);
-  if (entries.length === 0) return;
+  if (entries.length === 0) return { unmatched: [] };
 
   const names = entries.map(([name]) => name);
   const { data: rows } = await supabase
     .from('stock')
     .select('id, name, qty')
     .eq('shop_id', source.shopId)
-    .in('name', names);
+    .in('name', names)
+    // Deterministic when a branch still carries two rows under one name: the
+    // oldest wins, every time. Migration 0025 adds a unique index so this can
+    // only matter on data that predates it.
+    .order('id', { ascending: true });
 
-  const byName = new Map((rows ?? []).map((r) => [r.name, r]));
+  const byName = new Map<string, { id: number; name: string; qty: number }>();
+  for (const r of rows ?? []) if (!byName.has(r.name)) byName.set(r.name, r);
+
   const today = new Date().toISOString().slice(0, 10);
 
   const logRows = entries.map(([name, d]) => ({
@@ -112,17 +129,27 @@ export async function applyStockMovements(
     status: 'อนุมัติแล้ว',
   }));
 
+  /*
+    The arithmetic happens in the DATABASE (migration 0025), not here.
+
+    Reading `qty` and writing back `qty - d` is a lost update the moment two
+    people save at once: both read 10, both write 8, and the shop is one short
+    with two successful writes to show for it. `qty = qty + change` is applied
+    to whatever the row holds at that instant, so both land.
+  */
+  const changes = entries
+    .map(([name, d]) => ({ id: byName.get(name)?.id, change: -d }))
+    .filter((c): c is { id: number; change: number } => typeof c.id === 'number');
+
   await Promise.all([
-    ...entries.flatMap(([name, d]) => {
-      const row = byName.get(name);
-      if (!row) return [];
-      return [
-        supabase
-          .from('stock')
-          .update({ qty: Number(row.qty) - d })
-          .eq('id', row.id),
-      ];
-    }),
+    changes.length > 0
+      ? supabase.rpc('apply_stock_deltas', { p_changes: changes as unknown as Json })
+      : null,
     supabase.from('withdrawals').insert(logRows),
   ]);
+
+  // Names with no product at this shop. They are logged above so the movement
+  // is never lost, but the caller has to be able to SAY so — silently skipping
+  // is how a renamed product stops being deducted without anyone noticing.
+  return { unmatched: names.filter((n) => !byName.has(n)) };
 }

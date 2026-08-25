@@ -46,7 +46,17 @@ import type {
 
 type Options = Record<OptionListName, string[]>;
 
-export type SaveResult = { ok: boolean; error?: string; id?: string };
+export type SaveResult = {
+  ok: boolean;
+  error?: string;
+  id?: string;
+  /**
+   * Saved, but some materials could not be deducted — the product was renamed or
+   * removed since the usage was recorded. Not an error; a message somebody has to
+   * read, because the alternative is stock quietly drifting.
+   */
+  stockWarning?: string;
+};
 
 /**
  * The job-ticket detail / new-ticket form.
@@ -463,6 +473,11 @@ export function TicketDetail({
         return;
       }
       window.__hasUnsavedFormChanges = false;
+      // The save worked, so this is not an error banner — but the shop has to
+      // SEE it, and the next line navigates away. A product renamed after its
+      // usage was recorded stops being deducted, and stock drifts from then on
+      // unless somebody fixes the name.
+      if (result.stockWarning) window.alert(result.stockWarning);
       router.push('/tickets');
       router.refresh();
     } catch (e) {

@@ -1409,6 +1409,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_stock_deltas: {
+        Args: { p_changes: Json }
+        Returns: undefined
+      }
       current_user_can: { Args: { cap: string }; Returns: boolean }
       current_user_has_nav: { Args: { nav_key: string }; Returns: boolean }
       current_user_role: { Args: never; Returns: string }

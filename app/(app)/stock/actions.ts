@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { getSessionContext, type SessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import type { Json } from '@/lib/types/database';
 
 /**
  * Server actions for the Stock module.
@@ -63,13 +64,24 @@ export async function addProductAction(input: AddProductInput): Promise<void> {
       .single();
     if (error || !row) throw new Error('stock item not found');
     assertShopAccess(session, row.shop_id);
-    const patch: { qty: number; cost?: number } = {
-      qty: row.qty + Number(input.qty),
-    };
-    // Only a price-visible caller may move the cost; otherwise keep it as-is.
-    if (canSeePrices && Number(input.cost)) patch.cost = Number(input.cost);
-    const { error: upErr } = await supabase.from('stock').update(patch).eq('id', row.id);
-    if (upErr) throw upErr;
+
+    // The quantity is a RELATIVE change and is applied by the database
+    // (migration 0025). Reading it here and writing back `qty + n` loses one
+    // of two deliveries received at the same moment.
+    const { error: qtyErr } = await supabase.rpc('apply_stock_deltas', {
+      p_changes: [{ id: row.id, change: Number(input.qty) }] as unknown as Json,
+    });
+    if (qtyErr) throw qtyErr;
+
+    // Cost is a replacement, not a delta, so a plain update is right for it.
+    // Only a price-visible caller may move it; otherwise keep it as-is.
+    if (canSeePrices && Number(input.cost)) {
+      const { error: upErr } = await supabase
+        .from('stock')
+        .update({ cost: Number(input.cost) })
+        .eq('id', row.id);
+      if (upErr) throw upErr;
+    }
   } else {
     assertShopAccess(session, input.shop);
     const { error } = await supabase.from('stock').insert({
@@ -170,10 +182,13 @@ export async function withdrawAction(input: {
   });
   if (insErr) throw insErr;
 
-  const { error: upErr } = await supabase
-    .from('stock')
-    .update({ qty: Math.max(0, row.qty - qty) })
-    .eq('id', row.id);
+  // Relative, applied by the database (migration 0025), and NOT clamped at
+  // zero. Every other path already refused to clamp for the same reason: a
+  // negative figure means the shop counted wrong or missed a delivery, and a
+  // floor of zero makes that error permanent instead of visible.
+  const { error: upErr } = await supabase.rpc('apply_stock_deltas', {
+    p_changes: [{ id: row.id, change: -qty }] as unknown as Json,
+  });
   if (upErr) throw upErr;
   revalidatePath('/stock');
 }
