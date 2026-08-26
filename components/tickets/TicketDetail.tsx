@@ -6,13 +6,15 @@ import { useMemo, useState } from 'react';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
-import { fmtThaiDate } from '@/lib/domain/format';
+import { fmtThaiDate, hhmm } from '@/lib/domain/format';
 import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { itemNetPrice } from '@/lib/domain/tickets';
+import { dateInputValue } from '@/lib/domain/now';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
 import { PrintJobSheet, docPrefixFor, type PrintMode } from './PrintJobSheet';
 import { serializeTicket } from './serialize';
+import { findProductStock } from './serviceForm';
 import { ExtrasSection } from './detail/ExtrasSection';
 import { EXPIRY_WARNING_DAYS, InsuranceSection, daysLeft } from './detail/InsuranceSection';
 import { FormSection, SECTION_TONES } from './detail/FormSection';
@@ -360,36 +362,59 @@ export function TicketDetail({
   /**
    * ใบเคลมประกัน — the ใบเซอร์วิส form with the cover printed on it.
    *
-   * A claim IS a workshop visit, so the sheet is filled the same way: the
-   * recorded claim becomes a stand-in visit (its date, the technician who did
-   * it, its detail on the first จุดพิเศษ row) and the walk-around boxes print
-   * empty to be written on. `claim` null is the blank sheet you carry to the
-   * car before anything is recorded.
+   * A claim IS a workshop visit, so the sheet is filled the same way — but
+   * NOTHING on it is asked for twice. Everything the ใบงาน already knows is
+   * printed: the ฟิล์มกันรอย product that was fitted, who sold it, the team
+   * that did the work, and the dates the car came in and went back. Only what
+   * happens at the car during the claim is left empty to write on.
+   *
+   * `claim` null means the caller did not name one — the ปุ่มใบเคลม on the
+   * policy. It then prints the LATEST recorded claim, because printing the
+   * claim boxes blank while a claim is on file is the paperwork done twice.
+   * A policy with no claims yet still gives the blank sheet to carry to the car.
    */
   function printInsuranceClaim(policy: InsurancePolicy, claim: InsuranceClaim | null) {
+    const saved = policy.claims.filter((c) => c.claimedAt || c.detail);
+    const latest = saved.length
+      ? saved.reduce((a, b) => ((b.claimedAt || 0) >= (a.claimedAt || 0) ? b : a))
+      : null;
+    const c = claim ?? latest;
+
+    // ฟิล์มที่ใช้ — the same source the ใบเซอร์วิส uses: the product on the
+    // ฟิล์มกันรอย line, resolved to the stock name (`sold` carries a position
+    // prefix). A recorded visit outranks it: that is what was actually fitted.
+    const wrapItem = t.items.find((i) => i.category === WRAP_CATEGORY);
+    const wrapStock = wrapItem ? findProductStock(stock, wrapItem.sold) : null;
+    const lastVisit = t.serviceVisits?.[0] ?? null;
+
     setPrintPolicy(policy);
-    setPrintClaim(claim);
-    setPrintVisit(
-      claim
-        ? {
-            visitNo: 0,
-            plate: policy.plate || t.plate,
-            receivedAt: claim.claimedAt,
-            receivedTime: '',
-            deliveredAt: '',
-            deliveredTime: '',
-            salesBy: currentUserName,
-            qcBy: '',
-            technicians: claim.technician ? [claim.technician] : [],
-            filmProduct: '',
-            customerWaits: null,
-            overallOk: null,
-            checks: {},
-            notes: policy.notes,
-            points: claim.detail ? [{ seq: 1, position: '', detail: claim.detail, note: '' }] : [],
-          }
-        : null,
-    );
+    setPrintClaim(c);
+    setPrintVisit({
+      visitNo: 0,
+      plate: policy.plate || t.plate,
+      // The dates of the job this warranty came from — how long ago the film
+      // was fitted is the first thing anyone assessing a claim asks. The date
+      // of the claim itself prints at the top of the sheet.
+      receivedAt: dateInputValue(t.dropOffDateObj),
+      receivedTime: hhmm(t.dropOffDateObj),
+      deliveredAt: dateInputValue(t.pickupDateObj),
+      deliveredTime: hhmm(t.pickupDateObj),
+      salesBy: t.createdBy || currentUserName,
+      qcBy: lastVisit?.qcBy ?? '',
+      // ช่างที่รับผิดชอบ from the ticket, plus whoever did the claim.
+      technicians: [
+        ...new Set([
+          ...(t.techByCategory?.[WRAP_CATEGORY] ?? []),
+          ...(c?.technician ? [c.technician] : []),
+        ]),
+      ],
+      filmProduct: lastVisit?.filmProduct || wrapStock?.name || wrapItem?.sold || '',
+      customerWaits: null,
+      overallOk: null,
+      checks: {},
+      notes: policy.notes,
+      points: c?.detail ? [{ seq: 1, position: '', detail: c.detail, note: '' }] : [],
+    });
     doPrint('claim');
   }
 
