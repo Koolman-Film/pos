@@ -607,16 +607,26 @@ export function Dashboard({
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-1">
           {groupUpcoming(upcoming).map((day) => (
             <div key={day.key} className="mb-2 break-inside-avoid">
-              <p className="text-xs font-bold mt-2 mb-1.5" style={{ color: 'var(--primary)' }}>
+              {/* Three headings, three weights: the day carries the rule, the
+                  การนัดหมาย is a filled chip, and the ชนิดสินค้า underneath is
+                  quiet. Reading the photo, the eye has to land on WHAT KIND of
+                  appointment these cars are here for before anything else. */}
+              <p
+                className="text-sm font-bold mt-2 mb-1.5 pb-1"
+                style={{ color: 'var(--primary)', borderBottom: '1px solid var(--line)' }}
+              >
                 {fmtThaiDate(day.date)}
               </p>
               {day.byService.map((group) => (
-                <div key={group.serviceType} className="mb-1.5 ml-2">
-                  <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)' }}>
+                <div key={group.serviceType} className="mb-2">
+                  <span
+                    className="text-xs font-bold px-2 py-1 rounded-lg inline-block mb-1.5"
+                    style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}
+                  >
                     {group.serviceType}
-                  </p>
+                  </span>
                   {group.byCategory.map((cat) => (
-                    <div key={cat.category} className="mb-1 ml-2">
+                    <div key={cat.category} className="mb-1 ml-1">
                       <p
                         className="text-xs font-medium mb-0.5"
                         style={{ color: 'var(--ink-faint)' }}
@@ -630,28 +640,38 @@ export function Dashboard({
                           className="flex items-start justify-between gap-2 cursor-pointer py-1.5 pl-2"
                           style={{ borderTop: i === 0 ? 'none' : '1px solid var(--line)' }}
                         >
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold break-words">
-                              {t.customer}
-                              {/* Says WHY this job is under today: the car has
-                                  been here since last week and goes back now. */}
-                              {t.status === HANDOVER_STATUS && (
-                                <span
-                                  className="text-xs font-semibold px-1.5 py-0.5 rounded-full ml-1.5 align-middle"
-                                  style={{ background: '#E8F1E4', color: '#4C7A3E' }}
-                                >
-                                  ส่งมอบ
-                                </span>
-                              )}
-                            </p>
-                            <p
-                              className="text-xs mt-0.5 break-words"
-                              style={{ color: 'var(--ink)' }}
-                            >
-                              {[t.brand, t.model].filter(Boolean).join(' ')}
-                              {t.plate ? ` · ${t.plate}` : ''}
-                            </p>
-                          </div>
+                          {/*
+                            One line per car: ลูกค้า · รถ · ทะเบียน. Three weights
+                            rather than three lines — the name leads, the model is
+                            quiet, the plate is legible again because it is the
+                            field the person reading the photo matches on. It wraps
+                            rather than clipping when the name is long.
+                          */}
+                          <p className="text-sm break-words min-w-0">
+                            <span className="font-semibold">{t.customer}</span>
+                            {[t.brand, t.model].filter(Boolean).join(' ') && (
+                              <span style={{ color: 'var(--ink-soft)' }}>
+                                {' · '}
+                                {[t.brand, t.model].filter(Boolean).join(' ')}
+                              </span>
+                            )}
+                            {t.plate && (
+                              <span className="font-medium" style={{ color: 'var(--ink)' }}>
+                                {' · '}
+                                {t.plate}
+                              </span>
+                            )}
+                            {/* Says WHY this job is under today: the car has been
+                                here since last week and goes back now. */}
+                            {t.status === HANDOVER_STATUS && (
+                              <span
+                                className="text-xs font-semibold px-1.5 py-0.5 rounded-full ml-1.5 align-middle"
+                                style={{ background: '#E8F1E4', color: '#4C7A3E' }}
+                              >
+                                ส่งมอบ
+                              </span>
+                            )}
+                          </p>
                           <span
                             className="row-action text-xs flex-shrink-0 mt-1"
                             style={{ color: 'var(--primary)' }}
