@@ -59,7 +59,27 @@ export type UpcomingTicket = {
   serviceType: string;
   categories: string[];
   dropOff: Date;
+  status: string;
+  /** วันส่งมอบ — what a รอส่งมอบ job is listed under. */
+  pickup?: Date | null;
 };
+
+/** The one status whose appointment is the HANDOVER, not the drop-off. */
+export const HANDOVER_STATUS = 'รอส่งมอบ';
+
+/**
+ * วันที่นัด — which date this job belongs under.
+ *
+ * A job waiting to be handed back was dropped off days ago; listing it under
+ * that old date puts it out of sight of the day it actually needs someone,
+ * so รอส่งมอบ is listed under วันส่งมอบ instead. Everything else is listed
+ * under the day the car comes in.
+ */
+export function appointmentDate<
+  T extends { status: string; dropOff: Date | null; pickup?: Date | null },
+>(t: T): Date | null {
+  return t.status === HANDOVER_STATUS ? (t.pickup ?? t.dropOff) : t.dropOff;
+}
 
 /** A row of the "งานล่าสุด" list (prototype `visible.slice(0,5)`). */
 export type RecentJob = {
@@ -452,7 +472,7 @@ export function Dashboard({
           (prototype :844-917). The first two are ungated there, so they are
           ungated here; only รอการอนุมัติ sits behind a widget permission. */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
-        <div className="card p-5 lg:col-span-4">
+        <div className="card p-5 lg:col-span-6">
           <div className="flex items-start justify-between mb-3">
             <div className="icon-tile" style={{ background: '#E6EFDC' }}>
               <i className="fa-solid fa-clipboard-check" style={{ color: '#4C7A3E' }}></i>
@@ -488,7 +508,7 @@ export function Dashboard({
           of list: a short queue of customers somebody should ring this week.
         */}
         {expiringInsurance.length > 0 && (
-          <div className="card p-5 lg:col-span-4">
+          <div className="card p-5 lg:col-span-6">
             <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
               <i className="fa-solid fa-shield-halved" style={{ color: '#B26A00' }}></i>
               ประกันใกล้หมดอายุ (ภายใน 30 วัน) ({expiringInsurance.length})
@@ -517,73 +537,8 @@ export function Dashboard({
             </div>
           </div>
         )}
-        <div className="card p-5 lg:col-span-4">
-          <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
-            <i className="fa-solid fa-calendar-week" style={{ color: 'var(--primary)' }}></i>
-            การนัดหมายวันนี้ &ndash; อีก 7 วันข้างหน้า ({upcoming.length})
-          </p>
-          {upcoming.length === 0 && (
-            <p className="text-xs py-6 text-center" style={{ color: 'var(--ink-faint)' }}>
-              ยังไม่มีนัดหมายในช่วงนี้
-            </p>
-          )}
-          {/*
-            Nothing here truncates any more. The card is one third of a row, and
-            a booking reads "คุณ ปรีชา · Toyota vios · ถัง 123456 / ฟิล์มกรองแสง" —
-            on one line that clipped mid-plate, which is the half of the line
-            that tells the technician which car is coming. Each field gets its
-            own line and wraps; the taller list scrolls.
-          */}
-          <div className="flex flex-col max-h-[26rem] overflow-y-auto scrollbar-thin">
-            {groupUpcoming(upcoming).map((day) => (
-              <div key={day.key} className="mb-2">
-                <p className="text-xs font-bold mt-2 mb-1.5" style={{ color: 'var(--primary)' }}>
-                  {fmtThaiDate(day.date)}
-                </p>
-                {day.byService.map((group) => (
-                  <div key={group.serviceType} className="mb-1.5 ml-2">
-                    <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)' }}>
-                      {group.serviceType}
-                    </p>
-                    {group.tickets.map((t, i) => (
-                      <Link
-                        key={t.id}
-                        href={`/tickets/${t.id}`}
-                        className="flex items-start justify-between gap-2 cursor-pointer py-2 pl-2"
-                        style={{ borderTop: i === 0 ? 'none' : '1px solid var(--line)' }}
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold break-words">{t.customer}</p>
-                          <p className="text-xs mt-0.5 break-words" style={{ color: 'var(--ink)' }}>
-                            {[t.brand, t.model].filter(Boolean).join(' ')}
-                            {t.plate ? ` · ${t.plate}` : ''}
-                          </p>
-                          {t.categories.length > 0 && (
-                            <p
-                              className="text-xs break-words mt-0.5"
-                              style={{ color: 'var(--ink-faint)' }}
-                            >
-                              {t.categories.join(', ')}
-                            </p>
-                          )}
-                        </div>
-                        <span
-                          className="row-action text-xs flex-shrink-0 mt-1"
-                          style={{ color: 'var(--primary)' }}
-                        >
-                          <i className="fa-solid fa-chevron-right"></i>
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
         {hasDashboardWidget('pendingApprovals') && pendingApprovals && (
-          <div className="card p-5 lg:col-span-4">
+          <div className="card p-5 lg:col-span-6">
             <p className="text-sm font-semibold mb-3">รอการอนุมัติ</p>
             <div className="h-1.5 rounded-full flex overflow-hidden mb-4">
               <div className="h-full" style={{ width: '50%', background: '#E8B23D' }}></div>
@@ -623,6 +578,95 @@ export function Dashboard({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Row 3b: the week ahead, on a row of its own.
+
+          It shared a row with two other cards and was a third of the width, so
+          it needed an inner scrollbar and still cut lines off — and this is the
+          card the shop photographs and sends out, where a hidden line is a line
+          the person receiving the photo never sees. Full width, no scroller, and
+          the days lay out across the row instead of down it. */}
+      <div className="card p-5 mb-4">
+        <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
+          <i className="fa-solid fa-calendar-week" style={{ color: 'var(--primary)' }}></i>
+          การนัดหมายวันนี้ &ndash; อีก 7 วันข้างหน้า ({upcoming.length})
+        </p>
+        {upcoming.length === 0 && (
+          <p className="text-xs py-6 text-center" style={{ color: 'var(--ink-faint)' }}>
+            ยังไม่มีนัดหมายในช่วงนี้
+          </p>
+        )}
+        {/*
+          Nothing here truncates or scrolls. The shop photographs this card and
+          sends it out, so a line hidden under the fold of an inner scrollbar is
+          a line the person receiving the photo never sees. Each field gets its
+          own line and wraps, ชนิดสินค้า is a heading rather than a fourth line
+          on every row, and the card grows to fit the whole week.
+        */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-1">
+          {groupUpcoming(upcoming).map((day) => (
+            <div key={day.key} className="mb-2 break-inside-avoid">
+              <p className="text-xs font-bold mt-2 mb-1.5" style={{ color: 'var(--primary)' }}>
+                {fmtThaiDate(day.date)}
+              </p>
+              {day.byService.map((group) => (
+                <div key={group.serviceType} className="mb-1.5 ml-2">
+                  <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)' }}>
+                    {group.serviceType}
+                  </p>
+                  {group.byCategory.map((cat) => (
+                    <div key={cat.category} className="mb-1 ml-2">
+                      <p
+                        className="text-xs font-medium mb-0.5"
+                        style={{ color: 'var(--ink-faint)' }}
+                      >
+                        {cat.category}
+                      </p>
+                      {cat.tickets.map((t, i) => (
+                        <Link
+                          key={t.id}
+                          href={`/tickets/${t.id}`}
+                          className="flex items-start justify-between gap-2 cursor-pointer py-1.5 pl-2"
+                          style={{ borderTop: i === 0 ? 'none' : '1px solid var(--line)' }}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold break-words">
+                              {t.customer}
+                              {/* Says WHY this job is under today: the car has
+                                  been here since last week and goes back now. */}
+                              {t.status === HANDOVER_STATUS && (
+                                <span
+                                  className="text-xs font-semibold px-1.5 py-0.5 rounded-full ml-1.5 align-middle"
+                                  style={{ background: '#E8F1E4', color: '#4C7A3E' }}
+                                >
+                                  ส่งมอบ
+                                </span>
+                              )}
+                            </p>
+                            <p
+                              className="text-xs mt-0.5 break-words"
+                              style={{ color: 'var(--ink)' }}
+                            >
+                              {[t.brand, t.model].filter(Boolean).join(' ')}
+                              {t.plate ? ` · ${t.plate}` : ''}
+                            </p>
+                          </div>
+                          <span
+                            className="row-action text-xs flex-shrink-0 mt-1"
+                            style={{ color: 'var(--primary)' }}
+                          >
+                            <i className="fa-solid fa-chevron-right"></i>
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Row 4: the wide "งานล่าสุด" list (prototype :919-943). */}
@@ -700,32 +744,48 @@ export function Dashboard({
 }
 
 /**
- * Group the 7-day booking window by day, then by appointment type — the
- * prototype's nested `dateKeys` / `apptTypes` IIFE (:865-892), lifted out so the
- * JSX above stays readable. Input order is preserved (the caller sorts by
- * drop-off), so days and service types come out in first-seen order exactly as
- * `[...new Set(...)]` produced them.
+ * Group the 7-day booking window: วันที่นัด → การนัดหมาย → ชนิดสินค้า.
+ *
+ * Three levels, not two, because this card is photographed and sent out. A
+ * heading per ชนิดสินค้า says "these four cars are film jobs" once instead of
+ * repeating it on every line, and the lines that are left are short enough to
+ * read whole.
+ *
+ * Input order is preserved (the caller sorts by วันที่นัด), so every level
+ * comes out in first-seen order.
  */
-function groupUpcoming(upcoming: UpcomingTicket[]) {
+export function groupUpcoming(upcoming: UpcomingTicket[]) {
   const days: {
     key: string;
     date: Date;
-    byService: { serviceType: string; tickets: UpcomingTicket[] }[];
+    byService: {
+      serviceType: string;
+      byCategory: { category: string; tickets: UpcomingTicket[] }[];
+    }[];
   }[] = [];
   for (const t of upcoming) {
-    const key = t.dropOff.toDateString();
+    const date = appointmentDate(t) ?? t.dropOff;
+    const key = date.toDateString();
     let day = days.find((d) => d.key === key);
     if (!day) {
-      day = { key, date: t.dropOff, byService: [] };
+      day = { key, date, byService: [] };
       days.push(day);
     }
     const serviceType = t.serviceType || 'ยังไม่ระบุการนัดหมาย';
     let group = day.byService.find((g) => g.serviceType === serviceType);
     if (!group) {
-      group = { serviceType, tickets: [] };
+      group = { serviceType, byCategory: [] };
       day.byService.push(group);
     }
-    group.tickets.push(t);
+    // A job carrying two ชนิดสินค้า is ONE job and stays one line — listing it
+    // under each would read as two cars coming in.
+    const category = t.categories.filter(Boolean).join(', ') || 'ยังไม่ระบุชนิดสินค้า';
+    let cat = group.byCategory.find((c) => c.category === category);
+    if (!cat) {
+      cat = { category, tickets: [] };
+      group.byCategory.push(cat);
+    }
+    cat.tickets.push(t);
   }
   return days;
 }
