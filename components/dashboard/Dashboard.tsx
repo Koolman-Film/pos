@@ -662,13 +662,15 @@ export function Dashboard({
                               </span>
                             )}
                             {/* Says WHY this job is under today: the car has been
-                                here since last week and goes back now. */}
+                                here since last week and goes back now. The badge
+                                is the STATUS itself, not a word of its own — the
+                                board and this card have to say the same thing. */}
                             {t.status === HANDOVER_STATUS && (
                               <span
                                 className="text-xs font-semibold px-1.5 py-0.5 rounded-full ml-1.5 align-middle"
                                 style={{ background: '#E8F1E4', color: '#4C7A3E' }}
                               >
-                                ส่งมอบ
+                                {t.status}
                               </span>
                             )}
                           </p>

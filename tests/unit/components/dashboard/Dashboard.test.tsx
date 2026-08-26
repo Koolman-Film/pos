@@ -127,6 +127,24 @@ describe('Dashboard upcoming bookings', () => {
     expect(screen.getByText(/การนัดหมายวันนี้/)).toHaveTextContent('(2)');
   });
 
+  it('marks a job that is under today because it goes BACK today', async () => {
+    const day = new Date(2026, 6, 27, 9, 0, 0);
+    render(
+      <Dashboard
+        {...base}
+        upcoming={[
+          {
+            ...job({ id: 'JT-9', customer: 'คุณ วิภา', status: 'รอส่งมอบ' }),
+            dropOff: new Date(2026, 6, 20, 9, 0, 0),
+            pickup: day,
+          },
+        ]}
+      />,
+    );
+    // The badge carries the STATUS, so the card and the board say the same word.
+    expect(screen.getByText('รอส่งมอบ')).toBeInTheDocument();
+  });
+
   it('shows the empty state when nothing is booked in the window', () => {
     render(<Dashboard {...base} upcoming={[]} />);
     expect(screen.getByText('ยังไม่มีนัดหมายในช่วงนี้')).toBeInTheDocument();
