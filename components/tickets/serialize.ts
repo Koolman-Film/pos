@@ -33,6 +33,7 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
     ),
     wrapOptions: t.wrapOptions ?? [],
     createdBy: t.createdBy ?? '',
+    qcBy: (t.qcBy ?? '').trim(),
     qcPhotos: t.qcPhotos ?? [],
     qcAlbumUrl: (t.qcAlbumUrl ?? '').trim(),
     installConfirmed: !!t.installConfirmed,

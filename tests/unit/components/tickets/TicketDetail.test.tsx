@@ -459,6 +459,7 @@ describe('TicketDetail — ใบเคลมประกัน ดึงข้�
   function renderWithPolicy() {
     const ticket = makeTicket({
       createdBy: 'คุณเซลล์',
+      qcBy: 'คุณนิด',
       techByCategory: { ฟิล์มกันรอย: ['บอล', 'อ้วน'] },
       extras: { ประกัน: { checked: true } },
       items: [
@@ -516,6 +517,8 @@ describe('TicketDetail — ใบเคลมประกัน ดึงข้�
     // ฟิล์มที่ใช้ / เซลล์รับรถ — from the ticket, not typed a second time.
     expect(sheet).toContain(FILM);
     expect(sheet).toContain('คุณเซลล์');
+    // QC ผู้รับผิดชอบ — named once on the ใบงาน, printed here.
+    expect(sheet).toContain('คุณนิด');
     // วันรับรถ / วันส่งมอบรถ of the job the warranty came from.
     expect(sheet).toContain('วันรับรถ');
     expect(sheet).toContain('24 ก.ค. 2569');
@@ -541,5 +544,36 @@ describe('TicketDetail — ใบเคลมประกัน ดึงข้�
     expect(sheet).toContain('คงเหลือ');
     // 3 − 1 ชิ้นใหญ่ left, and the cover it came from.
     expect(sheet).toContain('2 ชิ้นใหญ่, 20 ชิ้นเล็ก');
+  });
+});
+
+describe('TicketDetail — QC ผู้รับผิดชอบ', () => {
+  it('names one QC on the ticket and prints it on the ใบงานติดตั้ง', async () => {
+    // Before this the sheet had a blank line to write on, and the only place a
+    // QC name existed was inside a service visit — nothing said who checked the
+    // install itself.
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    const ticket = makeTicket({
+      items: [
+        {
+          category: 'ฟิล์มกรองแสง',
+          booked: '',
+          bookedPrice: 0,
+          sold: 'ฟิล์ม 3M CRM 60%',
+          soldPrice: 12000,
+          positions: [],
+        },
+      ],
+    });
+    render(
+      <TicketDetail
+        {...baseProps(ticket)}
+        initialOptions={options({ technicians: ['บอล', 'คุณนิด'] })}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText('QC ผู้รับผิดชอบ'), 'คุณนิด');
+    expect(screen.getByLabelText('QC ผู้รับผิดชอบ')).toHaveValue('คุณนิด');
   });
 });

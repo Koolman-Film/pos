@@ -202,6 +202,15 @@ export type Ticket = {
    */
   insuranceForPlate?: InsurancePolicy[];
   createdBy?: string;
+  /**
+   * QC ผู้รับผิดชอบ — the one person who signed off the work on this ticket.
+   *
+   * Separate from `qcPhotos`, which is the evidence, and from the ช่าง who
+   * did the fitting: QC is the check on their work, so the same name filling
+   * both boxes is a fact worth being able to see. Printed on the ใบงานติดตั้ง
+   * and carried onto the ใบเคลมประกัน and ใบเซอร์วิส, which both ask for it.
+   */
+  qcBy?: string;
   statusHistory?: StatusHistoryEntry[];
   installConfirmed?: boolean;
   installConfirmedAt?: string;

@@ -400,7 +400,9 @@ export function TicketDetail({
       deliveredAt: dateInputValue(t.pickupDateObj),
       deliveredTime: hhmm(t.pickupDateObj),
       salesBy: t.createdBy || currentUserName,
-      qcBy: lastVisit?.qcBy ?? '',
+      // The ticket names the QC for the install itself; a later visit only
+      // answers for that visit.
+      qcBy: t.qcBy || lastVisit?.qcBy || '',
       // ช่างที่รับผิดชอบ from the ticket, plus whoever did the claim.
       technicians: [
         ...new Set([
