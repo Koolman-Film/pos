@@ -349,6 +349,7 @@ export default async function DashboardPage({
       plate: t.plate,
       serviceType: t.serviceType,
       categories: t.categories,
+      products: t.products,
       dropOff: t.dropOff as Date,
       status: t.status,
       pickup: t.pickup,

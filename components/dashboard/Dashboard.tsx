@@ -22,7 +22,7 @@ import type { ReactNode } from 'react';
 
 import { LineChart } from '@/components/charts/LineChart';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
-import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { hhmm, fmt, fmtThaiDate } from '@/lib/domain/format';
 
 import { JobCalendar, type CalendarTicket } from './JobCalendar';
 import { TicketStatusSelect } from './TicketStatusSelect';
@@ -58,6 +58,8 @@ export type UpcomingTicket = {
   plate: string;
   serviceType: string;
   categories: string[];
+  /** สินค้าที่เลือกไว้แล้ว — empty until the counter picks one. */
+  products: string[];
   dropOff: Date;
   status: string;
   /** วันส่งมอบ — what a รอส่งมอบ job is listed under. */
@@ -79,6 +81,20 @@ export function appointmentDate<
   T extends { status: string; dropOff: Date | null; pickup?: Date | null },
 >(t: T): Date | null {
   return t.status === HANDOVER_STATUS ? (t.pickup ?? t.dropOff) : t.dropOff;
+}
+
+/**
+ * เวลานัด — the clock part of the same date the job is listed under.
+ *
+ * '' when the stored time is midnight: the ticket form always picks a slot, so
+ * midnight means nobody recorded one, and printing "00:00" on a card the shop
+ * sends to a customer would be inventing an appointment at midnight.
+ */
+export function appointmentTime<
+  T extends { status: string; dropOff: Date | null; pickup?: Date | null },
+>(t: T): string {
+  const at = hhmm(appointmentDate(t));
+  return at === '00:00' ? '' : at;
 }
 
 /** A row of the "งานล่าสุด" list (prototype `visible.slice(0,5)`). */
@@ -647,33 +663,56 @@ export function Dashboard({
                             field the person reading the photo matches on. It wraps
                             rather than clipping when the name is long.
                           */}
-                          <p className="text-sm break-words min-w-0">
-                            <span className="font-semibold">{t.customer}</span>
-                            {[t.brand, t.model].filter(Boolean).join(' ') && (
-                              <span style={{ color: 'var(--ink-soft)' }}>
-                                {' · '}
-                                {[t.brand, t.model].filter(Boolean).join(' ')}
+                          <div className="min-w-0">
+                            <p className="text-sm break-words">
+                              {/* The time leads the line so the day reads as a
+                                schedule; a fixed width keeps the names lined up
+                                under each other even when a slot is missing. */}
+                              <span
+                                className="text-xs font-bold tabular-nums inline-block align-middle mr-1"
+                                style={{ color: 'var(--primary)', minWidth: '2.7rem' }}
+                              >
+                                {appointmentTime(t)}
                               </span>
-                            )}
-                            {t.plate && (
-                              <span className="font-medium" style={{ color: 'var(--ink)' }}>
-                                {' · '}
-                                {t.plate}
-                              </span>
-                            )}
-                            {/* Says WHY this job is under today: the car has been
+                              <span className="font-semibold">{t.customer}</span>
+                              {[t.brand, t.model].filter(Boolean).join(' ') && (
+                                <span style={{ color: 'var(--ink-soft)' }}>
+                                  {' · '}
+                                  {[t.brand, t.model].filter(Boolean).join(' ')}
+                                </span>
+                              )}
+                              {t.plate && (
+                                <span className="font-medium" style={{ color: 'var(--ink)' }}>
+                                  {' · '}
+                                  {t.plate}
+                                </span>
+                              )}
+                              {/* Says WHY this job is under today: the car has been
                                 here since last week and goes back now. The badge
                                 is the STATUS itself, not a word of its own — the
                                 board and this card have to say the same thing. */}
-                            {t.status === HANDOVER_STATUS && (
-                              <span
-                                className="text-xs font-semibold px-1.5 py-0.5 rounded-full ml-1.5 align-middle"
-                                style={{ background: '#E8F1E4', color: '#4C7A3E' }}
+                              {t.status === HANDOVER_STATUS && (
+                                <span
+                                  className="text-xs font-semibold px-1.5 py-0.5 rounded-full ml-1.5 align-middle"
+                                  style={{ background: '#E8F1E4', color: '#4C7A3E' }}
+                                >
+                                  {t.status}
+                                </span>
+                              )}
+                            </p>
+                            {/* สินค้าที่เลือกแล้ว, indented to sit under the name
+                                rather than the time. Nothing prints while the
+                                counter has not picked one — an empty line under
+                                every booking reads as missing information. */}
+                            {t.products.length > 0 && (
+                              <p
+                                className="text-xs break-words"
+                                style={{ color: 'var(--ink-soft)', marginLeft: '3rem' }}
                               >
-                                {t.status}
-                              </span>
+                                {t.products.join(', ')}
+                              </p>
                             )}
-                          </p>
+                          </div>
                           <span
                             className="row-action text-xs flex-shrink-0 mt-1"
                             style={{ color: 'var(--primary)' }}

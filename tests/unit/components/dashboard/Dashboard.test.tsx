@@ -145,6 +145,38 @@ describe('Dashboard upcoming bookings', () => {
     expect(screen.getByText('รอส่งมอบ')).toBeInTheDocument();
   });
 
+  it('shows the time of the appointment and the product once one is chosen', () => {
+    render(
+      <Dashboard
+        {...base}
+        upcoming={[
+          {
+            ...job({ id: 'JT-7', products: ['ฟิล์ม 3M CRM 60%'] }),
+            dropOff: new Date(2026, 6, 27, 14, 30, 0),
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText('14:30')).toBeInTheDocument();
+    expect(screen.getByText('ฟิล์ม 3M CRM 60%')).toBeInTheDocument();
+  });
+
+  it('prints no time and no product line when neither was recorded', () => {
+    render(
+      <Dashboard
+        {...base}
+        upcoming={[
+          {
+            ...job({ id: 'JT-8', products: [] }),
+            // Midnight is what a ticket with no slot picked stores.
+            dropOff: new Date(2026, 6, 27, 0, 0, 0),
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText('00:00')).not.toBeInTheDocument();
+  });
+
   it('shows the empty state when nothing is booked in the window', () => {
     render(<Dashboard {...base} upcoming={[]} />);
     expect(screen.getByText('ยังไม่มีนัดหมายในช่วงนี้')).toBeInTheDocument();
@@ -263,6 +295,7 @@ describe('groupUpcoming', () => {
       plate: '1กก',
       serviceType: 'เข้าทำ/ติดตั้ง',
       categories: ['ฟิล์มกรองแสง'],
+      products: ['ฟิล์ม 3M CRM 60%'],
       dropOff: day,
       status: 'จองแล้ว',
       pickup: null as Date | null,
