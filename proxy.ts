@@ -45,9 +45,20 @@ export async function proxy(request: NextRequest) {
 
   // Must run before the response is produced, otherwise a refresh that lands
   // after the response is committed is lost.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  //
+  // `getClaims()`, not `getUser()`. This gate is optimistic by design (see the
+  // note above), and `getUser()` costs a network round trip to the auth server
+  // on EVERY request — paid before the page has even started, and paid again by
+  // `resolveSessionContext()`, which is the real authorization boundary.
+  //
+  // `getClaims()` is not a weaker check, it is a local one: this project signs
+  // tokens with an asymmetric key (ES256), so auth-js verifies the signature
+  // with WebCrypto against a cached JWKS instead of asking the server. A forged
+  // or tampered token still fails. It calls `getSession()` first, so an expired
+  // token is still refreshed here and the new cookie still lands on the
+  // response — which is the other half of this proxy's job.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const user = claimsData?.claims ?? null;
 
   // Paths reachable WITHOUT a session. `/auth/*` carries the Supabase email-link
   // flow (invite / password-reset callback + the set-password page): the invitee
