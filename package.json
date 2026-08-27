@@ -22,6 +22,7 @@
     "db:reset": "supabase db reset && sleep 6 && npm run db:seed"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-free": "^6.5.1",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
     "chart.js": "^4.5.1",

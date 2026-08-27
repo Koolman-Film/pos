@@ -1,6 +1,19 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_Thai, Plus_Jakarta_Sans } from 'next/font/google';
 import { THEME_INIT_SCRIPT } from '@/components/layout/theme';
+/*
+  Font Awesome, served from our own origin instead of cdnjs.
+
+  It used to be a <link> to cdnjs in <head>, which is render-blocking: every
+  page waited on a THIRD-PARTY origin — its own DNS, TLS handshake and cache
+  miss — for 102 kB of CSS, and then again for a 156 kB webfont the CSS asks
+  for, before the browser could paint anything.
+
+  Imported here instead, so it ships from the same origin as the app on a
+  connection the browser has already opened. Pinned to 6.5.1, the exact version
+  the CDN was serving, so no icon changes with it.
+*/
+import '@fortawesome/fontawesome-free/css/all.min.css';
 import './globals.css';
 
 // The prototype pulled these two families from the Google Fonts CDN at runtime.
@@ -45,10 +58,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             defers it (async/defer, moving it into <body>, a Client Component)
             reintroduces the flash of light theme. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        <link
-          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
-          rel="stylesheet"
-        />
       </head>
       <body>{children}</body>
     </html>
