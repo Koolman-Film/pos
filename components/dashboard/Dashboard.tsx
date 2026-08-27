@@ -22,7 +22,7 @@ import type { ReactNode } from 'react';
 
 import { LineChart } from '@/components/charts/LineChart';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
-import { hhmm, fmt, fmtThaiDate } from '@/lib/domain/format';
+import { shopDayKey, hhmm, fmt, fmtThaiDate } from '@/lib/domain/format';
 
 import { JobCalendar, type CalendarTicket } from './JobCalendar';
 import { TicketStatusSelect } from './TicketStatusSelect';
@@ -826,7 +826,9 @@ export function groupUpcoming(upcoming: UpcomingTicket[]) {
   }[] = [];
   for (const t of upcoming) {
     const date = appointmentDate(t) ?? t.dropOff;
-    const key = date.toDateString();
+    // The shop's calendar day, not the server's: a job at 02:00 in Bangkok is
+    // still the previous day in UTC, and the deployed server runs in UTC.
+    const key = shopDayKey(date);
     let day = days.find((d) => d.key === key);
     if (!day) {
       day = { key, date, byService: [] };

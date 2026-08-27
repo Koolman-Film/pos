@@ -9,8 +9,14 @@
 // Semantics, unchanged from the ported copies:
 //  - a missing date passes every period (rows that carry no date are never
 //    filtered out by the period control);
-//  - comparisons are on the local calendar day, not UTC;
+//  - comparisons are on the SHOP's calendar day (Asia/Bangkok). They used to be
+//    on the running process's local day, which is the shop's own machine in
+//    development and UTC on the deployed server — so the same job could count
+//    into July in production and August on the laptop, and "วันนี้" meant
+//    yesterday until 07:00;
 //  - `year` accepts either a Buddhist-era year (2569) or a CE one.
+
+import { SHOP_TIME_ZONE, shopDayKey } from './format';
 
 /** The four period modes of the shared period/shop filter bar. */
 export type PeriodKey = 'today' | 'month' | 'year' | 'range';
@@ -34,7 +40,12 @@ export function periodCaption(
   now: Date,
 ): string {
   const thaiDate = (d: Date) =>
-    d.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+    d.toLocaleDateString('th-TH', {
+      timeZone: SHOP_TIME_ZONE,
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
 
   if (period === 'month') {
     const [y, m] = (periodValue || '').split('-').map(Number);
@@ -63,27 +74,28 @@ export function isInPeriod(
   rangeEnd: string,
 ): boolean {
   if (!dateObj) return true;
-  const d = new Date(dateObj);
-  d.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // `YYYY-MM-DD` on the shop's calendar. Comparing those strings compares the
+  // days, and it cannot drift with the server's time zone the way reading
+  // getFullYear()/getMonth() off a Date does.
+  const key = shopDayKey(new Date(dateObj));
+  if (!key) return true;
+  const [dy, dm] = key.split('-').map(Number);
+  const todayKey = shopDayKey(new Date());
 
-  if (period === 'today') return d.getTime() === today.getTime();
+  if (period === 'today') return key === todayKey;
   if (period === 'month') {
     const [y, m] = (periodValue || '').split('-').map(Number);
-    return y && m ? d.getFullYear() === y && d.getMonth() === m - 1 : true;
+    return y && m ? dy === y && dm === m : true;
   }
   if (period === 'year') {
     const rawY = Number(periodValue);
-    const y = rawY && rawY > 2400 ? rawY - 543 : rawY || today.getFullYear();
-    return d.getFullYear() === y;
+    const y = rawY && rawY > 2400 ? rawY - 543 : rawY || Number(todayKey.slice(0, 4));
+    return dy === y;
   }
   if (period === 'range') {
-    const s = rangeStart ? new Date(rangeStart) : null;
-    const e = rangeEnd ? new Date(rangeEnd) : null;
-    if (s) s.setHours(0, 0, 0, 0);
-    if (e) e.setHours(23, 59, 59, 999);
-    return (!s || d >= s) && (!e || d <= e);
+    // Both bounds arrive as the `YYYY-MM-DD` an <input type="date"> produces, so
+    // both ends are inclusive by plain string comparison.
+    return (!rangeStart || key >= rangeStart) && (!rangeEnd || key <= rangeEnd);
   }
   return true;
 }

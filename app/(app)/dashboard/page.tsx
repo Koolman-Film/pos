@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { startOfShopDay } from '@/lib/domain/format';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
@@ -325,11 +326,12 @@ export default async function DashboardPage({
   // Bookings from today through 7 days out, ascending — prototype `isWithinDays`
   // (:109) inlined here because the boundary is what matters: from today at
   // 00:00:00.000 through the 7th day at 23:59:59.999.
-  const windowStart = new Date();
-  windowStart.setHours(0, 0, 0, 0);
-  const windowEnd = new Date(windowStart);
-  windowEnd.setDate(windowEnd.getDate() + 7);
-  windowEnd.setHours(23, 59, 59, 999);
+  //
+  // Measured on the SHOP's clock. This runs on a server in UTC, where local
+  // midnight is 07:00 in Bangkok — every booking earlier than that fell outside
+  // the window and the card simply did not list it.
+  const windowStart = startOfShopDay();
+  const windowEnd = new Date(windowStart.getTime() + 8 * 86400000 - 1);
 
   // Period-independent on purpose: this card is the next seven days, which the
   // selected month/year has no say over.

@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 vi.mock('@/components/charts/LineChart', () => ({ LineChart: () => null }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => {} }) }));
 
+import { shopDayKey } from '@/lib/domain/format';
 import {
   Dashboard,
   appointmentDate,
@@ -111,7 +112,7 @@ describe('Dashboard job-status totals', () => {
 
 describe('Dashboard upcoming bookings', () => {
   it('groups the window by day and then by appointment type', () => {
-    const day = new Date(2026, 6, 27, 9, 0, 0);
+    const day = new Date('2026-07-27T09:00:00+07:00');
     render(
       <Dashboard
         {...base}
@@ -128,14 +129,14 @@ describe('Dashboard upcoming bookings', () => {
   });
 
   it('marks a job that is under today because it goes BACK today', async () => {
-    const day = new Date(2026, 6, 27, 9, 0, 0);
+    const day = new Date('2026-07-27T09:00:00+07:00');
     render(
       <Dashboard
         {...base}
         upcoming={[
           {
             ...job({ id: 'JT-9', customer: 'คุณ วิภา', status: 'รอส่งมอบ' }),
-            dropOff: new Date(2026, 6, 20, 9, 0, 0),
+            dropOff: new Date('2026-07-20T09:00:00+07:00'),
             pickup: day,
           },
         ]}
@@ -152,7 +153,7 @@ describe('Dashboard upcoming bookings', () => {
         upcoming={[
           {
             ...job({ id: 'JT-7', products: ['ฟิล์ม 3M CRM 60%'] }),
-            dropOff: new Date(2026, 6, 27, 14, 30, 0),
+            dropOff: new Date('2026-07-27T14:30:00+07:00'),
           },
         ]}
       />,
@@ -169,7 +170,7 @@ describe('Dashboard upcoming bookings', () => {
           {
             ...job({ id: 'JT-8', products: [] }),
             // Midnight is what a ticket with no slot picked stores.
-            dropOff: new Date(2026, 6, 27, 0, 0, 0),
+            dropOff: new Date('2026-07-27T00:00:00+07:00'),
           },
         ]}
       />,
@@ -261,7 +262,7 @@ describe('Dashboard create-ticket button', () => {
  * deliverable: วันที่นัด → การนัดหมาย → ชนิดสินค้า, one line per car.
  */
 describe('appointmentDate', () => {
-  const drop = new Date(2026, 6, 20, 9, 0, 0);
+  const drop = new Date('2026-07-20T09:00:00+07:00');
   const pick = new Date(2026, 6, 27, 17, 0, 0);
 
   it('lists a job under the day the car comes in', () => {
@@ -280,8 +281,8 @@ describe('appointmentDate', () => {
 });
 
 describe('groupUpcoming', () => {
-  const day = new Date(2026, 6, 27, 9, 0, 0);
-  const later = new Date(2026, 7, 3, 17, 0, 0);
+  const day = new Date('2026-07-27T09:00:00+07:00');
+  const later = new Date('2026-08-03T17:00:00+07:00');
   const row = (over: Partial<ReturnType<typeof baseUpcoming>> = {}) => ({
     ...baseUpcoming(),
     ...over,
@@ -326,7 +327,7 @@ describe('groupUpcoming', () => {
 
   it('files a รอส่งมอบ job under its handover day, not its drop-off day', () => {
     const days = groupUpcoming([row(), row({ id: 'JT-2', status: 'รอส่งมอบ', pickup: later })]);
-    expect(days.map((d) => d.key)).toEqual([day.toDateString(), later.toDateString()]);
+    expect(days.map((d) => d.key)).toEqual([shopDayKey(day), shopDayKey(later)]);
   });
 
   it('names the empty cases rather than dropping the row', () => {

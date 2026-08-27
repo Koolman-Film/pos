@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { fmt, fmtThaiDate, thaiBahtText, daysFromNow } from '@/lib/domain/format';
+import {
+  fmt,
+  fmtThaiDate,
+  hhmm,
+  shopDayKey,
+  startOfShopDay,
+  thaiBahtText,
+  daysFromNow,
+} from '@/lib/domain/format';
 
 describe('fmt', () => {
   it('formats a number as Thai-locale currency-style with 2 decimals', () => {
@@ -85,5 +93,53 @@ describe('daysFromNow', () => {
     const expected = new Date();
     expected.setDate(expected.getDate() - 3);
     expect(daysFromNow(-3).getDate()).toBe(expected.getDate());
+  });
+});
+
+/**
+ * The shop's clock (Asia/Bangkok), not the process's.
+ *
+ * A `timestamptz` is an instant; turning it into "16:00" needs a zone. These ran
+ * in whatever zone the process happened to be in — the shop's own machine in
+ * development, UTC on the deployed server — so a job booked for 11:00 printed as
+ * 04:00 on the live site and looked right on the laptop. Every assertion below
+ * must hold with TZ=UTC, TZ=Asia/Bangkok and anything else.
+ */
+describe('shop-clock formatting', () => {
+  const elevenAm = new Date('2026-08-27T11:00:00+07:00');
+  const fourPm = new Date('2026-08-27T16:00:00+07:00');
+  // 02:00 in Bangkok is still the PREVIOUS day in UTC.
+  const earlyMorning = new Date('2026-08-27T02:00:00+07:00');
+
+  it('prints the time the ticket was booked for', () => {
+    expect(hhmm(elevenAm)).toBe('11:00');
+    expect(hhmm(fourPm)).toBe('16:00');
+    expect(hhmm(earlyMorning)).toBe('02:00');
+  });
+
+  it('prints the day the shop is open on, not the server\u2019s day', () => {
+    expect(fmtThaiDate(earlyMorning)).toBe('27 ส.ค. 2569');
+    expect(fmtThaiDate(fourPm)).toBe('27 ส.ค. 2569');
+  });
+
+  it('groups by the shop\u2019s calendar day', () => {
+    expect(shopDayKey(earlyMorning)).toBe('2026-08-27');
+    expect(shopDayKey(fourPm)).toBe('2026-08-27');
+    // …and a booking half an hour later belongs to the next day.
+    expect(shopDayKey(new Date('2026-08-27T23:30:00+07:00'))).toBe('2026-08-27');
+    expect(shopDayKey(new Date('2026-08-28T00:30:00+07:00'))).toBe('2026-08-28');
+  });
+
+  it('starts the shop day at midnight in Bangkok', () => {
+    // Not the server's midnight, which is 07:00 in Bangkok — the seven hours the
+    // 7-day booking window used to lose off the front of every day.
+    expect(startOfShopDay(fourPm).toISOString()).toBe('2026-08-26T17:00:00.000Z');
+  });
+
+  it('has nothing to say about a missing or broken date', () => {
+    expect(hhmm(null)).toBe('');
+    expect(hhmm(new Date('nonsense'))).toBe('');
+    expect(fmtThaiDate(null)).toBe('-');
+    expect(shopDayKey(undefined)).toBe('');
   });
 });
