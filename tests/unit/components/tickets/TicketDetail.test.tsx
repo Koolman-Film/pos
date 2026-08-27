@@ -419,3 +419,161 @@ describe('TicketDetail — ราคาฟิล์มแยกตามสา�
     expect(positionPrice()).toBe('2500');
   });
 });
+
+/**
+ * ใบเคลมประกัน (migration 0023).
+ *
+ * The sheet goes out to the workshop with the car. Everything the ใบงาน already
+ * knows has to be ON it — the film that was fitted, who sold it, the team that
+ * did the work, the dates — or the counter writes out by hand what the system
+ * is holding, which is how two versions of the same job start to exist.
+ */
+describe('TicketDetail — ใบเคลมประกัน ดึงข้อมูลจากใบงาน', () => {
+  const FILM = 'TPU กันรอยเกรดพรีเมียม';
+
+  const policy = {
+    id: 7,
+    ticketId: 'JT-CM-00214',
+    plate: '250 กก',
+    planName: 'ประกันฟิล์มกันรอย 1 ปี',
+    price: 3000,
+    bigPieces: 3,
+    smallPieces: 20,
+    terms: '',
+    soldAt: '2026-08-26',
+    startsAt: '2026-08-26',
+    endsAt: '2027-08-26',
+    notes: '',
+    claims: [
+      {
+        id: 9,
+        claimedAt: '2026-09-01',
+        bigUsed: 1,
+        smallUsed: 0,
+        detail: 'กันชนหน้า',
+        technician: 'บอล',
+      },
+    ],
+  };
+
+  function renderWithPolicy() {
+    const ticket = makeTicket({
+      createdBy: 'คุณเซลล์',
+      qcBy: 'คุณนิด',
+      techByCategory: { ฟิล์มกันรอย: ['บอล', 'อ้วน'] },
+      extras: { ประกัน: { checked: true } },
+      items: [
+        {
+          category: 'ฟิล์มกันรอย',
+          booked: '',
+          bookedPrice: 0,
+          sold: FILM,
+          soldPrice: 29500,
+          positions: [],
+        },
+      ],
+      insurancePolicies: [policy],
+    });
+    const props = baseProps(ticket);
+    return render(
+      <TicketDetail
+        {...props}
+        initialOptions={options({
+          extra_options: ['ประกัน'],
+          technicians: ['บอล', 'อ้วน', 'สยาม'],
+        })}
+        initialStock={[
+          {
+            id: 1,
+            name: FILM,
+            shortName: 'TPU',
+            category: 'ฟิล์มกันรอย',
+            shop: 'cm',
+            qty: 3,
+            cost: 8000,
+            sellPrice: 29500,
+          },
+        ]}
+        insuranceAction={vi.fn(async () => ({ ok: true }))}
+        insurancePlans={[]}
+      />,
+    );
+  }
+
+  /** The printed sheet only — the form holds the same words on screen. */
+  function sheetText(): string {
+    return document.querySelector('.print-area')?.textContent ?? '';
+  }
+
+  it('prints the film, the seller, the team and the dates without being asked again', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    renderWithPolicy();
+
+    await user.click(screen.getByLabelText(/พิมพ์ใบเคลมประกัน/));
+
+    const sheet = sheetText();
+    expect(sheet).toContain('ใบเคลมประกันฟิล์มกันรอย');
+    // ฟิล์มที่ใช้ / เซลล์รับรถ — from the ticket, not typed a second time.
+    expect(sheet).toContain(FILM);
+    expect(sheet).toContain('คุณเซลล์');
+    // QC ผู้รับผิดชอบ — named once on the ใบงาน, printed here.
+    expect(sheet).toContain('คุณนิด');
+    // วันรับรถ / วันส่งมอบรถ of the job the warranty came from.
+    expect(sheet).toContain('วันรับรถ');
+    expect(sheet).toContain('24 ก.ค. 2569');
+    expect(sheet).toContain('25 ก.ค. 2569');
+    expect(sheet).toContain('09:00');
+    // ...and the team the ticket put on the job, ticked.
+    expect(sheet).toMatch(/✓บอล/);
+    expect(sheet).toMatch(/✓อ้วน/);
+  });
+
+  it('prints the latest claim when the button did not name one', async () => {
+    // The ปุ่มใบเคลม on the policy row passes no claim. Printing the claim boxes
+    // blank while a claim is on file is the same paperwork done twice.
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    renderWithPolicy();
+
+    await user.click(screen.getByLabelText(/พิมพ์ใบเคลมประกัน/));
+
+    const sheet = sheetText();
+    expect(sheet).toContain('1 ชิ้นใหญ่, 0 ชิ้นเล็ก');
+    expect(sheet).toContain('กันชนหน้า');
+    expect(sheet).toContain('คงเหลือ');
+    // 3 − 1 ชิ้นใหญ่ left, and the cover it came from.
+    expect(sheet).toContain('2 ชิ้นใหญ่, 20 ชิ้นเล็ก');
+  });
+});
+
+describe('TicketDetail — QC ผู้รับผิดชอบ', () => {
+  it('names one QC on the ticket and prints it on the ใบงานติดตั้ง', async () => {
+    // Before this the sheet had a blank line to write on, and the only place a
+    // QC name existed was inside a service visit — nothing said who checked the
+    // install itself.
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    const ticket = makeTicket({
+      items: [
+        {
+          category: 'ฟิล์มกรองแสง',
+          booked: '',
+          bookedPrice: 0,
+          sold: 'ฟิล์ม 3M CRM 60%',
+          soldPrice: 12000,
+          positions: [],
+        },
+      ],
+    });
+    render(
+      <TicketDetail
+        {...baseProps(ticket)}
+        initialOptions={options({ technicians: ['บอล', 'คุณนิด'] })}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText('QC ผู้รับผิดชอบ'), 'คุณนิด');
+    expect(screen.getByLabelText('QC ผู้รับผิดชอบ')).toHaveValue('คุณนิด');
+  });
+});

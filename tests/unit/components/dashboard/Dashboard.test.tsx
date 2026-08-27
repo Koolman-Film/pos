@@ -8,7 +8,12 @@ import userEvent from '@testing-library/user-event';
 vi.mock('@/components/charts/LineChart', () => ({ LineChart: () => null }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => {} }) }));
 
-import { Dashboard, type RecentJob } from '@/components/dashboard/Dashboard';
+import {
+  Dashboard,
+  appointmentDate,
+  groupUpcoming,
+  type RecentJob,
+} from '@/components/dashboard/Dashboard';
 
 const emptyTrend = { labels: [], revenue: [], expense: [], profit: [] };
 
@@ -122,6 +127,56 @@ describe('Dashboard upcoming bookings', () => {
     expect(screen.getByText(/การนัดหมายวันนี้/)).toHaveTextContent('(2)');
   });
 
+  it('marks a job that is under today because it goes BACK today', async () => {
+    const day = new Date(2026, 6, 27, 9, 0, 0);
+    render(
+      <Dashboard
+        {...base}
+        upcoming={[
+          {
+            ...job({ id: 'JT-9', customer: 'คุณ วิภา', status: 'รอส่งมอบ' }),
+            dropOff: new Date(2026, 6, 20, 9, 0, 0),
+            pickup: day,
+          },
+        ]}
+      />,
+    );
+    // The badge carries the STATUS, so the card and the board say the same word.
+    expect(screen.getByText('รอส่งมอบ')).toBeInTheDocument();
+  });
+
+  it('shows the time of the appointment and the product once one is chosen', () => {
+    render(
+      <Dashboard
+        {...base}
+        upcoming={[
+          {
+            ...job({ id: 'JT-7', products: ['ฟิล์ม 3M CRM 60%'] }),
+            dropOff: new Date(2026, 6, 27, 14, 30, 0),
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText('14:30')).toBeInTheDocument();
+    expect(screen.getByText('ฟิล์ม 3M CRM 60%')).toBeInTheDocument();
+  });
+
+  it('prints no time and no product line when neither was recorded', () => {
+    render(
+      <Dashboard
+        {...base}
+        upcoming={[
+          {
+            ...job({ id: 'JT-8', products: [] }),
+            // Midnight is what a ticket with no slot picked stores.
+            dropOff: new Date(2026, 6, 27, 0, 0, 0),
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText('00:00')).not.toBeInTheDocument();
+  });
+
   it('shows the empty state when nothing is booked in the window', () => {
     render(<Dashboard {...base} upcoming={[]} />);
     expect(screen.getByText('ยังไม่มีนัดหมายในช่วงนี้')).toBeInTheDocument();
@@ -196,5 +251,87 @@ describe('Dashboard create-ticket button', () => {
 
     render(<Dashboard {...base} canDo={(k) => k === 'list.createNew'} />);
     expect(screen.getByText(/สร้างใบงานใหม่/)).toHaveAttribute('href', '/tickets/new');
+  });
+});
+
+/**
+ * วันที่นัด — which day a job is listed under (การนัดหมายวันนี้ – อีก 7 วันข้างหน้า).
+ *
+ * The shop photographs this card and sends it out, so the grouping IS the
+ * deliverable: วันที่นัด → การนัดหมาย → ชนิดสินค้า, one line per car.
+ */
+describe('appointmentDate', () => {
+  const drop = new Date(2026, 6, 20, 9, 0, 0);
+  const pick = new Date(2026, 6, 27, 17, 0, 0);
+
+  it('lists a job under the day the car comes in', () => {
+    expect(appointmentDate({ status: 'จองแล้ว', dropOff: drop, pickup: pick })).toBe(drop);
+  });
+
+  it('lists a รอส่งมอบ job under the day it goes back', () => {
+    // It came in last week; under the drop-off date it would sit in the past,
+    // out of the window entirely, on no day anyone is looking at.
+    expect(appointmentDate({ status: 'รอส่งมอบ', dropOff: drop, pickup: pick })).toBe(pick);
+  });
+
+  it('falls back to the drop-off when a รอส่งมอบ job has no pickup date', () => {
+    expect(appointmentDate({ status: 'รอส่งมอบ', dropOff: drop, pickup: null })).toBe(drop);
+  });
+});
+
+describe('groupUpcoming', () => {
+  const day = new Date(2026, 6, 27, 9, 0, 0);
+  const later = new Date(2026, 7, 3, 17, 0, 0);
+  const row = (over: Partial<ReturnType<typeof baseUpcoming>> = {}) => ({
+    ...baseUpcoming(),
+    ...over,
+  });
+  function baseUpcoming() {
+    return {
+      id: 'JT-1',
+      customer: 'คุณ เอ',
+      brand: 'Toyota',
+      model: 'Vios',
+      plate: '1กก',
+      serviceType: 'เข้าทำ/ติดตั้ง',
+      categories: ['ฟิล์มกรองแสง'],
+      products: ['ฟิล์ม 3M CRM 60%'],
+      dropOff: day,
+      status: 'จองแล้ว',
+      pickup: null as Date | null,
+    };
+  }
+
+  it('nests ชนิดสินค้า under การนัดหมาย under วันที่', () => {
+    const days = groupUpcoming([
+      row(),
+      row({ id: 'JT-2', categories: ['ฟิล์มกันรอย'] }),
+      row({ id: 'JT-3', serviceType: 'ถอดฟิล์ม' }),
+    ]);
+    expect(days).toHaveLength(1);
+    expect(days[0].byService.map((g) => g.serviceType)).toEqual(['เข้าทำ/ติดตั้ง', 'ถอดฟิล์ม']);
+    expect(days[0].byService[0].byCategory.map((c) => c.category)).toEqual([
+      'ฟิล์มกรองแสง',
+      'ฟิล์มกันรอย',
+    ]);
+  });
+
+  it('keeps a job with two ชนิดสินค้า as one line, not two cars', () => {
+    const days = groupUpcoming([row({ categories: ['ฟิล์มกันรอย', 'เครื่องเสียง'] })]);
+    const cats = days[0].byService[0].byCategory;
+    expect(cats).toHaveLength(1);
+    expect(cats[0].category).toBe('ฟิล์มกันรอย, เครื่องเสียง');
+    expect(cats[0].tickets).toHaveLength(1);
+  });
+
+  it('files a รอส่งมอบ job under its handover day, not its drop-off day', () => {
+    const days = groupUpcoming([row(), row({ id: 'JT-2', status: 'รอส่งมอบ', pickup: later })]);
+    expect(days.map((d) => d.key)).toEqual([day.toDateString(), later.toDateString()]);
+  });
+
+  it('names the empty cases rather than dropping the row', () => {
+    const days = groupUpcoming([row({ serviceType: '', categories: [] })]);
+    expect(days[0].byService[0].serviceType).toBe('ยังไม่ระบุการนัดหมาย');
+    expect(days[0].byService[0].byCategory[0].category).toBe('ยังไม่ระบุชนิดสินค้า');
   });
 });

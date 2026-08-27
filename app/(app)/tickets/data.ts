@@ -257,6 +257,7 @@ type ExtraMeta = {
   notesByCategory?: Record<string, string>;
   wrapOptions?: string[];
   createdBy?: string;
+  qcBy?: string;
   qcPhotos?: string[];
   qcAlbumUrl?: string;
   installConfirmed?: boolean;
@@ -537,6 +538,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     notesByCategory: meta.notesByCategory ?? {},
     wrapOptions: meta.wrapOptions ?? [],
     createdBy: meta.createdBy ?? '',
+    qcBy: meta.qcBy ?? '',
     qcPhotos: meta.qcPhotos ?? [],
     qcAlbumUrl: meta.qcAlbumUrl ?? '',
     serviceVisits: service.visits,

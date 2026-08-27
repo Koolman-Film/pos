@@ -69,6 +69,31 @@ export function TechSection({
   return (
     <div>
       <div className="mb-3 rounded-xl p-3" style={{ background: '#fff' }}>
+        {/*
+          Who checked the work. The photos below are the evidence; this is the
+          person who stands behind them. Asked for once here and then carried
+          onto every sheet that has a QC box — the ใบงานติดตั้ง, the ใบเซอร์วิส
+          and the ใบเคลมประกัน — instead of being written by hand on each.
+        */}
+        <label className={labelCls} htmlFor="ticket-qc-by" style={{ color: 'var(--ink-soft)' }}>
+          <i className="fa-solid fa-user-check mr-1"></i>QC ผู้รับผิดชอบ
+        </label>
+        <select
+          id="ticket-qc-by"
+          value={t.qcBy || ''}
+          onChange={(e) => field('qcBy', e.target.value)}
+          className="field w-full text-sm px-3 py-2 mb-3"
+        >
+          <option value="">ยังไม่ระบุ</option>
+          {technicians.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+          {/* Someone who has since left the list still shows on their own
+              tickets — dropping them would silently blank an old sign-off. */}
+          {t.qcBy && !technicians.includes(t.qcBy) && <option value={t.qcBy}>{t.qcBy}</option>}
+        </select>
         <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
           <i className="fa-solid fa-camera mr-1"></i>QC ก่อนติดตั้ง
         </label>

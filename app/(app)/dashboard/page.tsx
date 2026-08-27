@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { ticketTotal } from '@/lib/domain/tickets';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
-import { Dashboard } from '@/components/dashboard/Dashboard';
+import { appointmentDate, Dashboard } from '@/components/dashboard/Dashboard';
 import type {
   PendingApprovals,
   RecentJob,
@@ -54,7 +54,7 @@ export default async function DashboardPage({
     supabase
       .from('tickets')
       .select(
-        'id, shop_id, customer_name, plate, brand, model, service_type, status, drop_off_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
+        'id, shop_id, customer_name, plate, brand, model, service_type, status, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
       )
       // Soft-deleted tickets (migration 0013) are out of every figure on this
       // screen — revenue, job counts, the calendar and the bookings window.
@@ -131,6 +131,7 @@ export default async function DashboardPage({
     serviceType: t.service_type,
     status: t.status,
     dropOff: toDate(t.drop_off_date),
+    pickup: toDate(t.pickup_date),
     // Distinct product categories, and the product names the prototype shows on
     // the recent-jobs rows (`i.sold || i.booked`).
     categories: [...new Set((t.ticket_items ?? []).map((i) => i.category).filter(Boolean))],
@@ -332,10 +333,15 @@ export default async function DashboardPage({
 
   // Period-independent on purpose: this card is the next seven days, which the
   // selected month/year has no say over.
+  //
+  // The window is measured on วันที่นัด, not on the drop-off: a รอส่งมอบ job
+  // came in days ago and is due back this week, and filtering on the old date
+  // would keep the day it actually needs someone off the card entirely.
   const upcoming: UpcomingTicket[] = shopTickets
-    .filter((t) => t.dropOff && t.dropOff >= windowStart && t.dropOff <= windowEnd)
-    .sort((a, b) => (a.dropOff as Date).getTime() - (b.dropOff as Date).getTime())
-    .map((t) => ({
+    .map((t) => ({ t, appt: appointmentDate(t) }))
+    .filter(({ appt }) => appt && appt >= windowStart && appt <= windowEnd)
+    .sort((a, b) => (a.appt as Date).getTime() - (b.appt as Date).getTime())
+    .map(({ t }) => ({
       id: t.id,
       customer: t.customer,
       brand: t.brand,
@@ -343,7 +349,10 @@ export default async function DashboardPage({
       plate: t.plate,
       serviceType: t.serviceType,
       categories: t.categories,
+      products: t.products,
       dropOff: t.dropOff as Date,
+      status: t.status,
+      pickup: t.pickup,
     }));
 
   // Pending approvals count across ALL orders the caller can see, not the

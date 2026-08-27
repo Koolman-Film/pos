@@ -700,6 +700,17 @@ export function PrintJobSheet({
                   &nbsp;
                 </span>
               )}
+              {/* Who checks the work belongs beside who did it. */}
+              <span>QC</span>
+              {t.qcBy ? (
+                <span style={{ fontWeight: 'bold' }}>{t.qcBy}</span>
+              ) : (
+                <span
+                  style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 120 }}
+                >
+                  &nbsp;
+                </span>
+              )}
             </p>
             <div style={{ display: 'flex', gap: 12 }}>
               <div

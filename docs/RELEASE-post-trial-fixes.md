@@ -1,4 +1,4 @@
-# Release runbook — post-trial fixes (migrations 0012–0029)
+# Release runbook — post-trial fixes (migrations 0012–0030)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
 
@@ -28,7 +28,7 @@ dashboard and the accounting page.
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0029 only
+npx supabase db push                     # applies 0012 … 0030 only
 ```
 
 ### No CLI? Paste the files instead
@@ -37,26 +37,33 @@ In this order, from the dashboard → SQL Editor. Each is guarded so that runnin
 it twice changes nothing, and each records its versions in
 `supabase_migrations.schema_migrations` so a later `db push` skips them.
 
-| Order | File                                          | Needs                                      |
-| ----- | --------------------------------------------- | ------------------------------------------ |
-| 1     | `supabase/release-0012-0018.sql`              | a normal connection                        |
-| 2     | `supabase/storage-policies.sql`               | **owner of `storage.objects`** — see below |
-| 3     | `supabase/release-0019.sql`                   | a normal connection                        |
-| 4     | `supabase/release-0020.sql`                   | a normal connection                        |
-| 5     | `supabase/release-0021.sql`                   | a normal connection                        |
-| 6     | `supabase/release-0022.sql`                   | a normal connection                        |
-| 7     | `supabase/release-0023.sql`                   | a normal connection                        |
-| 8     | `supabase/release-0024.sql`                   | a normal connection                        |
-| 9     | `supabase/release-0025.sql`                   | a normal connection                        |
-| 10    | `supabase/release-0026.sql`                   | a normal connection                        |
-| 11    | `supabase/release-0027.sql`                   | a normal connection                        |
-| 12    | `supabase/release-0028.sql`                   | a normal connection                        |
-| 13    | `supabase/release-0029.sql`                   | a normal connection                        |
-| 14    | `supabase/repair-categories-and-services.sql` | a normal connection                        |
+| Order | File                                          | Needs                                               |
+| ----- | --------------------------------------------- | --------------------------------------------------- |
+| 0     | `supabase/release-0030.sql`                   | a normal connection — **run this first, see below** |
+| 1     | `supabase/release-0012-0018.sql`              | a normal connection                                 |
+| 2     | `supabase/storage-policies.sql`               | **owner of `storage.objects`** — see below          |
+| 3     | `supabase/release-0019.sql`                   | a normal connection                                 |
+| 4     | `supabase/release-0020.sql`                   | a normal connection                                 |
+| 5     | `supabase/release-0021.sql`                   | a normal connection                                 |
+| 6     | `supabase/release-0022.sql`                   | a normal connection                                 |
+| 7     | `supabase/release-0023.sql`                   | a normal connection                                 |
+| 8     | `supabase/release-0024.sql`                   | a normal connection                                 |
+| 9     | `supabase/release-0025.sql`                   | a normal connection                                 |
+| 10    | `supabase/release-0026.sql`                   | a normal connection                                 |
+| 11    | `supabase/release-0027.sql`                   | a normal connection                                 |
+| 12    | `supabase/release-0028.sql`                   | a normal connection                                 |
+| 13    | `supabase/release-0029.sql`                   | a normal connection                                 |
+| 14    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all fourteen in order
+already been handed over. If nothing has been run yet, running all fifteen in order
 is still correct.
+
+`release-0030.sql` is numbered 0 because it is the one file that is urgent and
+depends on nothing: it adds the missing indexes that make the live site slow, it
+creates no table and changes no data, and every statement in it is skipped when
+its table is not in the database yet. Run it on its own, today, whatever else has
+or has not been run. It is safe to run again afterwards in numerical order.
 
 The last step is a one-time DATA repair, not schema. It folds every ชนิดสินค้า that
 products actually use into `product_categories` (so a product whose category was
@@ -95,6 +102,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0027_stock_batches`            | `stock_batches` — รับของแต่ละรอบเป็นล็อตของตัวเอง พร้อมผู้ขาย/เลขที่ใบส่งของ, `stock_movement_batches` เก็บว่าตัดจากล็อตไหนราคาเท่าไหร่, `receive_stock()` และ `move_stock()` ตัดแบบ FIFO พร้อมคิดต้นทุน, `stock.cost` กลายเป็นค่าเฉลี่ยถ่วงน้ำหนักที่คำนวณเอง                                                                       | ปานกลาง — ของที่มีอยู่กลายเป็น "ล็อตยกมา" ล็อตเดียว และ `cost` เลิกพิมพ์เอง                 |
 | `0028_stock_transfer`           | `transfer_stock()` — โอนสต็อกระหว่างสาขาเป็นการกระทำเดียว ตัด FIFO ที่ต้นทาง แล้วสร้างล็อตปลายทางด้วยต้นทุนเดิม ลงสมุดบัญชีทั้งสองฝั่ง                                                                                                                                                                                               | ต่ำ. เพิ่ม function อย่างเดียว                                                              |
 | `0029_film_price_per_shop`      | `film_price_matrix.shop_id` — ราคาฟิล์ม/กันรอย ตั้งแยกรายสาขาได้ NULL = ราคากลางใช้ทุกสาขา เดิมมีราคาเดียวใช้ร่วมกันทุกสาขา แก้ของสาขาหนึ่งแล้วอีกสี่สาขาเปลี่ยนตามโดยไม่มีใครรู้                                                                                                                                                    | ต่ำ. เพิ่มคอลัมน์ที่เป็น NULL ได้ แถวเดิมเป็นราคากลางทั้งหมด                                |
+| `0030_hot_path_indexes`         | ดัชนีของตารางลูก (ticket_items / ticket_payments / order_items …) และคอลัมน์ที่ใช้เรียงลำดับ — ตารางชุดแรกไม่เคยมีดัชนีเลยนอกจาก primary key หน้าที่แสดงรายการใบงานจึงสแกนตารางลูกทั้งตารางหนึ่งรอบต่อใบงานหนึ่งใบ วัดที่ 2,000 ใบงาน: 4,033 ms → 25 ms                                                                              | ต่ำมาก. เพิ่มดัชนีอย่างเดียว ไม่แตะข้อมูล                                                   |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

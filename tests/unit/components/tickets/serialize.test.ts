@@ -192,6 +192,7 @@ const meta = (t: Ticket) =>
     notesByCategory: Record<string, string>;
     wrapOptions: string[];
     qcAlbumUrl: string;
+    qcBy: string;
   };
 
 describe('serializeTicket — per-category notes and wrap options', () => {
@@ -219,6 +220,13 @@ describe('serializeTicket — per-category notes and wrap options', () => {
   it('sends empty containers rather than undefined for a ticket with neither', () => {
     expect(meta(baseTicket()).notesByCategory).toEqual({});
     expect(meta(baseTicket()).wrapOptions).toEqual([]);
+  });
+
+  it('carries the QC ผู้รับผิดชอบ, trimmed', () => {
+    // The one name the ใบงานติดตั้ง, ใบเซอร์วิส and ใบเคลม all print.
+    const t = baseTicket({ qcBy: '  คุณนิด  ' } as unknown as Partial<Ticket>);
+    expect(meta(t).qcBy).toBe('คุณนิด');
+    expect(meta(baseTicket()).qcBy).toBe('');
   });
 
   it('carries the external QC album link, trimmed', () => {

@@ -15,6 +15,17 @@ export function fmtThaiDate(d: Date | null | undefined): string {
   return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+/**
+ * The clock part of a Date as `HH:MM`, or '' when there is no usable date.
+ *
+ * Printed forms carry a time beside the date (เวลารับรถ / เวลาส่งมอบรถ), and
+ * the ticket stores both in one timestamp.
+ */
+export function hhmm(d: Date | null | undefined): string {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 export function fmt(n: number | null | undefined): string {
   return Number(n || 0).toLocaleString('th-TH', {
     minimumFractionDigits: 2,

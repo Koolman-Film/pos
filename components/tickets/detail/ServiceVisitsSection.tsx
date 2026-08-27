@@ -36,7 +36,9 @@ const empty = (
   deliveredTime: '',
   // The person filling this in is the one receiving the car, nine times in ten.
   salesBy: currentUserName,
-  qcBy: '',
+  // The QC named on the ticket, for the same reason the team is: it is almost
+  // always the same person, and asking again is how two answers appear.
+  qcBy: t.qcBy ?? '',
   // The team the ticket put on the ฟิล์มกันรอย job. Almost always the same
   // people, so it is filled in rather than asked for again — still editable,
   // because a visit two years later may be somebody else.
