@@ -201,6 +201,15 @@ export type Ticket = {
    * Each carries its own ticket id so the list can link back.
    */
   insuranceForPlate?: InsurancePolicy[];
+  /**
+   * ใบงานนี้เป็นรายได้ของสาขา หรือเงินที่รับแทน Finnix (migration 0031).
+   *
+   * 'รับแทน' means the customer paid here for a job that belongs to another
+   * Finnix shop: the cash was collected, so it stays on the payments, but it
+   * is not this branch’s takings and is kept out of every sales figure.
+   * Absent counts as รายได้ — the ticket predates the choice.
+   */
+  revenueKind?: 'รายได้' | 'รับแทน';
   createdBy?: string;
   /**
    * QC ผู้รับผิดชอบ — the one person who signed off the work on this ticket.
@@ -321,6 +330,7 @@ export type TicketSavePayload = {
   serviceType: string;
   status: string;
   bookingChannel: string;
+  revenueKind: 'รายได้' | 'รับแทน';
   techByCategory: Record<string, string[]>;
   dropOffDate: string;
   pickupDate: string;

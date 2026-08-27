@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
@@ -38,6 +39,17 @@ function downloadBase64(base64: string, fileName: string) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+/** One ใบงาน whose money is held for another Finnix shop. */
+type HeldJob = {
+  ticketId: string;
+  shop: string;
+  soldAt: string;
+  customer: string;
+  plate: string;
+  products: string[];
+  amount: number;
+};
 
 export function RevenueModule({
   lines,
@@ -79,7 +91,17 @@ export function RevenueModule({
     // null as "always in", which would smear undated rows across every month.
     d ? isInPeriod(new Date(`${d}T00:00:00`), period, periodValue, rangeStart, rangeEnd) : false;
 
-  const scoped = lines.filter((l) => inShop(l.shop) && inPeriod(l.soldAt));
+  const inScope = lines.filter((l) => inShop(l.shop) && inPeriod(l.soldAt));
+  /*
+    เงินรอคืน Finnix is split off before anything is counted (migration 0031).
+
+    The customer paid this branch for a job that belongs to another Finnix
+    shop, so the cash was taken and is on the ticket — but it is not this
+    branch's takings. Folding it into ยอดขาย would overstate every figure on
+    this page and disagree with the dashboard, which excludes it too.
+  */
+  const scoped = inScope.filter((l) => !l.held);
+  const heldLines = inScope.filter((l) => l.held);
   const categories = [...new Set(scoped.map((l) => l.category))].sort();
 
   const visible = scoped.filter(
@@ -89,6 +111,26 @@ export function RevenueModule({
   );
 
   const total = visible.reduce((s, l) => s + l.amount, 0);
+  const heldTotal = heldLines.reduce((s, l) => s + l.amount, 0);
+  /** One row per held ใบงาน — the report is read by job, not by product line. */
+  const heldJobs = [
+    ...heldLines
+      .reduce((m, l) => {
+        const row = m.get(l.ticketId) ?? {
+          ticketId: l.ticketId,
+          shop: l.shop,
+          soldAt: l.soldAt,
+          customer: l.customer,
+          plate: l.plate,
+          products: [] as string[],
+          amount: 0,
+        };
+        row.products.push(l.product);
+        row.amount += l.amount;
+        return m.set(l.ticketId, row);
+      }, new Map<string, HeldJob>())
+      .values(),
+  ].sort((a, b) => (a.soldAt < b.soldAt ? 1 : a.soldAt > b.soldAt ? -1 : 0));
   // A ticket selling three categories is ONE job, counted once.
   const jobCount = new Set(visible.map((l) => l.ticketId)).size;
   const taxTotal = visible.filter((l) => l.taxInvoiceNo).reduce((s, l) => s + l.amount, 0);
@@ -111,7 +153,9 @@ export function RevenueModule({
 
   async function exportExcel() {
     if (!exportAction) return;
-    const rows = visible.map((l) => ({
+    // A widened row shape: held jobs carry a เงินรอคืน column the sales rows
+    // leave empty, so one sheet holds both piles without a second header.
+    const rows: Record<string, string | number>[] = visible.map((l) => ({
       วันที่ขาย: l.soldAt,
       ใบงาน: l.ticketId,
       สาขา: shopName(l.shop),
@@ -123,6 +167,23 @@ export function RevenueModule({
       ...(canSeeCost ? { ต้นทุน: l.cost, กำไรขั้นต้น: l.amount - l.cost } : {}),
       เลขที่ใบกำกับภาษี: l.taxInvoiceNo,
     }));
+    // Held jobs ride along at the bottom rather than in a second file: the
+    // accountant reconciles the drawer against both piles at once.
+    for (const j of heldJobs) {
+      rows.push({
+        วันที่ขาย: j.soldAt,
+        ใบงาน: j.ticketId,
+        สาขา: shopName(j.shop),
+        ลูกค้า: j.customer,
+        ทะเบียน: j.plate,
+        ชนิดสินค้า: 'เงินรอคืน Finnix',
+        สินค้า: j.products.join(', '),
+        ยอดขาย: 0,
+        ...(canSeeCost ? { ต้นทุน: 0, กำไรขั้นต้น: 0 } : {}),
+        เลขที่ใบกำกับภาษี: '',
+        เงินรอคืน: j.amount,
+      });
+    }
     const result = await exportAction({
       fileNameBase: `รายได้-${exportStamp()}`,
       groups: [{ sheetName: 'รายการขาย', rows }],
@@ -164,8 +225,8 @@ export function RevenueModule({
       </p>
 
       <div
-        className={`grid grid-cols-1 gap-3 mb-5 ${
-          canSeeCost ? 'sm:grid-cols-4' : 'sm:grid-cols-3'
+        className={`grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 ${
+          canSeeCost ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
         }`}
       >
         <div className="card p-4">
@@ -181,6 +242,19 @@ export function RevenueModule({
             จำนวนใบงาน
           </p>
           <p className="text-2xl font-extrabold">{jobCount}</p>
+        </div>
+        {/* Held money gets a card of its own rather than a line inside ยอดขาย:
+            it is a different pile, and the shop settles it separately. */}
+        <div className="card p-4">
+          <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+            เงินรอคืน Finnix
+          </p>
+          <p className="text-2xl font-extrabold" style={{ color: '#8A5A12' }}>
+            {fmt(heldTotal)}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--ink-faint)' }}>
+            {heldJobs.length > 0 ? `${heldJobs.length} ใบงาน · ไม่รวมในยอดขาย` : 'ไม่มีในช่วงนี้'}
+          </p>
         </div>
         <div className="card p-4">
           {/* The accountant's figure: how much of the period was invoiced. */}
@@ -251,6 +325,77 @@ export function RevenueModule({
           </button>
         ))}
       </div>
+
+      {/* สรุปเงินรอคืน Finnix — only when the period holds any, so the page does
+          not carry an empty table for the branches that never take this work. */}
+      {heldJobs.length > 0 && (
+        <div className="card p-5 mb-4" style={{ borderLeft: '3px solid #8A5A12' }}>
+          <div className="flex items-baseline justify-between gap-2 mb-1 flex-wrap">
+            <p className="text-sm font-semibold">เงินรอคืน Finnix ({heldJobs.length} ใบงาน)</p>
+            <p className="text-lg font-extrabold" style={{ color: '#8A5A12' }}>
+              {fmt(heldTotal)}
+            </p>
+          </div>
+          <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+            ใบงานที่รับเงินแทน Finnix ในช่วงเวลานี้ — เก็บเงินแล้วแต่ไม่นับเป็นยอดขายของสาขา
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ color: 'var(--ink-soft)' }}>
+                  <th className="text-left font-medium py-2">วันที่</th>
+                  <th className="text-left font-medium py-2">ใบงาน</th>
+                  <th className="text-left font-medium py-2">ลูกค้า</th>
+                  <th className="text-left font-medium py-2">สินค้า</th>
+                  <th className="text-right font-medium py-2">ยอดรับแทน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {heldJobs.map((j) => (
+                  <tr key={j.ticketId} style={{ borderTop: '1px solid var(--line)' }}>
+                    <td className="py-2 whitespace-nowrap text-xs">{j.soldAt}</td>
+                    <td className="py-2">
+                      <Link
+                        href={`/tickets/${j.ticketId}`}
+                        className="font-medium"
+                        style={{ color: 'var(--primary)' }}
+                      >
+                        {j.ticketId}
+                      </Link>
+                      <span className="block text-xs" style={{ color: 'var(--ink-faint)' }}>
+                        {shopName(j.shop)}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      {j.customer}
+                      <span className="block text-xs" style={{ color: 'var(--ink-faint)' }}>
+                        {j.plate}
+                      </span>
+                    </td>
+                    <td className="py-2 text-xs">{j.products.join(', ')}</td>
+                    <td className="py-2 text-right font-semibold whitespace-nowrap">
+                      {fmt(j.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '2px solid var(--line-strong)' }}>
+                  <td className="py-2 text-xs font-semibold" colSpan={4}>
+                    รวมเงินรอคืน Finnix
+                  </td>
+                  <td
+                    className="py-2 text-right font-extrabold whitespace-nowrap"
+                    style={{ color: '#8A5A12' }}
+                  >
+                    {fmt(heldTotal)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="card p-5">
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">

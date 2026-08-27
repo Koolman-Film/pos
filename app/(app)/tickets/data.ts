@@ -277,6 +277,7 @@ type DetailRow = {
   service_type: string;
   status: string;
   booking_channel: string;
+  revenue_kind: string;
   tech_by_category: Record<string, string[]> | null;
   drop_off_date: string;
   pickup_date: string;
@@ -499,7 +500,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     .from('tickets')
     .select(
       'id, shop_id, customer_name, phone, plate, car_type, brand, model, color, service_type, status, ' +
-        'booking_channel, tech_by_category, drop_off_date, pickup_date, extras, locked, ' +
+        'booking_channel, revenue_kind, tech_by_category, drop_off_date, pickup_date, extras, locked, ' +
         'ticket_items(id, category, booked, booked_price, sold, sold_price, interested, interested_price, discount_type, discount_value, actual_qty, ' +
         'ticket_item_positions(position, product, price)), ' +
         'ticket_payments(type, method, amount, paid_at, attachments)',
@@ -530,6 +531,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     serviceType: t.service_type,
     status: t.status,
     bookingChannel: t.booking_channel,
+    revenueKind: t.revenue_kind === 'รับแทน' ? 'รับแทน' : 'รายได้',
     techByCategory: (t.tech_by_category as Record<string, string[]>) || {},
     dropOffDateObj: new Date(t.drop_off_date),
     pickupDateObj: new Date(t.pickup_date),

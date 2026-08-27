@@ -219,6 +219,7 @@ function ticketRow(p: TicketSavePayload, id: string, retailCustomerId: number | 
     service_type: p.serviceType,
     status: p.status,
     booking_channel: p.bookingChannel,
+    revenue_kind: p.revenueKind,
     tech_by_category: p.techByCategory,
     drop_off_date: p.dropOffDate,
     pickup_date: p.pickupDate,

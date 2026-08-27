@@ -1110,6 +1110,7 @@ export function TicketDetail({
                 addPayment={addPayment}
                 removePayment={removePayment}
                 updatePayment={updatePayment}
+                setRevenueKind={(kind) => field('revenueKind', kind)}
                 total={total}
                 paid={paid}
               />

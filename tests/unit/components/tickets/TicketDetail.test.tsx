@@ -577,3 +577,24 @@ describe('TicketDetail — QC ผู้รับผิดชอบ', () => {
     expect(screen.getByLabelText('QC ผู้รับผิดชอบ')).toHaveValue('คุณนิด');
   });
 });
+
+describe('TicketDetail — รายได้ / รับแทน', () => {
+  it('starts on รายได้ and switches the whole ticket to รับแทน', async () => {
+    const user = userEvent.setup();
+    const saveAction = vi.fn(async () => ({ ok: true, id: 'JT-CM-00214' }));
+    render(<TicketDetail {...baseProps(makeTicket())} saveAction={saveAction} />);
+
+    const held = screen.getByRole('button', { name: /รับแทน Finnix/ });
+    const own = screen.getByRole('button', { name: /รายได้ของสาขา/ });
+    expect(own).toHaveAttribute('aria-pressed', 'true');
+    expect(held).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(held);
+    expect(held).toHaveAttribute('aria-pressed', 'true');
+    // The consequence is stated on screen, not left for the report to reveal.
+    expect(screen.getByText(/ไม่นับเป็นยอดขายของสาขา/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    expect(saveAction).toHaveBeenCalledWith(expect.objectContaining({ revenueKind: 'รับแทน' }));
+  });
+});

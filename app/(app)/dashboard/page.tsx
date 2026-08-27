@@ -55,7 +55,7 @@ export default async function DashboardPage({
     supabase
       .from('tickets')
       .select(
-        'id, shop_id, customer_name, plate, brand, model, service_type, status, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
+        'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
       )
       // Soft-deleted tickets (migration 0013) are out of every figure on this
       // screen — revenue, job counts, the calendar and the bookings window.
@@ -131,6 +131,9 @@ export default async function DashboardPage({
     model: t.model,
     serviceType: t.service_type,
     status: t.status,
+    // 'รับแทน' = the customer paid here for another Finnix shop's job, so the
+    // money is held, not earned (migration 0031).
+    held: t.revenue_kind === 'รับแทน',
     dropOff: toDate(t.drop_off_date),
     pickup: toDate(t.pickup_date),
     // Distinct product categories, and the product names the prototype shows on
@@ -225,7 +228,12 @@ export default async function DashboardPage({
     .filter((p) => inPeriod(p.sold_at ? new Date(`${p.sold_at}T00:00:00`) : null))
     .reduce((s, p) => s + num(p.price), 0);
 
-  const revenue = visibleTickets.reduce((s, t) => s + ticketTotal(t), 0) + insuranceRevenue;
+  // ยอดขาย counts only what the branch earned. เงินรอคืน Finnix is collected
+  // and recorded, but it belongs to another shop and is reported separately in
+  // โมดูลรายได้ — never folded into this figure.
+  const revenue =
+    visibleTickets.filter((t) => !t.held).reduce((s, t) => s + ticketTotal(t), 0) +
+    insuranceRevenue;
 
   /*
     ประกันใกล้หมดอายุ — the 30-day window the shop asked for.

@@ -1,4 +1,4 @@
-# Release runbook — post-trial fixes (migrations 0012–0030)
+# Release runbook — post-trial fixes (migrations 0012–0031)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
 
@@ -28,7 +28,7 @@ dashboard and the accounting page.
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0030 only
+npx supabase db push                     # applies 0012 … 0031 only
 ```
 
 ### No CLI? Paste the files instead
@@ -53,10 +53,11 @@ it twice changes nothing, and each records its versions in
 | 11    | `supabase/release-0027.sql`                   | a normal connection                                 |
 | 12    | `supabase/release-0028.sql`                   | a normal connection                                 |
 | 13    | `supabase/release-0029.sql`                   | a normal connection                                 |
-| 14    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 14    | `supabase/release-0031.sql`                   | a normal connection                                 |
+| 15    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all fifteen in order
+already been handed over. If nothing has been run yet, running all sixteen in order
 is still correct.
 
 `release-0030.sql` is numbered 0 because it is the one file that is urgent and
@@ -103,6 +104,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0028_stock_transfer`           | `transfer_stock()` — โอนสต็อกระหว่างสาขาเป็นการกระทำเดียว ตัด FIFO ที่ต้นทาง แล้วสร้างล็อตปลายทางด้วยต้นทุนเดิม ลงสมุดบัญชีทั้งสองฝั่ง                                                                                                                                                                                               | ต่ำ. เพิ่ม function อย่างเดียว                                                              |
 | `0029_film_price_per_shop`      | `film_price_matrix.shop_id` — ราคาฟิล์ม/กันรอย ตั้งแยกรายสาขาได้ NULL = ราคากลางใช้ทุกสาขา เดิมมีราคาเดียวใช้ร่วมกันทุกสาขา แก้ของสาขาหนึ่งแล้วอีกสี่สาขาเปลี่ยนตามโดยไม่มีใครรู้                                                                                                                                                    | ต่ำ. เพิ่มคอลัมน์ที่เป็น NULL ได้ แถวเดิมเป็นราคากลางทั้งหมด                                |
 | `0030_hot_path_indexes`         | ดัชนีของตารางลูก (ticket_items / ticket_payments / order_items …) และคอลัมน์ที่ใช้เรียงลำดับ — ตารางชุดแรกไม่เคยมีดัชนีเลยนอกจาก primary key หน้าที่แสดงรายการใบงานจึงสแกนตารางลูกทั้งตารางหนึ่งรอบต่อใบงานหนึ่งใบ วัดที่ 2,000 ใบงาน: 4,033 ms → 25 ms                                                                              | ต่ำมาก. เพิ่มดัชนีอย่างเดียว ไม่แตะข้อมูล                                                   |
+| `0031_ticket_revenue_kind`      | `tickets.revenue_kind` — ใบงานเป็น "รายได้" หรือ "รับแทน" ใบงานที่รับเงินแทน Finnix จะไม่ถูกนับเป็นยอดขายทั้งบนแดชบอร์ดและโมดูลรายได้ แต่ไปขึ้นเป็น "เงินรอคืน Finnix" แทน ใบงานเดิมทั้งหมดเป็น "รายได้" ตามค่าตั้งต้น                                                                                                               | ต่ำ. เพิ่มคอลัมน์ที่มีค่าตั้งต้น ไม่แตะข้อมูลเดิม                                           |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

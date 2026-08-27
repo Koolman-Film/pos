@@ -1192,6 +1192,7 @@ export type Database = {
       }
       tickets: {
         Row: {
+          revenue_kind: string
           booking_channel: string
           brand: string
           car_type: string
@@ -1215,6 +1216,7 @@ export type Database = {
           tech_by_category: Json
         }
         Insert: {
+          revenue_kind?: string
           booking_channel?: string
           brand?: string
           car_type?: string
@@ -1238,6 +1240,7 @@ export type Database = {
           tech_by_category?: Json
         }
         Update: {
+          revenue_kind?: string
           booking_channel?: string
           brand?: string
           car_type?: string
