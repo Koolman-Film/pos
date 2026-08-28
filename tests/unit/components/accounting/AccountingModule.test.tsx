@@ -226,3 +226,64 @@ describe('AccountingModule attachments', () => {
     expect(screen.queryByTitle(/^เปิด /)).not.toBeInTheDocument();
   });
 });
+
+/**
+ * เงินรอรับคืน Finnix (migration 0032).
+ *
+ * The branch pays a bill that belongs to another Finnix shop. The cash left the
+ * drawer — so the row stays in the list and in the petty-cash balance — but it
+ * is not this branch's cost, and counting it as one understates the profit by
+ * exactly the amount the shop is waiting to get back.
+ */
+describe('AccountingModule — เงินรอรับคืน Finnix', () => {
+  const mixed = [
+    { ...expenses[0], id: 1, amount: 35000, dateObj: new Date() },
+    {
+      id: 2,
+      shop: 'cm',
+      desc: 'ค่าฟิล์มงานร้านต้นทาง',
+      category: 'ค่าวัสดุสิ้นเปลือง',
+      source: 'บัญชีธนาคารสาขา',
+      amount: 12000,
+      status: 'จ่ายแล้ว',
+      paidForFinnix: true,
+      dateObj: new Date(),
+    },
+  ];
+
+  it('keeps money paid for Finnix out of จ่ายแล้ว and reports it on its own', () => {
+    render(<AccountingModule expenses={mixed} pettyCash={pettyCash} />);
+
+    const paidCard = screen
+      .getAllByText('จ่ายแล้ว')
+      .find((el) => el.tagName === 'P')!
+      .closest('div')!;
+    expect(within(paidCard).getByText('35,000.00')).toBeInTheDocument();
+
+    const heldCard = screen.getByText('เงินรอรับคืน Finnix').closest('div')!;
+    expect(within(heldCard).getByText('12,000.00')).toBeInTheDocument();
+    expect(within(heldCard).getByText(/1 รายการ/)).toBeInTheDocument();
+  });
+
+  it('lists each reimbursable row in its own report', () => {
+    render(<AccountingModule expenses={mixed} pettyCash={pettyCash} />);
+    const report = screen
+      .getByText(/เงินรอรับคืน Finnix \(1 รายการ\)/)
+      .closest('.card') as HTMLElement;
+    expect(within(report).getByText('ค่าฟิล์มงานร้านต้นทาง')).toBeInTheDocument();
+    expect(within(report).queryByText('ค่าเช่าร้านเดือนกรกฎาคม')).not.toBeInTheDocument();
+  });
+
+  it('says nothing at all when the period holds none', () => {
+    render(
+      <AccountingModule
+        expenses={[{ ...expenses[0], dateObj: new Date() }]}
+        pettyCash={pettyCash}
+      />,
+    );
+    expect(screen.queryByText(/เงินรอรับคืน Finnix \(/)).not.toBeInTheDocument();
+    // The card stays, so the shop can see the figure is zero.
+    expect(screen.getByText('เงินรอรับคืน Finnix')).toBeInTheDocument();
+    expect(screen.getByText('ไม่มีในช่วงนี้')).toBeInTheDocument();
+  });
+});

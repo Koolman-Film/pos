@@ -63,6 +63,13 @@ export type ExpenseView = {
   source: string;
   amount: number;
   status: string; // 'จ่ายแล้ว' | 'รอจ่าย'
+  /**
+   * เงินรอรับคืน Finnix — the branch paid a bill that belongs to another
+   * Finnix shop (migration 0032). The cash did leave, so the row stays in
+   * ค่าใช้จ่าย and in the petty-cash balance; it is simply not this branch’s
+   * cost and is kept out of the expense totals.
+   */
+  paidForFinnix?: boolean;
   date?: string;
   dateObj?: Date | string | null;
   due?: string;
@@ -108,6 +115,8 @@ export type NewExpenseInput = {
    * for a รอจ่าย one — the two dates the module already displays.
    */
   date?: string;
+  /** จ่ายแทน Finnix — one answer for the whole document (migration 0032). */
+  paidForFinnix?: boolean;
   lines: { desc: string; category: string; amount: number }[];
   /** Receipts shared by every line in this submission, as the panel states. */
   attachments?: UploadedAttachment[];
@@ -125,6 +134,7 @@ export type UpdateExpenseInput = {
   amount: number;
   status: string;
   paidAt: string | null;
+  paidForFinnix?: boolean;
 };
 
 /** Payload handed to the Excel-export Server Action. */
@@ -251,6 +261,8 @@ export function AccountingModule({
     // money moved, and the action used to stamp `now()` with no way to say
     // otherwise — so a Monday entry for Friday's fuel landed on Monday.
     date: todayValue(),
+    // ค่าใช้จ่ายของสาขาเป็นค่าตั้งต้น — จ่ายแทนเป็นข้อยกเว้น จึงต้องตั้งใจเลือก
+    paidForFinnix: false,
     lines: [{ desc: '', category: '', amount: 0 }] as ExpenseLine[],
   });
   const emptyTopup = () => ({ shop: firstShop, amount: 0 as number | string, note: '' });
@@ -295,12 +307,23 @@ export function AccountingModule({
       (statusFilter === 'all' || e.status === statusFilter) &&
       inSelectedPeriod(e.dateObj),
   );
-  const paidTotal = shopExpenses
+  /*
+    เงินรอรับคืน Finnix is split off before the totals (migration 0032).
+
+    The cash left the drawer, so these rows stay in the list and in the
+    petty-cash balance — but they are another Finnix shop's costs, and adding
+    them to ค่าใช้จ่าย would understate the branch's profit by exactly the
+    amount it is waiting to get back.
+  */
+  const ownExpenses = shopExpenses.filter((e) => !e.paidForFinnix);
+  const finnixExpenses = shopExpenses.filter((e) => e.paidForFinnix);
+  const paidTotal = ownExpenses
     .filter((e) => e.status === 'จ่ายแล้ว')
     .reduce((s, e) => s + Number(e.amount), 0);
-  const pendingTotal = shopExpenses
+  const pendingTotal = ownExpenses
     .filter((e) => e.status === 'รอจ่าย')
     .reduce((s, e) => s + Number(e.amount), 0);
+  const finnixTotal = finnixExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const cashTopups = pettyCash
     .filter((p) => (shopFilter === 'all' || p.shop === shopFilter) && p.type === 'เติมเงิน')
     .reduce((s, p) => s + Number(p.amount), 0);
@@ -345,6 +368,9 @@ export function AccountingModule({
           รายละเอียด: e.desc,
           จ่ายจาก: e.source,
           สถานะ: e.status,
+          // The sheet has to say which pile a row is in; the two totals
+          // underneath it are not the same money.
+          ประเภท: e.paidForFinnix ? 'จ่ายแทน Finnix' : 'ค่าใช้จ่ายของสาขา',
           ยอดเงิน: e.amount,
         })),
       })),
@@ -406,6 +432,7 @@ export function AccountingModule({
           source: ex.source,
           status: ex.status,
           date: ex.date,
+          paidForFinnix: ex.paidForFinnix,
           lines,
           attachments,
         });
@@ -502,6 +529,7 @@ export function AccountingModule({
         // `expenses.paid_at` is a DATE. Sending a UTC timestamp made Postgres
         // cast it back one day in Asia/Bangkok — pick 1 Aug, store 31 Jul.
         paidAt: dateInputValue(form.dateObj) || null,
+        paidForFinnix: !!form.paidForFinnix,
       });
       setEditingExId(null);
       setEditExForm(null);
@@ -687,7 +715,7 @@ export function AccountingModule({
             </div>
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div className="card p-4">
             <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
               จ่ายแล้ว
@@ -700,6 +728,21 @@ export function AccountingModule({
             </p>
             <p className="text-xl font-bold mt-1" style={{ color: '#8A5A12' }}>
               {fmt(pendingTotal)}
+            </p>
+          </div>
+          {/* Money the branch is owed, not money it spent — its own card so it
+              is never read as part of the cost of running the shop. */}
+          <div className="card p-4">
+            <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              เงินรอรับคืน Finnix
+            </p>
+            <p className="text-xl font-bold mt-1" style={{ color: '#8A5A12' }}>
+              {fmt(finnixTotal)}
+            </p>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--ink-faint)' }}>
+              {finnixExpenses.length > 0
+                ? `${finnixExpenses.length} รายการ · ไม่รวมในค่าใช้จ่าย`
+                : 'ไม่มีในช่วงนี้'}
             </p>
           </div>
           <div
@@ -724,6 +767,70 @@ export function AccountingModule({
             </p>
           </div>
         </div>
+        {/* สรุปเงินรอรับคืน Finnix — only when the period holds any. */}
+        {finnixExpenses.length > 0 && (
+          <div className="card p-5 mb-4" style={{ borderLeft: '3px solid #8A5A12' }}>
+            <div className="flex items-baseline justify-between gap-2 mb-1 flex-wrap">
+              <p className="text-sm font-semibold">
+                เงินรอรับคืน Finnix ({finnixExpenses.length} รายการ)
+              </p>
+              <p className="text-lg font-extrabold" style={{ color: '#8A5A12' }}>
+                {fmt(finnixTotal)}
+              </p>
+            </div>
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
+              ค่าใช้จ่ายที่จ่ายแทน Finnix ในช่วงเวลานี้ —
+              จ่ายออกไปแล้วแต่ไม่นับเป็นค่าใช้จ่ายของสาขา
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ color: 'var(--ink-soft)' }}>
+                    <th className="text-left font-medium py-2">วันที่</th>
+                    <th className="text-left font-medium py-2">เลขที่เอกสาร</th>
+                    <th className="text-left font-medium py-2">รายการ</th>
+                    <th className="text-left font-medium py-2">หมวด</th>
+                    <th className="text-left font-medium py-2">สถานะ</th>
+                    <th className="text-right font-medium py-2">ยอดจ่ายแทน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {finnixExpenses.map((e) => (
+                    <tr key={e.id} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td className="py-2 whitespace-nowrap text-xs">{e.date}</td>
+                      <td className="py-2 text-xs">
+                        {e.docNo || '—'}
+                        <span className="block" style={{ color: 'var(--ink-faint)' }}>
+                          {shopName(e.shop)}
+                        </span>
+                      </td>
+                      <td className="py-2">{e.desc}</td>
+                      <td className="py-2 text-xs">{e.category}</td>
+                      <td className="py-2 text-xs">{e.status}</td>
+                      <td className="py-2 text-right font-semibold whitespace-nowrap">
+                        {fmt(e.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: '2px solid var(--line-strong)' }}>
+                    <td className="py-2 text-xs font-semibold" colSpan={5}>
+                      รวมเงินรอรับคืน Finnix
+                    </td>
+                    <td
+                      className="py-2 text-right font-extrabold whitespace-nowrap"
+                      style={{ color: '#8A5A12' }}
+                    >
+                      {fmt(finnixTotal)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+
         {showCashDetail && (
           <div className="card p-5 mb-4 fade-page">
             <p className="text-sm font-semibold mb-3">
@@ -1042,6 +1149,45 @@ export function AccountingModule({
                   onChange={(e) => setEx({ ...ex, date: e.target.value })}
                   className="field w-full text-sm px-3 py-2"
                 />
+              </div>
+              {/*
+                เงินก้อนนี้เป็นของใคร. Asked on the form rather than fixed up later,
+                because it decides whether the amount is a cost or a receivable —
+                and it is one answer for the whole document, like the ticket.
+              */}
+              <div className="sm:col-span-2">
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  ค่าใช้จ่ายนี้เป็นของใคร
+                </label>
+                <div className="flex gap-2 mt-1">
+                  {(
+                    [
+                      [false, 'ค่าใช้จ่ายของสาขา', 'fa-store'],
+                      [true, 'จ่ายแทน Finnix', 'fa-hand-holding-dollar'],
+                    ] as const
+                  ).map(([kind, label, icon]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setEx({ ...ex, paidForFinnix: kind })}
+                      aria-pressed={ex.paidForFinnix === kind}
+                      className={`text-xs px-3 py-2 rounded-lg font-semibold flex items-center gap-1.5 flex-1 justify-center ${
+                        ex.paidForFinnix === kind ? 'btn-primary' : 'btn-outline'
+                      }`}
+                    >
+                      <i className={`fa-solid ${icon}`}></i>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p
+                  className="text-xs mt-1.5"
+                  style={{ color: ex.paidForFinnix ? '#8A5A12' : 'var(--ink-faint)' }}
+                >
+                  {ex.paidForFinnix
+                    ? 'ยอดนี้ไม่นับเป็นค่าใช้จ่ายของสาขา แต่จะขึ้นเป็น เงินรอรับคืน Finnix'
+                    : 'นับรวมเป็นค่าใช้จ่ายของสาขาตามปกติ'}
+                </p>
               </div>
               <div className="sm:col-span-2">
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>

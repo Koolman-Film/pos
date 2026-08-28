@@ -49,6 +49,7 @@ export async function addExpense(input: NewExpenseInput): Promise<void> {
       source: input.source,
       amount: Number(l.amount || 0),
       status: input.status,
+      expense_kind: input.paidForFinnix ? 'จ่ายแทน' : 'ค่าใช้จ่าย',
       paid_at: input.status === 'จ่ายแล้ว' ? entered : null,
       due_at: input.status === 'จ่ายแล้ว' ? null : entered,
     }));
@@ -178,6 +179,7 @@ export async function updateExpense(input: UpdateExpenseInput): Promise<void> {
       source: input.source,
       amount: Number(input.amount),
       status: input.status,
+      expense_kind: input.paidForFinnix ? 'จ่ายแทน' : 'ค่าใช้จ่าย',
       paid_at: input.paidAt,
     })
     .eq('id', input.id);

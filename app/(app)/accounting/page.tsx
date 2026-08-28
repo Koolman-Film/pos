@@ -40,6 +40,7 @@ type ExpenseRow = {
   source: string;
   amount: number;
   status: string;
+  expense_kind: string;
   paid_at: string | null;
   due_at: string | null;
   expense_attachments:
@@ -56,7 +57,7 @@ export default async function AccountingPage() {
       supabase
         .from('expenses')
         .select(
-          'id, doc_no, shop_id, description, category, source, amount, status, paid_at, due_at, ' +
+          'id, doc_no, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at, ' +
             'expense_attachments(id, file_name, storage_path, mime_type)',
         )
         .order('id', { ascending: false }),
@@ -79,6 +80,7 @@ export default async function AccountingPage() {
     source: e.source,
     amount: Number(e.amount),
     status: e.status,
+    paidForFinnix: e.expense_kind === 'จ่ายแทน',
     dateObj: e.paid_at ? new Date(e.paid_at) : null,
     date: e.paid_at ? fmtThaiDate(new Date(e.paid_at)) : '-',
     due: e.due_at ? fmtThaiDate(new Date(e.due_at)) : undefined,

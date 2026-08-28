@@ -197,6 +197,7 @@ export type Database = {
       }
       expenses: {
         Row: {
+          expense_kind: string
           amount: number
           category: string
           description: string
@@ -209,6 +210,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          expense_kind?: string
           amount: number
           category: string
           description: string
@@ -221,6 +223,7 @@ export type Database = {
           status: string
         }
         Update: {
+          expense_kind?: string
           amount?: number
           category?: string
           description?: string

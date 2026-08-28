@@ -69,7 +69,9 @@ export default async function DashboardPage({
     supabase.from('wholesale_customers').select('id, name'),
     supabase
       .from('expenses')
-      .select('id, shop_id, description, category, source, amount, status, paid_at, due_at'),
+      .select(
+        'id, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at',
+      ),
     supabase.from('petty_cash').select('shop_id, type, amount'),
     supabase.from('stock').select('category, shop_id, qty'),
     supabase.from('shops').select('id, name, sort_order').order('sort_order'),
@@ -178,6 +180,8 @@ export default async function DashboardPage({
     source: e.source,
     amount: num(e.amount),
     status: e.status,
+    // Paid on behalf of another Finnix shop (migration 0032).
+    paidForFinnix: e.expense_kind === 'จ่ายแทน',
     paidAt: toDate(e.paid_at),
     due: e.due_at
       ? new Date(`${e.due_at}T00:00:00`).toLocaleDateString('th-TH', {
@@ -258,8 +262,11 @@ export default async function DashboardPage({
     .filter((p) => p.daysLeft >= 0 && p.daysLeft <= 30)
     .sort((a, b) => a.daysLeft - b.daysLeft);
 
+  // ค่าใช้จ่าย counts what the branch spent on itself. A bill paid on behalf of
+  // another Finnix shop left the drawer — so it still moves เงินสดย่อย below —
+  // but it is that shop’s cost, and is reported as เงินรอรับคืน in บัญชี.
   const paidExpenses = expenses.filter(
-    (e) => inShop(e.shop) && e.status === 'จ่ายแล้ว' && inPeriod(e.paidAt),
+    (e) => inShop(e.shop) && !e.paidForFinnix && e.status === 'จ่ายแล้ว' && inPeriod(e.paidAt),
   );
   const totalExpenses = paidExpenses.reduce((s, e) => s + e.amount, 0);
   // Petty cash is a running balance, not a period total: `petty_cash` rows carry
