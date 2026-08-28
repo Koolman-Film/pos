@@ -98,3 +98,37 @@ describe('expenses.expense_kind', () => {
     expect(error?.message ?? '').toMatch(/expense_kind/);
   });
 });
+
+/**
+ * `shop_info.vat_registered` (migration 0035).
+ *
+ * Only a VAT-registered branch may issue a ใบกำกับภาษี. The flag is data rather
+ * than a branch id written into the code, so a shop that registers next year is
+ * a tick in จัดการสิทธิ์ — but the default has to be OFF, or a branch added
+ * tomorrow could issue tax invoices before anybody decided it should.
+ */
+describe('shop_info.vat_registered', () => {
+  it('is on for เชียงใหม่ and off for every other branch', async () => {
+    const { data } = await admin.from('shop_info').select('shop_id, vat_registered');
+    const registered = (data ?? []).filter((r) => r.vat_registered).map((r) => r.shop_id);
+    expect(registered).toEqual(['cm']);
+  });
+
+  it('defaults to off for a branch created later', async () => {
+    await admin.from('shop_info').delete().eq('shop_id', 'zzvat');
+    await admin.from('shops').delete().eq('id', 'zzvat');
+    await admin.from('shops').insert({ id: 'zzvat', name: 'ทดสอบ VAT', sort_order: 99 });
+    const { error } = await admin.from('shop_info').insert({ shop_id: 'zzvat' });
+    assertNoError('insert shop_info', error);
+
+    const { data } = await admin
+      .from('shop_info')
+      .select('vat_registered')
+      .eq('shop_id', 'zzvat')
+      .single();
+    expect(data?.vat_registered).toBe(false);
+
+    await admin.from('shop_info').delete().eq('shop_id', 'zzvat');
+    await admin.from('shops').delete().eq('id', 'zzvat');
+  });
+});

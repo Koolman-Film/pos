@@ -1916,8 +1916,13 @@ export function PrintJobSheet({
                 {bi('ข้อมูลลูกค้า', 'Customer')} :
               </p>
               <p style={{ margin: 0, fontWeight: 'bold' }}>{buyerName || t.customer}</p>
-              {isTaxInvoice && buyerAddress && <p style={{ margin: '2px 0 0' }}>{buyerAddress}</p>}
-              {isTaxInvoice && buyerTaxId && (
+              {/* Printed on a tax invoice, and on any document going out under
+                  the shop's company details — a ใบเสร็จรับเงิน made out to a
+                  company has to name the company it is for. */}
+              {(isTaxInvoice || showCompanyInfo) && buyerAddress && (
+                <p style={{ margin: '2px 0 0' }}>{buyerAddress}</p>
+              )}
+              {(isTaxInvoice || showCompanyInfo) && buyerTaxId && (
                 <p style={{ margin: '2px 0 0' }}>
                   {bi('เลขผู้เสียภาษี', 'Tax ID')} {buyerTaxId}
                 </p>

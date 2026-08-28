@@ -20,6 +20,8 @@ export type StatusRow = { key: string; short: string; bg: string; text: string; 
 export type WsStatusRow = { key: string; bg: string; text: string; dot: string };
 export type ShopRow = { id: string; name: string };
 export type ShopInfoRow = {
+  /** จดทะเบียนภาษีมูลค่าเพิ่ม — only such a branch may issue a ใบกำกับภาษี. */
+  vatRegistered: boolean;
   companyName: string;
   taxId: string;
   address: string;

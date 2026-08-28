@@ -320,6 +320,7 @@ export async function deleteWsStatus(key: string): Promise<ActionResult> {
 export async function updateShopInfo(
   shopId: string,
   patch: Partial<{
+    vatRegistered: boolean;
     companyName: string;
     taxId: string;
     address: string;
@@ -329,6 +330,7 @@ export async function updateShopInfo(
 ): Promise<ActionResult> {
   const { supabase } = await authorize();
   const dbPatch: Database['pos']['Tables']['shop_info']['Update'] = {};
+  if (patch.vatRegistered !== undefined) dbPatch.vat_registered = patch.vatRegistered;
   if (patch.companyName !== undefined) dbPatch.company_name = patch.companyName;
   if (patch.taxId !== undefined) dbPatch.tax_id = patch.taxId;
   if (patch.address !== undefined) dbPatch.address = patch.address;

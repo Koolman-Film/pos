@@ -70,7 +70,7 @@ export default async function PermissionsPage() {
     supabase.from('shops').select('id, name').order('sort_order'),
     supabase
       .from('shop_info')
-      .select('shop_id, company_name, tax_id, address, phone, payment_channels'),
+      .select('shop_id, company_name, tax_id, address, phone, payment_channels, vat_registered'),
     supabase
       .from('app_users')
       .select('id, email, name, role_id, active, sees_all_shops, user_shop_access(shop_id)')
@@ -112,6 +112,7 @@ export default async function PermissionsPage() {
   const shopInfo: Record<string, ShopInfoRow> = {};
   for (const info of shopInfoRows ?? []) {
     shopInfo[info.shop_id] = {
+      vatRegistered: !!info.vat_registered,
       companyName: info.company_name,
       taxId: info.tax_id,
       address: info.address,

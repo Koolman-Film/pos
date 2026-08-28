@@ -846,7 +846,28 @@ export function PermissionsModule({
                 className="rounded-xl p-3"
                 style={{ border: '1px solid var(--line)' }}
               >
-                <p className="text-sm font-semibold mb-2">{s.name}</p>
+                <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                  <p className="text-sm font-semibold">{s.name}</p>
+                  {/* The one thing on this card that changes what the app will
+                      let the counter DO: only a registered branch may issue a
+                      ใบกำกับภาษี. Kept beside the tax id it goes out with. */}
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-3.5 h-3.5"
+                      checked={!!info?.vatRegistered}
+                      aria-label={`จดทะเบียนภาษีมูลค่าเพิ่ม ${s.name}`}
+                      onChange={(e) =>
+                        run(onUpdateShopInfo?.(s.id, { vatRegistered: e.target.checked }))
+                      }
+                    />
+                    <span
+                      style={{ color: info?.vatRegistered ? 'var(--primary)' : 'var(--ink-soft)' }}
+                    >
+                      จดทะเบียนภาษีมูลค่าเพิ่ม (ออกใบกำกับภาษีได้)
+                    </span>
+                  </label>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                   <input
                     defaultValue={info?.companyName || ''}

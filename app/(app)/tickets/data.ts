@@ -185,7 +185,7 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
     supabase.from('corporate_buyers').select('name, address, tax_id'),
     supabase
       .from('shop_info')
-      .select('shop_id, company_name, address, phone, tax_id, payment_channels'),
+      .select('shop_id, company_name, address, phone, tax_id, payment_channels, vat_registered'),
   ]);
 
   const options = Object.fromEntries(OPTION_LISTS.map((k) => [k, [] as string[]])) as Record<
@@ -200,6 +200,7 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
   const shopInfo: Record<string, ShopInfo> = {};
   for (const s of shopInfoRes.data ?? []) {
     shopInfo[s.shop_id] = {
+      vatRegistered: !!s.vat_registered,
       companyName: s.company_name,
       address: s.address,
       phone: s.phone,

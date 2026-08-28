@@ -717,13 +717,32 @@ export async function recordTicketDocument(input: {
   if (input.docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') {
     const { data: ticket } = await supabase
       .from('tickets')
-      .select('revenue_kind')
+      .select('revenue_kind, shop_id')
       .eq('id', input.ticketId)
       .maybeSingle();
     if (ticket?.revenue_kind === 'รับแทน') {
       return {
         ok: false,
         error: 'ใบงานนี้เป็นเงินรับแทน Finnix จึงออกใบกำกับภาษีไม่ได้',
+      };
+    }
+
+    /*
+      …and the branch has to be registered for VAT (migration 0035).
+
+      Only เชียงใหม่ is today. A tax invoice from a branch with no registration
+      is a document asserting a registration that does not exist — found by an
+      auditor months later, on paper already in a customer’s hands.
+    */
+    const { data: info } = await supabase
+      .from('shop_info')
+      .select('vat_registered')
+      .eq('shop_id', ticket?.shop_id ?? '')
+      .maybeSingle();
+    if (!info?.vat_registered) {
+      return {
+        ok: false,
+        error: 'สาขานี้ไม่ได้จดทะเบียนภาษีมูลค่าเพิ่ม จึงออกใบกำกับภาษีไม่ได้',
       };
     }
   }

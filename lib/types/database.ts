@@ -760,6 +760,7 @@ export type Database = {
       }
       shop_info: {
         Row: {
+          vat_registered: boolean
           address: string
           company_name: string
           payment_channels: string[]
@@ -768,6 +769,7 @@ export type Database = {
           tax_id: string
         }
         Insert: {
+          vat_registered?: boolean
           address?: string
           company_name?: string
           payment_channels?: string[]
@@ -776,6 +778,7 @@ export type Database = {
           tax_id?: string
         }
         Update: {
+          vat_registered?: boolean
           address?: string
           company_name?: string
           payment_channels?: string[]

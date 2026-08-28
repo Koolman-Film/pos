@@ -60,7 +60,10 @@ function baseProps(ticket: Ticket) {
     filmPriceMatrix: [],
     initialRetailCustomers: [],
     initialCorporateBuyers: [],
-    shopInfo: {},
+    // เชียงใหม่ is the VAT-registered branch (migration 0035); the tickets in
+    // these tests live there, so the tax invoice is available unless something
+    // else takes it away.
+    shopInfo: { cm: { vatRegistered: true } },
     saveAction: vi.fn(async () => ({ ok: true, id: 'JT-CM-00001' })),
     optionAction: vi.fn(async () => ({ ok: true })),
   };
@@ -640,5 +643,65 @@ describe('TicketDetail — ล็อกใบกำกับภาษีเม�
     expect(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'ใบเสนอราคา' }));
     expect(screen.getByRole('button', { name: /^ออก/ })).toHaveTextContent('ออกใบเสนอราคา');
+  });
+});
+
+/**
+ * ใบกำกับภาษีออกได้เฉพาะสาขาที่จดทะเบียนภาษีมูลค่าเพิ่ม (migration 0035).
+ *
+ * Only FINNIX FILM เชียงใหม่ is registered. A tax invoice from anywhere else
+ * asserts a registration that does not exist — the kind of paper an auditor
+ * finds months later, already in a customer's hands.
+ */
+describe('TicketDetail — ใบกำกับภาษีตามการจดทะเบียนของสาขา', () => {
+  const TAX = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+
+  function atShop(shop: string, vatRegistered: boolean) {
+    return {
+      ...baseProps(makeTicket({ shop })),
+      shops: [
+        { id: 'cm', name: 'FINNIX FILM เชียงใหม่' },
+        { id: 'lpg', name: 'FINNIX FILM ลำปาง' },
+      ],
+      shopInfo: { [shop]: { vatRegistered } },
+    };
+  }
+
+  it('locks it at a branch that is not registered, and says which branch', () => {
+    render(<TicketDetail {...atShop('lpg', false)} />);
+    expect(screen.getByRole('button', { name: new RegExp(TAX) })).toBeDisabled();
+    expect(
+      screen.getByText(/FINNIX FILM ลำปาง ไม่ได้จดทะเบียนภาษีมูลค่าเพิ่ม/),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves the other two documents available there', () => {
+    render(<TicketDetail {...atShop('lpg', false)} />);
+    expect(screen.getByRole('button', { name: 'ใบเสนอราคา' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' })).toBeEnabled();
+  });
+
+  it('allows it at the registered branch', () => {
+    render(<TicketDetail {...atShop('cm', true)} />);
+    expect(screen.getByRole('button', { name: TAX })).toBeEnabled();
+  });
+
+  it('offers ข้อมูลนิติบุคคล on a ใบเสร็จรับเงิน once the shop’s details are shown', async () => {
+    // At a branch that cannot issue a tax invoice, a receipt made out to a
+    // company was the only paperwork available and had nowhere to type the
+    // company into.
+    const user = userEvent.setup();
+    render(<TicketDetail {...atShop('lpg', false)} />);
+
+    await user.click(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' }));
+    expect(screen.queryByPlaceholderText('ที่อยู่นิติบุคคล')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/แสดงชื่อนิติบุคคล/));
+    expect(screen.getByPlaceholderText('ที่อยู่นิติบุคคล')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('เลขผู้เสียภาษี 13 หลัก')).toBeInTheDocument();
+    // …and it can be kept for next time, which is the point of asking for it.
+    expect(
+      screen.getByRole('button', { name: /บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป/ }),
+    ).toBeInTheDocument();
   });
 });

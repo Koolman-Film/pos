@@ -288,6 +288,14 @@ export type FilmPriceRow = {
 export type RetailCustomer = { id: number; name: string; phone: string };
 export type CorporateBuyer = { name: string; address: string; taxId: string };
 export type ShopInfo = {
+  /**
+   * สาขานี้จดทะเบียนภาษีมูลค่าเพิ่ม (migration 0035).
+   *
+   * Only a registered branch may issue a ใบกำกับภาษี. Today that is
+   * เชียงใหม่ alone, but it is data rather than a branch id in the code:
+   * a shop that registers next year ticks a box in จัดการสิทธิ์.
+   */
+  vatRegistered?: boolean;
   companyName?: string;
   address?: string;
   phone?: string;
