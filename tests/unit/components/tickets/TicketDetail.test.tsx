@@ -598,3 +598,47 @@ describe('TicketDetail — รายได้ / รับแทน', () => {
     expect(saveAction).toHaveBeenCalledWith(expect.objectContaining({ revenueKind: 'รับแทน' }));
   });
 });
+
+/**
+ * ใบกำกับภาษีกับเงินที่รับแทน Finnix.
+ *
+ * A tax invoice asserts that THIS shop made the sale. A held ticket is another
+ * Finnix shop's sale, so issuing one here would put a document into this shop's
+ * tax position for money it never earned.
+ */
+describe('TicketDetail — ล็อกใบกำกับภาษีเมื่อรับแทน Finnix', () => {
+  const TAX = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+
+  it('locks the tax invoice the moment the ticket becomes รับแทน', async () => {
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket())} />);
+
+    expect(screen.getByRole('button', { name: TAX })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: /รับแทน Finnix/ }));
+    expect(screen.getByRole('button', { name: new RegExp(TAX) })).toBeDisabled();
+    expect(screen.getByText(/จึงออกใบกำกับภาษีไม่ได้/)).toBeInTheDocument();
+  });
+
+  it('moves the selection off the tax invoice rather than leaving it selected', async () => {
+    // Otherwise the ออก… button would still offer the one document now refused.
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket())} />);
+
+    await user.click(screen.getByRole('button', { name: TAX }));
+    await user.click(screen.getByRole('button', { name: /รับแทน Finnix/ }));
+
+    expect(screen.getByRole('button', { name: /^ออก/ })).toHaveTextContent('ออกใบเสร็จรับเงิน');
+  });
+
+  it('leaves ใบเสนอราคา and ใบเสร็จรับเงิน available', async () => {
+    // The customer did pay at this counter and can still be given paperwork.
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket({ revenueKind: 'รับแทน' }))} />);
+
+    expect(screen.getByRole('button', { name: 'ใบเสนอราคา' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'ใบเสนอราคา' }));
+    expect(screen.getByRole('button', { name: /^ออก/ })).toHaveTextContent('ออกใบเสนอราคา');
+  });
+});

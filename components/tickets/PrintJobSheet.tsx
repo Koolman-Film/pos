@@ -111,6 +111,9 @@ function bi(th: string, en: string) {
  * RECORDED (migration 0024) have to be the same string; the customer quotes it
  * back off the paper.
  */
+/** The one document that puts a sale into the shop’s tax position. */
+export const TAX_DOC_TYPE = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+
 export function docPrefixFor(docType: string): string {
   if (docType === 'ใบเสนอราคา') return 'QT';
   if (docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') return 'INV';

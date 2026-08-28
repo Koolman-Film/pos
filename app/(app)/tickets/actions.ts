@@ -704,6 +704,30 @@ export async function recordTicketDocument(input: {
   const session = await getSessionContext(); // C2: authenticate before mutating
   if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์ออกเอกสาร' };
   const supabase = await createClient();
+
+  /*
+    ใบกำกับภาษีออกไม่ได้ถ้าใบงานเป็น "รับแทน Finnix" (migration 0031).
+
+    The ticket screen hides the button, but the button is not the rule: this is
+    a Server Action, and any client can POST to it without ever rendering that
+    screen. A tax invoice asserts that THIS shop made the sale, so issuing one
+    for money it is only holding would put a document into its tax position for
+    revenue it never earned — checked here, against the stored ticket.
+  */
+  if (input.docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') {
+    const { data: ticket } = await supabase
+      .from('tickets')
+      .select('revenue_kind')
+      .eq('id', input.ticketId)
+      .maybeSingle();
+    if (ticket?.revenue_kind === 'รับแทน') {
+      return {
+        ok: false,
+        error: 'ใบงานนี้เป็นเงินรับแทน Finnix จึงออกใบกำกับภาษีไม่ได้',
+      };
+    }
+  }
+
   const { error } = await supabase.rpc('record_ticket_document', {
     p_ticket_id: input.ticketId,
     p_doc_type: input.docType,
