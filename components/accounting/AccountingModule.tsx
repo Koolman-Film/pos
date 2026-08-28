@@ -73,6 +73,8 @@ export type ExpenseView = {
   date?: string;
   dateObj?: Date | string | null;
   due?: string;
+  /** กำหนดจ่าย as a date, so a รอจ่าย row can have it edited. */
+  dueObj?: Date | string | null;
   attachments?: ExpenseAttachment[];
 };
 
@@ -128,12 +130,18 @@ export type TopupInput = { shop: string; amount: number; note: string };
 /** Payload handed to the edit Server Action. */
 export type UpdateExpenseInput = {
   id: number;
+  /** สาขา — editable, because a row entered against the wrong branch is a
+   *  correction the shop has to be able to make itself. */
+  shop: string;
   desc: string;
   category: string;
   source: string;
   amount: number;
   status: string;
+  /** วันที่จ่าย — set for a จ่ายแล้ว row, null for a รอจ่าย one. */
   paidAt: string | null;
+  /** กำหนดจ่าย — the mirror of `paidAt`; exactly one of the two is set. */
+  dueAt: string | null;
   paidForFinnix?: boolean;
 };
 
@@ -519,8 +527,10 @@ export function AccountingModule({
     }
     const form = editExForm;
     startTransition(async () => {
+      const paid = form.status === 'จ่ายแล้ว';
       await updateExpenseAction({
         id: form.id,
+        shop: form.shop,
         desc: form.desc,
         category: form.category,
         source: form.source,
@@ -528,7 +538,11 @@ export function AccountingModule({
         status: form.status,
         // `expenses.paid_at` is a DATE. Sending a UTC timestamp made Postgres
         // cast it back one day in Asia/Bangkok — pick 1 Aug, store 31 Jul.
-        paidAt: dateInputValue(form.dateObj) || null,
+        // A row carries the date of what it IS: จ่ายแล้ว dates the payment,
+        // รอจ่าย dates the deadline. Switching status used to leave the old
+        // date behind on the other column.
+        paidAt: paid ? dateInputValue(form.dateObj) || null : null,
+        dueAt: paid ? null : dateInputValue(form.dueObj) || null,
         paidForFinnix: !!form.paidForFinnix,
       });
       setEditingExId(null);
@@ -1271,6 +1285,30 @@ export function AccountingModule({
                       placeholder="รายละเอียด"
                       className="field text-sm px-2.5 py-1.5 sm:col-span-2"
                     />
+                    {/* A row entered against the wrong branch is a correction the
+                        shop has to be able to make itself. */}
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        สาขา
+                      </label>
+                      <select
+                        value={editExForm.shop}
+                        aria-label="แก้ไขสาขาของรายการค่าใช้จ่าย"
+                        onChange={(e2) => setEditExForm({ ...editExForm, shop: e2.target.value })}
+                        className="field text-sm px-2.5 py-1.5 w-full"
+                      >
+                        {accessibleShops.map((sh) => (
+                          <option key={sh.id} value={sh.id}>
+                            {sh.name}
+                          </option>
+                        ))}
+                        {/* A branch this user cannot see still shows on its own row,
+                            so saving never silently moves the expense elsewhere. */}
+                        {!accessibleShops.some((sh) => sh.id === editExForm.shop) && (
+                          <option value={editExForm.shop}>{shopName(editExForm.shop)}</option>
+                        )}
+                      </select>
+                    </div>
                     <div>
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                         กลุ่มค่าใช้จ่าย
@@ -1322,24 +1360,64 @@ export function AccountingModule({
                     </div>
                     <div>
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                        วันที่
+                        {editExForm.status === 'จ่ายแล้ว' ? 'วันที่จ่าย' : 'กำหนดจ่าย'}
                       </label>
+                      {/* One field, two columns: a paid row dates the payment and a
+                          pending one dates the deadline. Before this, กำหนดจ่าย could
+                          not be edited at all. */}
                       <input
                         type="date"
-                        aria-label="วันที่ของรายการค่าใช้จ่าย"
-                        value={dateInputValue(editExForm.dateObj)}
+                        aria-label={editExForm.status === 'จ่ายแล้ว' ? 'วันที่จ่าย' : 'กำหนดจ่าย'}
+                        value={dateInputValue(
+                          editExForm.status === 'จ่ายแล้ว' ? editExForm.dateObj : editExForm.dueObj,
+                        )}
                         onChange={(e2) => {
                           const d = e2.target.value
                             ? new Date(e2.target.value + 'T00:00:00')
                             : null;
-                          setEditExForm({
-                            ...editExForm,
-                            dateObj: d,
-                            date: d ? fmtThaiDate(d) : '-',
-                          });
+                          setEditExForm(
+                            editExForm.status === 'จ่ายแล้ว'
+                              ? {
+                                  ...editExForm,
+                                  dateObj: d,
+                                  date: d ? fmtThaiDate(d) : '-',
+                                }
+                              : {
+                                  ...editExForm,
+                                  dueObj: d,
+                                  due: d ? fmtThaiDate(d) : undefined,
+                                },
+                          );
                         }}
                         className="field text-sm px-2.5 py-1.5 w-full"
                       />
+                    </div>
+                    {/* The same choice the add form asks for, so a row entered as an
+                        ordinary cost can be corrected to จ่ายแทน afterwards. */}
+                    <div className="sm:col-span-2">
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        ค่าใช้จ่ายนี้เป็นของใคร
+                      </label>
+                      <div className="flex gap-2 mt-1">
+                        {(
+                          [
+                            [false, 'ค่าใช้จ่ายของสาขา'],
+                            [true, 'จ่ายแทน Finnix'],
+                          ] as const
+                        ).map(([kind, label]) => (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => setEditExForm({ ...editExForm, paidForFinnix: kind })}
+                            aria-pressed={!!editExForm.paidForFinnix === kind}
+                            className={`text-xs px-3 py-1.5 rounded-lg font-semibold flex-1 ${
+                              !!editExForm.paidForFinnix === kind ? 'btn-primary' : 'btn-outline'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   {/*

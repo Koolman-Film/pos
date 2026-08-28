@@ -84,6 +84,7 @@ export default async function AccountingPage() {
     dateObj: e.paid_at ? new Date(e.paid_at) : null,
     date: e.paid_at ? fmtThaiDate(new Date(e.paid_at)) : '-',
     due: e.due_at ? fmtThaiDate(new Date(e.due_at)) : undefined,
+    dueObj: e.due_at ? new Date(e.due_at) : null,
     attachments: (e.expense_attachments ?? []).map((a) => ({
       id: a.id,
       fileName: a.file_name,
