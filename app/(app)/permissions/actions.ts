@@ -338,6 +338,35 @@ export async function updateShopInfo(
   return error ? fail(error) : done();
 }
 
+/**
+ * เพิ่มสาขาใหม่ หรือแก้ชื่อ/ลำดับของสาขาเดิม (migration 0034).
+ *
+ * The database decides, not this function: `save_shop` is `security definer`
+ * and re-checks that the caller is an admin, so the rule holds for any client,
+ * not only for the screen that has the button. Validation of the id lives there
+ * too, next to the table it protects.
+ *
+ * There is no delete. Every ticket, order, expense and stock row points at a
+ * shop; a branch that closes is one nobody is given access to.
+ */
+export async function saveShop(input: {
+  id: string;
+  name: string;
+  sortOrder?: number;
+}): Promise<ActionResult> {
+  const { supabase } = await authorize();
+  const { error } = await supabase.rpc('save_shop', {
+    p_id: input.id,
+    p_name: input.name,
+    p_sort: input.sortOrder ?? undefined,
+  });
+  if (error) return fail(error);
+  // A new branch shows up in the sidebar's shop filter and in every module's
+  // scope, so the whole app has to be re-rendered, not just this page.
+  revalidatePath('/', 'layout');
+  return done();
+}
+
 // ---------- users ----------
 
 export async function updateUser(

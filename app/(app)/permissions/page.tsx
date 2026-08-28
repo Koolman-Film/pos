@@ -33,6 +33,7 @@ import {
   setUserAllShops,
   toggleUserShop,
   updateShopInfo,
+  saveShop,
   updateStatus,
   updateUser,
   updateWsStatusColor,
@@ -156,6 +157,7 @@ export default async function PermissionsPage() {
       onRenameWsStatus={renameWsStatus}
       onDeleteWsStatus={deleteWsStatus}
       onUpdateShopInfo={updateShopInfo}
+      onSaveShop={saveShop}
       onUpdateUser={updateUser}
       onSetUserAllShops={setUserAllShops}
       onToggleUserShop={toggleUserShop}

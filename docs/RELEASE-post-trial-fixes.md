@@ -1,4 +1,4 @@
-# Release runbook — post-trial fixes (migrations 0012–0032)
+# Release runbook — post-trial fixes (migrations 0012–0034)
 
 Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
 
@@ -28,7 +28,7 @@ dashboard and the accounting page.
 ```bash
 npx supabase login                       # personal access token, once
 npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0032 only
+npx supabase db push                     # applies 0012 … 0034 only
 ```
 
 ### No CLI? Paste the files instead
@@ -55,10 +55,12 @@ it twice changes nothing, and each records its versions in
 | 13    | `supabase/release-0029.sql`                   | a normal connection                                 |
 | 14    | `supabase/release-0031.sql`                   | a normal connection                                 |
 | 15    | `supabase/release-0032.sql`                   | a normal connection                                 |
-| 16    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 16    | `supabase/release-0033.sql`                   | a normal connection                                 |
+| 17    | `supabase/release-0034.sql`                   | a normal connection                                 |
+| 18    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all seventeen in order
+already been handed over. If nothing has been run yet, running all nineteen in order
 is still correct.
 
 `release-0030.sql` is numbered 0 because it is the one file that is urgent and
@@ -107,6 +109,8 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0030_hot_path_indexes`         | ดัชนีของตารางลูก (ticket_items / ticket_payments / order_items …) และคอลัมน์ที่ใช้เรียงลำดับ — ตารางชุดแรกไม่เคยมีดัชนีเลยนอกจาก primary key หน้าที่แสดงรายการใบงานจึงสแกนตารางลูกทั้งตารางหนึ่งรอบต่อใบงานหนึ่งใบ วัดที่ 2,000 ใบงาน: 4,033 ms → 25 ms                                                                              | ต่ำมาก. เพิ่มดัชนีอย่างเดียว ไม่แตะข้อมูล                                                   |
 | `0031_ticket_revenue_kind`      | `tickets.revenue_kind` — ใบงานเป็น "รายได้" หรือ "รับแทน" ใบงานที่รับเงินแทน Finnix จะไม่ถูกนับเป็นยอดขายทั้งบนแดชบอร์ดและโมดูลรายได้ แต่ไปขึ้นเป็น "เงินรอคืน Finnix" แทน ใบงานเดิมทั้งหมดเป็น "รายได้" ตามค่าตั้งต้น                                                                                                               | ต่ำ. เพิ่มคอลัมน์ที่มีค่าตั้งต้น ไม่แตะข้อมูลเดิม                                           |
 | `0032_expense_paid_for_finnix`  | `expenses.expense_kind` — ค่าใช้จ่ายเป็นของสาขา หรือ "จ่ายแทน" Finnix รายการที่จ่ายแทนจะไม่ถูกนับเป็นค่าใช้จ่ายทั้งบนแดชบอร์ดและโมดูลบัญชี แต่ไปขึ้นเป็น "เงินรอรับคืน Finnix" แทน เงินสดย่อยยังหักตามจริงเพราะเงินออกจากลิ้นชักจริง                                                                                                 | ต่ำ. เพิ่มคอลัมน์ที่มีค่าตั้งต้น ไม่แตะข้อมูลเดิม                                           |
+| `0033_permission_coverage`      | จัดการสิทธิ์ครอบคลุมทุกโมดูลและทุกการ์ด — เพิ่มสิทธิ์การ์ดประกันใกล้หมดอายุ (ตั้งต้นเปิดให้ทุกบทบาท จึงไม่มีใครเห็นอะไรหายไป) และเขียน `reset_permissions_to_defaults()` ใหม่ให้มีทุกคีย์ครบ                                                                                                                                         | ต่ำ. ไม่ลบสิทธิ์เดิม                                                                        |
+| `0034_manage_shops`             | `save_shop()` — เพิ่มสาขาใหม่/แก้ชื่อสาขาได้จากหน้าจัดการสิทธิ์ ตรวจสิทธิ์แอดมินในฐานข้อมูลเอง ไม่ใช่แค่ซ่อนปุ่ม และไม่มีการลบสาขาเพราะทุกใบงาน/เอกสารอ้างอิงอยู่                                                                                                                                                                    | ต่ำ. เพิ่ม function อย่างเดียว                                                              |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

@@ -523,7 +523,10 @@ export function Dashboard({
           ประกันใกล้หมดอายุ. Sits beside the bookings because it is the same kind
           of list: a short queue of customers somebody should ring this week.
         */}
-        {expiringInsurance.length > 0 && (
+        {/* Gated like every other card. It was added after the permission list
+            was written and went ungoverned — an admin could not hide it from a
+            role that has no business seeing customer policies. */}
+        {hasDashboardWidget('insuranceExpiry') && expiringInsurance.length > 0 && (
           <div className="card p-5 lg:col-span-6">
             <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
               <i className="fa-solid fa-shield-halved" style={{ color: '#B26A00' }}></i>
