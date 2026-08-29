@@ -36,6 +36,17 @@ export type StockByCategory = { name: string; qty: number };
 export type StatusTotal = { key: string; count: number; pct: number };
 
 /**
+ * งานแก้ / เซอร์วิส ในช่วงเวลาที่เลือก.
+ *
+ * Counted apart from the status bars above them, and deliberately NOT added
+ * into งานทั้งหมด. A status is one per ticket and the bars partition the jobs
+ * between them; a งานแก้ is an EVENT on a ticket that already has a status, so
+ * folding it in would count the same car twice and leave the bars adding up to
+ * more than the total they sit under.
+ */
+export type VisitTotal = { key: string; label: string; count: number; dot: string };
+
+/**
  * ประกันที่ใกล้หมดอายุใน 30 วัน.
  *
  * "As of now" like the bookings window, not a period total: a policy running
@@ -140,6 +151,8 @@ export type DashboardProps = {
   totalJobs?: number;
   statusTotals?: StatusTotal[];
   upcoming?: UpcomingTicket[];
+  /** งานแก้ / เซอร์วิส in the selected period — beside the status bars. */
+  visitTotals?: VisitTotal[];
   expiringInsurance?: ExpiringInsurance[];
   pendingApprovals?: PendingApprovals;
   recentJobs?: RecentJob[];
@@ -173,6 +186,7 @@ export function Dashboard({
   totalJobs = 0,
   statusTotals = [],
   upcoming = [],
+  visitTotals = [],
   expiringInsurance = [],
   pendingApprovals,
   recentJobs = [],
@@ -517,6 +531,28 @@ export function Dashboard({
               );
             })}
           </div>
+          {visitTotals.length > 0 && (
+            <div className="mt-4 pt-3" style={{ borderTop: '1px dashed var(--line-strong)' }}>
+              {/* Separated on purpose. These are events on jobs that already
+                  have a status above, so they are not part of that total and
+                  the card has to say so rather than quietly adding up wrong. */}
+              <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
+                นัดหมายในช่วงนี้ (นับแยก ไม่รวมในยอดงานทั้งหมด)
+              </p>
+              <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+                {visitTotals.map((v) => (
+                  <span key={v.key} className="flex items-center gap-1.5 text-xs">
+                    <span
+                      className="inline-block rounded-full"
+                      style={{ width: 8, height: 8, background: v.dot }}
+                    ></span>
+                    <span style={{ color: 'var(--ink-soft)' }}>{v.label}</span>
+                    <span className="font-semibold">{v.count}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/*

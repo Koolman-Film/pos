@@ -377,3 +377,45 @@ describe('Dashboard — งานแก้/เซอร์วิส เป็น
     expect(days[0].byService.map((g) => g.serviceType)).toEqual(['เข้าทำ/ติดตั้ง', 'แก้งาน']);
   });
 });
+
+/**
+ * งานแก้ / เซอร์วิส บนการ์ดงานทั้งหมด และบนปฏิทิน.
+ *
+ * The risk this pins is arithmetic. The status bars partition the jobs — one
+ * status per ticket — so an EVENT on a ticket that already has a status cannot
+ * join them without counting the same car twice and leaving the bars adding up
+ * to more than the total printed above them.
+ */
+describe('Dashboard — นัดหมายนับแยกจากสถานะ', () => {
+  it('counts them beside the bars, not inside the total', () => {
+    render(
+      <Dashboard
+        {...base}
+        totalJobs={8}
+        statusTotals={[
+          { key: 'จองแล้ว', count: 5, pct: 62 },
+          { key: 'ส่งมอบแล้ว', count: 3, pct: 38 },
+        ]}
+        statuses={[
+          { key: 'จองแล้ว', short: 'จองแล้ว', bg: '#eee', text: '#333', dot: '#B5AAA1' },
+          { key: 'ส่งมอบแล้ว', short: 'ส่งมอบแล้ว', bg: '#eee', text: '#333', dot: '#B5AAA1' },
+        ]}
+        visitTotals={[
+          { key: 'แก้งาน', label: 'แก้งาน', count: 2, dot: '#B23A48' },
+          { key: 'Service', label: 'Service', count: 4, dot: '#2563EB' },
+        ]}
+      />,
+    );
+    const card = screen.getByText('งานทั้งหมด').closest('div')!.parentElement!;
+    // The total still describes the jobs, not the jobs plus their visits.
+    expect(within(card).getByText('8')).toBeInTheDocument();
+    expect(within(card).getByText(/ไม่รวมในยอดงานทั้งหมด/)).toBeInTheDocument();
+    expect(within(card).getByText('แก้งาน')).toBeInTheDocument();
+    expect(within(card).getByText('Service')).toBeInTheDocument();
+  });
+
+  it('says nothing when the period holds no visits', () => {
+    render(<Dashboard {...base} totalJobs={8} visitTotals={[]} />);
+    expect(screen.queryByText(/ไม่รวมในยอดงานทั้งหมด/)).not.toBeInTheDocument();
+  });
+});

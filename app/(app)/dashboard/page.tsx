@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { startOfShopDay } from '@/lib/domain/format';
+import { daysAgoValue } from '@/lib/domain/now';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
@@ -12,6 +13,7 @@ import type {
   RecentJob,
   StatusTotal,
   UpcomingTicket,
+  VisitTotal,
 } from '@/components/dashboard/Dashboard';
 import { updateTicketStatus } from '@/app/(app)/tickets/actions';
 import { DashboardFilter } from '@/components/dashboard/DashboardFilter';
@@ -79,6 +81,12 @@ export default async function DashboardPage({
     supabase
       .from('service_visits')
       .select('ticket_id, visit_no, received_at, delivered_at')
+      // Bounded, unlike the ticket read beside it: visits accumulate several
+      // per job and this page loads on every visit to the app. A year either
+      // side covers the calendar anyone actually pages to; older visits stay
+      // on their ticket and on the ใบเซอร์วิส, they just do not paint a
+      // calendar month nobody is looking at.
+      .gte('received_at', daysAgoValue(365))
       .order('visit_no', { ascending: false }),
     supabase.from('stock').select('category, shop_id, qty'),
     supabase.from('shops').select('id, name, sort_order').order('sort_order'),
@@ -466,6 +474,15 @@ export default async function DashboardPage({
     status: t.status,
   }));
 
+  /*
+    The calendar plots the ticket by its status, and งานแก้ / เซอร์วิส beside it
+    under keys of their own.
+
+    They are NOT statuses — the ticket keeps whatever status it has while the
+    car comes back — but the calendar answers "what is happening that day", and
+    a car returning is one of the things happening. Built from the same list
+    that feeds the 7-day card, so the two can never disagree.
+  */
   const calendarTickets: CalendarTicket[] = tickets
     .filter((t) => t.dropOff)
     .map((t) => ({
@@ -475,6 +492,43 @@ export default async function DashboardPage({
       dropOff: t.dropOff as Date,
       statusHistory: t.statusHistory,
     }));
+
+  for (const a of appointments) {
+    if (a.row.serviceType !== 'แก้งาน' && a.row.serviceType !== 'Service') continue;
+    if (!a.appt) continue;
+    calendarTickets.push({
+      id: a.t.id,
+      shop: a.t.shop,
+      status: a.row.serviceType,
+      dropOff: a.appt,
+      // Empty on purpose: the calendar reads the last status change when there
+      // is a history, and this entry is about its own date, not the ticket’s.
+      statusHistory: [],
+    });
+  }
+
+  /*
+    …and the same events, counted for the period the dashboard is showing.
+
+    Counted on the VISIT’s own date, not the ticket’s: a rework happening this
+    month on a job booked last month belongs to this month, or the number means
+    nothing. Kept out of `statusTotals` — those bars partition the jobs between
+    them, and an event on a job that already has a status would be the same car
+    counted twice.
+  */
+  const visitTotals: VisitTotal[] = (
+    [
+      ['แก้งาน', 'แก้งาน', '#B23A48'],
+      ['Service', 'Service', '#2563EB'],
+    ] as const
+  ).map(([key, label, dot]) => ({
+    key,
+    label,
+    dot,
+    count: appointments.filter(
+      (a) => a.row.serviceType === key && inShop(a.t.shop) && inPeriod(a.appt),
+    ).length,
+  }));
 
   return (
     <Dashboard
@@ -490,6 +544,7 @@ export default async function DashboardPage({
       stockTotal={stockTotal}
       trend={trend}
       calendarTickets={calendarTickets}
+      visitTotals={visitTotals}
       shopFilter={shopFilter}
       caption={periodCaption(period, periodValue, rangeStart, rangeEnd, now)}
       statuses={statuses}
