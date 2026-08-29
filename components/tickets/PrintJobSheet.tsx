@@ -120,6 +120,48 @@ export function docPrefixFor(docType: string): string {
   return 'RCT';
 }
 
+/**
+ * ตราประทับ "งานแก้" — rework, stamped across the top of the job sheet.
+ *
+ * A car that comes back is not a new job: the technician has to know before
+ * touching anything, and a tick buried in the extras list at the bottom of a
+ * page is not something anybody reads first. Sized and angled like the rubber
+ * stamp it stands in for, and transparent, so whatever it lands on still
+ * reads — the same reason a real stamp works.
+ */
+function ReworkStamp() {
+  return (
+    <div
+      className="print-stamp"
+      aria-label="งานแก้"
+      style={{
+        position: 'absolute',
+        /*
+          Rotated about its own centre, so the offsets have to clear the corner
+          the rotation swings out: a 5×3cm box at 45° needs a 5.66cm square, and
+          anchoring it at the very corner threw the top of the stamp off the
+          sheet entirely.
+        */
+        top: '1.6cm',
+        left: '0.6cm',
+        width: '5cm',
+        height: '3cm',
+        border: '3px solid #B23A48',
+        borderRadius: '4px',
+        transform: 'rotate(-45deg)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        // Above the header text it crosses, like a stamp on paper.
+        zIndex: 2,
+        pointerEvents: 'none',
+      }}
+    >
+      <span style={{ fontSize: 34, fontWeight: 900, letterSpacing: 3 }}>งานแก้</span>
+    </div>
+  );
+}
+
 /** A percentage anywhere in a product name: `40%`, `7.5 %`. */
 const PERCENT = /(\d+(?:\.\d+)?\s*%)/;
 
@@ -322,6 +364,10 @@ export function PrintJobSheet({
 
   const categories = [...new Set(t.items.filter((i) => i.sold).map((i) => i.category))];
   const filledExtras = extraOptions.filter((name) => t.extras?.[name]?.checked);
+  // Read off the ticket, not off `extraOptions`: the option list is per shop and
+  // editable, and a job already marked as rework must keep its stamp even if
+  // somebody removes "แก้งาน" from the list afterwards.
+  const isRework = !!t.extras?.['แก้งาน']?.checked;
   const info = shopInfo[t.shop] || {};
   const receivedPayments = t.payments.filter((p) => Number(p.amount || 0) > 0);
   /** Net per ชนิดสินค้า, for the sale sheet's multi-category summary strip. */
@@ -549,8 +595,12 @@ export function PrintJobSheet({
           <div
             key={cat}
             className="print-page"
-            style={catIdx > 0 ? { pageBreakBefore: 'always' } : {}}
+            style={{
+              position: 'relative',
+              ...(catIdx > 0 ? { pageBreakBefore: 'always' } : {}),
+            }}
           >
+            {isRework && <ReworkStamp />}
             <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานติดตั้ง</h1>
             <div style={{ textAlign: 'right', marginBottom: 16 }}>
               <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>

@@ -209,6 +209,15 @@ body {
 .print-area .print-gain * {
   color: #2f7a4f !important;
 }
+/*
+  ตราประทับ "งานแก้" — the one thing on a job sheet that changes what the
+  technician is about to do, so it is the one thing allowed to be red. Kept
+  transparent like a real rubber stamp: whatever it lands on still reads.
+*/
+.print-area .print-stamp,
+.print-area .print-stamp * {
+  color: #b23a48 !important;
+}
 .print-area .doc-band,
 .print-area .doc-band *,
 .print-area .doc-total,

@@ -658,3 +658,46 @@ describe('ใบงานติดตั้ง — คอลัมน์สิ�
     expect(marked).toHaveLength(0);
   });
 });
+
+/**
+ * ตราประทับ "งานแก้" บนใบงานติดตั้ง.
+ *
+ * A car that comes back is not a new job. The tick sat in the extras list at the
+ * bottom of the sheet, which is not where anybody looks before starting work.
+ */
+describe('ใบงานติดตั้ง — ตราประทับงานแก้', () => {
+  const reworkTicket = makeTicket({
+    items: [item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' })],
+    extras: { แก้งาน: { checked: true, detail: 'ขันรูฟ มีรอยฟิล์มหัก' } },
+  });
+
+  it('stamps the sheet when แก้งาน is ticked', () => {
+    renderSheet(reworkTicket, 'job');
+    const stamp = document.body.querySelector('.print-stamp') as HTMLElement | null;
+    expect(stamp).not.toBeNull();
+    expect(stamp!.textContent).toBe('งานแก้');
+    // The size and angle the shop asked for, so it reads as a rubber stamp.
+    expect(stamp!.style.width).toBe('5cm');
+    expect(stamp!.style.height).toBe('3cm');
+    expect(stamp!.style.transform).toBe('rotate(-45deg)');
+  });
+
+  it('leaves an ordinary job unstamped', () => {
+    renderSheet(makeTicket({ items: [item({ category: 'ฟิล์มกรองแสง' })] }), 'job');
+    expect(document.body.querySelector('.print-stamp')).toBeNull();
+  });
+
+  it('stamps every page, because the rework is about the car', () => {
+    renderSheet(
+      makeTicket({
+        items: [
+          item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' }),
+          item({ category: 'เครื่องเสียง', sold: 'ลำโพงคู่ JBL Stage' }),
+        ],
+        extras: { แก้งาน: { checked: true } },
+      }),
+      'job',
+    );
+    expect(document.body.querySelectorAll('.print-stamp')).toHaveLength(2);
+  });
+});
