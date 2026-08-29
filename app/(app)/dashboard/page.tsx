@@ -47,6 +47,7 @@ export default async function DashboardPage({
     { data: customerRows },
     { data: expenseRows },
     { data: pettyRows },
+    { data: visitRows },
     { data: stockRows },
     { data: shopRows },
     { data: statusRows },
@@ -55,7 +56,7 @@ export default async function DashboardPage({
     supabase
       .from('tickets')
       .select(
-        'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
+        'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
       )
       // Soft-deleted tickets (migration 0013) are out of every figure on this
       // screen — revenue, job counts, the calendar and the bookings window.
@@ -73,6 +74,12 @@ export default async function DashboardPage({
         'id, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at',
       ),
     supabase.from('petty_cash').select('shop_id, type, amount'),
+    // เซอร์วิสที่บันทึกไว้ — each recorded visit is its own appointment, with
+    // its own dates, and belongs on the 7-day card beside the bookings.
+    supabase
+      .from('service_visits')
+      .select('ticket_id, visit_no, received_at, delivered_at')
+      .order('visit_no', { ascending: false }),
     supabase.from('stock').select('category, shop_id, qty'),
     supabase.from('shops').select('id, name, sort_order').order('sort_order'),
     supabase
@@ -138,6 +145,7 @@ export default async function DashboardPage({
     held: t.revenue_kind === 'รับแทน',
     dropOff: toDate(t.drop_off_date),
     pickup: toDate(t.pickup_date),
+    extras: (t.extras ?? {}) as Record<string, Record<string, unknown>>,
     // Distinct product categories, and the product names the prototype shows on
     // the recent-jobs rows (`i.sold || i.booked`).
     categories: [...new Set((t.ticket_items ?? []).map((i) => i.category).filter(Boolean))],
@@ -354,11 +362,29 @@ export default async function DashboardPage({
   // The window is measured on วันที่นัด, not on the drop-off: a รอส่งมอบ job
   // came in days ago and is due back this week, and filtering on the old date
   // would keep the day it actually needs someone off the card entirely.
-  const upcoming: UpcomingTicket[] = shopTickets
-    .map((t) => ({ t, appt: appointmentDate(t) }))
-    .filter(({ appt }) => appt && appt >= windowStart && appt <= windowEnd)
-    .sort((a, b) => (a.appt as Date).getTime() - (b.appt as Date).getTime())
-    .map(({ t }) => ({
+  /*
+    One ticket can be several appointments.
+
+    The booking is one. A งานแก้ is another — the car comes back on its own day
+    — and every recorded เซอร์วิส visit is another again. They used to be
+    invisible here: the card read the ticket's own dates, which are in the past
+    by the time a car returns, so the day somebody actually has to be ready for
+    it never appeared. Each is built as its own row carrying its own dates, so
+    the existing grouping puts it under its own การนัดหมาย heading.
+  */
+  const visitsByTicket = new Map<string, { from: string; to: string }[]>();
+  for (const v of visitRows ?? []) {
+    const list = visitsByTicket.get(v.ticket_id) ?? [];
+    list.push({ from: v.received_at ?? '', to: v.delivered_at ?? '' });
+    visitsByTicket.set(v.ticket_id, list);
+  }
+
+  type Appointment = { t: (typeof shopTickets)[number]; appt: Date | null; row: UpcomingTicket };
+  const asDate = (v: string) => (v ? new Date(`${v}T00:00:00+07:00`) : null);
+
+  const appointments: Appointment[] = [];
+  for (const t of shopTickets) {
+    const base: UpcomingTicket = {
       id: t.id,
       customer: t.customer,
       brand: t.brand,
@@ -370,7 +396,51 @@ export default async function DashboardPage({
       dropOff: t.dropOff as Date,
       status: t.status,
       pickup: t.pickup,
-    }));
+    };
+    appointments.push({ t, appt: appointmentDate(t), row: base });
+
+    const rework = t.extras['แก้งาน'];
+    if (rework?.checked) {
+      const from = asDate(String(rework.receivedAt ?? ''));
+      const to = asDate(String(rework.deliveredAt ?? ''));
+      if (from || to) {
+        const category = String(rework.category ?? '').trim();
+        appointments.push({
+          t,
+          appt: appointmentDate({ status: t.status, dropOff: from, pickup: to }),
+          row: {
+            ...base,
+            serviceType: 'แก้งาน',
+            categories: category ? [category] : t.categories,
+            products: [String(rework.detail ?? '').trim()].filter(Boolean),
+            dropOff: (from ?? to) as Date,
+            pickup: to,
+          },
+        });
+      }
+    }
+
+    for (const v of visitsByTicket.get(t.id) ?? []) {
+      const from = asDate(v.from);
+      const to = asDate(v.to);
+      if (!from && !to) continue;
+      appointments.push({
+        t,
+        appt: appointmentDate({ status: t.status, dropOff: from, pickup: to }),
+        row: {
+          ...base,
+          serviceType: 'Service',
+          dropOff: (from ?? to) as Date,
+          pickup: to,
+        },
+      });
+    }
+  }
+
+  const upcoming: UpcomingTicket[] = appointments
+    .filter(({ appt }) => appt && appt >= windowStart && appt <= windowEnd)
+    .sort((a, b) => (a.appt as Date).getTime() - (b.appt as Date).getTime())
+    .map(({ row }) => row);
 
   // Pending approvals count across ALL orders the caller can see, not the
   // shop-filtered subset — matching the prototype, which reads `orders` directly

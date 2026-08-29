@@ -654,7 +654,10 @@ export function Dashboard({
                       </p>
                       {cat.tickets.map((t, i) => (
                         <Link
-                          key={t.id}
+                          // One ticket can appear more than once — its booking,
+                          // its งานแก้ and each เซอร์วิส visit are separate
+                          // appointments — so the id alone is not a key.
+                          key={`${t.id}-${t.serviceType}-${i}`}
                           href={`/tickets/${t.id}`}
                           className="flex items-start justify-between gap-2 cursor-pointer py-1.5 pl-2"
                           style={{ borderTop: i === 0 ? 'none' : '1px solid var(--line)' }}

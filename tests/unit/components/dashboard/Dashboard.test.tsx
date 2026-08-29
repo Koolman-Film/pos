@@ -336,3 +336,44 @@ describe('groupUpcoming', () => {
     expect(days[0].byService[0].byCategory[0].category).toBe('ยังไม่ระบุชนิดสินค้า');
   });
 });
+
+/**
+ * งานแก้ และ เซอร์วิส บนการ์ดนัดหมาย.
+ *
+ * A car coming back is an appointment on its own day, under its own heading —
+ * not a line hidden inside the booking it came from. The card groups by
+ * การนัดหมาย, so all it takes is giving those rows their own one.
+ */
+describe('Dashboard — งานแก้/เซอร์วิส เป็นหัวข้อนัดหมายของตัวเอง', () => {
+  const day = new Date('2026-07-27T09:00:00+07:00');
+
+  it('heads them separately from เข้าทำ/ติดตั้ง', () => {
+    render(
+      <Dashboard
+        {...base}
+        upcoming={[
+          { ...job({ id: 'JT-1' }), dropOff: day },
+          {
+            ...job({ id: 'JT-1', serviceType: 'แก้งาน', products: ['ฟิล์มมีฝุ่น'] }),
+            dropOff: day,
+          },
+          { ...job({ id: 'JT-2', serviceType: 'Service' }), dropOff: day },
+        ]}
+      />,
+    );
+    expect(screen.getByText('เข้าทำ/ติดตั้ง')).toBeInTheDocument();
+    expect(screen.getByText('แก้งาน')).toBeInTheDocument();
+    expect(screen.getByText('Service')).toBeInTheDocument();
+    expect(screen.getByText(/การนัดหมายวันนี้/)).toHaveTextContent('(3)');
+  });
+
+  it('lists the same ticket twice when it is two appointments', () => {
+    // The booking and the rework are different days' work on the same car; a
+    // duplicate id must not collapse them into one row.
+    const days = groupUpcoming([
+      { ...job({ id: 'JT-1' }), dropOff: day, pickup: null },
+      { ...job({ id: 'JT-1', serviceType: 'แก้งาน' }), dropOff: day, pickup: null },
+    ]);
+    expect(days[0].byService.map((g) => g.serviceType)).toEqual(['เข้าทำ/ติดตั้ง', 'แก้งาน']);
+  });
+});
