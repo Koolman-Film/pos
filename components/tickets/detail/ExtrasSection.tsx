@@ -52,6 +52,8 @@ export function ExtrasSection({
     assignedTechnicians: string[];
   }) => React.ReactNode;
 }) {
+  // The ชนิดสินค้า on this ticket, which is what a rework can be about.
+  const reworkCategories = [...new Set(t.items.map((i) => i.category).filter(Boolean))];
   const [showOptional, setShowOptional] = useState(false);
   const [addingExtra, setAddingExtra] = useState(false);
   const [newExtraName, setNewExtraName] = useState('');
@@ -244,6 +246,30 @@ export function ExtrasSection({
                     them over the ticket dates would lose when the work was
                     actually done, which is the thing a warranty argument turns on.
                   */}
+                  {/* Which product the rework is on. Only worth asking when the
+                      ticket carries more than one: ใบงานติดตั้ง prints a page per
+                      ชนิดสินค้า, and a rework on the film is not a rework on the
+                      speakers. */}
+                  {reworkCategories.length > 1 && (
+                    <div className="mt-2">
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        แก้สินค้าชนิดไหน
+                      </label>
+                      <select
+                        aria-label="ชนิดสินค้าที่แก้"
+                        value={(ex.category as string) || ''}
+                        onChange={(e) => updateExtraDetail(name, 'category', e.target.value)}
+                        className="field w-full text-sm px-3 py-2"
+                      >
+                        <option value="">ทุกชนิดสินค้าในใบงานนี้</option>
+                        {reworkCategories.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
                     <div>
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>

@@ -403,6 +403,38 @@ export function PrintJobSheet({
   // somebody removes "แก้งาน" from the list afterwards.
   const isRework = !!t.extras?.['แก้งาน']?.checked;
   const reworkDetail = String(t.extras?.['แก้งาน']?.detail ?? '').trim();
+  /**
+   * ชนิดสินค้าที่งานแก้นี้เป็นของ — blank means the whole ticket.
+   *
+   * ใบงานติดตั้ง prints one page per ชนิดสินค้า. A rework on the film is not
+   * a rework on the speakers, and stamping both pages sends a technician to
+   * redo work nobody complained about.
+   */
+  const reworkCategory = String(t.extras?.['แก้งาน']?.category ?? '').trim();
+  const reworkOn = (cat: string) => isRework && (!reworkCategory || reworkCategory === cat);
+
+  /**
+   * The visit this sheet is being printed for, if it is not the original job.
+   *
+   * งานแก้ carries its own dates on the ticket; เซอร์วิส already records one
+   * row per visit (migration 0020), so the newest of those is used rather than
+   * asking for the same two dates a second time. Rework wins when both are on:
+   * the car is in front of the technician to be redone.
+   */
+  function visitDates(cat: string): { label: string; from: string; to: string } | null {
+    if (reworkOn(cat)) {
+      const from = String(t.extras?.['แก้งาน']?.receivedAt ?? '');
+      const to = String(t.extras?.['แก้งาน']?.deliveredAt ?? '');
+      if (from || to) return { label: 'งานแก้', from, to };
+    }
+    if (t.extras?.['Service']?.checked) {
+      const visit = t.serviceVisits?.[0];
+      if (visit && (visit.receivedAt || visit.deliveredAt)) {
+        return { label: 'เซอร์วิส', from: visit.receivedAt, to: visit.deliveredAt };
+      }
+    }
+    return null;
+  }
   const info = shopInfo[t.shop] || {};
   const receivedPayments = t.payments.filter((p) => Number(p.amount || 0) > 0);
   /** Net per ชนิดสินค้า, for the sale sheet's multi-category summary strip. */
@@ -598,10 +630,8 @@ export function PrintJobSheet({
    * underneath in small type rather than being replaced: which day the car
    * first came in is what a warranty argument turns on.
    */
-  function jobDates() {
-    const reworkIn = String(t.extras?.['แก้งาน']?.receivedAt ?? '');
-    const reworkOut = String(t.extras?.['แก้งาน']?.deliveredAt ?? '');
-    const hasReworkDates = isRework && (reworkIn || reworkOut);
+  function jobDates(cat = '') {
+    const visit = visitDates(cat);
     const day = (v: string) => (v ? fmtThaiDate(new Date(`${v}T00:00:00`)) : '-');
     return (
       <div
@@ -622,7 +652,8 @@ export function PrintJobSheet({
             padding: '4px 10px',
           }}
         >
-          วันที่รับงาน: {hasReworkDates ? day(reworkIn) : fmtThaiDate(t.dropOffDateObj)}
+          วันที่รับงาน{visit ? ` (${visit.label})` : ''}:{' '}
+          {visit ? day(visit.from) : fmtThaiDate(t.dropOffDateObj)}
         </span>
         <span
           style={{
@@ -634,9 +665,10 @@ export function PrintJobSheet({
             background: '#FFF7DD',
           }}
         >
-          วันที่ส่งงาน: {hasReworkDates ? day(reworkOut) : fmtThaiDate(t.pickupDateObj)}
+          วันที่ส่งงาน{visit ? ` (${visit.label})` : ''}:{' '}
+          {visit ? day(visit.to) : fmtThaiDate(t.pickupDateObj)}
         </span>
-        {hasReworkDates && (
+        {visit && (
           <span style={{ width: '100%', textAlign: 'right', fontSize: 10, color: '#777' }}>
             งานเดิม: รับ {fmtThaiDate(t.dropOffDateObj)} &middot; ส่ง {fmtThaiDate(t.pickupDateObj)}
           </span>
@@ -659,7 +691,7 @@ export function PrintJobSheet({
             <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานติดตั้ง</h1>
             <div style={{ textAlign: 'right', marginBottom: 16 }}>
               <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
-              {jobDates()}
+              {jobDates(cat)}
               <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
               <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
                 บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
@@ -929,7 +961,7 @@ export function PrintJobSheet({
             {/* Last thing on the page, under the QC boxes: the technician has
                 read the job by the time they reach it, and it is the one thing
                 that changes what they are about to do. */}
-            {isRework && <ReworkStamp detail={reworkDetail} />}
+            {reworkOn(cat) && <ReworkStamp detail={reworkDetail} />}
           </div>
         ))}
         {categories.includes('ฟิล์มกรองแสง') && (

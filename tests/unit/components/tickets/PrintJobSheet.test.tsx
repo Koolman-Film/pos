@@ -753,8 +753,9 @@ describe('ใบงานติดตั้ง — วันที่ของ�
   it('shows the rework’s dates in the header', () => {
     renderSheet(withDates, 'job');
     const head = document.body.textContent ?? '';
-    expect(head).toContain('วันที่รับงาน: 1 ก.ย. 2569');
-    expect(head).toContain('วันที่ส่งงาน: 2 ก.ย. 2569');
+    // Labelled, so nobody reads them as the original job's dates.
+    expect(head).toContain('วันที่รับงาน (งานแก้): 1 ก.ย. 2569');
+    expect(head).toContain('วันที่ส่งงาน (งานแก้): 2 ก.ย. 2569');
   });
 
   it('keeps the original job’s dates on the sheet too', () => {
@@ -785,5 +786,86 @@ describe('ใบงานติดตั้ง — วันที่ของ�
       (el) => el.textContent === 'แก้บานหน้า มีเม็ดฝุ่นเยอะมาก',
     ) as HTMLElement;
     expect(detail.style.width).toBe('100%');
+  });
+});
+
+/**
+ * งานแก้ที่ระบุชนิดสินค้า, และวันที่ของเซอร์วิส.
+ *
+ * ใบงานติดตั้ง prints one page per ชนิดสินค้า. A rework on the film is not a
+ * rework on the speakers, and stamping both pages sends a technician to redo
+ * work nobody complained about.
+ */
+describe('ใบงานติดตั้ง — งานแก้แยกตามชนิดสินค้า', () => {
+  const twoCategories = (extras: Record<string, unknown>) =>
+    makeTicket({
+      items: [
+        item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' }),
+        item({ category: 'เครื่องเสียง', sold: 'ลำโพงคู่ JBL Stage' }),
+      ],
+      extras: extras as Ticket['extras'],
+    });
+
+  it('stamps only the page of the product being redone', () => {
+    renderSheet(
+      twoCategories({
+        แก้งาน: { checked: true, detail: 'ฟิล์มมีฝุ่น', category: 'ฟิล์มกรองแสง' },
+      }),
+      'job',
+    );
+    const pages = Array.from(document.body.querySelectorAll('.print-page'));
+    const stamped = pages.filter((p) => p.querySelector('.print-stamp'));
+    expect(stamped).toHaveLength(1);
+    expect(stamped[0].textContent).toContain('ฟิล์มกรองแสง');
+  });
+
+  it('stamps every page when no product is named', () => {
+    // An older ticket, or a rework that really is about the whole job.
+    renderSheet(twoCategories({ แก้งาน: { checked: true, detail: 'ทำใหม่ทั้งคัน' } }), 'job');
+    const pages = Array.from(document.body.querySelectorAll('.print-page'));
+    expect(pages.filter((p) => p.querySelector('.print-stamp'))).toHaveLength(2);
+  });
+});
+
+describe('ใบงานติดตั้ง — วันที่ของเซอร์วิส', () => {
+  const serviced = makeTicket({
+    items: [item({ category: 'ฟิล์มกันรอย', sold: 'TPU กันรอยเกรดพรีเมียม' })],
+    dropOffDateObj: new Date('2026-08-12T09:00:00+07:00'),
+    pickupDateObj: new Date('2026-08-14T17:00:00+07:00'),
+    extras: { Service: { checked: true } },
+    serviceVisits: [
+      {
+        visitNo: 2,
+        plate: 'กก 999',
+        receivedAt: '2026-09-10',
+        receivedTime: '',
+        deliveredAt: '2026-09-11',
+        deliveredTime: '',
+        salesBy: '',
+        qcBy: '',
+        technicians: [],
+        filmProduct: '',
+        customerWaits: null,
+        overallOk: null,
+        checks: {},
+        notes: '',
+        points: [],
+      },
+    ],
+  });
+
+  it('shows the latest visit’s dates, labelled as เซอร์วิส', () => {
+    // Taken from the visit that was recorded rather than asking for the same
+    // two dates a second time on the ticket.
+    renderSheet(serviced, 'job');
+    const head = document.body.textContent ?? '';
+    expect(head).toContain('วันที่รับงาน (เซอร์วิส): 10 ก.ย. 2569');
+    expect(head).toContain('วันที่ส่งงาน (เซอร์วิส): 11 ก.ย. 2569');
+    expect(head).toContain('งานเดิม: รับ 12 ส.ค. 2569');
+  });
+
+  it('falls back to the job’s own dates before any visit is recorded', () => {
+    renderSheet({ ...serviced, serviceVisits: [] }, 'job');
+    expect(document.body.textContent).toContain('วันที่รับงาน: 12 ส.ค. 2569');
   });
 });
