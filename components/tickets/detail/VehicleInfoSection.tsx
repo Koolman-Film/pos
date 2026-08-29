@@ -26,6 +26,7 @@ export function VehicleInfoSection({
   onSelectCustomer,
   onModelChange,
   commitModelRegistry,
+  shopChoices = [],
 }: {
   t: Ticket;
   field: (key: keyof Ticket, value: unknown) => void;
@@ -42,11 +43,43 @@ export function VehicleInfoSection({
   onSelectCustomer: (c: { name: string; phone: string }) => void;
   onModelChange: (v: string) => void;
   commitModelRegistry: (brand: string, carType: string) => void;
+  /**
+   * สาขาที่เปิดใบงานนี้ให้ — offered only while the ticket is NEW.
+   *
+   * Somebody who can see several branches can open a job for any of them:
+   * head office books for a branch over the phone all the time, and before
+   * this the ticket silently landed on whichever branch happened to sort
+   * first. Empty (or one entry) means there is nothing to choose.
+   */
+  shopChoices?: { id: string; name: string }[];
 }) {
   // The panel and its heading live in the FormSection wrapper this is rendered
   // inside — see detail/FormSection.tsx.
   return (
     <>
+      {/* Which branch the job belongs to. First, because everything below it —
+          the products, the prices, the stock it will consume — is that
+          branch's. Only on a new ticket: an existing one carries a document
+          number and stock movements that already name its branch. */}
+      {shopChoices.length > 1 && (
+        <div className="mb-3">
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            สาขาที่เปิดใบงาน
+          </label>
+          <select
+            value={t.shop}
+            aria-label="สาขาที่เปิดใบงาน"
+            onChange={(e) => field('shop', e.target.value)}
+            className="field w-full text-sm px-3 py-2"
+          >
+            {shopChoices.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>

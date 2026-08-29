@@ -48,6 +48,7 @@ export default async function NewTicketPage({
       initialTicket={initialTicket}
       isNew
       shops={shops}
+      accessibleShops={accessibleShops}
       statuses={statuses}
       capabilities={{
         'list.createNew': session.canDo('list.createNew'),

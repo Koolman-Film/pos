@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 import { WholesaleDetail } from '@/components/wholesale/WholesaleDetail';
 import type { WsOrder } from '@/components/wholesale/types';
@@ -133,5 +133,45 @@ describe('WholesaleDetail capability gates', () => {
       />,
     );
     expect(screen.queryByText(/ตัดหนี้สูญ/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * เปิด PO ให้สาขาอื่นได้ (ตามสิทธิ์ที่มี).
+ *
+ * The branch was printed as plain text, so a new PO always belonged to whichever
+ * of the caller's shops sorted first — head office could read and edit another
+ * branch's PO but could not raise one for it.
+ */
+describe('WholesaleDetail — เลือกสาขาตอนเปิด PO ใหม่', () => {
+  const SHOPS = [
+    { id: 'cm', name: 'FINNIX FILM เชียงใหม่' },
+    { id: 'lpg', name: 'FINNIX FILM ลำปาง' },
+  ];
+  const blank = { ...order, id: '', shop: 'cm' } as unknown as WsOrder;
+
+  it('offers the branches the caller may act for', () => {
+    render(<WholesaleDetail order={blank} isNew shops={SHOPS} canDo={() => true} />);
+    const picker = screen.getByLabelText('สาขาที่เปิด PO');
+    expect(picker).toHaveValue('cm');
+    expect(within(picker).getByRole('option', { name: SHOPS[1].name })).toBeInTheDocument();
+  });
+
+  it('keeps it fixed on a PO that already exists', () => {
+    // Its number, its stock and the customer's paperwork all name the branch.
+    render(
+      <WholesaleDetail
+        order={{ ...order, shop: 'lpg' } as unknown as WsOrder}
+        shops={SHOPS}
+        canDo={() => true}
+      />,
+    );
+    expect(screen.queryByLabelText('สาขาที่เปิด PO')).not.toBeInTheDocument();
+    expect(screen.getByText(SHOPS[1].name)).toBeInTheDocument();
+  });
+
+  it('says nothing when the caller has one branch', () => {
+    render(<WholesaleDetail order={blank} isNew shops={[SHOPS[0]]} canDo={() => true} />);
+    expect(screen.queryByLabelText('สาขาที่เปิด PO')).not.toBeInTheDocument();
   });
 });

@@ -705,3 +705,54 @@ describe('TicketDetail — ใบกำกับภาษีตามการ�
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * เปิดใบงานให้สาขาอื่นได้ (ตามสิทธิ์ที่มี).
+ *
+ * Head office books for a branch over the phone. Before this the form had no
+ * branch field at all: a new ticket landed on whichever of the caller's shops
+ * sorted first, and there was no way to say otherwise — an admin could edit
+ * another branch's ticket but could not open one.
+ */
+describe('TicketDetail — เลือกสาขาตอนเปิดใบงานใหม่', () => {
+  const SHOPS = [
+    { id: 'cm', name: 'FINNIX FILM เชียงใหม่' },
+    { id: 'lpg', name: 'FINNIX FILM ลำปาง' },
+  ];
+
+  it('opens the ticket at the branch the user picked', async () => {
+    const user = userEvent.setup();
+    const saveAction = vi.fn(async () => ({ ok: true, id: 'JT-LPG-00001' }));
+    render(
+      <TicketDetail
+        {...baseProps(makeTicket({ shop: 'cm' }))}
+        isNew
+        shops={SHOPS}
+        accessibleShops={SHOPS}
+        saveAction={saveAction}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText('สาขาที่เปิดใบงาน'), 'lpg');
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    expect(saveAction).toHaveBeenCalledWith(expect.objectContaining({ shop: 'lpg' }));
+  });
+
+  it('does not offer it on a saved ticket', () => {
+    // The id, the documents and the stock movements all name the branch already.
+    render(<TicketDetail {...baseProps(makeTicket())} shops={SHOPS} accessibleShops={SHOPS} />);
+    expect(screen.queryByLabelText('สาขาที่เปิดใบงาน')).not.toBeInTheDocument();
+  });
+
+  it('does not offer it to somebody who only has one branch', () => {
+    render(
+      <TicketDetail
+        {...baseProps(makeTicket())}
+        isNew
+        shops={SHOPS}
+        accessibleShops={[SHOPS[0]]}
+      />,
+    );
+    expect(screen.queryByLabelText('สาขาที่เปิดใบงาน')).not.toBeInTheDocument();
+  });
+});

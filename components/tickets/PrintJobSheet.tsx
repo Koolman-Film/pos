@@ -638,13 +638,18 @@ export function PrintJobSheet({
                           // The product only earns a line of its own when it
                           // changes; repeating "3M60" five times is noise the
                           // technician has to read past.
+                          //
+                          // Said in words, not with a ditto mark: on a sheet that
+                          // is worked from at the car, a lone ″ reads as an empty
+                          // cell or as inches, and the technician fitting the
+                          // wrong film is the cost of that guess.
                           const sameAsAbove = ri > 0 && rows[ri - 1].product === r.product;
                           return (
                             <tr key={ri}>
                               <td style={{ ...cellBody, fontWeight: 'bold' }}>{r.label ?? '—'}</td>
                               <td style={cellBody}>
                                 {sameAsAbove ? (
-                                  <span style={{ color: '#999' }}>&#8243;</span>
+                                  <span style={{ color: '#777', fontSize: 12 }}>เหมือนกัน</span>
                                 ) : (
                                   <>
                                     <span style={{ fontSize: 15, fontWeight: 'bold' }}>

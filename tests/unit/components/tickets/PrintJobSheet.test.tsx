@@ -582,3 +582,40 @@ describe('เอกสารการเงิน — ภาษาอังก�
     expect(total).toContain('Grand Total');
   });
 });
+
+/**
+ * ใบงานติดตั้ง — สินค้าที่ซ้ำกับบรรทัดบน.
+ *
+ * The position table repeats the film across several rows, so a repeat is
+ * collapsed rather than printed five times. It used to collapse to a ditto mark:
+ * on a sheet worked from at the car, a lone ″ reads as an empty cell or as
+ * inches, and the technician fitting the wrong film is the cost of that guess.
+ */
+describe('ใบงานติดตั้ง — สินค้าซ้ำบรรทัดบน', () => {
+  const filmTicket = makeTicket({
+    items: [
+      {
+        ...item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' }),
+        positions: [
+          { position: 'บานหน้า', product: 'ฟิล์ม FINNIX CT 40%', price: 3000 },
+          { position: 'คู่หน้า', product: 'ฟิล์ม FINNIX CT 40%', price: 3000 },
+          { position: 'คู่หลัง', product: 'ฟิล์ม 3M CRM 60%', price: 2500 },
+        ],
+      },
+    ],
+  });
+
+  it('says เหมือนกัน rather than printing a ditto mark', () => {
+    renderSheet(filmTicket, 'job');
+    expect(screen.getByText('เหมือนกัน')).toBeInTheDocument();
+    expect(screen.queryByText('\u2033')).not.toBeInTheDocument();
+  });
+
+  it('still names the product when it changes', () => {
+    renderSheet(filmTicket, 'job');
+    // Two distinct films, so two named rows and one เหมือนกัน between them.
+    expect(screen.getByText(/FINNIX CT 40%/)).toBeInTheDocument();
+    expect(screen.getByText(/3M CRM 60%/)).toBeInTheDocument();
+    expect(screen.getAllByText('เหมือนกัน')).toHaveLength(1);
+  });
+});

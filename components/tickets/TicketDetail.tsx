@@ -73,6 +73,7 @@ export function TicketDetail({
   initialTicket,
   isNew,
   shops,
+  accessibleShops = [],
   statuses,
   canDo,
   currentUserName,
@@ -102,6 +103,11 @@ export function TicketDetail({
   initialTicket: Ticket;
   isNew: boolean;
   shops: Shop[];
+  /**
+   * สาขาที่ผู้ใช้คนนี้เปิดใบงานให้ได้ — normally the shops they may see.
+   * More than one turns on the branch picker while the ticket is new.
+   */
+  accessibleShops?: Shop[];
   statuses: StatusConfig[];
   canDo: (key: string) => boolean;
   currentUserName: string;
@@ -984,6 +990,7 @@ export function TicketDetail({
                 onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
                 onModelChange={onModelChange}
                 commitModelRegistry={commitModelRegistry}
+                shopChoices={isNew ? accessibleShops : []}
               />
             </FormSection>
 
