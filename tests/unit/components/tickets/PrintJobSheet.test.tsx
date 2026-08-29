@@ -679,7 +679,7 @@ describe('ใบงานติดตั้ง — ตราประทับ�
     // The size and angle the shop asked for, so it reads as a rubber stamp.
     expect(stamp!.style.width).toBe('5cm');
     expect(stamp!.style.height).toBe('3cm');
-    expect(stamp!.style.transform).toBe('rotate(-45deg)');
+    expect(stamp!.style.transform).toBe('rotate(-15deg)');
   });
 
   it('puts it under the QC boxes, at the end of the page', () => {

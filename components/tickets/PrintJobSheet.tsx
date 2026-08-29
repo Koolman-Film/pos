@@ -133,30 +133,39 @@ function ReworkStamp({ detail }: { detail: string }) {
   return (
     <div
       style={{
-        marginTop: 22,
+        /*
+          Pulled UP into the QC row so it overlaps it, the way a rubber stamp
+          lands across whatever is already on the page. Sitting neatly below in
+          its own space read as one more field on the form rather than as a
+          stamp — which is the whole point of it.
+        */
+        marginTop: '-2cm',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
+        // Left of centre, under the first QC box — where the sheet has room and
+        // where the eye already is after reading the QC row left to right.
+        alignItems: 'flex-start',
+        paddingLeft: '5cm',
       }}
     >
       {/*
-        A 5×3cm box turned 45° needs a 5.66cm square to stand in, so the space
-        is reserved rather than left to the rotation to overflow — anchored at
-        a corner, the top of the stamp ran clean off the sheet.
+        Space reserved for the box AFTER it turns: 5×3cm at 15° needs about
+        5.6 × 4.2cm. Leaving the rotation to overflow is how the first version
+        ran off the top of the sheet.
       */}
-      <div style={{ position: 'relative', width: '5.9cm', height: '5.9cm' }}>
+      <div style={{ position: 'relative', width: '5.7cm', height: '4.3cm' }}>
         <div
           className="print-stamp"
           aria-label="งานแก้"
           style={{
             position: 'absolute',
-            top: '1.45cm',
-            left: '0.45cm',
+            top: '0.65cm',
+            left: '0.35cm',
             width: '5cm',
             height: '3cm',
             border: '3px solid #B23A48',
             borderRadius: '4px',
-            transform: 'rotate(-45deg)',
+            transform: 'rotate(-15deg)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -174,8 +183,9 @@ function ReworkStamp({ detail }: { detail: string }) {
             margin: 0,
             fontSize: 20,
             fontWeight: 'bold',
+            // Centred under the stamp itself, not under the page.
+            width: '5.7cm',
             textAlign: 'center',
-            maxWidth: '14cm',
             lineHeight: 1.4,
           }}
         >
