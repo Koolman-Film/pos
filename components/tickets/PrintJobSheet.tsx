@@ -120,6 +120,37 @@ export function docPrefixFor(docType: string): string {
   return 'RCT';
 }
 
+/** A percentage anywhere in a product name: `40%`, `7.5 %`. */
+const PERCENT = /(\d+(?:\.\d+)?\s*%)/;
+
+/**
+ * ไฮไลท์ตัวเลข % ในชื่อสินค้า — the number the technician has to match.
+ *
+ * "ฟิล์ม FINNIX CT 40%" and "ฟิล์ม FINNIX CT 60%" differ by two characters in
+ * the middle of a long name, and fitting the wrong one is a car stripped and
+ * done again. The number is picked out so it is found without reading the name.
+ *
+ * It survives the printer: the sheet sets `print-color-adjust: exact`, so the
+ * background prints, while `.print-area *` flattens the text itself to ink and
+ * keeps it legible on a mono printer.
+ */
+export function highlightPercent(name: string): React.ReactNode {
+  // One split, so the untouched parts of the name render verbatim — spaces and
+  // all — rather than being rebuilt from pieces.
+  return name.split(new RegExp(PERCENT.source, 'g')).map((part, i) =>
+    new RegExp(`^${PERCENT.source}$`).test(part) ? (
+      <span
+        key={i}
+        style={{ background: '#FFF3A3', padding: '0 2px', borderRadius: 2, fontWeight: 'bold' }}
+      >
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
+
 /** The document name in English, for the band under the Thai one. */
 function docTypeEn(docType: string): string {
   if (docType === 'ใบเสนอราคา') return 'QUOTATION';
@@ -653,11 +684,11 @@ export function PrintJobSheet({
                                 ) : (
                                   <>
                                     <span style={{ fontSize: 15, fontWeight: 'bold' }}>
-                                      {short}
+                                      {highlightPercent(short)}
                                     </span>
                                     {stockMatch?.shortName && (
                                       <span style={{ fontSize: 10, color: '#777', marginLeft: 4 }}>
-                                        ({r.product})
+                                        ({highlightPercent(r.product)})
                                       </span>
                                     )}
                                   </>

@@ -591,8 +591,22 @@ describe('เอกสารการเงิน — ภาษาอังก�
  * on a sheet worked from at the car, a lone ″ reads as an empty cell or as
  * inches, and the technician fitting the wrong film is the cost of that guess.
  */
-describe('ใบงานติดตั้ง — สินค้าซ้ำบรรทัดบน', () => {
-  const filmTicket = makeTicket({
+
+/**
+ * The product column of ใบงานติดตั้ง.
+ *
+ * Read at the car by whoever is fitting the film, so both of these are about
+ * one thing: the technician must not have to work anything out.
+ */
+describe('ใบงานติดตั้ง — คอลัมน์สินค้า', () => {
+  /** The product cell of every row in the position table, as text. */
+  function productCells(): string[] {
+    return Array.from(document.body.querySelectorAll('table tbody tr')).map(
+      (tr) => tr.children[1]?.textContent?.trim() ?? '',
+    );
+  }
+
+  const twoFilms = makeTicket({
     items: [
       {
         ...item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' }),
@@ -605,17 +619,42 @@ describe('ใบงานติดตั้ง — สินค้าซ้ำ�
     ],
   });
 
-  it('says เหมือนกัน rather than printing a ditto mark', () => {
-    renderSheet(filmTicket, 'job');
-    expect(screen.getByText('เหมือนกัน')).toBeInTheDocument();
-    expect(screen.queryByText('\u2033')).not.toBeInTheDocument();
+  it('says เหมือนกัน for a repeat rather than printing a ditto mark', () => {
+    // A lone ″ on a sheet worked from at the car reads as an empty cell, or as
+    // inches; the technician fitting the wrong film is the cost of that guess.
+    renderSheet(twoFilms, 'job');
+    const cells = productCells();
+    expect(cells[0]).toContain('FINNIX CT 40%');
+    expect(cells[1]).toBe('เหมือนกัน');
+    expect(cells[2]).toContain('3M CRM 60%');
+    expect(document.body.textContent).not.toContain('″');
   });
 
-  it('still names the product when it changes', () => {
-    renderSheet(filmTicket, 'job');
-    // Two distinct films, so two named rows and one เหมือนกัน between them.
-    expect(screen.getByText(/FINNIX CT 40%/)).toBeInTheDocument();
-    expect(screen.getByText(/3M CRM 60%/)).toBeInTheDocument();
-    expect(screen.getAllByText('เหมือนกัน')).toHaveLength(1);
+  it('marks the percentage, and only the percentage', () => {
+    renderSheet(twoFilms, 'job');
+    const marked = Array.from(document.body.querySelectorAll('span')).filter(
+      (el) => el.style.background === 'rgb(255, 243, 163)',
+    );
+    // One per named row; the เหมือนกัน row has no name to mark.
+    expect(marked.map((el) => el.textContent)).toEqual(['40%', '60%']);
+  });
+
+  it('leaves a product with no percentage alone', () => {
+    renderSheet(
+      makeTicket({
+        items: [
+          {
+            ...item({ category: 'เครื่องเสียง', sold: 'ลำโพงคู่ JBL Stage' }),
+            positions: [{ position: 'หน้า', product: 'ลำโพงคู่ JBL Stage', price: 4500 }],
+          },
+        ],
+      }),
+      'job',
+    );
+    expect(productCells()[0]).toBe('ลำโพงคู่ JBL Stage');
+    const marked = Array.from(document.body.querySelectorAll('span')).filter(
+      (el) => el.style.background === 'rgb(255, 243, 163)',
+    );
+    expect(marked).toHaveLength(0);
   });
 });
