@@ -227,12 +227,49 @@ export function ExtrasSection({
               )}
               {ex.checked && name === 'แก้งาน' && (
                 <div className="mt-2 ml-6">
-                  <input
+                  {/* A textarea, not a one-line input: this is where the shop
+                      writes what actually has to be redone, and it prints in
+                      full on the job sheet. */}
+                  <textarea
                     value={(ex.detail as string) || ''}
                     onChange={(e) => updateExtraDetail(name, 'detail', e.target.value)}
                     placeholder="รายละเอียดการแก้"
+                    rows={2}
                     className="field w-full text-sm px-3 py-2"
+                    style={{ resize: 'vertical' }}
                   />
+                  {/*
+                    วันที่ของงานแก้เอง. The car comes back on its own day and goes
+                    home on another, and neither is the original job's — writing
+                    them over the ticket dates would lose when the work was
+                    actually done, which is the thing a warranty argument turns on.
+                  */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        วันที่รับงาน (งานแก้)
+                      </label>
+                      <input
+                        type="date"
+                        aria-label="วันที่รับงานแก้"
+                        value={(ex.receivedAt as string) || ''}
+                        onChange={(e) => updateExtraDetail(name, 'receivedAt', e.target.value)}
+                        className="field w-full text-sm px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        วันที่ส่งงาน (งานแก้)
+                      </label>
+                      <input
+                        type="date"
+                        aria-label="วันที่ส่งงานแก้"
+                        value={(ex.deliveredAt as string) || ''}
+                        onChange={(e) => updateExtraDetail(name, 'deliveredAt', e.target.value)}
+                        className="field w-full text-sm px-3 py-2"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
               {ex.checked && name === 'Service' && (

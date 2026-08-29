@@ -726,3 +726,64 @@ describe('ใบงานติดตั้ง — ตราประทับ�
     expect(document.body.querySelectorAll('.print-stamp')).toHaveLength(2);
   });
 });
+
+/**
+ * วันที่ของงานแก้.
+ *
+ * The car comes back on its own day and goes home on another, and neither is
+ * the original job's. Writing them over the ticket's dates would lose when the
+ * first fit happened — which is the thing a warranty argument turns on — so the
+ * sheet carries the rework's dates and keeps the original underneath.
+ */
+describe('ใบงานติดตั้ง — วันที่ของงานแก้', () => {
+  const withDates = makeTicket({
+    items: [item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' })],
+    dropOffDateObj: new Date('2026-08-12T09:00:00+07:00'),
+    pickupDateObj: new Date('2026-08-14T17:00:00+07:00'),
+    extras: {
+      แก้งาน: {
+        checked: true,
+        detail: 'แก้บานหน้า มีเม็ดฝุ่นเยอะมาก',
+        receivedAt: '2026-09-01',
+        deliveredAt: '2026-09-02',
+      },
+    },
+  });
+
+  it('shows the rework’s dates in the header', () => {
+    renderSheet(withDates, 'job');
+    const head = document.body.textContent ?? '';
+    expect(head).toContain('วันที่รับงาน: 1 ก.ย. 2569');
+    expect(head).toContain('วันที่ส่งงาน: 2 ก.ย. 2569');
+  });
+
+  it('keeps the original job’s dates on the sheet too', () => {
+    renderSheet(withDates, 'job');
+    expect(document.body.textContent).toContain('งานเดิม: รับ 12 ส.ค. 2569');
+  });
+
+  it('leaves the header alone when the rework has no dates yet', () => {
+    renderSheet(
+      makeTicket({
+        items: [item({ category: 'ฟิล์มกรองแสง' })],
+        dropOffDateObj: new Date('2026-08-12T09:00:00+07:00'),
+        pickupDateObj: new Date('2026-08-14T17:00:00+07:00'),
+        extras: { แก้งาน: { checked: true, detail: 'ยังไม่นัดวัน' } },
+      }),
+      'job',
+    );
+    const head = document.body.textContent ?? '';
+    expect(head).toContain('วันที่รับงาน: 12 ส.ค. 2569');
+    expect(head).not.toContain('งานเดิม:');
+  });
+
+  it('lets the note run the width of the sheet', () => {
+    // It used to wrap inside the 5.7cm stamp column, which turned a sentence
+    // into one word a line.
+    renderSheet(withDates, 'job');
+    const detail = Array.from(document.body.querySelectorAll('.print-stamp')).find(
+      (el) => el.textContent === 'แก้บานหน้า มีเม็ดฝุ่นเยอะมาก',
+    ) as HTMLElement;
+    expect(detail.style.width).toBe('100%');
+  });
+});

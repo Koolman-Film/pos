@@ -144,8 +144,7 @@ function ReworkStamp({ detail }: { detail: string }) {
         flexDirection: 'column',
         // Left of centre, under the first QC box — where the sheet has room and
         // where the eye already is after reading the QC row left to right.
-        alignItems: 'flex-start',
-        paddingLeft: '5cm',
+        alignItems: 'stretch',
       }}
     >
       {/*
@@ -153,7 +152,7 @@ function ReworkStamp({ detail }: { detail: string }) {
         5.6 × 4.2cm. Leaving the rotation to overflow is how the first version
         ran off the top of the sheet.
       */}
-      <div style={{ position: 'relative', width: '5.7cm', height: '4.3cm' }}>
+      <div style={{ position: 'relative', width: '5.7cm', height: '4.3cm', marginLeft: '5cm' }}>
         <div
           className="print-stamp"
           aria-label="งานแก้"
@@ -183,8 +182,9 @@ function ReworkStamp({ detail }: { detail: string }) {
             margin: 0,
             fontSize: 20,
             fontWeight: 'bold',
-            // Centred under the stamp itself, not under the page.
-            width: '5.7cm',
+            // Wraps at the width of the sheet, the same as the table above it,
+            // so a long note reads as sentences instead of as one word a line.
+            width: '100%',
             textAlign: 'center',
             lineHeight: 1.4,
           }}
@@ -590,7 +590,19 @@ export function PrintJobSheet({
    * fields. The delivery date keeps the emphasis; it is the one the customer is
    * here about.
    */
+  /**
+   * The dates in the header.
+   *
+   * A rework sheet carries the rework's own dates — that is the visit the
+   * technician is holding the paper for. The original job keeps its line
+   * underneath in small type rather than being replaced: which day the car
+   * first came in is what a warranty argument turns on.
+   */
   function jobDates() {
+    const reworkIn = String(t.extras?.['แก้งาน']?.receivedAt ?? '');
+    const reworkOut = String(t.extras?.['แก้งาน']?.deliveredAt ?? '');
+    const hasReworkDates = isRework && (reworkIn || reworkOut);
+    const day = (v: string) => (v ? fmtThaiDate(new Date(`${v}T00:00:00`)) : '-');
     return (
       <div
         style={{
@@ -610,7 +622,7 @@ export function PrintJobSheet({
             padding: '4px 10px',
           }}
         >
-          วันที่รับงาน: {fmtThaiDate(t.dropOffDateObj)}
+          วันที่รับงาน: {hasReworkDates ? day(reworkIn) : fmtThaiDate(t.dropOffDateObj)}
         </span>
         <span
           style={{
@@ -622,8 +634,13 @@ export function PrintJobSheet({
             background: '#FFF7DD',
           }}
         >
-          วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
+          วันที่ส่งงาน: {hasReworkDates ? day(reworkOut) : fmtThaiDate(t.pickupDateObj)}
         </span>
+        {hasReworkDates && (
+          <span style={{ width: '100%', textAlign: 'right', fontSize: 10, color: '#777' }}>
+            งานเดิม: รับ {fmtThaiDate(t.dropOffDateObj)} &middot; ส่ง {fmtThaiDate(t.pickupDateObj)}
+          </span>
+        )}
       </div>
     );
   }
