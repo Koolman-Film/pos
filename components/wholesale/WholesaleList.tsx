@@ -42,6 +42,7 @@ export function WholesaleList({
   accessibleShops,
   canSeeAllShops = true,
   onUpdateStatus,
+  stockWarning,
 }: {
   orders: WsOrder[];
   customers: WsCustomer[];
@@ -52,6 +53,14 @@ export function WholesaleList({
   accessibleShops: Shop[];
   canSeeAllShops?: boolean;
   onUpdateStatus?: (orderId: string, status: string) => Promise<void> | void;
+  /**
+   * สินค้าที่ตัดสต็อกไม่สำเร็จตอนบันทึก PO ใบล่าสุด.
+   *
+   * Shown here because saving a PO redirects to this list. The save itself
+   * succeeds either way — losing the sale over a stock lookup would be the
+   * worse failure — so this is the only place the shop finds out.
+   */
+  stockWarning?: string;
 }) {
   const can = canDo ?? ((k: string) => !!caps?.[k]);
   const router = useRouter();
@@ -135,6 +144,16 @@ export function WholesaleList({
 
   return (
     <div className="fade-page">
+      {stockWarning && (
+        <p
+          className="text-sm mb-4 px-4 py-3 rounded-xl flex items-start gap-2"
+          style={{ background: '#FBF1DA', color: '#8A5A12' }}
+          role="status"
+        >
+          <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+          <span>{stockWarning}</span>
+        </p>
+      )}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <h1 className="text-xl font-bold">ขายส่ง</h1>
         {can('wholesale.createNew') && (

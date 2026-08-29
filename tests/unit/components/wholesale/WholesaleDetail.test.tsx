@@ -1,7 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 
+// WholesaleList navigates with useRouter(); jsdom has no app-router context.
+// Test-environment concern only.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+}));
+
 import { WholesaleDetail } from '@/components/wholesale/WholesaleDetail';
+import { WholesaleList } from '@/components/wholesale/WholesaleList';
 import type { WsOrder } from '@/components/wholesale/types';
 
 // The Step-3 order: a single line, no discount (requestedPrice with no
@@ -173,5 +180,39 @@ describe('WholesaleDetail — เลือกสาขาตอนเปิด P
   it('says nothing when the caller has one branch', () => {
     render(<WholesaleDetail order={blank} isNew shops={[SHOPS[0]]} canDo={() => true} />);
     expect(screen.queryByLabelText('สาขาที่เปิด PO')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * ตัดสต็อกไม่สำเร็จตอนบันทึก PO.
+ *
+ * Saving a PO deducts what was sold. When that fails — the product was renamed,
+ * or the branch has no such product registered — the save still succeeds, which
+ * is right: losing the sale over a stock lookup would be the worse failure. What
+ * was wrong is that the failure was swallowed whole, so goods left the shelf and
+ * the count never moved, and nobody knew until a stocktake months later.
+ */
+describe('WholesaleList — เตือนเมื่อตัดสต็อกไม่สำเร็จ', () => {
+  const listProps = {
+    orders: [],
+    customers: [],
+    wsStatuses: {},
+    accessibleShops: [{ id: 'cm', name: 'FINNIX FILM เชียงใหม่' }],
+  };
+
+  it('shows what could not be deducted', () => {
+    render(
+      <WholesaleList
+        {...listProps}
+        canDo={() => true}
+        stockWarning="บันทึก PO แล้ว แต่ตัดสต็อกไม่สำเร็จ: ฟิล์ม 3M CRM 60%"
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('ฟิล์ม 3M CRM 60%');
+  });
+
+  it('says nothing when everything deducted', () => {
+    render(<WholesaleList {...listProps} canDo={() => true} />);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

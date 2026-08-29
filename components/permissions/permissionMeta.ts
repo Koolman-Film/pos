@@ -99,6 +99,7 @@ export const MODULE_CAPABILITIES: LabeledKey[] = [
   { key: 'wholesale.createNew', label: 'ขายส่ง: สร้าง PO ใหม่' },
   { key: 'wholesale.priceApproval', label: 'ขายส่ง: อนุมัติ/ปฏิเสธราคา' },
   { key: 'wholesale.badDebt', label: 'ขายส่ง: แจ้งตัดหนี้สูญ' },
+  { key: 'wholesale.updateStatus', label: 'ขายส่ง: เปลี่ยนสถานะ PO' },
   { key: 'wholesale.export', label: 'ขายส่ง: ส่งออก Excel/PDF' },
   { key: 'stock.addProduct', label: 'สต็อก: เพิ่มสินค้า/ขึ้นทะเบียนใหม่' },
   { key: 'stock.adjustStock', label: 'สต็อก: ปรับสต็อก' },

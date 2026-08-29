@@ -51,15 +51,44 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
   // exactly the prototype's origSold/origReturned pair (:2694-2701). Must be read
   // before the delete-then-insert below wipes the rows, because it is the "before"
   // side of the stock delta.
-  const before = await storedOrderNetQty(supabase, input.id);
+  // Nothing is stored yet for a new PO, and its id is about to change.
+  const before = isNew ? {} : await storedOrderNetQty(supabase, input.id);
 
-  const { error: headerErr } = await supabase.from('orders').upsert({
-    id: input.id,
-    shop_id: input.shop,
-    customer_id: input.customerId,
-    status: input.status,
-  });
-  if (headerErr) throw new Error(headerErr.message);
+  /*
+    The PO number comes from the database (migration 0036), not the browser.
+
+    It used to be `'WS-NEW-' + random(1000..9999)`, chosen client-side and kept
+    as the primary key — which collides at about 112 POs, and the upsert below
+    then overwrote the earlier PO's header and replaced all of its children.
+    The trigger swaps a `WS-NEW-%` placeholder for the next number in that
+    branch's series, under a lock, so two people raising a PO at the same
+    moment cannot be handed the same one.
+  */
+  let orderId = input.id;
+  if (isNew) {
+    const { data, error } = await supabase
+      .from('orders')
+      .insert({
+        id: input.id,
+        shop_id: input.shop,
+        customer_id: input.customerId,
+        status: input.status,
+      })
+      .select('id')
+      .single();
+    if (error) throw new Error(error.message);
+    orderId = data.id;
+  } else {
+    const { error } = await supabase
+      .from('orders')
+      .update({
+        shop_id: input.shop,
+        customer_id: input.customerId,
+        status: input.status,
+      })
+      .eq('id', orderId);
+    if (error) throw new Error(error.message);
+  }
 
   // Replace all four child tables in ONE atomic call (`save_order_children`,
   // migration 0011). Previously each delete and each insert was its own
@@ -71,7 +100,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
   // free-text Thai display string ("วันนี้"), so the save date is persisted.
   const savedOn = new Date().toISOString().slice(0, 10);
   const { error: childErr } = await supabase.rpc('save_order_children', {
-    p_order_id: input.id,
+    p_order_id: orderId,
     p_items: input.items,
     p_returns: input.returns,
     p_adjustments: input.adjustments,
@@ -89,23 +118,33 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
     input.returns.map((r) => ({ name: r.item, qty: Number(r.qty) || 0 })),
   );
   const delta = diffQtyMaps(before, after);
+  let unmatched: string[] = [];
   if (Object.keys(delta).length > 0) {
     try {
-      await applyStockMovements(supabase, delta, {
+      const result = await applyStockMovements(supabase, delta, {
         kind: 'ขายส่ง',
-        documentId: input.id,
+        documentId: orderId,
         // The prototype always credited the system here, never the user (:2709).
         by: 'ระบบ (ขายส่ง)',
         shopId: input.shop,
       });
+      unmatched = result.unmatched;
     } catch {
-      // Deliberately swallowed; see above.
+      // Saving the PO must not fail over a stock lookup — but the shop has to
+      // be TOLD, which is what the message below is for. Silently swallowing
+      // it left goods leaving the shelf with the count unchanged and nobody
+      // any the wiser until a stocktake months later.
+      unmatched = Object.keys(delta);
     }
   }
 
   revalidatePath('/wholesale');
   revalidatePath('/stock');
-  redirect('/wholesale');
+  redirect(
+    unmatched.length > 0
+      ? `/wholesale?stock=${encodeURIComponent(unmatched.join(', '))}`
+      : '/wholesale',
+  );
 }
 
 /** Net = sold - returned, per product. */
@@ -169,12 +208,16 @@ export async function markOrderBadDebt(orderId: string) {
 }
 
 /**
- * Inline status change from the list. Not capability-gated in the prototype (any
- * user may move a PO through the pipeline), but still re-checks the session per
- * C2 so an unauthenticated POST is rejected.
+ * Inline status change from the list.
+ *
+ * Gated, unlike in the prototype. Moving a PO to ปิดงานแล้ว closes it, and
+ * moving it back reopens one that was closed — decisions of the same weight as
+ * approving a price or writing off a debt, both of which have always been
+ * gated. Leaving this one open meant the other two could be walked around.
  */
 export async function updateOrderStatus(orderId: string, status: string) {
-  await getSessionContext();
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.updateStatus')) throw new Error('ไม่มีสิทธิ์เปลี่ยนสถานะ PO');
   await setOrderStatusInternal(orderId, status);
 }
 

@@ -132,3 +132,61 @@ describe('shop_info.vat_registered', () => {
     await admin.from('shops').delete().eq('id', 'zzvat');
   });
 });
+
+/**
+ * เลขที่ PO ออกโดยฐานข้อมูล (migration 0036).
+ *
+ * The browser used to pick `'WS-NEW-' + random(1000..9999)` and keep it as the
+ * primary key. The chance two POs share a number passes 50% at about 112 POs,
+ * and the save was an upsert — so a collision overwrote the earlier PO's header
+ * and replaced every one of its items, returns, payments and adjustments.
+ */
+describe('next_order_id', () => {
+  const MADE = ['WS-CM-9001', 'WS-CM-9002'];
+
+  async function cleanupOrders() {
+    await admin.from('orders').delete().like('id', 'WS-ZZ%');
+    for (const id of MADE) await admin.from('orders').delete().eq('id', id);
+  }
+  beforeEach(cleanupOrders);
+  afterAll(cleanupOrders);
+
+  async function raise(id: string, shop = 'cm') {
+    const { data, error } = await admin
+      .from('orders')
+      .insert({ id, shop_id: shop, status: 'รออนุมัติราคา' })
+      .select('id')
+      .single();
+    assertNoError(`insert ${id}`, error);
+    return data?.id as string;
+  }
+
+  it('gives two POs raised with the same placeholder different numbers', async () => {
+    const first = await raise('WS-NEW-4823');
+    const second = await raise('WS-NEW-4823');
+
+    expect(first).not.toBe(second);
+    expect(first).toMatch(/^WS-CM-\d{4}$/);
+    expect(second).toMatch(/^WS-CM-\d{4}$/);
+    // …and they are consecutive, so a missing PO can be noticed.
+    expect(Number(second.slice(-4))).toBe(Number(first.slice(-4)) + 1);
+
+    await admin.from('orders').delete().eq('id', first);
+    await admin.from('orders').delete().eq('id', second);
+  });
+
+  it('numbers each branch in its own series', async () => {
+    const cm = await raise('WS-NEW-1111', 'cm');
+    const lpg = await raise('WS-NEW-1111', 'lpg');
+    expect(cm.startsWith('WS-CM-')).toBe(true);
+    expect(lpg.startsWith('WS-LPG-')).toBe(true);
+
+    await admin.from('orders').delete().eq('id', cm);
+    await admin.from('orders').delete().eq('id', lpg);
+  });
+
+  it('keeps a real number it is given, so an import stays as it came', async () => {
+    const kept = await raise('WS-CM-9001');
+    expect(kept).toBe('WS-CM-9001');
+  });
+});

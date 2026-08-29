@@ -91,8 +91,11 @@ describe('reset_permissions_to_defaults keeps every key', () => {
    * The defaults live in SQL, which is a copy of the registry that no compiler
    * checks. A key missing there is a key that a "reset to defaults" quietly
    * un-governs — the same failure, arriving later and harder to spot.
+   *
+   * Always the NEWEST migration that rebuilds the function: that is the one a
+   * reset actually runs.
    */
-  const sql = readFileSync('supabase/migrations/0033_permission_coverage.sql', 'utf8');
+  const sql = readFileSync('supabase/migrations/0037_wholesale_status_capability.sql', 'utf8');
 
   it('seeds every module', () => {
     for (const nav of declared.nav) {
