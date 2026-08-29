@@ -682,6 +682,31 @@ describe('ใบงานติดตั้ง — ตราประทับ�
     expect(stamp!.style.transform).toBe('rotate(-45deg)');
   });
 
+  it('puts it under the QC boxes, at the end of the page', () => {
+    renderSheet(reworkTicket, 'job');
+    const page = document.body.querySelector('.print-page') as HTMLElement;
+    const qc = Array.from(page.querySelectorAll('p')).find((p) =>
+      p.textContent?.includes('QC หลังติดตั้ง'),
+    )!;
+    const stamp = page.querySelector('.print-stamp') as HTMLElement;
+    // DOCUMENT_POSITION_FOLLOWING: the stamp comes after the QC block.
+    expect(qc.compareDocumentPosition(stamp) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('prints what has to be redone under the stamp, in the same red', () => {
+    renderSheet(reworkTicket, 'job');
+    const marks = Array.from(document.body.querySelectorAll('.print-stamp'));
+    const detail = marks.find((el) => el.textContent === 'ขันรูฟ มีรอยฟิล์มหัก') as HTMLElement;
+    expect(detail).toBeTruthy();
+    // Bigger than the 12px it used to sit at in the extras list.
+    expect(Number.parseInt(detail.style.fontSize, 10)).toBeGreaterThanOrEqual(18);
+  });
+
+  it('no longer repeats it in the extras list on this sheet', () => {
+    renderSheet(reworkTicket, 'job', { extraOptions: ['แก้งาน'] });
+    expect(document.body.textContent).not.toContain('แก้งาน: ขันรูฟ');
+  });
+
   it('leaves an ordinary job unstamped', () => {
     renderSheet(makeTicket({ items: [item({ category: 'ฟิล์มกรองแสง' })] }), 'job');
     expect(document.body.querySelector('.print-stamp')).toBeNull();

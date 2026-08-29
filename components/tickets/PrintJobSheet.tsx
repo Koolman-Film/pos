@@ -129,35 +129,59 @@ export function docPrefixFor(docType: string): string {
  * stamp it stands in for, and transparent, so whatever it lands on still
  * reads — the same reason a real stamp works.
  */
-function ReworkStamp() {
+function ReworkStamp({ detail }: { detail: string }) {
   return (
     <div
-      className="print-stamp"
-      aria-label="งานแก้"
       style={{
-        position: 'absolute',
-        /*
-          Rotated about its own centre, so the offsets have to clear the corner
-          the rotation swings out: a 5×3cm box at 45° needs a 5.66cm square, and
-          anchoring it at the very corner threw the top of the stamp off the
-          sheet entirely.
-        */
-        top: '1.6cm',
-        left: '0.6cm',
-        width: '5cm',
-        height: '3cm',
-        border: '3px solid #B23A48',
-        borderRadius: '4px',
-        transform: 'rotate(-45deg)',
+        marginTop: 22,
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        // Above the header text it crosses, like a stamp on paper.
-        zIndex: 2,
-        pointerEvents: 'none',
       }}
     >
-      <span style={{ fontSize: 34, fontWeight: 900, letterSpacing: 3 }}>งานแก้</span>
+      {/*
+        A 5×3cm box turned 45° needs a 5.66cm square to stand in, so the space
+        is reserved rather than left to the rotation to overflow — anchored at
+        a corner, the top of the stamp ran clean off the sheet.
+      */}
+      <div style={{ position: 'relative', width: '5.9cm', height: '5.9cm' }}>
+        <div
+          className="print-stamp"
+          aria-label="งานแก้"
+          style={{
+            position: 'absolute',
+            top: '1.45cm',
+            left: '0.45cm',
+            width: '5cm',
+            height: '3cm',
+            border: '3px solid #B23A48',
+            borderRadius: '4px',
+            transform: 'rotate(-45deg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <span style={{ fontSize: 34, fontWeight: 900, letterSpacing: 3 }}>งานแก้</span>
+        </div>
+      </div>
+      {/* What has to be redone, under the stamp and in the same red: the
+          stamp says there is rework, this says what it is. */}
+      {detail && (
+        <p
+          className="print-stamp"
+          style={{
+            margin: 0,
+            fontSize: 20,
+            fontWeight: 'bold',
+            textAlign: 'center',
+            maxWidth: '14cm',
+            lineHeight: 1.4,
+          }}
+        >
+          {detail}
+        </p>
+      )}
     </div>
   );
 }
@@ -368,6 +392,7 @@ export function PrintJobSheet({
   // editable, and a job already marked as rework must keep its stamp even if
   // somebody removes "แก้งาน" from the list afterwards.
   const isRework = !!t.extras?.['แก้งาน']?.checked;
+  const reworkDetail = String(t.extras?.['แก้งาน']?.detail ?? '').trim();
   const info = shopInfo[t.shop] || {};
   const receivedPayments = t.payments.filter((p) => Number(p.amount || 0) > 0);
   /** Net per ชนิดสินค้า, for the sale sheet's multi-category summary strip. */
@@ -376,11 +401,18 @@ export function PrintJobSheet({
     categoryTotals[i.category] = (categoryTotals[i.category] || 0) + itemNetPrice(mapItem(i));
   }
 
-  function extrasBlock(gap: number) {
-    if (filledExtras.length === 0) return null;
+  /**
+   * `skipRework` is set by the ใบงานติดตั้ง, where แก้งาน is printed under the
+   * stamp at the bottom instead — saying it twice on one sheet, once in
+   * 12px and once in red, is how the small one gets read and the big one
+   * ignored. The ใบงานขาย still lists it with the rest.
+   */
+  function extrasBlock(gap: number, skipRework = false) {
+    const names = skipRework ? filledExtras.filter((n) => n !== 'แก้งาน') : filledExtras;
+    if (names.length === 0) return null;
     return (
       <div style={{ fontSize: 12, lineHeight: 1.6, marginBottom: gap }}>
-        {filledExtras.map((name) => {
+        {names.map((name) => {
           const ex = t.extras[name];
           if (name === 'รถสไลด์') {
             const legs =
@@ -595,12 +627,8 @@ export function PrintJobSheet({
           <div
             key={cat}
             className="print-page"
-            style={{
-              position: 'relative',
-              ...(catIdx > 0 ? { pageBreakBefore: 'always' } : {}),
-            }}
+            style={catIdx > 0 ? { pageBreakBefore: 'always' } : {}}
           >
-            {isRework && <ReworkStamp />}
             <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานติดตั้ง</h1>
             <div style={{ textAlign: 'right', marginBottom: 16 }}>
               <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
@@ -768,7 +796,7 @@ export function PrintJobSheet({
             <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
             {cat === WRAP_CATEGORY && wrapOptionsBlock()}
             {notesBlock(cat)}
-            {extrasBlock(16)}
+            {extrasBlock(16, true)}
             <p
               style={{
                 margin: '0 0 16px',
@@ -871,6 +899,10 @@ export function PrintJobSheet({
                 </p>
               </div>
             </div>
+            {/* Last thing on the page, under the QC boxes: the technician has
+                read the job by the time they reach it, and it is the one thing
+                that changes what they are about to do. */}
+            {isRework && <ReworkStamp detail={reworkDetail} />}
           </div>
         ))}
         {categories.includes('ฟิล์มกรองแสง') && (
