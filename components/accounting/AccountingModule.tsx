@@ -85,6 +85,8 @@ export type PettyCashView = {
   type: string; // 'เติมเงิน'
   amount: number;
   date?: string;
+  /** The date itself, so a top-up can be windowed and sorted like a spend. */
+  dateObj?: Date | string | null;
   note?: string;
 };
 
@@ -339,14 +341,55 @@ export function AccountingModule({
     .filter((e) => e.source === 'เงินสดย่อย' && e.status === 'จ่ายแล้ว')
     .reduce((s, e) => s + Number(e.amount), 0);
   const cashBalance = cashTopups - cashSpent;
-  const cashDetailItems = shopExpensesAllCat
-    .filter((e) => e.source === 'เงินสดย่อย' && e.status === 'จ่ายแล้ว' && inCashPeriod(e.dateObj))
-    .sort(
-      (a, b) =>
-        (b.dateObj ? new Date(b.dateObj).getTime() : 0) -
-        (a.dateObj ? new Date(a.dateObj).getTime() : 0),
-    );
-  const cashDetailTotal = cashDetailItems.reduce((s, e) => s + Number(e.amount), 0);
+  /*
+    เงินสดย่อย เข้าและออก ในรายการเดียว.
+
+    The panel used to list only what was spent, which is half a cash book: the
+    balance above it moves on top-ups too, and with only the spends on screen
+    there was no way to see why the two did not agree. Top-ups are + and
+    spends are −, sorted together by date, and the total at the bottom is the
+    NET movement for the window — the amount the balance changed by.
+  */
+  type CashRow = {
+    key: string;
+    title: string;
+    meta: string;
+    amount: number;
+    at: number;
+  };
+  const stamp = (d: Date | string | null | undefined) => (d ? new Date(d).getTime() : 0);
+
+  const cashDetailItems: CashRow[] = [
+    ...pettyCash
+      .filter((p) => (shopFilter === 'all' || p.shop === shopFilter) && p.type === 'เติมเงิน')
+      .filter((p) => inCashPeriod(p.dateObj))
+      .map((p) => ({
+        key: `topup-${p.id}`,
+        title: p.note?.trim() || 'เติมเงินสดย่อย',
+        meta: `เติมเงินสดย่อย · ${p.date ?? '-'}`,
+        amount: Number(p.amount),
+        at: stamp(p.dateObj),
+      })),
+    ...shopExpensesAllCat
+      .filter(
+        (e) => e.source === 'เงินสดย่อย' && e.status === 'จ่ายแล้ว' && inCashPeriod(e.dateObj),
+      )
+      .map((e) => ({
+        key: `spend-${e.id}`,
+        title: e.desc,
+        meta: `${e.category} · ${e.date ?? '-'}`,
+        amount: -Number(e.amount),
+        at: stamp(e.dateObj),
+      })),
+  ].sort((a, b) => b.at - a.at);
+
+  const cashDetailIn = cashDetailItems
+    .filter((r) => r.amount > 0)
+    .reduce((s, r) => s + r.amount, 0);
+  const cashDetailOut = cashDetailItems
+    .filter((r) => r.amount < 0)
+    .reduce((s, r) => s - r.amount, 0);
+  const cashDetailTotal = cashDetailIn - cashDetailOut;
   const exportShopIds =
     shopFilter === 'all'
       ? accessibleShops.map((s) => s.id).filter((id) => shopExpenses.some((e) => e.shop === id))
@@ -848,7 +891,8 @@ export function AccountingModule({
         {showCashDetail && (
           <div className="card p-5 mb-4 fade-page">
             <p className="text-sm font-semibold mb-3">
-              รายการที่จ่ายจากเงินสดย่อย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
+              รายการที่รับ-จ่ายจากเงินสดย่อย
+              {shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
             </p>
             <div
               className="card p-3 mb-4 flex flex-wrap items-center gap-2"
@@ -938,31 +982,47 @@ export function AccountingModule({
             </div>
             {cashDetailItems.length === 0 ? (
               <p className="text-sm py-6 text-center" style={{ color: 'var(--ink-faint)' }}>
-                ไม่มีรายการที่จ่ายจากเงินสดย่อยในช่วงเวลานี้
+                ไม่มีรายการรับ-จ่ายเงินสดย่อยในช่วงเวลานี้
               </p>
             ) : (
               <div className="flex flex-col gap-2">
-                {cashDetailItems.map((e) => (
+                {cashDetailItems.map((r) => (
                   <div
-                    key={e.id}
+                    key={r.key}
                     className="flex items-center justify-between py-2"
                     style={{ borderBottom: '1px solid var(--line)' }}
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{e.desc}</p>
+                      <p className="text-sm font-medium truncate">{r.title}</p>
                       <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
-                        {e.category} &middot; {e.date}
+                        {r.meta}
                       </p>
                     </div>
-                    <span className="text-sm font-semibold flex-shrink-0">{fmt(e.amount)}</span>
+                    {/* Signed, because a cash book that shows 520 for money in and
+                        520 for money out is unreadable. */}
+                    <span
+                      className="text-sm font-semibold flex-shrink-0"
+                      style={{ color: r.amount > 0 ? '#3F6B33' : 'var(--ink)' }}
+                    >
+                      {r.amount > 0 ? '+' : '−'}
+                      {fmt(Math.abs(r.amount))}
+                    </span>
                   </div>
                 ))}
                 <div
-                  className="flex justify-between pt-2 text-sm font-bold"
-                  style={{ borderTop: '1.5px solid var(--line-strong)' }}
+                  className="flex justify-between pt-2 text-sm"
+                  style={{ borderTop: '1.5px solid var(--line-strong)', color: 'var(--ink-soft)' }}
                 >
-                  <span>ยอดรวม</span>
-                  <span>{fmt(cashDetailTotal)}</span>
+                  <span>
+                    เติมเข้า {fmt(cashDetailIn)} &middot; จ่ายออก {fmt(cashDetailOut)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm font-bold">
+                  <span>เคลื่อนไหวสุทธิ</span>
+                  <span style={{ color: cashDetailTotal < 0 ? '#B23A48' : '#3F6B33' }}>
+                    {cashDetailTotal > 0 ? '+' : cashDetailTotal < 0 ? '−' : ''}
+                    {fmt(Math.abs(cashDetailTotal))}
+                  </span>
                 </div>
               </div>
             )}

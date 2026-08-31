@@ -358,3 +358,56 @@ describe('AccountingModule — แก้ไขได้ทุกหัวข้�
     );
   });
 });
+
+/**
+ * รายการรับ-จ่ายเงินสดย่อย.
+ *
+ * The panel used to list only what was spent, which is half a cash book: the
+ * balance above it moves on top-ups too, so with only the spends on screen there
+ * was no way to see why the two did not agree.
+ */
+describe('AccountingModule — รายการรับ-จ่ายเงินสดย่อย', () => {
+  const today = new Date();
+  const rows = [
+    {
+      ...expenses[0],
+      id: 3,
+      desc: 'เติมแก๊ส',
+      category: 'ค่าวัสดุสิ้นเปลือง',
+      source: 'เงินสดย่อย',
+      amount: 520,
+      status: 'จ่ายแล้ว',
+      dateObj: today,
+    },
+  ];
+  const topups = [
+    { id: 1, shop: 'cm', type: 'เติมเงิน', amount: 5000, dateObj: today, note: 'เติมต้นเดือน' },
+  ];
+
+  async function openPanel() {
+    const user = userEvent.setup();
+    render(<AccountingModule expenses={rows} pettyCash={topups} accessibleShops={SHOPS_CM} />);
+    await user.click(screen.getByText('เงินสดย่อยคงเหลือ'));
+    return user;
+  }
+  const SHOPS_CM = [{ id: 'cm', name: 'FINNIX CM' }];
+
+  it('shows the top-up as money in and the expense as money out', async () => {
+    await openPanel();
+    const panel = screen.getByText(/รายการที่รับ-จ่ายจากเงินสดย่อย/).closest('.card') as HTMLElement;
+    expect(within(panel).getByText('เติมต้นเดือน')).toBeInTheDocument();
+    expect(within(panel).getByText('เติมแก๊ส')).toBeInTheDocument();
+    expect(within(panel).getByText(/\+5,000\.00/)).toBeInTheDocument();
+    expect(within(panel).getByText(/−520\.00/)).toBeInTheDocument();
+  });
+
+  it('totals the NET movement, not the spending', async () => {
+    // 5,000 in − 520 out. Summing them as one pile would say 5,520, which is
+    // neither what was spent nor what the balance moved by.
+    await openPanel();
+    const panel = screen.getByText(/รายการที่รับ-จ่ายจากเงินสดย่อย/).closest('.card') as HTMLElement;
+    expect(within(panel).getByText('เคลื่อนไหวสุทธิ')).toBeInTheDocument();
+    expect(within(panel).getByText(/\+4,480\.00/)).toBeInTheDocument();
+    expect(within(panel).getByText(/เติมเข้า 5,000\.00/)).toBeInTheDocument();
+  });
+});
