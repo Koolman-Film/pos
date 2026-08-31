@@ -312,7 +312,12 @@ export function PermissionsModule({
           <button
             onClick={() => {
               // The prototype confirms first (:4034) — this drops custom roles.
-              if (!window.confirm('รีเซ็ตบทบาทและสิทธิ์ทั้งหมดกลับเป็นค่าเริ่มต้น?')) return;
+              if (
+                !window.confirm(
+                  'รีเซ็ตสิทธิ์ของบทบาทหลัก 4 บทบาทกลับเป็นค่าเริ่มต้น? บทบาทที่สร้างเองจะไม่ถูกแตะต้อง',
+                )
+              )
+                return;
               run(onResetDefaults());
             }}
             className="btn-outline text-sm px-4 py-2 rounded-xl font-medium flex items-center gap-2"

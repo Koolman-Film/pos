@@ -110,19 +110,36 @@ describe('reset_permissions_to_defaults', () => {
     expect(data!.allowed).toBe(true);
   });
 
-  it('drops a custom role, exactly as the prototype setRoles(DEFAULT_ROLES) did', async () => {
+  it('leaves a custom role alone — a reset restores defaults, it does not delete roles', async () => {
     const { error } = await admin
       .from('roles')
       .insert({ id: 'qa-temp-role', name: 'บทบาททดสอบ', icon: 'fa-user' });
     assertNoError('insert custom role', error);
 
+    // Give it a permission an admin would plausibly have set, so this also pins
+    // down that a custom role's own matrix survives untouched.
+    await admin.from('role_permissions').insert({
+      role_id: 'qa-temp-role',
+      permission_type: 'nav',
+      permission_key: 'dashboard',
+      allowed: true,
+    });
+
     await reset();
 
     const { data } = await admin.from('roles').select('id').eq('id', 'qa-temp-role');
-    expect(data).toEqual([]);
+    expect(data).toEqual([{ id: 'qa-temp-role' }]);
+
+    const { data: perm } = await admin
+      .from('role_permissions')
+      .select('allowed')
+      .eq('role_id', 'qa-temp-role')
+      .eq('permission_key', 'dashboard')
+      .single();
+    expect(perm!.allowed).toBe(true);
   });
 
-  it('moves a user off a dropped custom role onto admin rather than orphaning them', async () => {
+  it('leaves a user on their custom role instead of promoting them to admin', async () => {
     // Owns its own account rather than borrowing a seeded one. The three non-admin
     // sample logins only exist after `npm run db:seed`, so a test that depended on
     // one of them failed on a bare `db reset` — and failed with a null-deref that
@@ -148,9 +165,11 @@ describe('reset_permissions_to_defaults', () => {
       .select('role_id')
       .eq('id', authUser.id)
       .single();
-    // The role it held is gone; app_users.role_id is NOT NULL, so it has to land
-    // somewhere, and the prototype's choice was admin.
-    expect(after!.role_id).toBe('admin');
+    // 0009 moved this user to 'admin', mirroring the prototype. That is a
+    // privilege escalation behind a button captioned only "reset to defaults", and
+    // on this database it would have promoted six real staff. 0039 stopped it: the
+    // role still exists, so the user simply stays on it.
+    expect(after!.role_id).toBe('qa-temp-role');
   });
 
   it('restores a renamed default role name and icon', async () => {

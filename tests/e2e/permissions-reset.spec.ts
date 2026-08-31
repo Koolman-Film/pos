@@ -43,7 +43,7 @@ test('dismissing the confirm leaves the drifted matrix untouched', async ({ page
   await page.goto('/permissions');
 
   page.once('dialog', (dialog) => {
-    expect(dialog.message()).toContain('รีเซ็ตบทบาทและสิทธิ์ทั้งหมดกลับเป็นค่าเริ่มต้น');
+    expect(dialog.message()).toContain('บทบาทที่สร้างเองจะไม่ถูกแตะต้อง');
     return dialog.dismiss();
   });
   await page.click('button:has-text("รีเซ็ตค่าเริ่มต้น")');

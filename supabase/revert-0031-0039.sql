@@ -1,6 +1,6 @@
--- supabase/revert-0031-0038.sql
+-- supabase/revert-0031-0039.sql
 --
--- ทางถอยกลับของ 0031-0038 — ใช้เมื่อจำเป็นเท่านั้น
+-- ทางถอยกลับของ 0031-0039 — ใช้เมื่อจำเป็นเท่านั้น
 --
 -- ลำดับที่ควรใช้จริง:
 --   1. ถอย CODE ที่ Vercel ก่อนเสมอ (rollback ทันที ไม่เสียข้อมูล). สคีมานี้
@@ -122,4 +122,4 @@ grant execute on function reset_permissions_to_defaults() to authenticated;
 
 -- ---- ถอนทะเบียน migration ------------------------------------------------
 delete from supabase_migrations.schema_migrations
- where version in ('0031','0032','0033','0034','0035','0036','0037','0038');
+ where version in ('0031','0032','0033','0034','0035','0036','0037','0038','0039');
