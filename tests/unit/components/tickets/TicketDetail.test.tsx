@@ -60,7 +60,10 @@ function baseProps(ticket: Ticket) {
     filmPriceMatrix: [],
     initialRetailCustomers: [],
     initialCorporateBuyers: [],
-    shopInfo: {},
+    // เชียงใหม่ is the VAT-registered branch (migration 0035); the tickets in
+    // these tests live there, so the tax invoice is available unless something
+    // else takes it away.
+    shopInfo: { cm: { vatRegistered: true } },
     saveAction: vi.fn(async () => ({ ok: true, id: 'JT-CM-00001' })),
     optionAction: vi.fn(async () => ({ ok: true })),
   };
@@ -81,8 +84,8 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     status: 'จองแล้ว',
     bookingChannel: '',
     techByCategory: {},
-    dropOffDateObj: new Date('2026-07-24T09:00:00'),
-    pickupDateObj: new Date('2026-07-25T09:00:00'),
+    dropOffDateObj: new Date('2026-07-24T09:00:00+07:00'),
+    pickupDateObj: new Date('2026-07-25T09:00:00+07:00'),
     extras: {},
     items: [],
     payments: [],
@@ -575,5 +578,181 @@ describe('TicketDetail — QC ผู้รับผิดชอบ', () => {
 
     await user.selectOptions(screen.getByLabelText('QC ผู้รับผิดชอบ'), 'คุณนิด');
     expect(screen.getByLabelText('QC ผู้รับผิดชอบ')).toHaveValue('คุณนิด');
+  });
+});
+
+describe('TicketDetail — รายได้ / รับแทน', () => {
+  it('starts on รายได้ and switches the whole ticket to รับแทน', async () => {
+    const user = userEvent.setup();
+    const saveAction = vi.fn(async () => ({ ok: true, id: 'JT-CM-00214' }));
+    render(<TicketDetail {...baseProps(makeTicket())} saveAction={saveAction} />);
+
+    const held = screen.getByRole('button', { name: /รับแทน Finnix/ });
+    const own = screen.getByRole('button', { name: /รายได้ของสาขา/ });
+    expect(own).toHaveAttribute('aria-pressed', 'true');
+    expect(held).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(held);
+    expect(held).toHaveAttribute('aria-pressed', 'true');
+    // The consequence is stated on screen, not left for the report to reveal.
+    expect(screen.getByText(/ไม่นับเป็นยอดขายของสาขา/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    expect(saveAction).toHaveBeenCalledWith(expect.objectContaining({ revenueKind: 'รับแทน' }));
+  });
+});
+
+/**
+ * ใบกำกับภาษีกับเงินที่รับแทน Finnix.
+ *
+ * A tax invoice asserts that THIS shop made the sale. A held ticket is another
+ * Finnix shop's sale, so issuing one here would put a document into this shop's
+ * tax position for money it never earned.
+ */
+describe('TicketDetail — ล็อกใบกำกับภาษีเมื่อรับแทน Finnix', () => {
+  const TAX = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+
+  it('locks the tax invoice the moment the ticket becomes รับแทน', async () => {
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket())} />);
+
+    expect(screen.getByRole('button', { name: TAX })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: /รับแทน Finnix/ }));
+    expect(screen.getByRole('button', { name: new RegExp(TAX) })).toBeDisabled();
+    expect(screen.getByText(/จึงออกใบกำกับภาษีไม่ได้/)).toBeInTheDocument();
+  });
+
+  it('moves the selection off the tax invoice rather than leaving it selected', async () => {
+    // Otherwise the ออก… button would still offer the one document now refused.
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket())} />);
+
+    await user.click(screen.getByRole('button', { name: TAX }));
+    await user.click(screen.getByRole('button', { name: /รับแทน Finnix/ }));
+
+    expect(screen.getByRole('button', { name: /^ออก/ })).toHaveTextContent('ออกใบเสร็จรับเงิน');
+  });
+
+  it('leaves ใบเสนอราคา and ใบเสร็จรับเงิน available', async () => {
+    // The customer did pay at this counter and can still be given paperwork.
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket({ revenueKind: 'รับแทน' }))} />);
+
+    expect(screen.getByRole('button', { name: 'ใบเสนอราคา' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'ใบเสนอราคา' }));
+    expect(screen.getByRole('button', { name: /^ออก/ })).toHaveTextContent('ออกใบเสนอราคา');
+  });
+});
+
+/**
+ * ใบกำกับภาษีออกได้เฉพาะสาขาที่จดทะเบียนภาษีมูลค่าเพิ่ม (migration 0035).
+ *
+ * Only FINNIX FILM เชียงใหม่ is registered. A tax invoice from anywhere else
+ * asserts a registration that does not exist — the kind of paper an auditor
+ * finds months later, already in a customer's hands.
+ */
+describe('TicketDetail — ใบกำกับภาษีตามการจดทะเบียนของสาขา', () => {
+  const TAX = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+
+  function atShop(shop: string, vatRegistered: boolean) {
+    return {
+      ...baseProps(makeTicket({ shop })),
+      shops: [
+        { id: 'cm', name: 'FINNIX FILM เชียงใหม่' },
+        { id: 'lpg', name: 'FINNIX FILM ลำปาง' },
+      ],
+      shopInfo: { [shop]: { vatRegistered } },
+    };
+  }
+
+  it('locks it at a branch that is not registered, and says which branch', () => {
+    render(<TicketDetail {...atShop('lpg', false)} />);
+    expect(screen.getByRole('button', { name: new RegExp(TAX) })).toBeDisabled();
+    expect(
+      screen.getByText(/FINNIX FILM ลำปาง ไม่ได้จดทะเบียนภาษีมูลค่าเพิ่ม/),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves the other two documents available there', () => {
+    render(<TicketDetail {...atShop('lpg', false)} />);
+    expect(screen.getByRole('button', { name: 'ใบเสนอราคา' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' })).toBeEnabled();
+  });
+
+  it('allows it at the registered branch', () => {
+    render(<TicketDetail {...atShop('cm', true)} />);
+    expect(screen.getByRole('button', { name: TAX })).toBeEnabled();
+  });
+
+  it('offers ข้อมูลนิติบุคคล on a ใบเสร็จรับเงิน once the shop’s details are shown', async () => {
+    // At a branch that cannot issue a tax invoice, a receipt made out to a
+    // company was the only paperwork available and had nowhere to type the
+    // company into.
+    const user = userEvent.setup();
+    render(<TicketDetail {...atShop('lpg', false)} />);
+
+    await user.click(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' }));
+    expect(screen.queryByPlaceholderText('ที่อยู่นิติบุคคล')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/แสดงชื่อนิติบุคคล/));
+    expect(screen.getByPlaceholderText('ที่อยู่นิติบุคคล')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('เลขผู้เสียภาษี 13 หลัก')).toBeInTheDocument();
+    // …and it can be kept for next time, which is the point of asking for it.
+    expect(
+      screen.getByRole('button', { name: /บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป/ }),
+    ).toBeInTheDocument();
+  });
+});
+
+/**
+ * เปิดใบงานให้สาขาอื่นได้ (ตามสิทธิ์ที่มี).
+ *
+ * Head office books for a branch over the phone. Before this the form had no
+ * branch field at all: a new ticket landed on whichever of the caller's shops
+ * sorted first, and there was no way to say otherwise — an admin could edit
+ * another branch's ticket but could not open one.
+ */
+describe('TicketDetail — เลือกสาขาตอนเปิดใบงานใหม่', () => {
+  const SHOPS = [
+    { id: 'cm', name: 'FINNIX FILM เชียงใหม่' },
+    { id: 'lpg', name: 'FINNIX FILM ลำปาง' },
+  ];
+
+  it('opens the ticket at the branch the user picked', async () => {
+    const user = userEvent.setup();
+    const saveAction = vi.fn(async () => ({ ok: true, id: 'JT-LPG-00001' }));
+    render(
+      <TicketDetail
+        {...baseProps(makeTicket({ shop: 'cm' }))}
+        isNew
+        shops={SHOPS}
+        accessibleShops={SHOPS}
+        saveAction={saveAction}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText('สาขาที่เปิดใบงาน'), 'lpg');
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    expect(saveAction).toHaveBeenCalledWith(expect.objectContaining({ shop: 'lpg' }));
+  });
+
+  it('does not offer it on a saved ticket', () => {
+    // The id, the documents and the stock movements all name the branch already.
+    render(<TicketDetail {...baseProps(makeTicket())} shops={SHOPS} accessibleShops={SHOPS} />);
+    expect(screen.queryByLabelText('สาขาที่เปิดใบงาน')).not.toBeInTheDocument();
+  });
+
+  it('does not offer it to somebody who only has one branch', () => {
+    render(
+      <TicketDetail
+        {...baseProps(makeTicket())}
+        isNew
+        shops={SHOPS}
+        accessibleShops={[SHOPS[0]]}
+      />,
+    );
+    expect(screen.queryByLabelText('สาขาที่เปิดใบงาน')).not.toBeInTheDocument();
   });
 });

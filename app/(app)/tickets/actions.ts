@@ -219,6 +219,7 @@ function ticketRow(p: TicketSavePayload, id: string, retailCustomerId: number | 
     service_type: p.serviceType,
     status: p.status,
     booking_channel: p.bookingChannel,
+    revenue_kind: p.revenueKind,
     tech_by_category: p.techByCategory,
     drop_off_date: p.dropOffDate,
     pickup_date: p.pickupDate,
@@ -703,6 +704,49 @@ export async function recordTicketDocument(input: {
   const session = await getSessionContext(); // C2: authenticate before mutating
   if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์ออกเอกสาร' };
   const supabase = await createClient();
+
+  /*
+    ใบกำกับภาษีออกไม่ได้ถ้าใบงานเป็น "รับแทน Finnix" (migration 0031).
+
+    The ticket screen hides the button, but the button is not the rule: this is
+    a Server Action, and any client can POST to it without ever rendering that
+    screen. A tax invoice asserts that THIS shop made the sale, so issuing one
+    for money it is only holding would put a document into its tax position for
+    revenue it never earned — checked here, against the stored ticket.
+  */
+  if (input.docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') {
+    const { data: ticket } = await supabase
+      .from('tickets')
+      .select('revenue_kind, shop_id')
+      .eq('id', input.ticketId)
+      .maybeSingle();
+    if (ticket?.revenue_kind === 'รับแทน') {
+      return {
+        ok: false,
+        error: 'ใบงานนี้เป็นเงินรับแทน Finnix จึงออกใบกำกับภาษีไม่ได้',
+      };
+    }
+
+    /*
+      …and the branch has to be registered for VAT (migration 0035).
+
+      Only เชียงใหม่ is today. A tax invoice from a branch with no registration
+      is a document asserting a registration that does not exist — found by an
+      auditor months later, on paper already in a customer’s hands.
+    */
+    const { data: info } = await supabase
+      .from('shop_info')
+      .select('vat_registered')
+      .eq('shop_id', ticket?.shop_id ?? '')
+      .maybeSingle();
+    if (!info?.vat_registered) {
+      return {
+        ok: false,
+        error: 'สาขานี้ไม่ได้จดทะเบียนภาษีมูลค่าเพิ่ม จึงออกใบกำกับภาษีไม่ได้',
+      };
+    }
+  }
+
   const { error } = await supabase.rpc('record_ticket_document', {
     p_ticket_id: input.ticketId,
     p_doc_type: input.docType,

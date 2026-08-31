@@ -15,6 +15,7 @@ export function PaymentsSection({
   addPayment,
   removePayment,
   updatePayment,
+  setRevenueKind,
   total,
   paid,
 }: {
@@ -29,12 +30,58 @@ export function PaymentsSection({
   /** Drops the row entirely — see `removePayment` in TicketDetail for why. */
   removePayment?: (idx: number) => void;
   updatePayment: (idx: number, key: keyof TicketPayment, val: unknown) => void;
+  /** Sets ใบงานนี้เป็น รายได้ / รับแทน (migration 0031). */
+  setRevenueKind: (kind: 'รายได้' | 'รับแทน') => void;
   total: number;
   paid: number;
 }) {
+  const held = t.revenueKind === 'รับแทน';
+
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
     <div>
+      {/*
+        เงินก้อนนี้เป็นของใคร. Asked here, at the top of the money, because it is
+        the question that decides what every figure downstream means — and it is
+        one answer for the whole job, never per line.
+      */}
+      <div
+        className="rounded-xl p-3 mb-3"
+        style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}
+      >
+        <p className="text-xs font-medium mb-2" style={{ color: 'var(--ink-soft)' }}>
+          เงินจากใบงานนี้
+        </p>
+        <div className="flex gap-2">
+          {(
+            [
+              ['รายได้', 'รายได้ของสาขา', 'fa-store'],
+              ['รับแทน', 'รับแทน Finnix', 'fa-hand-holding-dollar'],
+            ] as const
+          ).map(([kind, label, icon]) => {
+            const on = held === (kind === 'รับแทน');
+            return (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => setRevenueKind(kind)}
+                aria-pressed={on}
+                className={`text-xs px-3 py-2 rounded-lg font-semibold flex items-center gap-1.5 flex-1 justify-center ${
+                  on ? 'btn-primary' : 'btn-outline'
+                }`}
+              >
+                <i className={`fa-solid ${icon}`}></i>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs mt-2" style={{ color: held ? '#8A5A12' : 'var(--ink-faint)' }}>
+          {held
+            ? 'ยอดนี้ไม่นับเป็นยอดขายของสาขา แต่จะขึ้นเป็น เงินรอคืน Finnix ในรายงานรายได้'
+            : 'นับรวมเป็นยอดขายของสาขาตามปกติ'}
+        </p>
+      </div>
       {t.payments.map((p, idx) => (
         <div
           key={idx}

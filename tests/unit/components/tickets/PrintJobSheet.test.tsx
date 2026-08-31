@@ -582,3 +582,290 @@ describe('เอกสารการเงิน — ภาษาอังก�
     expect(total).toContain('Grand Total');
   });
 });
+
+/**
+ * ใบงานติดตั้ง — สินค้าที่ซ้ำกับบรรทัดบน.
+ *
+ * The position table repeats the film across several rows, so a repeat is
+ * collapsed rather than printed five times. It used to collapse to a ditto mark:
+ * on a sheet worked from at the car, a lone ″ reads as an empty cell or as
+ * inches, and the technician fitting the wrong film is the cost of that guess.
+ */
+
+/**
+ * The product column of ใบงานติดตั้ง.
+ *
+ * Read at the car by whoever is fitting the film, so both of these are about
+ * one thing: the technician must not have to work anything out.
+ */
+describe('ใบงานติดตั้ง — คอลัมน์สินค้า', () => {
+  /** The product cell of every row in the position table, as text. */
+  function productCells(): string[] {
+    return Array.from(document.body.querySelectorAll('table tbody tr')).map(
+      (tr) => tr.children[1]?.textContent?.trim() ?? '',
+    );
+  }
+
+  const twoFilms = makeTicket({
+    items: [
+      {
+        ...item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' }),
+        positions: [
+          { position: 'บานหน้า', product: 'ฟิล์ม FINNIX CT 40%', price: 3000 },
+          { position: 'คู่หน้า', product: 'ฟิล์ม FINNIX CT 40%', price: 3000 },
+          { position: 'คู่หลัง', product: 'ฟิล์ม 3M CRM 60%', price: 2500 },
+        ],
+      },
+    ],
+  });
+
+  it('says เหมือนกัน for a repeat rather than printing a ditto mark', () => {
+    // A lone ″ on a sheet worked from at the car reads as an empty cell, or as
+    // inches; the technician fitting the wrong film is the cost of that guess.
+    renderSheet(twoFilms, 'job');
+    const cells = productCells();
+    expect(cells[0]).toContain('FINNIX CT 40%');
+    expect(cells[1]).toBe('เหมือนกัน');
+    expect(cells[2]).toContain('3M CRM 60%');
+    expect(document.body.textContent).not.toContain('″');
+  });
+
+  it('marks the percentage, and only the percentage', () => {
+    renderSheet(twoFilms, 'job');
+    const marked = Array.from(document.body.querySelectorAll('span')).filter(
+      (el) => el.style.background === 'rgb(255, 243, 163)',
+    );
+    // One per named row; the เหมือนกัน row has no name to mark.
+    expect(marked.map((el) => el.textContent)).toEqual(['40%', '60%']);
+  });
+
+  it('leaves a product with no percentage alone', () => {
+    renderSheet(
+      makeTicket({
+        items: [
+          {
+            ...item({ category: 'เครื่องเสียง', sold: 'ลำโพงคู่ JBL Stage' }),
+            positions: [{ position: 'หน้า', product: 'ลำโพงคู่ JBL Stage', price: 4500 }],
+          },
+        ],
+      }),
+      'job',
+    );
+    expect(productCells()[0]).toBe('ลำโพงคู่ JBL Stage');
+    const marked = Array.from(document.body.querySelectorAll('span')).filter(
+      (el) => el.style.background === 'rgb(255, 243, 163)',
+    );
+    expect(marked).toHaveLength(0);
+  });
+});
+
+/**
+ * ตราประทับ "งานแก้" บนใบงานติดตั้ง.
+ *
+ * A car that comes back is not a new job. The tick sat in the extras list at the
+ * bottom of the sheet, which is not where anybody looks before starting work.
+ */
+describe('ใบงานติดตั้ง — ตราประทับงานแก้', () => {
+  const reworkTicket = makeTicket({
+    items: [item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' })],
+    extras: { แก้งาน: { checked: true, detail: 'ขันรูฟ มีรอยฟิล์มหัก' } },
+  });
+
+  it('stamps the sheet when แก้งาน is ticked', () => {
+    renderSheet(reworkTicket, 'job');
+    const stamp = document.body.querySelector('.print-stamp') as HTMLElement | null;
+    expect(stamp).not.toBeNull();
+    expect(stamp!.textContent).toBe('งานแก้');
+    // The size and angle the shop asked for, so it reads as a rubber stamp.
+    expect(stamp!.style.width).toBe('5cm');
+    expect(stamp!.style.height).toBe('3cm');
+    expect(stamp!.style.transform).toBe('rotate(-15deg)');
+  });
+
+  it('puts it under the QC boxes, at the end of the page', () => {
+    renderSheet(reworkTicket, 'job');
+    const page = document.body.querySelector('.print-page') as HTMLElement;
+    const qc = Array.from(page.querySelectorAll('p')).find((p) =>
+      p.textContent?.includes('QC หลังติดตั้ง'),
+    )!;
+    const stamp = page.querySelector('.print-stamp') as HTMLElement;
+    // DOCUMENT_POSITION_FOLLOWING: the stamp comes after the QC block.
+    expect(qc.compareDocumentPosition(stamp) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('prints what has to be redone under the stamp, in the same red', () => {
+    renderSheet(reworkTicket, 'job');
+    const marks = Array.from(document.body.querySelectorAll('.print-stamp'));
+    const detail = marks.find((el) => el.textContent === 'ขันรูฟ มีรอยฟิล์มหัก') as HTMLElement;
+    expect(detail).toBeTruthy();
+    // Bigger than the 12px it used to sit at in the extras list.
+    expect(Number.parseInt(detail.style.fontSize, 10)).toBeGreaterThanOrEqual(18);
+  });
+
+  it('no longer repeats it in the extras list on this sheet', () => {
+    renderSheet(reworkTicket, 'job', { extraOptions: ['แก้งาน'] });
+    expect(document.body.textContent).not.toContain('แก้งาน: ขันรูฟ');
+  });
+
+  it('leaves an ordinary job unstamped', () => {
+    renderSheet(makeTicket({ items: [item({ category: 'ฟิล์มกรองแสง' })] }), 'job');
+    expect(document.body.querySelector('.print-stamp')).toBeNull();
+  });
+
+  it('stamps every page, because the rework is about the car', () => {
+    renderSheet(
+      makeTicket({
+        items: [
+          item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' }),
+          item({ category: 'เครื่องเสียง', sold: 'ลำโพงคู่ JBL Stage' }),
+        ],
+        extras: { แก้งาน: { checked: true } },
+      }),
+      'job',
+    );
+    expect(document.body.querySelectorAll('.print-stamp')).toHaveLength(2);
+  });
+});
+
+/**
+ * วันที่ของงานแก้.
+ *
+ * The car comes back on its own day and goes home on another, and neither is
+ * the original job's. Writing them over the ticket's dates would lose when the
+ * first fit happened — which is the thing a warranty argument turns on — so the
+ * sheet carries the rework's dates and keeps the original underneath.
+ */
+describe('ใบงานติดตั้ง — วันที่ของงานแก้', () => {
+  const withDates = makeTicket({
+    items: [item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' })],
+    dropOffDateObj: new Date('2026-08-12T09:00:00+07:00'),
+    pickupDateObj: new Date('2026-08-14T17:00:00+07:00'),
+    extras: {
+      แก้งาน: {
+        checked: true,
+        detail: 'แก้บานหน้า มีเม็ดฝุ่นเยอะมาก',
+        receivedAt: '2026-09-01',
+        deliveredAt: '2026-09-02',
+      },
+    },
+  });
+
+  it('shows the rework’s dates in the header', () => {
+    renderSheet(withDates, 'job');
+    const head = document.body.textContent ?? '';
+    // Labelled, so nobody reads them as the original job's dates.
+    expect(head).toContain('วันที่รับงาน (งานแก้): 1 ก.ย. 2569');
+    expect(head).toContain('วันที่ส่งงาน (งานแก้): 2 ก.ย. 2569');
+  });
+
+  it('keeps the original job’s dates on the sheet too', () => {
+    renderSheet(withDates, 'job');
+    expect(document.body.textContent).toContain('งานเดิม: รับ 12 ส.ค. 2569');
+  });
+
+  it('leaves the header alone when the rework has no dates yet', () => {
+    renderSheet(
+      makeTicket({
+        items: [item({ category: 'ฟิล์มกรองแสง' })],
+        dropOffDateObj: new Date('2026-08-12T09:00:00+07:00'),
+        pickupDateObj: new Date('2026-08-14T17:00:00+07:00'),
+        extras: { แก้งาน: { checked: true, detail: 'ยังไม่นัดวัน' } },
+      }),
+      'job',
+    );
+    const head = document.body.textContent ?? '';
+    expect(head).toContain('วันที่รับงาน: 12 ส.ค. 2569');
+    expect(head).not.toContain('งานเดิม:');
+  });
+
+  it('lets the note run the width of the sheet', () => {
+    // It used to wrap inside the 5.7cm stamp column, which turned a sentence
+    // into one word a line.
+    renderSheet(withDates, 'job');
+    const detail = Array.from(document.body.querySelectorAll('.print-stamp')).find(
+      (el) => el.textContent === 'แก้บานหน้า มีเม็ดฝุ่นเยอะมาก',
+    ) as HTMLElement;
+    expect(detail.style.width).toBe('100%');
+  });
+});
+
+/**
+ * งานแก้ที่ระบุชนิดสินค้า, และวันที่ของเซอร์วิส.
+ *
+ * ใบงานติดตั้ง prints one page per ชนิดสินค้า. A rework on the film is not a
+ * rework on the speakers, and stamping both pages sends a technician to redo
+ * work nobody complained about.
+ */
+describe('ใบงานติดตั้ง — งานแก้แยกตามชนิดสินค้า', () => {
+  const twoCategories = (extras: Record<string, unknown>) =>
+    makeTicket({
+      items: [
+        item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%' }),
+        item({ category: 'เครื่องเสียง', sold: 'ลำโพงคู่ JBL Stage' }),
+      ],
+      extras: extras as Ticket['extras'],
+    });
+
+  it('stamps only the page of the product being redone', () => {
+    renderSheet(
+      twoCategories({
+        แก้งาน: { checked: true, detail: 'ฟิล์มมีฝุ่น', category: 'ฟิล์มกรองแสง' },
+      }),
+      'job',
+    );
+    const pages = Array.from(document.body.querySelectorAll('.print-page'));
+    const stamped = pages.filter((p) => p.querySelector('.print-stamp'));
+    expect(stamped).toHaveLength(1);
+    expect(stamped[0].textContent).toContain('ฟิล์มกรองแสง');
+  });
+
+  it('stamps every page when no product is named', () => {
+    // An older ticket, or a rework that really is about the whole job.
+    renderSheet(twoCategories({ แก้งาน: { checked: true, detail: 'ทำใหม่ทั้งคัน' } }), 'job');
+    const pages = Array.from(document.body.querySelectorAll('.print-page'));
+    expect(pages.filter((p) => p.querySelector('.print-stamp'))).toHaveLength(2);
+  });
+});
+
+describe('ใบงานติดตั้ง — วันที่ของเซอร์วิส', () => {
+  const serviced = makeTicket({
+    items: [item({ category: 'ฟิล์มกันรอย', sold: 'TPU กันรอยเกรดพรีเมียม' })],
+    dropOffDateObj: new Date('2026-08-12T09:00:00+07:00'),
+    pickupDateObj: new Date('2026-08-14T17:00:00+07:00'),
+    extras: { Service: { checked: true } },
+    serviceVisits: [
+      {
+        visitNo: 2,
+        plate: 'กก 999',
+        receivedAt: '2026-09-10',
+        receivedTime: '',
+        deliveredAt: '2026-09-11',
+        deliveredTime: '',
+        salesBy: '',
+        qcBy: '',
+        technicians: [],
+        filmProduct: '',
+        customerWaits: null,
+        overallOk: null,
+        checks: {},
+        notes: '',
+        points: [],
+      },
+    ],
+  });
+
+  it('shows the latest visit’s dates, labelled as เซอร์วิส', () => {
+    // Taken from the visit that was recorded rather than asking for the same
+    // two dates a second time on the ticket.
+    renderSheet(serviced, 'job');
+    const head = document.body.textContent ?? '';
+    expect(head).toContain('วันที่รับงาน (เซอร์วิส): 10 ก.ย. 2569');
+    expect(head).toContain('วันที่ส่งงาน (เซอร์วิส): 11 ก.ย. 2569');
+    expect(head).toContain('งานเดิม: รับ 12 ส.ค. 2569');
+  });
+
+  it('falls back to the job’s own dates before any visit is recorded', () => {
+    renderSheet({ ...serviced, serviceVisits: [] }, 'job');
+    expect(document.body.textContent).toContain('วันที่รับงาน: 12 ส.ค. 2569');
+  });
+});

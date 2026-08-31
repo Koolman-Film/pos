@@ -260,13 +260,35 @@ export function WholesaleDetail({
         </button>
         <div className="card p-5 sm:p-7">
           <div className="flex items-start justify-between mb-3">
-            <p
-              className="text-xs font-semibold flex items-center gap-1.5"
-              style={{ color: 'var(--primary)' }}
-            >
-              <i className="fa-solid fa-store"></i>
-              {shopName(o.shop, shops)}
-            </p>
+            {/*
+              Which branch the PO belongs to — a choice while it is new, a fact
+              once it is saved. Somebody who can see several branches opens POs
+              for all of them; before this it silently landed on whichever
+              branch sorted first. An existing PO keeps its branch: the number,
+              the stock it draws and the customer's paperwork all name it.
+            */}
+            {isNew && shops.length > 1 ? (
+              <select
+                value={o.shop}
+                aria-label="สาขาที่เปิด PO"
+                onChange={(e) => field('shop', e.target.value)}
+                className="field text-xs px-2.5 py-1.5"
+              >
+                {shops.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p
+                className="text-xs font-semibold flex items-center gap-1.5"
+                style={{ color: 'var(--primary)' }}
+              >
+                <i className="fa-solid fa-store"></i>
+                {shopName(o.shop, shops)}
+              </p>
+            )}
             <select
               value={o.status}
               aria-label="สถานะของ PO"

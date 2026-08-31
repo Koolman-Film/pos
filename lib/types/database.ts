@@ -197,6 +197,7 @@ export type Database = {
       }
       expenses: {
         Row: {
+          expense_kind: string
           amount: number
           category: string
           description: string
@@ -209,6 +210,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          expense_kind?: string
           amount: number
           category: string
           description: string
@@ -221,6 +223,7 @@ export type Database = {
           status: string
         }
         Update: {
+          expense_kind?: string
           amount?: number
           category?: string
           description?: string
@@ -757,6 +760,7 @@ export type Database = {
       }
       shop_info: {
         Row: {
+          vat_registered: boolean
           address: string
           company_name: string
           payment_channels: string[]
@@ -765,6 +769,7 @@ export type Database = {
           tax_id: string
         }
         Insert: {
+          vat_registered?: boolean
           address?: string
           company_name?: string
           payment_channels?: string[]
@@ -773,6 +778,7 @@ export type Database = {
           tax_id?: string
         }
         Update: {
+          vat_registered?: boolean
           address?: string
           company_name?: string
           payment_channels?: string[]
@@ -1192,6 +1198,7 @@ export type Database = {
       }
       tickets: {
         Row: {
+          revenue_kind: string
           booking_channel: string
           brand: string
           car_type: string
@@ -1215,6 +1222,7 @@ export type Database = {
           tech_by_category: Json
         }
         Insert: {
+          revenue_kind?: string
           booking_channel?: string
           brand?: string
           car_type?: string
@@ -1238,6 +1246,7 @@ export type Database = {
           tech_by_category?: Json
         }
         Update: {
+          revenue_kind?: string
           booking_channel?: string
           brand?: string
           car_type?: string
@@ -1657,6 +1666,10 @@ export type Database = {
       save_ticket_extras: {
         Args: { p_extras: Json; p_ticket_id: string }
         Returns: undefined
+      }
+      save_shop: {
+        Args: { p_id: string; p_name: string; p_sort?: number }
+        Returns: string
       }
     }
     Enums: {

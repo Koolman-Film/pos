@@ -26,6 +26,7 @@ const line = (over: Partial<SaleLine> = {}): SaleLine => ({
   product: 'TPU กันรอยเกรดพรีเมียม',
   amount: 30000,
   cost: 0,
+  held: false,
   taxInvoiceNo: '',
   documents: [],
   ...over,
@@ -179,5 +180,73 @@ describe('RevenueModule — กำไรขั้นต้น', () => {
     const row = exportAction.mock.calls[0][0].groups[0].rows[0];
     expect(row['ต้นทุน']).toBe(18000);
     expect(row['กำไรขั้นต้น']).toBe(12000);
+  });
+});
+
+/**
+ * เงินรอคืน Finnix (migration 0031).
+ *
+ * Some jobs are taken here for another Finnix shop: the customer pays at this
+ * counter, so the cash is real and on the ticket, but the takings are not this
+ * branch's. Counting it as ยอดขาย overstates every figure on the page — and
+ * disagrees with the dashboard, which leaves it out too.
+ */
+describe('RevenueModule — เงินรอคืน Finnix', () => {
+  it('keeps held money out of ยอดขาย and reports it on its own', () => {
+    renderModule([
+      line({ amount: 30000 }),
+      line({
+        ticketId: 'JT-CM-00301',
+        customer: 'คุณ สมชาย',
+        product: 'TPU กันรอยเต็มคัน',
+        amount: 18000,
+        held: true,
+      }),
+    ]);
+
+    // ยอดขายรวม is the 30,000 only.
+    const salesCard = screen.getByText('ยอดขายรวม').parentElement!;
+    expect(within(salesCard).getByText('30,000.00')).toBeInTheDocument();
+
+    const heldCard = screen.getByText('เงินรอคืน Finnix').parentElement!;
+    expect(within(heldCard).getByText('18,000.00')).toBeInTheDocument();
+    expect(within(heldCard).getByText(/1 ใบงาน/)).toBeInTheDocument();
+  });
+
+  it('lists each held ใบงาน with a link back to it', () => {
+    renderModule([
+      line({
+        ticketId: 'JT-CM-00301',
+        customer: 'คุณ สมชาย',
+        product: 'TPU กันรอยเต็มคัน',
+        amount: 18000,
+        held: true,
+      }),
+    ]);
+
+    const report = screen.getByText(/เงินรอคืน Finnix \(1 ใบงาน\)/).closest('div')!.parentElement!;
+    expect(within(report).getByText('คุณ สมชาย')).toBeInTheDocument();
+    expect(within(report).getByRole('link', { name: 'JT-CM-00301' })).toHaveAttribute(
+      'href',
+      '/tickets/JT-CM-00301',
+    );
+  });
+
+  it('keeps a held job out of the ชนิดสินค้า breakdown as well', () => {
+    // The breakdown is a split OF ยอดขาย; a held job in it would not add up.
+    renderModule([
+      line({ category: 'ฟิล์มกรองแสง', amount: 12000 }),
+      line({ ticketId: 'JT-CM-00301', category: 'ฟิล์มกันรอย', amount: 18000, held: true }),
+    ]);
+    const panel = screen.getByText('ยอดขายแยกตามชนิดสินค้า').parentElement!;
+    expect(within(panel).queryByText('ฟิล์มกันรอย')).not.toBeInTheDocument();
+  });
+
+  it('says nothing at all when the period holds none', () => {
+    renderModule([line()]);
+    expect(screen.queryByText(/เงินรอคืน Finnix \(/)).not.toBeInTheDocument();
+    // The card still shows, so the shop can see the figure is zero.
+    expect(screen.getByText('เงินรอคืน Finnix')).toBeInTheDocument();
+    expect(screen.getByText('ไม่มีในช่วงนี้')).toBeInTheDocument();
   });
 });

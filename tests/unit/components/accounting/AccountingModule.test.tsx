@@ -226,3 +226,135 @@ describe('AccountingModule attachments', () => {
     expect(screen.queryByTitle(/^เปิด /)).not.toBeInTheDocument();
   });
 });
+
+/**
+ * เงินรอรับคืน Finnix (migration 0032).
+ *
+ * The branch pays a bill that belongs to another Finnix shop. The cash left the
+ * drawer — so the row stays in the list and in the petty-cash balance — but it
+ * is not this branch's cost, and counting it as one understates the profit by
+ * exactly the amount the shop is waiting to get back.
+ */
+describe('AccountingModule — เงินรอรับคืน Finnix', () => {
+  const mixed = [
+    { ...expenses[0], id: 1, amount: 35000, dateObj: new Date() },
+    {
+      id: 2,
+      shop: 'cm',
+      desc: 'ค่าฟิล์มงานร้านต้นทาง',
+      category: 'ค่าวัสดุสิ้นเปลือง',
+      source: 'บัญชีธนาคารสาขา',
+      amount: 12000,
+      status: 'จ่ายแล้ว',
+      paidForFinnix: true,
+      dateObj: new Date(),
+    },
+  ];
+
+  it('keeps money paid for Finnix out of จ่ายแล้ว and reports it on its own', () => {
+    render(<AccountingModule expenses={mixed} pettyCash={pettyCash} />);
+
+    const paidCard = screen
+      .getAllByText('จ่ายแล้ว')
+      .find((el) => el.tagName === 'P')!
+      .closest('div')!;
+    expect(within(paidCard).getByText('35,000.00')).toBeInTheDocument();
+
+    const heldCard = screen.getByText('เงินรอรับคืน Finnix').closest('div')!;
+    expect(within(heldCard).getByText('12,000.00')).toBeInTheDocument();
+    expect(within(heldCard).getByText(/1 รายการ/)).toBeInTheDocument();
+  });
+
+  it('lists each reimbursable row in its own report', () => {
+    render(<AccountingModule expenses={mixed} pettyCash={pettyCash} />);
+    const report = screen
+      .getByText(/เงินรอรับคืน Finnix \(1 รายการ\)/)
+      .closest('.card') as HTMLElement;
+    expect(within(report).getByText('ค่าฟิล์มงานร้านต้นทาง')).toBeInTheDocument();
+    expect(within(report).queryByText('ค่าเช่าร้านเดือนกรกฎาคม')).not.toBeInTheDocument();
+  });
+
+  it('says nothing at all when the period holds none', () => {
+    render(
+      <AccountingModule
+        expenses={[{ ...expenses[0], dateObj: new Date() }]}
+        pettyCash={pettyCash}
+      />,
+    );
+    expect(screen.queryByText(/เงินรอรับคืน Finnix \(/)).not.toBeInTheDocument();
+    // The card stays, so the shop can see the figure is zero.
+    expect(screen.getByText('เงินรอรับคืน Finnix')).toBeInTheDocument();
+    expect(screen.getByText('ไม่มีในช่วงนี้')).toBeInTheDocument();
+  });
+});
+
+/**
+ * แก้ไขรายการค่าใช้จ่ายที่บันทึกไปแล้ว.
+ *
+ * The edit row used to expose only some of the fields, so a row entered against
+ * the wrong branch, or one that should have been marked จ่ายแทน, could only be
+ * fixed by deleting it and typing it again — which loses its document number and
+ * its receipts.
+ */
+describe('AccountingModule — แก้ไขได้ทุกหัวข้อ', () => {
+  const row = {
+    id: 9,
+    docNo: 'POS-CM-6908001',
+    shop: 'cm',
+    desc: 'ค่าฟิล์มงานร้านต้นทาง',
+    category: 'ค่าวัสดุสิ้นเปลือง',
+    source: 'บัญชีธนาคารสาขา',
+    amount: 12000,
+    status: 'จ่ายแล้ว',
+    dateObj: new Date('2026-08-20T00:00:00+07:00'),
+    paidForFinnix: false,
+  };
+  const SHOPS = [
+    { id: 'cm', name: 'FINNIX CM' },
+    { id: 'lpg', name: 'FINNIX ลำปาง' },
+  ];
+
+  async function openEdit() {
+    const user = userEvent.setup();
+    const updateExpenseAction = vi.fn(async () => {});
+    render(
+      <AccountingModule
+        expenses={[row]}
+        pettyCash={[]}
+        accessibleShops={SHOPS}
+        updateExpenseAction={updateExpenseAction}
+        canAddExpense
+      />,
+    );
+    await user.click(screen.getByLabelText(/แก้ไขรายการ/));
+    return { user, updateExpenseAction };
+  }
+
+  it('moves a row to another branch and marks it จ่ายแทน', async () => {
+    const { user, updateExpenseAction } = await openEdit();
+
+    await user.selectOptions(screen.getByLabelText('แก้ไขสาขาของรายการค่าใช้จ่าย'), 'lpg');
+    await user.click(screen.getByRole('button', { name: 'จ่ายแทน Finnix' }));
+    await user.click(screen.getByRole('button', { name: /บันทึก/ }));
+
+    expect(updateExpenseAction).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 9, shop: 'lpg', paidForFinnix: true }),
+    );
+  });
+
+  it('edits กำหนดจ่าย once the row is moved back to รอจ่าย', async () => {
+    // The pending date had no field at all before, and the paid date used to be
+    // left behind on a row that was no longer paid.
+    const { user, updateExpenseAction } = await openEdit();
+
+    await user.selectOptions(screen.getByLabelText('แก้ไขสถานะการจ่าย'), 'รอจ่าย');
+    const due = screen.getByLabelText('กำหนดจ่าย');
+    await user.clear(due);
+    await user.type(due, '2026-09-15');
+    await user.click(screen.getByRole('button', { name: /บันทึก/ }));
+
+    expect(updateExpenseAction).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'รอจ่าย', paidAt: null, dueAt: '2026-09-15' }),
+    );
+  });
+});

@@ -1,4 +1,6 @@
 import { Suspense } from 'react';
+import { startOfShopDay } from '@/lib/domain/format';
+import { daysAgoValue } from '@/lib/domain/now';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
@@ -11,6 +13,7 @@ import type {
   RecentJob,
   StatusTotal,
   UpcomingTicket,
+  VisitTotal,
 } from '@/components/dashboard/Dashboard';
 import { updateTicketStatus } from '@/app/(app)/tickets/actions';
 import { DashboardFilter } from '@/components/dashboard/DashboardFilter';
@@ -46,6 +49,7 @@ export default async function DashboardPage({
     { data: customerRows },
     { data: expenseRows },
     { data: pettyRows },
+    { data: visitRows },
     { data: stockRows },
     { data: shopRows },
     { data: statusRows },
@@ -54,7 +58,7 @@ export default async function DashboardPage({
     supabase
       .from('tickets')
       .select(
-        'id, shop_id, customer_name, plate, brand, model, service_type, status, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
+        'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
       )
       // Soft-deleted tickets (migration 0013) are out of every figure on this
       // screen — revenue, job counts, the calendar and the bookings window.
@@ -68,8 +72,22 @@ export default async function DashboardPage({
     supabase.from('wholesale_customers').select('id, name'),
     supabase
       .from('expenses')
-      .select('id, shop_id, description, category, source, amount, status, paid_at, due_at'),
+      .select(
+        'id, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at',
+      ),
     supabase.from('petty_cash').select('shop_id, type, amount'),
+    // เซอร์วิสที่บันทึกไว้ — each recorded visit is its own appointment, with
+    // its own dates, and belongs on the 7-day card beside the bookings.
+    supabase
+      .from('service_visits')
+      .select('ticket_id, visit_no, received_at, delivered_at')
+      // Bounded, unlike the ticket read beside it: visits accumulate several
+      // per job and this page loads on every visit to the app. A year either
+      // side covers the calendar anyone actually pages to; older visits stay
+      // on their ticket and on the ใบเซอร์วิส, they just do not paint a
+      // calendar month nobody is looking at.
+      .gte('received_at', daysAgoValue(365))
+      .order('visit_no', { ascending: false }),
     supabase.from('stock').select('category, shop_id, qty'),
     supabase.from('shops').select('id, name, sort_order').order('sort_order'),
     supabase
@@ -130,8 +148,12 @@ export default async function DashboardPage({
     model: t.model,
     serviceType: t.service_type,
     status: t.status,
+    // 'รับแทน' = the customer paid here for another Finnix shop's job, so the
+    // money is held, not earned (migration 0031).
+    held: t.revenue_kind === 'รับแทน',
     dropOff: toDate(t.drop_off_date),
     pickup: toDate(t.pickup_date),
+    extras: (t.extras ?? {}) as Record<string, Record<string, unknown>>,
     // Distinct product categories, and the product names the prototype shows on
     // the recent-jobs rows (`i.sold || i.booked`).
     categories: [...new Set((t.ticket_items ?? []).map((i) => i.category).filter(Boolean))],
@@ -174,6 +196,8 @@ export default async function DashboardPage({
     source: e.source,
     amount: num(e.amount),
     status: e.status,
+    // Paid on behalf of another Finnix shop (migration 0032).
+    paidForFinnix: e.expense_kind === 'จ่ายแทน',
     paidAt: toDate(e.paid_at),
     due: e.due_at
       ? new Date(`${e.due_at}T00:00:00`).toLocaleDateString('th-TH', {
@@ -224,7 +248,12 @@ export default async function DashboardPage({
     .filter((p) => inPeriod(p.sold_at ? new Date(`${p.sold_at}T00:00:00`) : null))
     .reduce((s, p) => s + num(p.price), 0);
 
-  const revenue = visibleTickets.reduce((s, t) => s + ticketTotal(t), 0) + insuranceRevenue;
+  // ยอดขาย counts only what the branch earned. เงินรอคืน Finnix is collected
+  // and recorded, but it belongs to another shop and is reported separately in
+  // โมดูลรายได้ — never folded into this figure.
+  const revenue =
+    visibleTickets.filter((t) => !t.held).reduce((s, t) => s + ticketTotal(t), 0) +
+    insuranceRevenue;
 
   /*
     ประกันใกล้หมดอายุ — the 30-day window the shop asked for.
@@ -249,8 +278,11 @@ export default async function DashboardPage({
     .filter((p) => p.daysLeft >= 0 && p.daysLeft <= 30)
     .sort((a, b) => a.daysLeft - b.daysLeft);
 
+  // ค่าใช้จ่าย counts what the branch spent on itself. A bill paid on behalf of
+  // another Finnix shop left the drawer — so it still moves เงินสดย่อย below —
+  // but it is that shop’s cost, and is reported as เงินรอรับคืน in บัญชี.
   const paidExpenses = expenses.filter(
-    (e) => inShop(e.shop) && e.status === 'จ่ายแล้ว' && inPeriod(e.paidAt),
+    (e) => inShop(e.shop) && !e.paidForFinnix && e.status === 'จ่ายแล้ว' && inPeriod(e.paidAt),
   );
   const totalExpenses = paidExpenses.reduce((s, e) => s + e.amount, 0);
   // Petty cash is a running balance, not a period total: `petty_cash` rows carry
@@ -325,11 +357,12 @@ export default async function DashboardPage({
   // Bookings from today through 7 days out, ascending — prototype `isWithinDays`
   // (:109) inlined here because the boundary is what matters: from today at
   // 00:00:00.000 through the 7th day at 23:59:59.999.
-  const windowStart = new Date();
-  windowStart.setHours(0, 0, 0, 0);
-  const windowEnd = new Date(windowStart);
-  windowEnd.setDate(windowEnd.getDate() + 7);
-  windowEnd.setHours(23, 59, 59, 999);
+  //
+  // Measured on the SHOP's clock. This runs on a server in UTC, where local
+  // midnight is 07:00 in Bangkok — every booking earlier than that fell outside
+  // the window and the card simply did not list it.
+  const windowStart = startOfShopDay();
+  const windowEnd = new Date(windowStart.getTime() + 8 * 86400000 - 1);
 
   // Period-independent on purpose: this card is the next seven days, which the
   // selected month/year has no say over.
@@ -337,11 +370,29 @@ export default async function DashboardPage({
   // The window is measured on วันที่นัด, not on the drop-off: a รอส่งมอบ job
   // came in days ago and is due back this week, and filtering on the old date
   // would keep the day it actually needs someone off the card entirely.
-  const upcoming: UpcomingTicket[] = shopTickets
-    .map((t) => ({ t, appt: appointmentDate(t) }))
-    .filter(({ appt }) => appt && appt >= windowStart && appt <= windowEnd)
-    .sort((a, b) => (a.appt as Date).getTime() - (b.appt as Date).getTime())
-    .map(({ t }) => ({
+  /*
+    One ticket can be several appointments.
+
+    The booking is one. A งานแก้ is another — the car comes back on its own day
+    — and every recorded เซอร์วิส visit is another again. They used to be
+    invisible here: the card read the ticket's own dates, which are in the past
+    by the time a car returns, so the day somebody actually has to be ready for
+    it never appeared. Each is built as its own row carrying its own dates, so
+    the existing grouping puts it under its own การนัดหมาย heading.
+  */
+  const visitsByTicket = new Map<string, { from: string; to: string }[]>();
+  for (const v of visitRows ?? []) {
+    const list = visitsByTicket.get(v.ticket_id) ?? [];
+    list.push({ from: v.received_at ?? '', to: v.delivered_at ?? '' });
+    visitsByTicket.set(v.ticket_id, list);
+  }
+
+  type Appointment = { t: (typeof shopTickets)[number]; appt: Date | null; row: UpcomingTicket };
+  const asDate = (v: string) => (v ? new Date(`${v}T00:00:00+07:00`) : null);
+
+  const appointments: Appointment[] = [];
+  for (const t of shopTickets) {
+    const base: UpcomingTicket = {
       id: t.id,
       customer: t.customer,
       brand: t.brand,
@@ -353,7 +404,51 @@ export default async function DashboardPage({
       dropOff: t.dropOff as Date,
       status: t.status,
       pickup: t.pickup,
-    }));
+    };
+    appointments.push({ t, appt: appointmentDate(t), row: base });
+
+    const rework = t.extras['แก้งาน'];
+    if (rework?.checked) {
+      const from = asDate(String(rework.receivedAt ?? ''));
+      const to = asDate(String(rework.deliveredAt ?? ''));
+      if (from || to) {
+        const category = String(rework.category ?? '').trim();
+        appointments.push({
+          t,
+          appt: appointmentDate({ status: t.status, dropOff: from, pickup: to }),
+          row: {
+            ...base,
+            serviceType: 'แก้งาน',
+            categories: category ? [category] : t.categories,
+            products: [String(rework.detail ?? '').trim()].filter(Boolean),
+            dropOff: (from ?? to) as Date,
+            pickup: to,
+          },
+        });
+      }
+    }
+
+    for (const v of visitsByTicket.get(t.id) ?? []) {
+      const from = asDate(v.from);
+      const to = asDate(v.to);
+      if (!from && !to) continue;
+      appointments.push({
+        t,
+        appt: appointmentDate({ status: t.status, dropOff: from, pickup: to }),
+        row: {
+          ...base,
+          serviceType: 'Service',
+          dropOff: (from ?? to) as Date,
+          pickup: to,
+        },
+      });
+    }
+  }
+
+  const upcoming: UpcomingTicket[] = appointments
+    .filter(({ appt }) => appt && appt >= windowStart && appt <= windowEnd)
+    .sort((a, b) => (a.appt as Date).getTime() - (b.appt as Date).getTime())
+    .map(({ row }) => row);
 
   // Pending approvals count across ALL orders the caller can see, not the
   // shop-filtered subset — matching the prototype, which reads `orders` directly
@@ -379,6 +474,15 @@ export default async function DashboardPage({
     status: t.status,
   }));
 
+  /*
+    The calendar plots the ticket by its status, and งานแก้ / เซอร์วิส beside it
+    under keys of their own.
+
+    They are NOT statuses — the ticket keeps whatever status it has while the
+    car comes back — but the calendar answers "what is happening that day", and
+    a car returning is one of the things happening. Built from the same list
+    that feeds the 7-day card, so the two can never disagree.
+  */
   const calendarTickets: CalendarTicket[] = tickets
     .filter((t) => t.dropOff)
     .map((t) => ({
@@ -388,6 +492,43 @@ export default async function DashboardPage({
       dropOff: t.dropOff as Date,
       statusHistory: t.statusHistory,
     }));
+
+  for (const a of appointments) {
+    if (a.row.serviceType !== 'แก้งาน' && a.row.serviceType !== 'Service') continue;
+    if (!a.appt) continue;
+    calendarTickets.push({
+      id: a.t.id,
+      shop: a.t.shop,
+      status: a.row.serviceType,
+      dropOff: a.appt,
+      // Empty on purpose: the calendar reads the last status change when there
+      // is a history, and this entry is about its own date, not the ticket’s.
+      statusHistory: [],
+    });
+  }
+
+  /*
+    …and the same events, counted for the period the dashboard is showing.
+
+    Counted on the VISIT’s own date, not the ticket’s: a rework happening this
+    month on a job booked last month belongs to this month, or the number means
+    nothing. Kept out of `statusTotals` — those bars partition the jobs between
+    them, and an event on a job that already has a status would be the same car
+    counted twice.
+  */
+  const visitTotals: VisitTotal[] = (
+    [
+      ['แก้งาน', 'แก้งาน', '#B23A48'],
+      ['Service', 'Service', '#2563EB'],
+    ] as const
+  ).map(([key, label, dot]) => ({
+    key,
+    label,
+    dot,
+    count: appointments.filter(
+      (a) => a.row.serviceType === key && inShop(a.t.shop) && inPeriod(a.appt),
+    ).length,
+  }));
 
   return (
     <Dashboard
@@ -403,6 +544,7 @@ export default async function DashboardPage({
       stockTotal={stockTotal}
       trend={trend}
       calendarTickets={calendarTickets}
+      visitTotals={visitTotals}
       shopFilter={shopFilter}
       caption={periodCaption(period, periodValue, rangeStart, rangeEnd, now)}
       statuses={statuses}

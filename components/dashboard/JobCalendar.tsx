@@ -33,8 +33,28 @@ export const DEFAULT_STATUSES: CalendarStatus[] = [
   { key: 'ค้างชำระ', short: 'ค้างชำระ', dot: '#C24B57' },
 ];
 
+/**
+ * งานแก้ / เซอร์วิส บนปฏิทิน.
+ *
+ * Not statuses — a ticket keeps whatever status it has while the car comes
+ * back — but they are days somebody has to be ready, which is what a calendar
+ * is for. Given their own keys and colours so they read as their own kind of
+ * entry beside จองแล้ว and รอ QC, and so a shop renaming a real status cannot
+ * take them with it.
+ */
+export const VISIT_STATUSES: CalendarStatus[] = [
+  { key: 'แก้งาน', short: 'แก้งาน', dot: '#B23A48' },
+  { key: 'Service', short: 'Service', dot: '#2563EB' },
+];
+
 function getStatus(statuses: CalendarStatus[], key: string): CalendarStatus {
-  return statuses.find((s) => s.key === key) || statuses[0] || { key, short: key, dot: '#B5AAA1' };
+  // VISIT_STATUSES first: they are not in the shop’s `statuses` table, so a
+  // lookup that fell through would paint them with whatever sorts first.
+  return (
+    VISIT_STATUSES.find((s) => s.key === key) ||
+    statuses.find((s) => s.key === key) ||
+    statuses[0] || { key, short: key, dot: '#B5AAA1' }
+  );
 }
 
 export function JobCalendar({
@@ -125,16 +145,23 @@ export function JobCalendar({
         {cells.map((d, idx) => {
           if (d === null) return <div key={idx}></div>;
           const dayTickets = dayMap[d] || [];
-          const dayStatuses = statuses
-            .map((s) => s.key)
-            .filter((s) => dayTickets.some((t) => t.status === s));
+          // The shop’s statuses first, then งานแก้/เซอร์วิส. Reading the keys off
+          // `statuses` alone dropped the visits: they are on the day, but they are
+          // not statuses, so nothing rendered them.
+          const dayStatuses = [
+            ...statuses.map((s) => s.key),
+            ...VISIT_STATUSES.map((s) => s.key),
+          ].filter((key) => dayTickets.some((t) => t.status === key));
           const isToday = isCurrentMonth && d === today.getDate();
           return (
             <div
               key={idx}
               onClick={() => {
-                if (dayTickets.length === 1) router.push(`/tickets/${dayTickets[0].ticketId}`);
-                else if (dayTickets.length > 1) router.push('/tickets');
+                // By CAR, not by entry: a day holding a booking and its งานแก้
+                // is one ticket twice over, and the list is the wrong answer.
+                const ids = [...new Set(dayTickets.map((x) => x.ticketId))];
+                if (ids.length === 1) router.push(`/tickets/${ids[0]}`);
+                else if (ids.length > 1) router.push('/tickets');
               }}
               className="rounded-lg p-1.5 flex flex-col"
               style={{

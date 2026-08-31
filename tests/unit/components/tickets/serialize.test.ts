@@ -260,3 +260,21 @@ describe('serializeTicket — payment dates', () => {
     );
   });
 });
+
+describe('serializeTicket — รายได้ / รับแทน', () => {
+  it('sends the choice the counter made', () => {
+    const t = baseTicket({ revenueKind: 'รับแทน' } as unknown as Partial<Ticket>);
+    expect(serializeTicket(t, false).revenueKind).toBe('รับแทน');
+  });
+
+  it('treats a ticket that predates the choice as รายได้', () => {
+    // Every ticket already in the database arrives without the field; none of
+    // them may quietly stop counting as takings.
+    expect(serializeTicket(baseTicket(), false).revenueKind).toBe('รายได้');
+  });
+
+  it('refuses anything that is not one of the two', () => {
+    const t = baseTicket({ revenueKind: 'อย่างอื่น' } as unknown as Partial<Ticket>);
+    expect(serializeTicket(t, false).revenueKind).toBe('รายได้');
+  });
+});

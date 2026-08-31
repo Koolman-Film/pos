@@ -10,20 +10,89 @@ export function daysFromNow(n: number): Date {
   return d;
 }
 
+/**
+ * The shop's clock. Every branch is in Thailand, so this is a constant.
+ *
+ * A `timestamptz` is an instant, not a wall time — turning one into "16:00"
+ * needs a time zone, and until this existed the code used whatever zone the
+ * process happened to run in. In development that is the shop’s own machine,
+ * so it looked right; the deployed server runs in UTC, where a job booked for
+ * 11:00 printed as 04:00 and a 02:00 job showed on the previous day.
+ *
+ * Pinning it also removes a whole class of hydration mismatch: the HTML the
+ * server renders and the HTML the browser re-renders now agree by
+ * construction, wherever either of them is running.
+ */
+export const SHOP_TIME_ZONE = 'Asia/Bangkok';
+
+const thaiDateFmt = new Intl.DateTimeFormat('th-TH', {
+  timeZone: SHOP_TIME_ZONE,
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
+
+const clockFmt = new Intl.DateTimeFormat('en-GB', {
+  timeZone: SHOP_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+/** `YYYY-MM-DD` on the shop's calendar — the key to group a day by. */
+const dayKeyFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: SHOP_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function usable(d: Date | null | undefined): d is Date {
+  return d instanceof Date && !Number.isNaN(d.getTime());
+}
+
 export function fmtThaiDate(d: Date | null | undefined): string {
   if (!d) return '-';
-  return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (!usable(d)) return '-';
+  return thaiDateFmt.format(d);
 }
 
 /**
- * The clock part of a Date as `HH:MM`, or '' when there is no usable date.
+ * The clock part of a Date as `HH:MM` on the shop's clock, or `` when there is
+ * no usable date.
  *
  * Printed forms carry a time beside the date (เวลารับรถ / เวลาส่งมอบรถ), and
  * the ticket stores both in one timestamp.
  */
 export function hhmm(d: Date | null | undefined): string {
-  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (!usable(d)) return '';
+  return clockFmt.format(d);
+}
+
+/**
+ * The day this instant falls on, on the shop's calendar, as `YYYY-MM-DD`.
+ *
+ * For grouping by day — never format this for a reader. Two jobs booked an
+ * hour apart at 23:30 and 00:30 belong to different days, and which days
+ * those are must not depend on where the code runs.
+ */
+export function shopDayKey(d: Date | null | undefined): string {
+  if (!usable(d)) return '';
+  return dayKeyFmt.format(d);
+}
+
+/**
+ * The instant the shop's day containing `d` begins (00:00 in Bangkok).
+ *
+ * `setHours(0,0,0,0)` gives midnight in whatever zone the process runs in —
+ * 07:00 Bangkok on a UTC server, so "today" started seven hours late and the
+ * early bookings of the day fell outside it.
+ */
+export function startOfShopDay(d: Date = new Date()): Date {
+  const key = shopDayKey(d);
+  // +07:00 is fixed: Thailand has no daylight saving and has not changed
+  // offset since 1940.
+  return new Date(`${key}T00:00:00+07:00`);
 }
 
 export function fmt(n: number | null | undefined): string {

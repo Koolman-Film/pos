@@ -22,7 +22,7 @@ import type { ReactNode } from 'react';
 
 import { LineChart } from '@/components/charts/LineChart';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
-import { hhmm, fmt, fmtThaiDate } from '@/lib/domain/format';
+import { shopDayKey, hhmm, fmt, fmtThaiDate } from '@/lib/domain/format';
 
 import { JobCalendar, type CalendarTicket } from './JobCalendar';
 import { TicketStatusSelect } from './TicketStatusSelect';
@@ -34,6 +34,17 @@ export type StockByCategory = { name: string; qty: number };
 
 /** One bar in the "งานทั้งหมด" breakdown (prototype `statusList`). */
 export type StatusTotal = { key: string; count: number; pct: number };
+
+/**
+ * งานแก้ / เซอร์วิส ในช่วงเวลาที่เลือก.
+ *
+ * Counted apart from the status bars above them, and deliberately NOT added
+ * into งานทั้งหมด. A status is one per ticket and the bars partition the jobs
+ * between them; a งานแก้ is an EVENT on a ticket that already has a status, so
+ * folding it in would count the same car twice and leave the bars adding up to
+ * more than the total they sit under.
+ */
+export type VisitTotal = { key: string; label: string; count: number; dot: string };
 
 /**
  * ประกันที่ใกล้หมดอายุใน 30 วัน.
@@ -140,6 +151,8 @@ export type DashboardProps = {
   totalJobs?: number;
   statusTotals?: StatusTotal[];
   upcoming?: UpcomingTicket[];
+  /** งานแก้ / เซอร์วิส in the selected period — beside the status bars. */
+  visitTotals?: VisitTotal[];
   expiringInsurance?: ExpiringInsurance[];
   pendingApprovals?: PendingApprovals;
   recentJobs?: RecentJob[];
@@ -173,6 +186,7 @@ export function Dashboard({
   totalJobs = 0,
   statusTotals = [],
   upcoming = [],
+  visitTotals = [],
   expiringInsurance = [],
   pendingApprovals,
   recentJobs = [],
@@ -517,13 +531,38 @@ export function Dashboard({
               );
             })}
           </div>
+          {visitTotals.length > 0 && (
+            <div className="mt-4 pt-3" style={{ borderTop: '1px dashed var(--line-strong)' }}>
+              {/* Separated on purpose. These are events on jobs that already
+                  have a status above, so they are not part of that total and
+                  the card has to say so rather than quietly adding up wrong. */}
+              <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
+                นัดหมายในช่วงนี้ (นับแยก ไม่รวมในยอดงานทั้งหมด)
+              </p>
+              <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+                {visitTotals.map((v) => (
+                  <span key={v.key} className="flex items-center gap-1.5 text-xs">
+                    <span
+                      className="inline-block rounded-full"
+                      style={{ width: 8, height: 8, background: v.dot }}
+                    ></span>
+                    <span style={{ color: 'var(--ink-soft)' }}>{v.label}</span>
+                    <span className="font-semibold">{v.count}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/*
           ประกันใกล้หมดอายุ. Sits beside the bookings because it is the same kind
           of list: a short queue of customers somebody should ring this week.
         */}
-        {expiringInsurance.length > 0 && (
+        {/* Gated like every other card. It was added after the permission list
+            was written and went ungoverned — an admin could not hide it from a
+            role that has no business seeing customer policies. */}
+        {hasDashboardWidget('insuranceExpiry') && expiringInsurance.length > 0 && (
           <div className="card p-5 lg:col-span-6">
             <p className="text-sm font-semibold mb-3 flex items-center gap-1.5">
               <i className="fa-solid fa-shield-halved" style={{ color: '#B26A00' }}></i>
@@ -651,7 +690,10 @@ export function Dashboard({
                       </p>
                       {cat.tickets.map((t, i) => (
                         <Link
-                          key={t.id}
+                          // One ticket can appear more than once — its booking,
+                          // its งานแก้ and each เซอร์วิส visit are separate
+                          // appointments — so the id alone is not a key.
+                          key={`${t.id}-${t.serviceType}-${i}`}
                           href={`/tickets/${t.id}`}
                           className="flex items-start justify-between gap-2 cursor-pointer py-1.5 pl-2"
                           style={{ borderTop: i === 0 ? 'none' : '1px solid var(--line)' }}
@@ -826,7 +868,9 @@ export function groupUpcoming(upcoming: UpcomingTicket[]) {
   }[] = [];
   for (const t of upcoming) {
     const date = appointmentDate(t) ?? t.dropOff;
-    const key = date.toDateString();
+    // The shop's calendar day, not the server's: a job at 02:00 in Bangkok is
+    // still the previous day in UTC, and the deployed server runs in UTC.
+    const key = shopDayKey(date);
     let day = days.find((d) => d.key === key);
     if (!day) {
       day = { key, date, byService: [] };

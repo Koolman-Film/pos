@@ -67,6 +67,8 @@ export type PermissionsModuleProps = {
   onRenameWsStatus?: (oldKey: string, newKey: string) => Maybe;
   onDeleteWsStatus?: (key: string) => Maybe;
   onUpdateShopInfo?: (shopId: string, patch: Partial<ShopInfoRow>) => Maybe;
+  /** เพิ่มสาขาใหม่ / แก้ชื่อสาขาเดิม (migration 0034). Admin only. */
+  onSaveShop?: (input: { id: string; name: string; sortOrder?: number }) => Maybe;
   onUpdateUser?: (id: string, patch: { role?: string; active?: boolean }) => Maybe;
   onSetUserAllShops?: (id: string, all: boolean) => Maybe;
   onToggleUserShop?: (id: string, shopId: string) => Maybe;
@@ -138,6 +140,7 @@ export function PermissionsModule({
   onRenameWsStatus,
   onDeleteWsStatus,
   onUpdateShopInfo,
+  onSaveShop,
   onUpdateUser,
   onSetUserAllShops,
   onToggleUserShop,
@@ -158,6 +161,8 @@ export function PermissionsModule({
 
   // ----- users -----
   const [newUserEmail, setNewUserEmail] = useState('');
+  const [newShopId, setNewShopId] = useState('');
+  const [newShopName, setNewShopName] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newUserRole, setNewUserRole] = useState(roles[0]?.id || 'sales');
   function addUser() {
@@ -752,6 +757,80 @@ export function PermissionsModule({
         </p>
       </div>
 
+      {/* ---------- shops ---------- */}
+      {onSaveShop && (
+        <div className="card p-5 sm:p-6 mb-4">
+          <p className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+            <i className="fa-solid fa-store" style={{ color: 'var(--primary)' }}></i>
+            สาขา
+          </p>
+          <p className="text-xs mb-4" style={{ color: 'var(--ink-soft)' }}>
+            เพิ่มสาขาใหม่ หรือแก้ชื่อสาขาเดิม สาขาใหม่จะขึ้นในตัวกรองของทุกโมดูลทันที
+            แล้วค่อยกำหนดว่าใครเห็นได้บ้างในหัวข้อผู้ใช้งานด้านบน
+          </p>
+          <div className="flex flex-col gap-2 mb-3">
+            {shops.map((sh) => (
+              <div
+                key={sh.id}
+                className="flex items-center gap-2 rounded-xl p-2.5"
+                style={{ border: '1px solid var(--line)' }}
+              >
+                <span
+                  className="text-xs font-mono px-2 py-1 rounded-lg flex-shrink-0"
+                  style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
+                >
+                  {sh.id}
+                </span>
+                <input
+                  defaultValue={sh.name}
+                  aria-label={`ชื่อสาขา ${sh.id}`}
+                  onBlur={(e) => {
+                    const name = e.target.value.trim();
+                    if (name && name !== sh.name) run(onSaveShop({ id: sh.id, name }));
+                  }}
+                  className="field text-sm px-2.5 py-1.5 flex-1"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <input
+              value={newShopId}
+              aria-label="รหัสสาขาใหม่"
+              onChange={(e) => setNewShopId(e.target.value)}
+              placeholder="รหัส เช่น north"
+              className="field text-sm px-2.5 py-1.5"
+            />
+            <input
+              value={newShopName}
+              aria-label="ชื่อสาขาใหม่"
+              onChange={(e) => setNewShopName(e.target.value)}
+              placeholder="ชื่อสาขา เช่น Finnix North"
+              className="field text-sm px-2.5 py-1.5"
+            />
+            <button
+              onClick={() => {
+                const id = newShopId.trim().toLowerCase();
+                const name = newShopName.trim();
+                if (!id || !name) return;
+                run(onSaveShop({ id, name }));
+                setNewShopId('');
+                setNewShopName('');
+              }}
+              className="btn-primary text-sm px-4 py-2 rounded-xl font-semibold"
+            >
+              <i className="fa-solid fa-plus mr-1.5"></i>เพิ่มสาขา
+            </button>
+          </div>
+          <p className="text-xs mt-2" style={{ color: 'var(--ink-faint)' }}>
+            <i className="fa-solid fa-circle-info mr-1"></i>
+            รหัสสาขาใช้ a-z และ 0-9 ยาว 2-10 ตัว ตั้งแล้วเปลี่ยนไม่ได้
+            เพราะติดอยู่กับใบงานและเอกสารทุกใบที่ออกไปแล้ว — และไม่มีปุ่มลบสาขา ด้วยเหตุผลเดียวกัน
+            สาขาที่เลิกใช้ให้เอาสิทธิ์การเห็นออกแทน
+          </p>
+        </div>
+      )}
+
       {/* ---------- shop info ---------- */}
       <div className="card p-5 sm:p-6 mb-4">
         <p className="text-sm font-semibold mb-4 flex items-center gap-1.5">
@@ -767,7 +846,28 @@ export function PermissionsModule({
                 className="rounded-xl p-3"
                 style={{ border: '1px solid var(--line)' }}
               >
-                <p className="text-sm font-semibold mb-2">{s.name}</p>
+                <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                  <p className="text-sm font-semibold">{s.name}</p>
+                  {/* The one thing on this card that changes what the app will
+                      let the counter DO: only a registered branch may issue a
+                      ใบกำกับภาษี. Kept beside the tax id it goes out with. */}
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-3.5 h-3.5"
+                      checked={!!info?.vatRegistered}
+                      aria-label={`จดทะเบียนภาษีมูลค่าเพิ่ม ${s.name}`}
+                      onChange={(e) =>
+                        run(onUpdateShopInfo?.(s.id, { vatRegistered: e.target.checked }))
+                      }
+                    />
+                    <span
+                      style={{ color: info?.vatRegistered ? 'var(--primary)' : 'var(--ink-soft)' }}
+                    >
+                      จดทะเบียนภาษีมูลค่าเพิ่ม (ออกใบกำกับภาษีได้)
+                    </span>
+                  </label>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                   <input
                     defaultValue={info?.companyName || ''}

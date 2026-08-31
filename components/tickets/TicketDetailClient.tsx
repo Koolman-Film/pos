@@ -27,6 +27,7 @@ export function TicketDetailClient({
   initialTicket,
   isNew,
   shops,
+  accessibleShops,
   statuses,
   capabilities,
   currentUserName,
@@ -56,6 +57,7 @@ export function TicketDetailClient({
   initialTicket: Ticket;
   isNew: boolean;
   shops: Shop[];
+  accessibleShops?: Shop[];
   statuses: StatusConfig[];
   capabilities: Record<string, boolean>;
   currentUserName: string;
@@ -120,6 +122,7 @@ export function TicketDetailClient({
       initialTicket={initialTicket}
       isNew={isNew}
       shops={shops}
+      accessibleShops={accessibleShops}
       statuses={statuses}
       canDo={canDo}
       currentUserName={currentUserName}

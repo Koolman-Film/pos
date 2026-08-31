@@ -12,7 +12,7 @@ import { itemNetPrice } from '@/lib/domain/tickets';
 import { dateInputValue } from '@/lib/domain/now';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
-import { PrintJobSheet, docPrefixFor, type PrintMode } from './PrintJobSheet';
+import { PrintJobSheet, TAX_DOC_TYPE, docPrefixFor, type PrintMode } from './PrintJobSheet';
 import { serializeTicket } from './serialize';
 import { findProductStock } from './serviceForm';
 import { ExtrasSection } from './detail/ExtrasSection';
@@ -73,6 +73,7 @@ export function TicketDetail({
   initialTicket,
   isNew,
   shops,
+  accessibleShops = [],
   statuses,
   canDo,
   currentUserName,
@@ -102,6 +103,11 @@ export function TicketDetail({
   initialTicket: Ticket;
   isNew: boolean;
   shops: Shop[];
+  /**
+   * สาขาที่ผู้ใช้คนนี้เปิดใบงานให้ได้ — normally the shops they may see.
+   * More than one turns on the branch picker while the ticket is new.
+   */
+  accessibleShops?: Shop[];
   statuses: StatusConfig[];
   canDo: (key: string) => boolean;
   currentUserName: string;
@@ -301,9 +307,42 @@ export function TicketDetail({
   const shopChannels = (shopInfo[t.shop]?.paymentChannels ?? []).filter(Boolean);
   const paymentMethodOptions = shopChannels.length > 0 ? shopChannels : options.payment_methods;
 
+  /**
+   * ใบกำกับภาษีออกไม่ได้ถ้าใบงานเป็น "รับแทน Finnix".
+   *
+   * A tax invoice says this shop made this sale, and a held job is another
+   * shop’s sale — issuing one here would put a document into the shop’s tax
+   * position for money it never earned. ใบเสนอราคา and ใบเสร็จรับเงิน stay
+   * available: the customer did pay at this counter and can still be given
+   * paperwork for it.
+   */
+  const shopIsVatRegistered = !!shopInfo[t.shop]?.vatRegistered;
+  const heldForFinnix = t.revenueKind === 'รับแทน';
+  const taxDocBlocked = heldForFinnix || !shopIsVatRegistered;
+  // Two ways to be refused, and the counter has to be told WHICH — "ออกไม่ได้"
+  // with no reason is how a rule gets worked around.
+  const taxBlockedReason = heldForFinnix
+    ? 'ใบงานนี้เป็นเงินรับแทน Finnix ไม่ใช่รายการขายของร้าน จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ'
+    : `${shopName(t.shop)} ไม่ได้จดทะเบียนภาษีมูลค่าเพิ่ม จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ`;
+
   function changeDocType(dt: string) {
+    if (dt === TAX_DOC_TYPE && taxDocBlocked) return;
     setDocType(dt);
-    setShowCompanyInfo(dt === 'ใบกำกับภาษี/ใบเสร็จรับเงิน');
+    setShowCompanyInfo(dt === TAX_DOC_TYPE);
+  }
+
+  /**
+   * Switching a ticket to รับแทน has to take the tax invoice off the screen
+   * with it — leaving it selected would leave a button offering to issue the
+   * one document that is now refused.
+   */
+  function setRevenueKind(kind: 'รายได้' | 'รับแทน') {
+    field('revenueKind', kind);
+    if (kind === 'รับแทน' && docType === TAX_DOC_TYPE) changeDocTypeTo('ใบเสร็จรับเงิน');
+  }
+  function changeDocTypeTo(dt: string) {
+    setDocType(dt);
+    setShowCompanyInfo(dt === TAX_DOC_TYPE);
   }
   /**
    * ใบเซอร์วิส — one recorded visit, or a blank sheet when given null.
@@ -951,6 +990,7 @@ export function TicketDetail({
                 onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
                 onModelChange={onModelChange}
                 commitModelRegistry={commitModelRegistry}
+                shopChoices={isNew ? accessibleShops : []}
               />
             </FormSection>
 
@@ -1112,6 +1152,7 @@ export function TicketDetail({
                 addPayment={addPayment}
                 removePayment={removePayment}
                 updatePayment={updatePayment}
+                setRevenueKind={setRevenueKind}
                 total={total}
                 paid={paid}
               />
@@ -1196,20 +1237,34 @@ export function TicketDetail({
               tone={SECTION_TONES.document}
             >
               <div className="flex gap-1.5 mb-2.5">
-                {['ใบเสนอราคา', 'ใบกำกับภาษี/ใบเสร็จรับเงิน', 'ใบเสร็จรับเงิน'].map((dt) => (
-                  <button
-                    key={dt}
-                    onClick={() => changeDocType(dt)}
-                    className="text-xs px-2.5 py-1.5 rounded-full font-semibold flex-1"
-                    style={{
-                      background: docType === dt ? '#2563EB' : '#fff',
-                      color: docType === dt ? '#fff' : '#1D4ED8',
-                    }}
-                  >
-                    {dt}
-                  </button>
-                ))}
+                {['ใบเสนอราคา', TAX_DOC_TYPE, 'ใบเสร็จรับเงิน'].map((dt) => {
+                  const off = dt === TAX_DOC_TYPE && taxDocBlocked;
+                  return (
+                    <button
+                      key={dt}
+                      onClick={() => changeDocType(dt)}
+                      disabled={off}
+                      title={off ? taxBlockedReason : undefined}
+                      className="text-xs px-2.5 py-1.5 rounded-full font-semibold flex-1 flex items-center justify-center gap-1"
+                      style={{
+                        background: docType === dt ? '#2563EB' : '#fff',
+                        color: docType === dt ? '#fff' : '#1D4ED8',
+                        opacity: off ? 0.45 : 1,
+                        cursor: off ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {off && <i className="fa-solid fa-lock text-[10px]"></i>}
+                      {dt}
+                    </button>
+                  );
+                })}
               </div>
+              {taxDocBlocked && (
+                <p className="text-xs mb-2.5 flex items-start gap-1.5" style={{ color: '#8A5A12' }}>
+                  <i className="fa-solid fa-lock mt-0.5"></i>
+                  <span>{taxBlockedReason}</span>
+                </p>
+              )}
               <div className="mb-2.5">
                 <label className="text-xs" style={{ color: '#1D4ED8' }}>
                   ชื่อลูกค้าในเอกสาร
@@ -1221,7 +1276,13 @@ export function TicketDetail({
                   className="field w-full text-xs px-2.5 py-1.5"
                 />
               </div>
-              {docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน' && (
+              {/*
+                ข้อมูลนิติบุคคล shows for a tax invoice, and for any document going
+                out under the shop's own company name and tax id — a ใบเสร็จรับเงิน
+                made out to a company still needs the company on it, and at a
+                branch that cannot issue a tax invoice there was nowhere to type it.
+              */}
+              {(docType === TAX_DOC_TYPE || showCompanyInfo) && (
                 <div className="mb-2.5 rounded-lg p-2.5" style={{ background: '#fff' }}>
                   <p className="text-xs font-medium mb-2" style={{ color: '#1D4ED8' }}>
                     ข้อมูลนิติบุคคล
@@ -1319,8 +1380,13 @@ export function TicketDetail({
               </label>
               <button
                 onClick={issueDocument}
+                disabled={docType === TAX_DOC_TYPE && taxDocBlocked}
                 className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
-                style={{ background: '#2563EB', color: '#fff' }}
+                style={{
+                  background: '#2563EB',
+                  color: '#fff',
+                  opacity: docType === TAX_DOC_TYPE && taxDocBlocked ? 0.45 : 1,
+                }}
               >
                 <i className="fa-solid fa-print"></i> ออก{docType}
               </button>

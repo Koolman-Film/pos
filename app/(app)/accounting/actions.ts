@@ -49,6 +49,7 @@ export async function addExpense(input: NewExpenseInput): Promise<void> {
       source: input.source,
       amount: Number(l.amount || 0),
       status: input.status,
+      expense_kind: input.paidForFinnix ? 'จ่ายแทน' : 'ค่าใช้จ่าย',
       paid_at: input.status === 'จ่ายแล้ว' ? entered : null,
       due_at: input.status === 'จ่ายแล้ว' ? null : entered,
     }));
@@ -173,12 +174,18 @@ export async function updateExpense(input: UpdateExpenseInput): Promise<void> {
   const { error } = await supabase
     .from('expenses')
     .update({
+      shop_id: input.shop,
       description: input.desc,
       category: input.category,
       source: input.source,
       amount: Number(input.amount),
       status: input.status,
+      expense_kind: input.paidForFinnix ? 'จ่ายแทน' : 'ค่าใช้จ่าย',
+      // Both columns are written every time: leaving the stale one behind is
+      // how a paid row kept a deadline, and a row moved back to รอจ่าย kept a
+      // payment date it no longer had.
       paid_at: input.paidAt,
+      due_at: input.dueAt,
     })
     .eq('id', input.id);
   if (error) throw error;

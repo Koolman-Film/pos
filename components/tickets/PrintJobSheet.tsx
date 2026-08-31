@@ -111,10 +111,120 @@ function bi(th: string, en: string) {
  * RECORDED (migration 0024) have to be the same string; the customer quotes it
  * back off the paper.
  */
+/** The one document that puts a sale into the shop’s tax position. */
+export const TAX_DOC_TYPE = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+
 export function docPrefixFor(docType: string): string {
   if (docType === 'ใบเสนอราคา') return 'QT';
   if (docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') return 'INV';
   return 'RCT';
+}
+
+/**
+ * ตราประทับ "งานแก้" — rework, stamped across the top of the job sheet.
+ *
+ * A car that comes back is not a new job: the technician has to know before
+ * touching anything, and a tick buried in the extras list at the bottom of a
+ * page is not something anybody reads first. Sized and angled like the rubber
+ * stamp it stands in for, and transparent, so whatever it lands on still
+ * reads — the same reason a real stamp works.
+ */
+function ReworkStamp({ detail }: { detail: string }) {
+  return (
+    <div
+      style={{
+        /*
+          Pulled UP into the QC row so it overlaps it, the way a rubber stamp
+          lands across whatever is already on the page. Sitting neatly below in
+          its own space read as one more field on the form rather than as a
+          stamp — which is the whole point of it.
+        */
+        marginTop: '-2cm',
+        display: 'flex',
+        flexDirection: 'column',
+        // Left of centre, under the first QC box — where the sheet has room and
+        // where the eye already is after reading the QC row left to right.
+        alignItems: 'stretch',
+      }}
+    >
+      {/*
+        Space reserved for the box AFTER it turns: 5×3cm at 15° needs about
+        5.6 × 4.2cm. Leaving the rotation to overflow is how the first version
+        ran off the top of the sheet.
+      */}
+      <div style={{ position: 'relative', width: '5.7cm', height: '4.3cm', marginLeft: '5cm' }}>
+        <div
+          className="print-stamp"
+          aria-label="งานแก้"
+          style={{
+            position: 'absolute',
+            top: '0.65cm',
+            left: '0.35cm',
+            width: '5cm',
+            height: '3cm',
+            border: '3px solid #B23A48',
+            borderRadius: '4px',
+            transform: 'rotate(-15deg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <span style={{ fontSize: 34, fontWeight: 900, letterSpacing: 3 }}>งานแก้</span>
+        </div>
+      </div>
+      {/* What has to be redone, under the stamp and in the same red: the
+          stamp says there is rework, this says what it is. */}
+      {detail && (
+        <p
+          className="print-stamp"
+          style={{
+            margin: 0,
+            fontSize: 20,
+            fontWeight: 'bold',
+            // Wraps at the width of the sheet, the same as the table above it,
+            // so a long note reads as sentences instead of as one word a line.
+            width: '100%',
+            textAlign: 'center',
+            lineHeight: 1.4,
+          }}
+        >
+          {detail}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A percentage anywhere in a product name: `40%`, `7.5 %`. */
+const PERCENT = /(\d+(?:\.\d+)?\s*%)/;
+
+/**
+ * ไฮไลท์ตัวเลข % ในชื่อสินค้า — the number the technician has to match.
+ *
+ * "ฟิล์ม FINNIX CT 40%" and "ฟิล์ม FINNIX CT 60%" differ by two characters in
+ * the middle of a long name, and fitting the wrong one is a car stripped and
+ * done again. The number is picked out so it is found without reading the name.
+ *
+ * It survives the printer: the sheet sets `print-color-adjust: exact`, so the
+ * background prints, while `.print-area *` flattens the text itself to ink and
+ * keeps it legible on a mono printer.
+ */
+export function highlightPercent(name: string): React.ReactNode {
+  // One split, so the untouched parts of the name render verbatim — spaces and
+  // all — rather than being rebuilt from pieces.
+  return name.split(new RegExp(PERCENT.source, 'g')).map((part, i) =>
+    new RegExp(`^${PERCENT.source}$`).test(part) ? (
+      <span
+        key={i}
+        style={{ background: '#FFF3A3', padding: '0 2px', borderRadius: 2, fontWeight: 'bold' }}
+      >
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
 }
 
 /** The document name in English, for the band under the Thai one. */
@@ -288,6 +398,43 @@ export function PrintJobSheet({
 
   const categories = [...new Set(t.items.filter((i) => i.sold).map((i) => i.category))];
   const filledExtras = extraOptions.filter((name) => t.extras?.[name]?.checked);
+  // Read off the ticket, not off `extraOptions`: the option list is per shop and
+  // editable, and a job already marked as rework must keep its stamp even if
+  // somebody removes "แก้งาน" from the list afterwards.
+  const isRework = !!t.extras?.['แก้งาน']?.checked;
+  const reworkDetail = String(t.extras?.['แก้งาน']?.detail ?? '').trim();
+  /**
+   * ชนิดสินค้าที่งานแก้นี้เป็นของ — blank means the whole ticket.
+   *
+   * ใบงานติดตั้ง prints one page per ชนิดสินค้า. A rework on the film is not
+   * a rework on the speakers, and stamping both pages sends a technician to
+   * redo work nobody complained about.
+   */
+  const reworkCategory = String(t.extras?.['แก้งาน']?.category ?? '').trim();
+  const reworkOn = (cat: string) => isRework && (!reworkCategory || reworkCategory === cat);
+
+  /**
+   * The visit this sheet is being printed for, if it is not the original job.
+   *
+   * งานแก้ carries its own dates on the ticket; เซอร์วิส already records one
+   * row per visit (migration 0020), so the newest of those is used rather than
+   * asking for the same two dates a second time. Rework wins when both are on:
+   * the car is in front of the technician to be redone.
+   */
+  function visitDates(cat: string): { label: string; from: string; to: string } | null {
+    if (reworkOn(cat)) {
+      const from = String(t.extras?.['แก้งาน']?.receivedAt ?? '');
+      const to = String(t.extras?.['แก้งาน']?.deliveredAt ?? '');
+      if (from || to) return { label: 'งานแก้', from, to };
+    }
+    if (t.extras?.['Service']?.checked) {
+      const visit = t.serviceVisits?.[0];
+      if (visit && (visit.receivedAt || visit.deliveredAt)) {
+        return { label: 'เซอร์วิส', from: visit.receivedAt, to: visit.deliveredAt };
+      }
+    }
+    return null;
+  }
   const info = shopInfo[t.shop] || {};
   const receivedPayments = t.payments.filter((p) => Number(p.amount || 0) > 0);
   /** Net per ชนิดสินค้า, for the sale sheet's multi-category summary strip. */
@@ -296,11 +443,18 @@ export function PrintJobSheet({
     categoryTotals[i.category] = (categoryTotals[i.category] || 0) + itemNetPrice(mapItem(i));
   }
 
-  function extrasBlock(gap: number) {
-    if (filledExtras.length === 0) return null;
+  /**
+   * `skipRework` is set by the ใบงานติดตั้ง, where แก้งาน is printed under the
+   * stamp at the bottom instead — saying it twice on one sheet, once in
+   * 12px and once in red, is how the small one gets read and the big one
+   * ignored. The ใบงานขาย still lists it with the rest.
+   */
+  function extrasBlock(gap: number, skipRework = false) {
+    const names = skipRework ? filledExtras.filter((n) => n !== 'แก้งาน') : filledExtras;
+    if (names.length === 0) return null;
     return (
       <div style={{ fontSize: 12, lineHeight: 1.6, marginBottom: gap }}>
-        {filledExtras.map((name) => {
+        {names.map((name) => {
           const ex = t.extras[name];
           if (name === 'รถสไลด์') {
             const legs =
@@ -468,7 +622,17 @@ export function PrintJobSheet({
    * fields. The delivery date keeps the emphasis; it is the one the customer is
    * here about.
    */
-  function jobDates() {
+  /**
+   * The dates in the header.
+   *
+   * A rework sheet carries the rework's own dates — that is the visit the
+   * technician is holding the paper for. The original job keeps its line
+   * underneath in small type rather than being replaced: which day the car
+   * first came in is what a warranty argument turns on.
+   */
+  function jobDates(cat = '') {
+    const visit = visitDates(cat);
+    const day = (v: string) => (v ? fmtThaiDate(new Date(`${v}T00:00:00`)) : '-');
     return (
       <div
         style={{
@@ -488,7 +652,8 @@ export function PrintJobSheet({
             padding: '4px 10px',
           }}
         >
-          วันที่รับงาน: {fmtThaiDate(t.dropOffDateObj)}
+          วันที่รับงาน{visit ? ` (${visit.label})` : ''}:{' '}
+          {visit ? day(visit.from) : fmtThaiDate(t.dropOffDateObj)}
         </span>
         <span
           style={{
@@ -500,8 +665,14 @@ export function PrintJobSheet({
             background: '#FFF7DD',
           }}
         >
-          วันที่ส่งงาน: {fmtThaiDate(t.pickupDateObj)}
+          วันที่ส่งงาน{visit ? ` (${visit.label})` : ''}:{' '}
+          {visit ? day(visit.to) : fmtThaiDate(t.pickupDateObj)}
         </span>
+        {visit && (
+          <span style={{ width: '100%', textAlign: 'right', fontSize: 10, color: '#777' }}>
+            งานเดิม: รับ {fmtThaiDate(t.dropOffDateObj)} &middot; ส่ง {fmtThaiDate(t.pickupDateObj)}
+          </span>
+        )}
       </div>
     );
   }
@@ -520,7 +691,7 @@ export function PrintJobSheet({
             <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานติดตั้ง</h1>
             <div style={{ textAlign: 'right', marginBottom: 16 }}>
               <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
-              {jobDates()}
+              {jobDates(cat)}
               <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
               <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
                 บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
@@ -635,21 +806,26 @@ export function PrintJobSheet({
                           // The product only earns a line of its own when it
                           // changes; repeating "3M60" five times is noise the
                           // technician has to read past.
+                          //
+                          // Said in words, not with a ditto mark: on a sheet that
+                          // is worked from at the car, a lone ″ reads as an empty
+                          // cell or as inches, and the technician fitting the
+                          // wrong film is the cost of that guess.
                           const sameAsAbove = ri > 0 && rows[ri - 1].product === r.product;
                           return (
                             <tr key={ri}>
                               <td style={{ ...cellBody, fontWeight: 'bold' }}>{r.label ?? '—'}</td>
                               <td style={cellBody}>
                                 {sameAsAbove ? (
-                                  <span style={{ color: '#999' }}>&#8243;</span>
+                                  <span style={{ color: '#777', fontSize: 12 }}>เหมือนกัน</span>
                                 ) : (
                                   <>
                                     <span style={{ fontSize: 15, fontWeight: 'bold' }}>
-                                      {short}
+                                      {highlightPercent(short)}
                                     </span>
                                     {stockMatch?.shortName && (
                                       <span style={{ fontSize: 10, color: '#777', marginLeft: 4 }}>
-                                        ({r.product})
+                                        ({highlightPercent(r.product)})
                                       </span>
                                     )}
                                   </>
@@ -679,7 +855,7 @@ export function PrintJobSheet({
             <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
             {cat === WRAP_CATEGORY && wrapOptionsBlock()}
             {notesBlock(cat)}
-            {extrasBlock(16)}
+            {extrasBlock(16, true)}
             <p
               style={{
                 margin: '0 0 16px',
@@ -782,6 +958,10 @@ export function PrintJobSheet({
                 </p>
               </div>
             </div>
+            {/* Last thing on the page, under the QC boxes: the technician has
+                read the job by the time they reach it, and it is the one thing
+                that changes what they are about to do. */}
+            {reworkOn(cat) && <ReworkStamp detail={reworkDetail} />}
           </div>
         ))}
         {categories.includes('ฟิล์มกรองแสง') && (
@@ -1913,8 +2093,13 @@ export function PrintJobSheet({
                 {bi('ข้อมูลลูกค้า', 'Customer')} :
               </p>
               <p style={{ margin: 0, fontWeight: 'bold' }}>{buyerName || t.customer}</p>
-              {isTaxInvoice && buyerAddress && <p style={{ margin: '2px 0 0' }}>{buyerAddress}</p>}
-              {isTaxInvoice && buyerTaxId && (
+              {/* Printed on a tax invoice, and on any document going out under
+                  the shop's company details — a ใบเสร็จรับเงิน made out to a
+                  company has to name the company it is for. */}
+              {(isTaxInvoice || showCompanyInfo) && buyerAddress && (
+                <p style={{ margin: '2px 0 0' }}>{buyerAddress}</p>
+              )}
+              {(isTaxInvoice || showCompanyInfo) && buyerTaxId && (
                 <p style={{ margin: '2px 0 0' }}>
                   {bi('เลขผู้เสียภาษี', 'Tax ID')} {buyerTaxId}
                 </p>

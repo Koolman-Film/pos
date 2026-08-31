@@ -1,6 +1,12 @@
 import { describe, it, expect, afterAll } from 'vitest';
 
 import { adminClient, assertNoError, createAuthUser, deleteAuthUserByEmail } from '../rls/_helpers';
+import {
+  NAV_ITEMS,
+  DASHBOARD_WIDGETS,
+  OTHER_CAPABILITIES,
+  MODULE_CAPABILITIES,
+} from '@/components/permissions/permissionMeta';
 
 /**
  * `reset_permissions_to_defaults()` — the SQL function behind the Permissions
@@ -170,16 +176,36 @@ describe('reset_permissions_to_defaults', () => {
       .select('role_id, permission_type, permission_key');
 
     const rows = data as PermRow[];
-    // 9 nav + 10 dashboard widgets/other + 21 module capabilities, for each role.
-    // Migrations 0012 and 0016-0017 moved these: 0012 adds the `customers` nav
-    // and `list.delete` / `list.restore` / `customers.edit`, 0016 adds
-    // `options.manage`, 0017 adds `list.unlock`, 0024 adds the `revenue` nav and
-    // 0026 adds `stock.approveWithdraw`.
+    /*
+      Counted from the UI registry, not written down here.
+
+      A hardcoded number has to be edited by hand every time a module or a card
+      is added, and the edit is the step that gets forgotten — which is how
+      โมดูลรายได้ ended up ungovernable. Deriving it means the defaults and the
+      screen that reads them are checked against each other, every run.
+    */
+    const expected = {
+      nav: NAV_ITEMS.length,
+      dashboard_widget: DASHBOARD_WIDGETS.length + OTHER_CAPABILITIES.length,
+      module_capability: MODULE_CAPABILITIES.length,
+    };
     for (const role of ['admin', 'exec', 'sales', 'tech']) {
       const forRole = rows.filter((r) => r.role_id === role);
-      expect(forRole.filter((r) => r.permission_type === 'nav')).toHaveLength(9);
-      expect(forRole.filter((r) => r.permission_type === 'dashboard_widget')).toHaveLength(10);
-      expect(forRole.filter((r) => r.permission_type === 'module_capability')).toHaveLength(21);
+      for (const [type, count] of Object.entries(expected)) {
+        const got = forRole.filter((r) => r.permission_type === type).map((r) => r.permission_key);
+        expect(got, `${role} / ${type}`).toHaveLength(count);
+      }
     }
+
+    // …and the keys themselves match, not merely the count.
+    const keysOf = (type: string) =>
+      new Set(rows.filter((r) => r.permission_type === type).map((r) => r.permission_key));
+    expect([...keysOf('nav')].sort()).toEqual(NAV_ITEMS.map((n) => n.id).sort());
+    expect([...keysOf('dashboard_widget')].sort()).toEqual(
+      [...DASHBOARD_WIDGETS, ...OTHER_CAPABILITIES].map((w) => w.key).sort(),
+    );
+    expect([...keysOf('module_capability')].sort()).toEqual(
+      MODULE_CAPABILITIES.map((c) => c.key).sort(),
+    );
   });
 });

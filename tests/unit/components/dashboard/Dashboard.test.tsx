@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 vi.mock('@/components/charts/LineChart', () => ({ LineChart: () => null }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => {} }) }));
 
+import { shopDayKey } from '@/lib/domain/format';
 import {
   Dashboard,
   appointmentDate,
@@ -111,7 +112,7 @@ describe('Dashboard job-status totals', () => {
 
 describe('Dashboard upcoming bookings', () => {
   it('groups the window by day and then by appointment type', () => {
-    const day = new Date(2026, 6, 27, 9, 0, 0);
+    const day = new Date('2026-07-27T09:00:00+07:00');
     render(
       <Dashboard
         {...base}
@@ -128,14 +129,14 @@ describe('Dashboard upcoming bookings', () => {
   });
 
   it('marks a job that is under today because it goes BACK today', async () => {
-    const day = new Date(2026, 6, 27, 9, 0, 0);
+    const day = new Date('2026-07-27T09:00:00+07:00');
     render(
       <Dashboard
         {...base}
         upcoming={[
           {
             ...job({ id: 'JT-9', customer: 'คุณ วิภา', status: 'รอส่งมอบ' }),
-            dropOff: new Date(2026, 6, 20, 9, 0, 0),
+            dropOff: new Date('2026-07-20T09:00:00+07:00'),
             pickup: day,
           },
         ]}
@@ -152,7 +153,7 @@ describe('Dashboard upcoming bookings', () => {
         upcoming={[
           {
             ...job({ id: 'JT-7', products: ['ฟิล์ม 3M CRM 60%'] }),
-            dropOff: new Date(2026, 6, 27, 14, 30, 0),
+            dropOff: new Date('2026-07-27T14:30:00+07:00'),
           },
         ]}
       />,
@@ -169,7 +170,7 @@ describe('Dashboard upcoming bookings', () => {
           {
             ...job({ id: 'JT-8', products: [] }),
             // Midnight is what a ticket with no slot picked stores.
-            dropOff: new Date(2026, 6, 27, 0, 0, 0),
+            dropOff: new Date('2026-07-27T00:00:00+07:00'),
           },
         ]}
       />,
@@ -261,7 +262,7 @@ describe('Dashboard create-ticket button', () => {
  * deliverable: วันที่นัด → การนัดหมาย → ชนิดสินค้า, one line per car.
  */
 describe('appointmentDate', () => {
-  const drop = new Date(2026, 6, 20, 9, 0, 0);
+  const drop = new Date('2026-07-20T09:00:00+07:00');
   const pick = new Date(2026, 6, 27, 17, 0, 0);
 
   it('lists a job under the day the car comes in', () => {
@@ -280,8 +281,8 @@ describe('appointmentDate', () => {
 });
 
 describe('groupUpcoming', () => {
-  const day = new Date(2026, 6, 27, 9, 0, 0);
-  const later = new Date(2026, 7, 3, 17, 0, 0);
+  const day = new Date('2026-07-27T09:00:00+07:00');
+  const later = new Date('2026-08-03T17:00:00+07:00');
   const row = (over: Partial<ReturnType<typeof baseUpcoming>> = {}) => ({
     ...baseUpcoming(),
     ...over,
@@ -326,12 +327,95 @@ describe('groupUpcoming', () => {
 
   it('files a รอส่งมอบ job under its handover day, not its drop-off day', () => {
     const days = groupUpcoming([row(), row({ id: 'JT-2', status: 'รอส่งมอบ', pickup: later })]);
-    expect(days.map((d) => d.key)).toEqual([day.toDateString(), later.toDateString()]);
+    expect(days.map((d) => d.key)).toEqual([shopDayKey(day), shopDayKey(later)]);
   });
 
   it('names the empty cases rather than dropping the row', () => {
     const days = groupUpcoming([row({ serviceType: '', categories: [] })]);
     expect(days[0].byService[0].serviceType).toBe('ยังไม่ระบุการนัดหมาย');
     expect(days[0].byService[0].byCategory[0].category).toBe('ยังไม่ระบุชนิดสินค้า');
+  });
+});
+
+/**
+ * งานแก้ และ เซอร์วิส บนการ์ดนัดหมาย.
+ *
+ * A car coming back is an appointment on its own day, under its own heading —
+ * not a line hidden inside the booking it came from. The card groups by
+ * การนัดหมาย, so all it takes is giving those rows their own one.
+ */
+describe('Dashboard — งานแก้/เซอร์วิส เป็นหัวข้อนัดหมายของตัวเอง', () => {
+  const day = new Date('2026-07-27T09:00:00+07:00');
+
+  it('heads them separately from เข้าทำ/ติดตั้ง', () => {
+    render(
+      <Dashboard
+        {...base}
+        upcoming={[
+          { ...job({ id: 'JT-1' }), dropOff: day },
+          {
+            ...job({ id: 'JT-1', serviceType: 'แก้งาน', products: ['ฟิล์มมีฝุ่น'] }),
+            dropOff: day,
+          },
+          { ...job({ id: 'JT-2', serviceType: 'Service' }), dropOff: day },
+        ]}
+      />,
+    );
+    expect(screen.getByText('เข้าทำ/ติดตั้ง')).toBeInTheDocument();
+    expect(screen.getByText('แก้งาน')).toBeInTheDocument();
+    expect(screen.getByText('Service')).toBeInTheDocument();
+    expect(screen.getByText(/การนัดหมายวันนี้/)).toHaveTextContent('(3)');
+  });
+
+  it('lists the same ticket twice when it is two appointments', () => {
+    // The booking and the rework are different days' work on the same car; a
+    // duplicate id must not collapse them into one row.
+    const days = groupUpcoming([
+      { ...job({ id: 'JT-1' }), dropOff: day, pickup: null },
+      { ...job({ id: 'JT-1', serviceType: 'แก้งาน' }), dropOff: day, pickup: null },
+    ]);
+    expect(days[0].byService.map((g) => g.serviceType)).toEqual(['เข้าทำ/ติดตั้ง', 'แก้งาน']);
+  });
+});
+
+/**
+ * งานแก้ / เซอร์วิส บนการ์ดงานทั้งหมด และบนปฏิทิน.
+ *
+ * The risk this pins is arithmetic. The status bars partition the jobs — one
+ * status per ticket — so an EVENT on a ticket that already has a status cannot
+ * join them without counting the same car twice and leaving the bars adding up
+ * to more than the total printed above them.
+ */
+describe('Dashboard — นัดหมายนับแยกจากสถานะ', () => {
+  it('counts them beside the bars, not inside the total', () => {
+    render(
+      <Dashboard
+        {...base}
+        totalJobs={8}
+        statusTotals={[
+          { key: 'จองแล้ว', count: 5, pct: 62 },
+          { key: 'ส่งมอบแล้ว', count: 3, pct: 38 },
+        ]}
+        statuses={[
+          { key: 'จองแล้ว', short: 'จองแล้ว', bg: '#eee', text: '#333', dot: '#B5AAA1' },
+          { key: 'ส่งมอบแล้ว', short: 'ส่งมอบแล้ว', bg: '#eee', text: '#333', dot: '#B5AAA1' },
+        ]}
+        visitTotals={[
+          { key: 'แก้งาน', label: 'แก้งาน', count: 2, dot: '#B23A48' },
+          { key: 'Service', label: 'Service', count: 4, dot: '#2563EB' },
+        ]}
+      />,
+    );
+    const card = screen.getByText('งานทั้งหมด').closest('div')!.parentElement!;
+    // The total still describes the jobs, not the jobs plus their visits.
+    expect(within(card).getByText('8')).toBeInTheDocument();
+    expect(within(card).getByText(/ไม่รวมในยอดงานทั้งหมด/)).toBeInTheDocument();
+    expect(within(card).getByText('แก้งาน')).toBeInTheDocument();
+    expect(within(card).getByText('Service')).toBeInTheDocument();
+  });
+
+  it('says nothing when the period holds no visits', () => {
+    render(<Dashboard {...base} totalJobs={8} visitTotals={[]} />);
+    expect(screen.queryByText(/ไม่รวมในยอดงานทั้งหมด/)).not.toBeInTheDocument();
   });
 });

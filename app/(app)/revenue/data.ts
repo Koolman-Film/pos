@@ -29,6 +29,13 @@ export type SaleLine = {
    * TICKET, because stock is consumed against the job, not against a line.
    */
   cost: number;
+  /**
+   * เงินรอคืน Finnix — the customer paid this branch for a job that belongs to
+   * another Finnix shop (migration 0031). The money was collected and is
+   * recorded, but it is not this branch’s takings: it is reported on its own
+   * and kept out of ยอดขาย everywhere.
+   */
+  held: boolean;
   /** เลขที่ใบกำกับภาษี if one was issued for this ticket, else ''. */
   taxInvoiceNo: string;
   /** Every document issued for the ticket, for the "เอกสาร" column. */
@@ -46,7 +53,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       supabase
         .from('tickets')
         .select(
-          'id, shop_id, customer_name, plate, drop_off_date, ' +
+          'id, shop_id, customer_name, plate, drop_off_date, revenue_kind, ' +
             'ticket_items(category, sold, sold_price, discount_type, discount_value)',
         )
         .is('deleted_at', null),
@@ -66,6 +73,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
     customer_name: string;
     plate: string;
     drop_off_date: string | null;
+    revenue_kind: string;
     ticket_items: {
       category: string;
       sold: string;
@@ -129,6 +137,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
           discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
         }),
         cost: costLeft,
+        held: t.revenue_kind === 'รับแทน',
         taxInvoiceNo: taxNo(t.id),
         documents: docsByTicket.get(t.id) ?? [],
       });
@@ -151,6 +160,8 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       amount: Number(p.price || 0),
       // ประกัน has no materials — the cover is the product.
       cost: 0,
+      // A policy is sold by the branch that sold it, even on a held job.
+      held: false,
       taxInvoiceNo: taxNo(p.ticket_id),
       documents: docsByTicket.get(p.ticket_id) ?? [],
     });

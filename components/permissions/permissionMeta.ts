@@ -9,6 +9,8 @@
  * actions import the canonical key lists without duplication.
  */
 
+import { NAV_ITEMS as SIDEBAR_NAV } from '@/components/layout/navItems';
+
 export type Role = { id: string; name: string; icon: string };
 
 /** roleId -> permissionKey -> allowed. One of these per `permission_type`. */
@@ -18,6 +20,8 @@ export type StatusRow = { key: string; short: string; bg: string; text: string; 
 export type WsStatusRow = { key: string; bg: string; text: string; dot: string };
 export type ShopRow = { id: string; name: string };
 export type ShopInfoRow = {
+  /** จดทะเบียนภาษีมูลค่าเพิ่ม — only such a branch may issue a ใบกำกับภาษี. */
+  vatRegistered: boolean;
   companyName: string;
   taxId: string;
   address: string;
@@ -47,17 +51,19 @@ export const ROLE_ICON_CHOICES = [
   'fa-warehouse',
 ];
 
-/** reference/v0.4/finnix-film.html:167-175 — only `enabled` rows are shown. */
-export const NAV_ITEMS: { id: string; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'แดชบอร์ด', icon: 'fa-gauge-high' },
-  { id: 'list', label: 'Book งาน', icon: 'fa-clipboard-list' },
-  { id: 'customers', label: 'ทะเบียนลูกค้า', icon: 'fa-address-book' },
-  { id: 'wholesale', label: 'ขายส่ง', icon: 'fa-truck-fast' },
-  { id: 'stock', label: 'สต็อกสินค้า', icon: 'fa-boxes-stacked' },
-  { id: 'commission', label: 'ค่าคอมมิชชั่น', icon: 'fa-percent' },
-  { id: 'accounting', label: 'บัญชี/ค่าใช้จ่าย', icon: 'fa-file-invoice-dollar' },
-  { id: 'permissions', label: 'จัดการสิทธิ์', icon: 'fa-user-shield' },
-];
+/**
+ * The modules an admin can grant, taken STRAIGHT from the sidebar registry.
+ *
+ * This used to be a second copy of that list, and the two drifted: โมดูลรายได้
+ * was added to the sidebar and to the database, but never to this list, so the
+ * one screen that exists to govern access could not see it — the module was
+ * ungovernable for as long as the copy went unnoticed. Importing the registry
+ * means a module added to the sidebar is grantable the same day, with no second
+ * place to remember.
+ */
+export const NAV_ITEMS: { id: string; label: string; icon: string }[] = SIDEBAR_NAV.map(
+  ({ id, label, icon }) => ({ id, label, icon }),
+);
 
 /** reference/v0.4/finnix-film.html:182-191 */
 export const DASHBOARD_WIDGETS: LabeledKey[] = [
@@ -69,6 +75,7 @@ export const DASHBOARD_WIDGETS: LabeledKey[] = [
   { key: 'jobCalendar', label: 'การ์ดปฏิทินงานรายเดือน' },
   { key: 'receivablesPayables', label: 'การ์ดเจ้าหนี้/ลูกหนี้' },
   { key: 'pendingApprovals', label: 'การ์ดรอการอนุมัติ' },
+  { key: 'insuranceExpiry', label: 'การ์ดประกันใกล้หมดอายุ' },
 ];
 
 /** reference/v0.4/finnix-film.html:192-195 */
@@ -92,11 +99,13 @@ export const MODULE_CAPABILITIES: LabeledKey[] = [
   { key: 'wholesale.createNew', label: 'ขายส่ง: สร้าง PO ใหม่' },
   { key: 'wholesale.priceApproval', label: 'ขายส่ง: อนุมัติ/ปฏิเสธราคา' },
   { key: 'wholesale.badDebt', label: 'ขายส่ง: แจ้งตัดหนี้สูญ' },
+  { key: 'wholesale.updateStatus', label: 'ขายส่ง: เปลี่ยนสถานะ PO' },
   { key: 'wholesale.export', label: 'ขายส่ง: ส่งออก Excel/PDF' },
   { key: 'stock.addProduct', label: 'สต็อก: เพิ่มสินค้า/ขึ้นทะเบียนใหม่' },
   { key: 'stock.adjustStock', label: 'สต็อก: ปรับสต็อก' },
   { key: 'stock.withdraw', label: 'สต็อก: เบิกใช้ภายใน' },
   { key: 'stock.editDelete', label: 'สต็อก: แก้ไข/ลบสินค้า' },
+  { key: 'stock.approveWithdraw', label: 'สต็อก: อนุมัติ/ไม่อนุมัติใบเบิก' },
   { key: 'stock.export', label: 'สต็อก: ส่งออก Excel/PDF' },
   { key: 'commission.addRule', label: 'ค่าคอมมิชชั่น: เพิ่มกฎใหม่' },
   { key: 'accounting.addExpense', label: 'บัญชี: เพิ่มรายการค่าใช้จ่าย' },
