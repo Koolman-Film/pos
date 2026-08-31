@@ -1,6 +1,6 @@
--- supabase/revert-0031-0037.sql
+-- supabase/revert-0031-0038.sql
 --
--- ทางถอยกลับของ 0031-0037 — ใช้เมื่อจำเป็นเท่านั้น
+-- ทางถอยกลับของ 0031-0038 — ใช้เมื่อจำเป็นเท่านั้น
 --
 -- ลำดับที่ควรใช้จริง:
 --   1. ถอย CODE ที่ Vercel ก่อนเสมอ (rollback ทันที ไม่เสียข้อมูล). สคีมานี้
@@ -38,7 +38,8 @@ alter table expenses drop column if exists expense_kind;
 drop index if exists tickets_held_idx;
 alter table tickets drop column if exists revenue_kind;
 
--- ---- 0037 / 0033: คืนฟังก์ชันรีเซ็ตสิทธิ์กลับเป็นรุ่นก่อน 0031 (คือของ 0026)
+-- ---- 0038 / 0037 / 0033: คืนฟังก์ชันรีเซ็ตสิทธิ์กลับเป็นรุ่นก่อน 0031 (คือของ 0026)
+--      0038 แก้แค่ตัวฟังก์ชัน ไม่ได้แตะข้อมูล การคืนกลับเป็นรุ่น 0026 จึงครอบคลุมทั้งสาม
 create or replace function reset_permissions_to_defaults()
 returns void
 language plpgsql
@@ -121,4 +122,4 @@ grant execute on function reset_permissions_to_defaults() to authenticated;
 
 -- ---- ถอนทะเบียน migration ------------------------------------------------
 delete from supabase_migrations.schema_migrations
- where version in ('0031','0032','0033','0034','0035','0036','0037');
+ where version in ('0031','0032','0033','0034','0035','0036','0037','0038');
