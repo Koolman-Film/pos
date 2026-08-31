@@ -1,0 +1,124 @@
+-- supabase/revert-0031-0037.sql
+--
+-- ทางถอยกลับของ 0031-0037 — ใช้เมื่อจำเป็นเท่านั้น
+--
+-- ลำดับที่ควรใช้จริง:
+--   1. ถอย CODE ที่ Vercel ก่อนเสมอ (rollback ทันที ไม่เสียข้อมูล). สคีมานี้
+--      เข้ากันได้กับโค้ดเก่าอยู่แล้ว — คอลัมน์ใหม่ทุกตัวเป็น NOT NULL ที่มี
+--      DEFAULT ไม่มีคอลัมน์หรือฟังก์ชันไหนถูกลบ และฟังก์ชันใหม่ก็ชื่อใหม่ทั้งหมด
+--      โค้ดเก่าจึงทำงานบนสคีมาใหม่ได้ตามปกติ
+--   2. รันไฟล์นี้เฉพาะเมื่อต้องถอยสคีมาจริง ๆ เท่านั้น
+--
+-- ข้อมูลที่จะหายเมื่อรันไฟล์นี้ (ยอมรับก่อนรัน):
+--   - tickets.revenue_kind   ใบงานไหนเป็น "รับแทน Finnix"
+--   - expenses.expense_kind  ค่าใช้จ่ายไหนจ่ายแทน Finnix
+--   - shop_info.vat_registered  สาขาไหนจดทะเบียน VAT
+--
+-- สิ่งที่จงใจไม่ถอย เพราะถอยแล้วเสียมากกว่าได้:
+--   - แถวสิทธิ์ที่ 0033/0037 เพิ่มไว้ — ไม่มีโค้ดเก่าอ่าน จึงไม่มีผล และการลบ
+--     ทิ้งอาจลบค่าที่แอดมินตั้งเองไปด้วย
+--   - on update cascade บน FK ของ orders (0036) — ปลอดภัยกว่าของเดิม
+
+set search_path = pos, public, extensions;
+
+-- ---- 0036: เลขที่ PO อัตโนมัติ -------------------------------------------
+drop trigger if exists orders_assign_id on orders;
+drop function if exists assign_order_id();
+drop function if exists next_order_id(text);
+
+-- ---- 0034: เพิ่ม/แก้สาขาในแอป --------------------------------------------
+drop function if exists save_shop(text, text, integer);
+
+-- ---- 0035 / 0032 / 0031: คอลัมน์ใหม่ --------------------------------------
+alter table shop_info drop column if exists vat_registered;
+
+drop index if exists expenses_paid_for_finnix_idx;
+alter table expenses drop column if exists expense_kind;
+
+drop index if exists tickets_held_idx;
+alter table tickets drop column if exists revenue_kind;
+
+-- ---- 0037 / 0033: คืนฟังก์ชันรีเซ็ตสิทธิ์กลับเป็นรุ่นก่อน 0031 (คือของ 0026)
+create or replace function reset_permissions_to_defaults()
+returns void
+language plpgsql
+security invoker
+set search_path = pos
+as $$
+begin
+  insert into roles (id, name, icon) values
+    ('admin', 'แอดมิน/หลังบ้าน', 'fa-gear'),
+    ('exec', 'ผู้บริหาร', 'fa-crown'),
+    ('sales', 'พนักงานขาย', 'fa-user-tie'),
+    ('tech', 'หัวหน้าช่าง', 'fa-screwdriver-wrench')
+  on conflict (id) do update set name = excluded.name, icon = excluded.icon;
+
+  update app_users
+     set role_id = 'admin'
+   where role_id not in ('admin', 'exec', 'sales', 'tech');
+
+  delete from roles where id not in ('admin', 'exec', 'sales', 'tech');
+
+  delete from role_permissions where role_id in ('admin', 'exec', 'sales', 'tech');
+
+  insert into role_permissions (role_id, permission_type, permission_key, allowed) values
+    ('admin','nav','dashboard',true), ('admin','nav','list',true), ('admin','nav','customers',true), ('admin','nav','wholesale',true), ('admin','nav','stock',true), ('admin','nav','commission',true), ('admin','nav','accounting',true), ('admin','nav','revenue',true), ('admin','nav','permissions',true),
+    ('exec','nav','dashboard',true), ('exec','nav','list',true), ('exec','nav','customers',true), ('exec','nav','wholesale',true), ('exec','nav','stock',true), ('exec','nav','commission',false), ('exec','nav','accounting',true), ('exec','nav','revenue',true), ('exec','nav','permissions',false),
+    ('sales','nav','dashboard',true), ('sales','nav','list',true), ('sales','nav','customers',true), ('sales','nav','wholesale',true), ('sales','nav','stock',false), ('sales','nav','commission',false), ('sales','nav','accounting',false), ('sales','nav','revenue',false), ('sales','nav','permissions',false),
+    ('tech','nav','dashboard',true), ('tech','nav','list',true), ('tech','nav','customers',false), ('tech','nav','wholesale',false), ('tech','nav','stock',true), ('tech','nav','commission',false), ('tech','nav','accounting',false), ('tech','nav','revenue',false), ('tech','nav','permissions',false);
+
+  insert into role_permissions (role_id, permission_type, permission_key, allowed) values
+    ('admin','dashboard_widget','revenue',true), ('admin','dashboard_widget','expense',true), ('admin','dashboard_widget','pettycash',true), ('admin','dashboard_widget','trendChart',true), ('admin','dashboard_widget','stockSummary',false), ('admin','dashboard_widget','jobCalendar',true), ('admin','dashboard_widget','receivablesPayables',true), ('admin','dashboard_widget','pendingApprovals',true), ('admin','dashboard_widget','seeAllShops',true), ('admin','dashboard_widget','seeStockPrices',true),
+    ('exec','dashboard_widget','revenue',true), ('exec','dashboard_widget','expense',true), ('exec','dashboard_widget','pettycash',true), ('exec','dashboard_widget','trendChart',true), ('exec','dashboard_widget','stockSummary',false), ('exec','dashboard_widget','jobCalendar',true), ('exec','dashboard_widget','receivablesPayables',true), ('exec','dashboard_widget','pendingApprovals',true), ('exec','dashboard_widget','seeAllShops',true), ('exec','dashboard_widget','seeStockPrices',true),
+    ('sales','dashboard_widget','revenue',false), ('sales','dashboard_widget','expense',false), ('sales','dashboard_widget','pettycash',false), ('sales','dashboard_widget','trendChart',false), ('sales','dashboard_widget','stockSummary',true), ('sales','dashboard_widget','jobCalendar',true), ('sales','dashboard_widget','receivablesPayables',false), ('sales','dashboard_widget','pendingApprovals',false), ('sales','dashboard_widget','seeAllShops',false), ('sales','dashboard_widget','seeStockPrices',false),
+    ('tech','dashboard_widget','revenue',false), ('tech','dashboard_widget','expense',false), ('tech','dashboard_widget','pettycash',false), ('tech','dashboard_widget','trendChart',false), ('tech','dashboard_widget','stockSummary',true), ('tech','dashboard_widget','jobCalendar',true), ('tech','dashboard_widget','receivablesPayables',false), ('tech','dashboard_widget','pendingApprovals',true), ('tech','dashboard_widget','seeAllShops',false), ('tech','dashboard_widget','seeStockPrices',false);
+
+  insert into role_permissions (role_id, permission_type, permission_key, allowed)
+    select r.id, 'module_capability', c.key, true
+    from roles r, (values
+      ('list.createNew'),('list.printSheet'),('list.delete'),('list.restore'),
+      ('customers.edit'),('wholesale.createNew'),('wholesale.priceApproval'),
+      ('wholesale.badDebt'),('wholesale.export'),('stock.addProduct'),('stock.adjustStock'),
+      ('stock.withdraw'),('stock.editDelete'),('stock.export'),('commission.addRule'),
+      ('accounting.addExpense'),('accounting.topupCash'),('accounting.export')
+    ) as c(key)
+    where r.id in ('admin','exec');
+
+  -- Admin-only keys: maintaining the option lists, and reopening a closed ticket.
+  insert into role_permissions (role_id, permission_type, permission_key, allowed) values
+    ('admin','module_capability','options.manage',true),
+    ('exec','module_capability','options.manage',false),
+    ('sales','module_capability','options.manage',false),
+    ('tech','module_capability','options.manage',false),
+    ('admin','module_capability','stock.approveWithdraw',true),
+    ('exec','module_capability','stock.approveWithdraw',true),
+    ('sales','module_capability','stock.approveWithdraw',false),
+    ('tech','module_capability','stock.approveWithdraw',false),
+    ('admin','module_capability','list.unlock',true),
+    ('exec','module_capability','list.unlock',false),
+    ('sales','module_capability','list.unlock',false),
+    ('tech','module_capability','list.unlock',false);
+
+  insert into role_permissions (role_id, permission_type, permission_key, allowed) values
+    ('sales','module_capability','list.createNew',true), ('sales','module_capability','list.printSheet',true), ('sales','module_capability','list.delete',true), ('sales','module_capability','list.restore',false),
+    ('sales','module_capability','customers.edit',true), ('sales','module_capability','wholesale.createNew',true),
+    ('sales','module_capability','wholesale.priceApproval',false), ('sales','module_capability','wholesale.badDebt',false), ('sales','module_capability','wholesale.export',false),
+    ('sales','module_capability','stock.addProduct',false), ('sales','module_capability','stock.adjustStock',false), ('sales','module_capability','stock.withdraw',false),
+    ('sales','module_capability','stock.editDelete',false), ('sales','module_capability','stock.export',false), ('sales','module_capability','commission.addRule',false),
+    ('sales','module_capability','accounting.addExpense',false), ('sales','module_capability','accounting.topupCash',false), ('sales','module_capability','accounting.export',false),
+    ('tech','module_capability','list.createNew',false), ('tech','module_capability','list.printSheet',true), ('tech','module_capability','list.delete',false), ('tech','module_capability','list.restore',false),
+    ('tech','module_capability','customers.edit',false), ('tech','module_capability','wholesale.createNew',false),
+    ('tech','module_capability','wholesale.priceApproval',false), ('tech','module_capability','wholesale.badDebt',false), ('tech','module_capability','wholesale.export',false),
+    ('tech','module_capability','stock.addProduct',false), ('tech','module_capability','stock.adjustStock',true), ('tech','module_capability','stock.withdraw',true),
+    ('tech','module_capability','stock.editDelete',false), ('tech','module_capability','stock.export',true), ('tech','module_capability','commission.addRule',false),
+    ('tech','module_capability','accounting.addExpense',false), ('tech','module_capability','accounting.topupCash',false), ('tech','module_capability','accounting.export',false);
+end;
+$$;
+
+revoke all on function reset_permissions_to_defaults() from public;
+revoke all on function reset_permissions_to_defaults() from anon;
+grant execute on function reset_permissions_to_defaults() to authenticated;
+
+-- ---- ถอนทะเบียน migration ------------------------------------------------
+delete from supabase_migrations.schema_migrations
+ where version in ('0031','0032','0033','0034','0035','0036','0037');
