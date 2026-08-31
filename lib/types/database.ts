@@ -595,6 +595,8 @@ export type Database = {
         Row: {
           created_at: string
           customer_id: number | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           shop_id: string
           status: string
@@ -602,6 +604,8 @@ export type Database = {
         Insert: {
           created_at?: string
           customer_id?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id: string
           shop_id: string
           status: string
@@ -609,11 +613,20 @@ export type Database = {
         Update: {
           created_at?: string
           customer_id?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           shop_id?: string
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "orders_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "orders_customer_id_fkey"
             columns: ["customer_id"]

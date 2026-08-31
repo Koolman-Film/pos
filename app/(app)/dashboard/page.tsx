@@ -68,7 +68,10 @@ export default async function DashboardPage({
       .from('orders')
       .select(
         'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount)',
-      ),
+      )
+      // Deleted POs (migration 0040) are out of the wholesale figures here for
+      // the same reason deleted tickets are out of the ticket ones above.
+      .is('deleted_at', null),
     supabase.from('wholesale_customers').select('id, name'),
     supabase
       .from('expenses')

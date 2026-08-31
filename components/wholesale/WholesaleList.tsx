@@ -156,14 +156,25 @@ export function WholesaleList({
       )}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <h1 className="text-xl font-bold">ขายส่ง</h1>
-        {can('wholesale.createNew') && (
-          <button
-            onClick={() => router.push('/wholesale/new')}
-            className="btn-primary text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2"
-          >
-            <i className="fa-solid fa-plus"></i>สร้าง PO ใหม่
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Only roles that may restore see the bin at all. */}
+          {can('wholesale.restore') && (
+            <button
+              onClick={() => router.push('/wholesale/trash')}
+              className="btn-outline text-sm px-4 py-2 rounded-xl font-medium flex items-center gap-2"
+            >
+              <i className="fa-solid fa-trash-can"></i>ถังขยะ
+            </button>
+          )}
+          {can('wholesale.createNew') && (
+            <button
+              onClick={() => router.push('/wholesale/new')}
+              className="btn-primary text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2"
+            >
+              <i className="fa-solid fa-plus"></i>สร้าง PO ใหม่
+            </button>
+          )}
+        </div>
       </div>
       <PeriodShopFilter
         shopFilter={shopFilter}

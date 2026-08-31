@@ -59,6 +59,7 @@ export function WholesaleDetail({
   onApprovePrice,
   onRejectPrice,
   onMarkBadDebt,
+  onDeleteOrder,
   onSaveCustomer,
   onBack,
   updateOptionListAction,
@@ -85,6 +86,8 @@ export function WholesaleDetail({
   onApprovePrice?: (orderId: string) => Promise<void> | void;
   onRejectPrice?: (orderId: string) => Promise<void> | void;
   onMarkBadDebt?: (orderId: string) => Promise<void> | void;
+  /** ลบ PO — gated by `wholesale.delete`. Absent in the bare unit test. */
+  onDeleteOrder?: (orderId: string) => Promise<{ ok: boolean; error?: string }>;
   onSaveCustomer?: (input: {
     id?: number;
     name: string;
@@ -119,6 +122,45 @@ export function WholesaleDetail({
     setTimeout(() => window.print(), 50);
   }
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  /**
+   * ลบ PO — into ถังขยะ, not gone. The PO keeps its number so it cannot be
+   * handed out twice, and the goods it took go back on the shelf.
+   *
+   * The unsaved-changes guard is cleared first: leaving the page would
+   * otherwise ask whether to discard edits to a PO that no longer exists.
+   */
+  async function deleteOrder() {
+    if (!onDeleteOrder) return;
+    const paid = orderPaid(o);
+    if (
+      !window.confirm(
+        `ลบ ${o.id}?` +
+          '\n\nPO จะถูกย้ายไปถังขยะ ไม่แสดงในรายการและไม่ถูกนับในยอดขายอีก ' +
+          'สินค้าที่ตัดสต็อกไปแล้วจะถูกคืนเข้าสต็อก แอดมินกู้คืนได้ภายหลัง' +
+          (paid > 0 ? `\n\nPO นี้มีการรับเงินแล้ว ${fmt(paid)} บาท` : ''),
+      )
+    ) {
+      return;
+    }
+    setDeleteError(null);
+    try {
+      const res = await onDeleteOrder(o.id);
+      if (!res?.ok) {
+        setDeleteError(res?.error || 'ลบ PO ไม่สำเร็จ');
+        return;
+      }
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'ลบ PO ไม่สำเร็จ');
+      return;
+    }
+    // Router-free, like goBack: this component is unit tested rendered bare.
+    window.__hasUnsavedFormChanges = false;
+    if (onBack) onBack();
+    else if (typeof window !== 'undefined') window.location.assign('/wholesale');
+  }
+
   async function save() {
     // `onSaveOrder` (the `saveOrder` server action) persists then redirects back
     // to the list, so there is nothing to navigate here on success.
@@ -146,6 +188,25 @@ export function WholesaleDetail({
 
   function field<K extends keyof WsOrder>(k: K, v: WsOrder[K]) {
     setO({ ...o, [k]: v });
+  }
+
+  /**
+   * Moving a new PO to another branch also moves which shelf it sells from.
+   *
+   * A product the new branch does not carry cannot be deducted from its stock
+   * — the save would go through and the goods would never leave any shelf — so
+   * those lines give up their product and keep their quantity, ready to be
+   * pointed at the new branch’s equivalent. Lines the new branch does carry
+   * are repriced to ITS price, because that is the price being sold at.
+   */
+  function changeShop(shopId: string) {
+    const items = o.items.map((it) => {
+      const match = stock.find((sk) => sk.shop === shopId && sk.name === it.name);
+      if (!it.name) return it;
+      if (!match) return { ...it, name: '', listPrice: 0, requestedPrice: 0 };
+      return { ...it, listPrice: match.sellPrice, requestedPrice: match.sellPrice };
+    });
+    setO({ ...o, shop: shopId, items });
   }
   function addItem() {
     setO({
@@ -271,7 +332,7 @@ export function WholesaleDetail({
               <select
                 value={o.shop}
                 aria-label="สาขาที่เปิด PO"
-                onChange={(e) => field('shop', e.target.value)}
+                onChange={(e) => changeShop(e.target.value)}
                 className="field text-xs px-2.5 py-1.5"
               >
                 {shops.map((s) => (
@@ -702,6 +763,25 @@ export function WholesaleDetail({
               <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>แจ้งตัดเป็นหนี้สูญ
               (ต้องผู้บริหารอนุมัติ)
             </button>
+          )}
+          {/*
+            ลบ PO. Only on a saved PO — there is nothing to delete while it is
+            still a draft, and ยกเลิก below already throws a draft away. Sits
+            apart from ยกเลิก/บันทึก so the two cannot be confused at a glance.
+          */}
+          {!isNew && can('wholesale.delete') && onDeleteOrder && (
+            <button
+              onClick={deleteOrder}
+              className="w-full mb-3 text-xs py-2 rounded-xl font-medium"
+              style={{ color: '#B23A48', border: '1px solid #C24B57' }}
+            >
+              <i className="fa-solid fa-trash-can mr-1.5"></i>ลบ PO นี้
+            </button>
+          )}
+          {deleteError && (
+            <p className="text-xs mb-3 text-center" style={{ color: '#B23A48' }}>
+              {deleteError}
+            </p>
           )}
           <div className="flex gap-3">
             <button

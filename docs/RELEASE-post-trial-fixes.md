@@ -60,10 +60,11 @@ it twice changes nothing, and each records its versions in
 | 18    | `supabase/release-0035.sql`                   | a normal connection                                 |
 | 19    | `supabase/release-0036.sql`                   | a normal connection                                 |
 | 20    | `supabase/release-0037.sql`                   | a normal connection                                 |
-| 21    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 21    | `supabase/release-0040.sql`                   | a normal connection                                 |
+| 22    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all twenty-two in order
+already been handed over. If nothing has been run yet, running all twenty-three in order
 is still correct.
 
 `release-0030.sql` is numbered 0 because it is the one file that is urgent and
@@ -117,6 +118,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0035_vat_registered_shop`         | `shop_info.vat_registered` — ออกใบกำกับภาษีได้เฉพาะสาขาที่จดทะเบียนภาษีมูลค่าเพิ่ม (ตั้งค่าเริ่มต้น: เชียงใหม่สาขาเดียว) สาขาอื่นออกได้แค่ใบเสนอราคาและใบเสร็จรับเงิน ติ๊กเปิด/ปิดได้เองในหน้าจัดการสิทธิ์                                                                                                                           | ต่ำ. เพิ่มคอลัมน์ที่มีค่าตั้งต้น false                                                      |
 | `0036_order_doc_no`                | เลขที่ PO ออกโดยฐานข้อมูล WS-CM-0092 เรียงต่อกันต่อสาขา — ของเดิมเป็นเลขสุ่มสี่หลักที่ซ้ำกันได้ และเมื่อซ้ำจะเขียนทับ PO ใบเดิมทั้งใบ พร้อมแก้เลขย้อนหลังให้ใบที่ใช้เลขสุ่มไปแล้ว                                                                                                                                                    | ต่ำ. เปลี่ยนเฉพาะใบที่เป็น WS-NEW-% ถ้าไม่มีก็ไม่ทำอะไร                                     |
 | `0037_wholesale_status_capability` | สิทธิ์ใหม่ "ขายส่ง: เปลี่ยนสถานะ PO" ตั้งต้นเปิดให้ทุกบทบาทที่เคยทำได้ จึงไม่มีใครเสียสิทธิ์ และเขียน `reset_permissions_to_defaults()` ใหม่ให้มีคีย์ครบ                                                                                                                                                                             | ต่ำ. ไม่ลบสิทธิ์เดิม                                                                        |
+| `0040_order_soft_delete`           | ลบ PO ขายส่งได้ — แบบย้ายเข้าถังขยะ เดิมโมดูลขายส่งไม่มีการลบเลย PO ที่เปิดผิดจึงค้างอยู่ในรายการตลอดไป PO ที่ลบยังเก็บเลขที่ไว้ (ไม่ถูกแจกซ้ำ) เก็บรายการ/การคืนของ/การรับเงินไว้ครบ และคืนสินค้าเข้าสต็อกให้ กู้คืนได้จากถังขยะ พร้อมสิทธิ์ใหม่ "ขายส่ง: ลบ PO" (ตั้งต้น แอดมิน/ผู้บริหาร/พนักงานขาย) และ "ขายส่ง: กู้คืน PO จากถังขยะ" (ตั้งต้น แอดมิน/ผู้บริหาร) | ต่ำ. เพิ่มคอลัมน์ที่เป็น NULL ได้ ไม่แตะข้อมูลเดิม                                          |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 
@@ -227,6 +229,6 @@ In this order, as an admin:
   slips had; deliberately left for now, since nobody reported it during the
   trial. `components/wholesale/WholesaleDetail.tsx` is the one remaining caller
   that stores `File.name`.
-- **No RLS/e2e coverage yet** for `expense_attachments`, the soft-delete columns,
+- **No RLS/e2e coverage yet** for `expense_attachments`, `tickets`’ soft-delete columns,
   `ticket_items.interested` or the lock trigger. The lock trigger was proved by
   hand against a real database, inside a transaction that was rolled back.
