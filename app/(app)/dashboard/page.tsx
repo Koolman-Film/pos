@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { ticketTotal } from '@/lib/domain/tickets';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
-import { appointmentDate, Dashboard } from '@/components/dashboard/Dashboard';
+import { Dashboard } from '@/components/dashboard/Dashboard';
 import type {
   PendingApprovals,
   RecentJob,
@@ -25,6 +25,7 @@ import {
   type TrendTicket,
 } from '@/components/dashboard/receivables';
 import type { CalendarTicket } from '@/components/dashboard/JobCalendar';
+import { buildAppointments } from '@/components/dashboard/appointments';
 
 // Aggregated server-side per the plan's Task 13, Step 5 model: fetch the raw rows
 // (RLS already scopes them to the caller's shops), map them into the domain
@@ -373,16 +374,8 @@ export default async function DashboardPage({
   // The window is measured on วันที่นัด, not on the drop-off: a รอส่งมอบ job
   // came in days ago and is due back this week, and filtering on the old date
   // would keep the day it actually needs someone off the card entirely.
-  /*
-    One ticket can be several appointments.
-
-    The booking is one. A งานแก้ is another — the car comes back on its own day
-    — and every recorded เซอร์วิส visit is another again. They used to be
-    invisible here: the card read the ticket's own dates, which are in the past
-    by the time a car returns, so the day somebody actually has to be ready for
-    it never appeared. Each is built as its own row carrying its own dates, so
-    the existing grouping puts it under its own การนัดหมาย heading.
-  */
+  // One ticket can be several appointments — the booking, a งานแก้, and every
+  // recorded เซอร์วิส visit. See components/dashboard/appointments.ts.
   const visitsByTicket = new Map<string, { from: string; to: string }[]>();
   for (const v of visitRows ?? []) {
     const list = visitsByTicket.get(v.ticket_id) ?? [];
@@ -390,63 +383,7 @@ export default async function DashboardPage({
     visitsByTicket.set(v.ticket_id, list);
   }
 
-  type Appointment = { t: (typeof shopTickets)[number]; appt: Date | null; row: UpcomingTicket };
-  const asDate = (v: string) => (v ? new Date(`${v}T00:00:00+07:00`) : null);
-
-  const appointments: Appointment[] = [];
-  for (const t of shopTickets) {
-    const base: UpcomingTicket = {
-      id: t.id,
-      customer: t.customer,
-      brand: t.brand,
-      model: t.model,
-      plate: t.plate,
-      serviceType: t.serviceType,
-      categories: t.categories,
-      products: t.products,
-      dropOff: t.dropOff as Date,
-      status: t.status,
-      pickup: t.pickup,
-    };
-    appointments.push({ t, appt: appointmentDate(t), row: base });
-
-    const rework = t.extras['แก้งาน'];
-    if (rework?.checked) {
-      const from = asDate(String(rework.receivedAt ?? ''));
-      const to = asDate(String(rework.deliveredAt ?? ''));
-      if (from || to) {
-        const category = String(rework.category ?? '').trim();
-        appointments.push({
-          t,
-          appt: appointmentDate({ status: t.status, dropOff: from, pickup: to }),
-          row: {
-            ...base,
-            serviceType: 'แก้งาน',
-            categories: category ? [category] : t.categories,
-            products: [String(rework.detail ?? '').trim()].filter(Boolean),
-            dropOff: (from ?? to) as Date,
-            pickup: to,
-          },
-        });
-      }
-    }
-
-    for (const v of visitsByTicket.get(t.id) ?? []) {
-      const from = asDate(v.from);
-      const to = asDate(v.to);
-      if (!from && !to) continue;
-      appointments.push({
-        t,
-        appt: appointmentDate({ status: t.status, dropOff: from, pickup: to }),
-        row: {
-          ...base,
-          serviceType: 'Service',
-          dropOff: (from ?? to) as Date,
-          pickup: to,
-        },
-      });
-    }
-  }
+  const appointments = buildAppointments(shopTickets, visitsByTicket);
 
   const upcoming: UpcomingTicket[] = appointments
     .filter(({ appt }) => appt && appt >= windowStart && appt <= windowEnd)

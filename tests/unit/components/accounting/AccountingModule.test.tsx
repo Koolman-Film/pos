@@ -306,7 +306,11 @@ describe('AccountingModule — แก้ไขได้ทุกหัวข้�
     source: 'บัญชีธนาคารสาขา',
     amount: 12000,
     status: 'จ่ายแล้ว',
-    dateObj: new Date('2026-08-20T00:00:00+07:00'),
+    // Today, not a fixed date. The module defaults to รายเดือน on the current
+    // month, so a hard-coded August date put the row outside the window the
+    // moment September began, and these two tests started failing at midnight
+    // on something neither of them is about.
+    dateObj: new Date(),
     paidForFinnix: false,
   };
   const SHOPS = [
@@ -394,7 +398,9 @@ describe('AccountingModule — รายการรับ-จ่ายเงิ
 
   it('shows the top-up as money in and the expense as money out', async () => {
     await openPanel();
-    const panel = screen.getByText(/รายการที่รับ-จ่ายจากเงินสดย่อย/).closest('.card') as HTMLElement;
+    const panel = screen
+      .getByText(/รายการที่รับ-จ่ายจากเงินสดย่อย/)
+      .closest('.card') as HTMLElement;
     expect(within(panel).getByText('เติมต้นเดือน')).toBeInTheDocument();
     expect(within(panel).getByText('เติมแก๊ส')).toBeInTheDocument();
     expect(within(panel).getByText(/\+5,000\.00/)).toBeInTheDocument();
@@ -405,7 +411,9 @@ describe('AccountingModule — รายการรับ-จ่ายเงิ
     // 5,000 in − 520 out. Summing them as one pile would say 5,520, which is
     // neither what was spent nor what the balance moved by.
     await openPanel();
-    const panel = screen.getByText(/รายการที่รับ-จ่ายจากเงินสดย่อย/).closest('.card') as HTMLElement;
+    const panel = screen
+      .getByText(/รายการที่รับ-จ่ายจากเงินสดย่อย/)
+      .closest('.card') as HTMLElement;
     expect(within(panel).getByText('เคลื่อนไหวสุทธิ')).toBeInTheDocument();
     expect(within(panel).getByText(/\+4,480\.00/)).toBeInTheDocument();
     expect(within(panel).getByText(/เติมเข้า 5,000\.00/)).toBeInTheDocument();
