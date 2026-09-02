@@ -3,7 +3,7 @@
 import { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
-import { fmt, fmtThaiDate, thaiBahtText } from '@/lib/domain/format';
+import { fmt, fmtThaiDate, hhmm, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
@@ -421,16 +421,36 @@ export function PrintJobSheet({
    * asking for the same two dates a second time. Rework wins when both are on:
    * the car is in front of the technician to be redone.
    */
-  function visitDates(cat: string): { label: string; from: string; to: string } | null {
+  function visitDates(cat: string): {
+    label: string;
+    from: string;
+    to: string;
+    fromTime: string;
+    toTime: string;
+  } | null {
     if (reworkOn(cat)) {
       const from = String(t.extras?.['แก้งาน']?.receivedAt ?? '');
       const to = String(t.extras?.['แก้งาน']?.deliveredAt ?? '');
-      if (from || to) return { label: 'งานแก้', from, to };
+      if (from || to) {
+        return {
+          label: 'งานแก้',
+          from,
+          to,
+          fromTime: String(t.extras?.['แก้งาน']?.receivedTime ?? ''),
+          toTime: String(t.extras?.['แก้งาน']?.deliveredTime ?? ''),
+        };
+      }
     }
     if (t.extras?.['Service']?.checked) {
       const visit = t.serviceVisits?.[0];
       if (visit && (visit.receivedAt || visit.deliveredAt)) {
-        return { label: 'เซอร์วิส', from: visit.receivedAt, to: visit.deliveredAt };
+        return {
+          label: 'เซอร์วิส',
+          from: visit.receivedAt,
+          to: visit.deliveredAt,
+          fromTime: visit.receivedTime ?? '',
+          toTime: visit.deliveredTime ?? '',
+        };
       }
     }
     return null;
@@ -632,7 +652,15 @@ export function PrintJobSheet({
    */
   function jobDates(cat = '') {
     const visit = visitDates(cat);
-    const day = (v: string) => (v ? fmtThaiDate(new Date(`${v}T00:00:00`)) : '-');
+    // Date + the clock the shop wrote, so the sheet says when the customer is
+    // actually due rather than only which day.
+    const day = (v: string, time = '') =>
+      v ? `${fmtThaiDate(new Date(`${v}T00:00:00`))}${time ? ' ' + time : ''}` : '-';
+    const jobDay = (d: Date | null | undefined) => {
+      if (!d) return '-';
+      const clock = hhmm(d);
+      return `${fmtThaiDate(d)}${clock ? ' ' + clock : ''}`;
+    };
     return (
       <div
         style={{
@@ -653,7 +681,7 @@ export function PrintJobSheet({
           }}
         >
           วันที่รับงาน{visit ? ` (${visit.label})` : ''}:{' '}
-          {visit ? day(visit.from) : fmtThaiDate(t.dropOffDateObj)}
+          {visit ? day(visit.from, visit.fromTime) : jobDay(t.dropOffDateObj)}
         </span>
         <span
           style={{
@@ -666,11 +694,11 @@ export function PrintJobSheet({
           }}
         >
           วันที่ส่งงาน{visit ? ` (${visit.label})` : ''}:{' '}
-          {visit ? day(visit.to) : fmtThaiDate(t.pickupDateObj)}
+          {visit ? day(visit.to, visit.toTime) : jobDay(t.pickupDateObj)}
         </span>
         {visit && (
           <span style={{ width: '100%', textAlign: 'right', fontSize: 10, color: '#777' }}>
-            งานเดิม: รับ {fmtThaiDate(t.dropOffDateObj)} &middot; ส่ง {fmtThaiDate(t.pickupDateObj)}
+            งานเดิม: รับ {jobDay(t.dropOffDateObj)} &middot; ส่ง {jobDay(t.pickupDateObj)}
           </span>
         )}
       </div>
@@ -1672,6 +1700,30 @@ export function PrintJobSheet({
     */
     const isClaim = printMode === 'claim';
     const pol = insurancePolicy;
+
+    /*
+      Which dates head the sheet.
+
+      A ใบเซอร์วิส takes them from its visit. A ใบเคลมประกัน takes them from the
+      CLAIM (migration 0041) — it used to inherit the synthesised visit built
+      from the ticket, so a claim handled today printed the day the film was
+      fitted, which could be a year earlier. A claim recorded before 0041 has
+      no dates of its own and prints blank lines to write on, which is what the
+      paper form did anyway.
+    */
+    const claimDates = isClaim ? insuranceClaim : null;
+    const visitReceivedAt = (isClaim ? claimDates?.receivedAt : v?.receivedAt) ?? '';
+    const visitReceivedTime = (isClaim ? claimDates?.receivedTime : v?.receivedTime) ?? '';
+    const visitDeliveredAt = (isClaim ? claimDates?.deliveredAt : v?.deliveredAt) ?? '';
+    const visitDeliveredTime = (isClaim ? claimDates?.deliveredTime : v?.deliveredTime) ?? '';
+
+    const stamp = (d: Date | null | undefined) => {
+      if (!d) return '';
+      const clock = hhmm(d);
+      return `${fmtThaiDate(d)}${clock ? ' ' + clock : ''}`;
+    };
+    const jobReceived = stamp(t.dropOffDateObj);
+    const jobDelivered = stamp(t.pickupDateObj);
     const usedBig = pol?.claims.reduce((n, c) => n + Number(c.bigUsed || 0), 0) ?? 0;
     const usedSmall = pol?.claims.reduce((n, c) => n + Number(c.smallUsed || 0), 0) ?? 0;
     const mark = (on: boolean) => (
@@ -1840,11 +1892,31 @@ export function PrintJobSheet({
               marginBottom: 10,
             }}
           >
-            {line('วันรับรถ', v?.receivedAt ? fmtThaiDate(new Date(v.receivedAt)) : '', 100)}
-            {line('เวลารับรถ', v?.receivedTime ?? '', 60)}
-            {line('วันส่งมอบรถ', v?.deliveredAt ? fmtThaiDate(new Date(v.deliveredAt)) : '', 100)}
-            {line('เวลาส่งมอบรถ', v?.deliveredTime ?? '', 60)}
+            {line('วันรับรถ', visitReceivedAt ? fmtThaiDate(new Date(visitReceivedAt)) : '', 100)}
+            {line('เวลารับรถ', visitReceivedTime, 60)}
+            {line(
+              'วันส่งมอบรถ',
+              visitDeliveredAt ? fmtThaiDate(new Date(visitDeliveredAt)) : '',
+              100,
+            )}
+            {line('เวลาส่งมอบรถ', visitDeliveredTime, 60)}
           </div>
+
+          {/*
+            งานเดิม — the job this sheet hangs off, printed small underneath.
+
+            The row above is THIS visit: the day the customer brought the car in
+            for the เซอร์วิส or the เคลม. How long ago the film was fitted is a
+            different question, and the first one anyone assessing a warranty
+            asks, so it keeps its place on the sheet — labelled, and no longer
+            impersonating the visit’s own dates.
+          */}
+          {(jobReceived || jobDelivered) && (
+            <div style={{ fontSize: 10, color: '#555', marginTop: -6, marginBottom: 10 }}>
+              {isClaim ? 'งานติดตั้งเดิม' : 'งานเดิม'}: รับ {jobReceived || '-'} · ส่ง{' '}
+              {jobDelivered || '-'}
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             {/* Same drawings as the ใบเช็ครถ — the technician marks the car up

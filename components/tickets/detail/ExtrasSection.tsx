@@ -269,7 +269,10 @@ export function ExtrasSection({
                       </select>
                     </div>
                   )}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                  {/* Times as well as dates, so the ใบงานติดตั้ง and the
+                      dashboard say when the customer is actually due — the
+                      same pair a เซอร์วิส visit records. */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
                     <div>
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                         วันที่รับงาน (งานแก้)
@@ -284,6 +287,18 @@ export function ExtrasSection({
                     </div>
                     <div>
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        เวลารับงาน
+                      </label>
+                      <TimeSelect
+                        value={(ex.receivedTime as string) || ''}
+                        onChange={(v) => updateExtraDetail(name, 'receivedTime', v)}
+                        ariaLabel="เวลารับงานแก้"
+                        placeholder="เวลา..."
+                        className="field w-full text-sm px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                         วันที่ส่งงาน (งานแก้)
                       </label>
                       <input
@@ -291,6 +306,18 @@ export function ExtrasSection({
                         aria-label="วันที่ส่งงานแก้"
                         value={(ex.deliveredAt as string) || ''}
                         onChange={(e) => updateExtraDetail(name, 'deliveredAt', e.target.value)}
+                        className="field w-full text-sm px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        เวลาส่งงาน
+                      </label>
+                      <TimeSelect
+                        value={(ex.deliveredTime as string) || ''}
+                        onChange={(v) => updateExtraDetail(name, 'deliveredTime', v)}
+                        ariaLabel="เวลาส่งงานแก้"
+                        placeholder="เวลา..."
                         className="field w-full text-sm px-3 py-2"
                       />
                     </div>

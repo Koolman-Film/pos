@@ -45,6 +45,8 @@ export const DEFAULT_STATUSES: CalendarStatus[] = [
 export const VISIT_STATUSES: CalendarStatus[] = [
   { key: 'แก้งาน', short: 'แก้งาน', dot: '#B23A48' },
   { key: 'Service', short: 'Service', dot: '#2563EB' },
+  { key: 'เคลมประกัน', short: 'เคลมประกัน', dot: '#7C3AED' },
+  { key: 'รถสไลด์', short: 'รถสไลด์', dot: '#0F766E' },
 ];
 
 function getStatus(statuses: CalendarStatus[], key: string): CalendarStatus {

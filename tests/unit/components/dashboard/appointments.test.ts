@@ -97,3 +97,98 @@ describe('buildAppointments — หนึ่งวัน หนึ่งงา�
     expect(kinds(out)).toEqual(['']);
   });
 });
+
+/**
+ * เวลา และการนัดหมายชนิดใหม่.
+ *
+ * The card could only ever say which DAY: every visit was read as midnight, so a
+ * เซอร์วิส at 16:00 and one at 09:00 looked identical, and a เคลมประกัน or a
+ * รถสไลด์ appeared nowhere at all even though both are days the customer and the
+ * shop have to be ready.
+ */
+describe('buildAppointments — เวลา และชนิดการนัดหมาย', () => {
+  it('carries the clock a เซอร์วิส was booked for, not midnight', () => {
+    const [visit] = buildAppointments(
+      [ticket()],
+      new Map([['JT-CM-00164', [{ from: '2026-09-05', to: '', fromTime: '16:00' }]]]),
+    );
+    expect(visit.appt).toEqual(new Date('2026-09-05T16:00:00+07:00'));
+  });
+
+  it('falls back to midnight when no time was written', () => {
+    // Blank renders as no time at all rather than "00:00" — the shop often takes
+    // a car in without knowing when it goes back.
+    const [visit] = buildAppointments(
+      [ticket()],
+      new Map([['JT-CM-00164', [{ from: '2026-09-05', to: '' }]]]),
+    );
+    expect(visit.appt).toEqual(new Date('2026-09-05T00:00:00+07:00'));
+  });
+
+  it('ignores a malformed time rather than producing an Invalid Date', () => {
+    // The old ManagedDropdown left "16.00" and "17.0" in the shop's time list.
+    const [visit] = buildAppointments(
+      [ticket()],
+      new Map([['JT-CM-00164', [{ from: '2026-09-05', to: '', fromTime: '16.00' }]]]),
+    );
+    expect(visit.appt).toEqual(new Date('2026-09-05T00:00:00+07:00'));
+  });
+
+  it('lists a เคลมประกัน as its own appointment, with what is being claimed', () => {
+    const out = buildAppointments(
+      [ticket()],
+      new Map(),
+      new Map([
+        [
+          'JT-CM-00164',
+          [{ from: '2026-09-04', to: '2026-09-04', fromTime: '10:00', detail: 'กันชนหน้า' }],
+        ],
+      ]),
+    );
+    const claim = out.find((a) => a.row.serviceType === 'เคลมประกัน')!;
+    expect(claim.appt).toEqual(new Date('2026-09-04T10:00:00+07:00'));
+    expect(claim.row.products).toEqual(['กันชนหน้า']);
+  });
+
+  it('lists every รถสไลด์ leg, and does NOT let one stand in for the booking', () => {
+    // A leg is the truck moving the car, not the work being done to it: a car
+    // collected at 09:00 and fitted the same day is two things to be ready for.
+    const out = buildAppointments(
+      [
+        ticket({
+          extras: {
+            รถสไลด์: {
+              checked: true,
+              slideType: 'Showroom',
+              legs: [
+                { from: 'โชว์รูม', to: 'ร้าน', date: '2026-09-01', time: '09:00' },
+                { from: 'ร้าน', to: 'บ้านลูกค้า', date: '2026-09-02', time: '17:00' },
+              ],
+            },
+          },
+        }),
+      ],
+      new Map(),
+    );
+    const legs = out.filter((a) => a.row.serviceType === 'รถสไลด์');
+    expect(legs).toHaveLength(2);
+    expect(legs[0].row.products).toEqual(['ขาที่ 1 โชว์รูม → ร้าน']);
+    expect(legs[1].appt).toEqual(new Date('2026-09-02T17:00:00+07:00'));
+    // The booking on the 1st survives alongside the leg on the 1st.
+    expect(out.some((a) => a.row.serviceType === '')).toBe(true);
+  });
+
+  it('skips a รถสไลด์ leg with no date rather than dropping it on today', () => {
+    const out = buildAppointments(
+      [
+        ticket({
+          extras: {
+            รถสไลด์: { checked: true, slideType: 'Walk-in', legs: [{ date: '', time: '09:00' }] },
+          },
+        }),
+      ],
+      new Map(),
+    );
+    expect(out.filter((a) => a.row.serviceType === 'รถสไลด์')).toHaveLength(0);
+  });
+});

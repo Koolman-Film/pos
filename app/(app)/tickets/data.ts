@@ -403,6 +403,10 @@ type InsurancePolicyRow = {
         small_used: number;
         detail: string;
         technician: string;
+        received_at: string | null;
+        received_time: string;
+        delivered_at: string | null;
+        delivered_time: string;
       }[]
     | null;
 };
@@ -410,7 +414,8 @@ type InsurancePolicyRow = {
 const POLICY_SELECT =
   'id, ticket_id, plate, plan_name, price, big_pieces, small_pieces, terms, ' +
   'sold_at, starts_at, ends_at, notes, ' +
-  'insurance_claims(id, claimed_at, big_used, small_used, detail, technician)';
+  'insurance_claims(id, claimed_at, big_used, small_used, detail, technician, ' +
+  'received_at, received_time, delivered_at, delivered_time)';
 
 function toPolicy(p: InsurancePolicyRow): InsurancePolicy {
   return {
@@ -434,6 +439,10 @@ function toPolicy(p: InsurancePolicyRow): InsurancePolicy {
         smallUsed: Number(c.small_used || 0),
         detail: c.detail ?? '',
         technician: c.technician ?? '',
+        receivedAt: c.received_at ?? '',
+        receivedTime: c.received_time ?? '',
+        deliveredAt: c.delivered_at ?? '',
+        deliveredTime: c.delivered_time ?? '',
       }))
       .sort((a, b) => (a.claimedAt < b.claimedAt ? 1 : -1)),
   };

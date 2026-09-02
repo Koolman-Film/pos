@@ -277,6 +277,10 @@ export type Database = {
       }
       insurance_claims: {
         Row: {
+          delivered_at: string | null
+          delivered_time: string
+          received_at: string | null
+          received_time: string
           big_used: number
           claimed_at: string
           created_at: string
@@ -288,6 +292,10 @@ export type Database = {
           technician: string
         }
         Insert: {
+          delivered_at?: string | null
+          delivered_time?: string
+          received_at?: string | null
+          received_time?: string
           big_used?: number
           claimed_at?: string
           created_at?: string
@@ -299,6 +307,10 @@ export type Database = {
           technician?: string
         }
         Update: {
+          delivered_at?: string | null
+          delivered_time?: string
+          received_at?: string | null
+          received_time?: string
           big_used?: number
           claimed_at?: string
           created_at?: string

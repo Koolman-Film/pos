@@ -24,11 +24,18 @@ export function TimeSelect({
   onChange,
   placeholder = 'เลือกเวลา...',
   className = 'field w-full text-sm px-3 py-2',
+  ariaLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   className?: string;
+  /**
+   * Overrides the placeholder as the accessible name. Needed wherever several
+   * of these sit on one form — four "เวลา..." selects in a row are announced
+   * identically and cannot be told apart, by a screen reader or by a test.
+   */
+  ariaLabel?: string;
 }) {
   // A ticket saved before this change can hold a time outside the window (08:00,
   // or one of the malformed entries). Keeping it in the list means opening such
@@ -43,7 +50,7 @@ export function TimeSelect({
       onChange={(e) => onChange(e.target.value)}
       // The visible cue for this control is its placeholder option; without this
       // the select is announced as unnamed.
-      aria-label={placeholder}
+      aria-label={ariaLabel ?? placeholder}
       className={className}
     >
       <option value="" disabled>

@@ -6,10 +6,9 @@ import { useMemo, useState } from 'react';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
-import { fmtThaiDate, hhmm } from '@/lib/domain/format';
+import { fmtThaiDate } from '@/lib/domain/format';
 import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { itemNetPrice } from '@/lib/domain/tickets';
-import { dateInputValue } from '@/lib/domain/now';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
 import { PrintJobSheet, TAX_DOC_TYPE, docPrefixFor, type PrintMode } from './PrintJobSheet';
@@ -431,13 +430,15 @@ export function TicketDetail({
     setPrintVisit({
       visitNo: 0,
       plate: policy.plate || t.plate,
-      // The dates of the job this warranty came from — how long ago the film
-      // was fitted is the first thing anyone assessing a claim asks. The date
-      // of the claim itself prints at the top of the sheet.
-      receivedAt: dateInputValue(t.dropOffDateObj),
-      receivedTime: hhmm(t.dropOffDateObj),
-      deliveredAt: dateInputValue(t.pickupDateObj),
-      deliveredTime: hhmm(t.pickupDateObj),
+      // Blank on purpose. The sheet takes its วันรับรถ / วันส่งมอบรถ from the
+      // CLAIM now (migration 0041) — this synthesised visit used to supply the
+      // ticket’s own dates there, so a claim handled today printed the day the
+      // film was fitted. Those install dates still print, in their own labelled
+      // line, and the sheet reads them straight off the ticket.
+      receivedAt: '',
+      receivedTime: '',
+      deliveredAt: '',
+      deliveredTime: '',
       salesBy: t.createdBy || currentUserName,
       // The ticket names the QC for the install itself; a later visit only
       // answers for that visit.
@@ -483,6 +484,10 @@ export function TicketDetail({
         smallUsed: c.smallUsed,
         detail: c.detail,
         technician: c.technician,
+        receivedAt: c.receivedAt || '',
+        receivedTime: c.receivedTime || '',
+        deliveredAt: c.deliveredAt || '',
+        deliveredTime: c.deliveredTime || '',
       })),
     });
     if (result.ok) router.refresh();
