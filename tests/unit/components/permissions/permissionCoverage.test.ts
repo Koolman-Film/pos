@@ -25,6 +25,25 @@ import { NAV_ITEMS as SIDEBAR_NAV } from '@/components/layout/navItems';
  */
 
 const ROOTS = ['app', 'components', 'lib'];
+
+/**
+ * The migration that a "รีเซ็ตค่าเริ่มต้น" actually runs today: the LAST one
+ * that rebuilds the function. Naming a specific file here goes stale the
+ * moment somebody rebuilds it again — and a guard reading a file nothing runs
+ * any more is worse than no guard, because it still passes.
+ */
+const NEWEST_DEFAULTS = (() => {
+  const dir = 'supabase/migrations';
+  const rebuilds = readdirSync(dir)
+    .filter((n) => n.endsWith('.sql'))
+    .filter((n) =>
+      readFileSync(join(dir, n), 'utf8').includes(
+        'create or replace function reset_permissions_to_defaults',
+      ),
+    )
+    .sort();
+  return join(dir, rebuilds[rebuilds.length - 1]);
+})();
 const CODE = /\.(ts|tsx)$/;
 
 function sourceFiles(dir: string): string[] {
@@ -95,7 +114,7 @@ describe('reset_permissions_to_defaults keeps every key', () => {
    * Always the NEWEST migration that rebuilds the function: that is the one a
    * reset actually runs.
    */
-  const sql = readFileSync('supabase/migrations/0037_wholesale_status_capability.sql', 'utf8');
+  const sql = readFileSync(NEWEST_DEFAULTS, 'utf8');
 
   it('seeds every module', () => {
     for (const nav of declared.nav) {
@@ -110,8 +129,13 @@ describe('reset_permissions_to_defaults keeps every key', () => {
   });
 
   it('seeds every capability', () => {
+    // Named anywhere in the function is enough. A key can be granted through the
+    // admin+exec bulk list — `('list.delete')` — or spelled out per role when the
+    // defaults differ, as `('admin','module_capability','list.unlock',true)`.
+    // What must never happen is a key the screen offers going unmentioned here,
+    // because a reset would then leave it ungoverned.
     for (const key of declared.capability) {
-      expect(sql).toContain(`('${key}')`);
+      expect(sql, key).toContain(`'${key}'`);
     }
   });
 });

@@ -111,6 +111,17 @@ export type InsuranceClaim = {
   smallUsed: number;
   detail: string;
   technician: string;
+  /**
+   * วันรับรถ/ส่งมอบรถ ของการเคลมครั้งนี้ (migration 0041).
+   *
+   * The claim’s OWN visit, not the job the warranty came from. Date and a
+   * free-text time kept apart, the same shape `ServiceVisit` uses: the shop
+   * often knows when a car arrived long before it knows when it goes back.
+   */
+  receivedAt?: string;
+  receivedTime?: string;
+  deliveredAt?: string;
+  deliveredTime?: string;
 };
 
 /**

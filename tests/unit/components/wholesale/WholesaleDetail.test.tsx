@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 // WholesaleList navigates with useRouter(); jsdom has no app-router context.
 // Test-environment concern only.
@@ -214,5 +215,104 @@ describe('WholesaleList — เตือนเมื่อตัดสต็อ�
   it('says nothing when everything deducted', () => {
     render(<WholesaleList {...listProps} canDo={() => true} />);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * สต็อกของสาขาที่เลือก และการลบ PO.
+ *
+ * Two defects found in the first real week of the wholesale module: a PO could
+ * not be deleted at all, and a new PO moved to another branch was offered no
+ * products, because the stock it was handed was pinned to whichever branch the
+ * draft happened to open on.
+ */
+describe('WholesaleDetail — สาขา และ ถังขยะ', () => {
+  const shops = [
+    { id: 'cm', name: 'FINNIX FILM เชียงใหม่' },
+    { id: 'north', name: 'Finnix North' },
+  ];
+  const stock = [
+    { id: 1, name: 'ฟิล์ม CT 40%', shortName: 'CT40', shop: 'cm', qty: 5, sellPrice: 900 },
+    { id: 2, name: 'ฟิล์มกันรอย', shortName: 'PPF', shop: 'north', qty: 20, sellPrice: 1500 },
+  ];
+  const draft = { ...order, id: 'WS-NEW-1234', shop: 'cm', items: [] } as unknown as WsOrder;
+
+  it('offers the chosen branch’s stock, not only the branch the draft opened on', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={draft} isNew shops={shops} stock={stock} canDo={() => true} />);
+
+    await user.click(screen.getByText(/เพิ่มรายการสินค้า|เพิ่มสินค้า/));
+    const picker = screen.getByLabelText('สินค้าในรายการ');
+    expect(within(picker).getByText(/ฟิล์ม CT 40%/)).toBeInTheDocument();
+    expect(within(picker).queryByText(/ฟิล์มกันรอย/)).not.toBeInTheDocument();
+
+    // Switch to the wholesale-only branch: its shelf is what the PO now sells.
+    await user.selectOptions(screen.getByLabelText('สาขาที่เปิด PO'), 'north');
+    expect(
+      within(screen.getByLabelText('สินค้าในรายการ')).getByText(/ฟิล์มกันรอย/),
+    ).toBeInTheDocument();
+  });
+
+  it('drops a product the new branch does not carry rather than selling from an empty shelf', async () => {
+    const user = userEvent.setup();
+    const withItem = {
+      ...draft,
+      items: [{ name: 'ฟิล์ม CT 40%', qty: 2, listPrice: 900, requestedPrice: 900, reason: '' }],
+    } as unknown as WsOrder;
+    render(
+      <WholesaleDetail order={withItem} isNew shops={shops} stock={stock} canDo={() => true} />,
+    );
+
+    await user.selectOptions(screen.getByLabelText('สาขาที่เปิด PO'), 'north');
+    // Kept as a line (the quantity is still wanted) but no longer claiming to
+    // sell a product that branch has never stocked.
+    expect((screen.getByLabelText('สินค้าในรายการ') as HTMLSelectElement).value).toBe('');
+  });
+
+  it('offers ลบ PO only on a saved PO, and only with the capability', () => {
+    const onDeleteOrder = vi.fn(async () => ({ ok: true }));
+    const { rerender } = render(
+      <WholesaleDetail order={order} canDo={() => true} onDeleteOrder={onDeleteOrder} />,
+    );
+    expect(screen.getByText('ลบ PO นี้')).toBeInTheDocument();
+
+    // A draft has nothing to delete — ยกเลิก already throws it away.
+    rerender(
+      <WholesaleDetail order={order} isNew canDo={() => true} onDeleteOrder={onDeleteOrder} />,
+    );
+    expect(screen.queryByText('ลบ PO นี้')).not.toBeInTheDocument();
+
+    rerender(<WholesaleDetail order={order} canDo={() => false} onDeleteOrder={onDeleteOrder} />);
+    expect(screen.queryByText('ลบ PO นี้')).not.toBeInTheDocument();
+  });
+
+  it('warns that money was already received before deleting', async () => {
+    const user = userEvent.setup();
+    const paidOrder = {
+      ...order,
+      payments: [{ amount: 4000, method: 'เงินสด', date: '', attachments: [] }],
+    } as unknown as WsOrder;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const onDeleteOrder = vi.fn(async () => ({ ok: true }));
+
+    render(<WholesaleDetail order={paidOrder} canDo={() => true} onDeleteOrder={onDeleteOrder} />);
+    await user.click(screen.getByText('ลบ PO นี้'));
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('4,000.00'));
+    // Declined at the prompt → nothing is deleted.
+    expect(onDeleteOrder).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it('surfaces a refused delete instead of pretending it worked', async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onDeleteOrder = vi.fn(async () => ({ ok: false, error: 'ไม่มีสิทธิ์ลบ PO' }));
+
+    render(<WholesaleDetail order={order} canDo={() => true} onDeleteOrder={onDeleteOrder} />);
+    await user.click(screen.getByText('ลบ PO นี้'));
+
+    expect(await screen.findByText('ไม่มีสิทธิ์ลบ PO')).toBeInTheDocument();
+    confirm.mockRestore();
   });
 });

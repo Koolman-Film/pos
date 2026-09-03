@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { ticketTotal } from '@/lib/domain/tickets';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
-import { appointmentDate, Dashboard } from '@/components/dashboard/Dashboard';
+import { Dashboard } from '@/components/dashboard/Dashboard';
 import type {
   PendingApprovals,
   RecentJob,
@@ -25,6 +25,22 @@ import {
   type TrendTicket,
 } from '@/components/dashboard/receivables';
 import type { CalendarTicket } from '@/components/dashboard/JobCalendar';
+import { buildAppointments, type VisitDates } from '@/components/dashboard/appointments';
+
+/**
+ * การนัดหมายที่ไม่ใช่การจองครั้งแรก — one place, read by the calendar and by
+ * the counts beside it.
+ *
+ * These are EVENTS on a job that already has a status, so they are counted
+ * apart from the status bars rather than folded into them; the colours match
+ * `VISIT_STATUSES` in JobCalendar so the same thing is the same colour in both.
+ */
+const VISIT_KINDS = [
+  ['แก้งาน', 'แก้งาน', '#B23A48'],
+  ['Service', 'Service', '#2563EB'],
+  ['เคลมประกัน', 'เคลมประกัน', '#7C3AED'],
+  ['รถสไลด์', 'รถสไลด์', '#0F766E'],
+] as const;
 
 // Aggregated server-side per the plan's Task 13, Step 5 model: fetch the raw rows
 // (RLS already scopes them to the caller's shops), map them into the domain
@@ -54,6 +70,7 @@ export default async function DashboardPage({
     { data: shopRows },
     { data: statusRows },
     { data: policyRows },
+    { data: claimRows },
   ] = await Promise.all([
     supabase
       .from('tickets')
@@ -68,7 +85,10 @@ export default async function DashboardPage({
       .from('orders')
       .select(
         'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount)',
-      ),
+      )
+      // Deleted POs (migration 0040) are out of the wholesale figures here for
+      // the same reason deleted tickets are out of the ticket ones above.
+      .is('deleted_at', null),
     supabase.from('wholesale_customers').select('id, name'),
     supabase
       .from('expenses')
@@ -80,7 +100,7 @@ export default async function DashboardPage({
     // its own dates, and belongs on the 7-day card beside the bookings.
     supabase
       .from('service_visits')
-      .select('ticket_id, visit_no, received_at, delivered_at')
+      .select('ticket_id, visit_no, received_at, received_time, delivered_at, delivered_time')
       // Bounded, unlike the ticket read beside it: visits accumulate several
       // per job and this page loads on every visit to the app. A year either
       // side covers the calendar anyone actually pages to; older visits stay
@@ -100,6 +120,14 @@ export default async function DashboardPage({
       .from('insurance_policies')
       .select('id, ticket_id, plate, plan_name, price, sold_at, ends_at')
       .order('ends_at', { ascending: true }),
+    // การเคลมที่มีวันนัด (migration 0041). Bounded like the visits above: a
+    // claim is an appointment only while it is near, and the history lives on
+    // its policy.
+    supabase
+      .from('insurance_claims')
+      .select('policy_id, received_at, received_time, delivered_at, delivered_time, detail')
+      .not('received_at', 'is', null)
+      .gte('received_at', daysAgoValue(365)),
   ]);
 
   // ---- Shop options for the filter (names + access) ----
@@ -370,80 +398,45 @@ export default async function DashboardPage({
   // The window is measured on วันที่นัด, not on the drop-off: a รอส่งมอบ job
   // came in days ago and is due back this week, and filtering on the old date
   // would keep the day it actually needs someone off the card entirely.
-  /*
-    One ticket can be several appointments.
-
-    The booking is one. A งานแก้ is another — the car comes back on its own day
-    — and every recorded เซอร์วิส visit is another again. They used to be
-    invisible here: the card read the ticket's own dates, which are in the past
-    by the time a car returns, so the day somebody actually has to be ready for
-    it never appeared. Each is built as its own row carrying its own dates, so
-    the existing grouping puts it under its own การนัดหมาย heading.
-  */
-  const visitsByTicket = new Map<string, { from: string; to: string }[]>();
+  // One ticket can be several appointments — the booking, a งานแก้, and every
+  // recorded เซอร์วิส visit. See components/dashboard/appointments.ts.
+  const visitsByTicket = new Map<string, VisitDates[]>();
   for (const v of visitRows ?? []) {
     const list = visitsByTicket.get(v.ticket_id) ?? [];
-    list.push({ from: v.received_at ?? '', to: v.delivered_at ?? '' });
+    list.push({
+      from: v.received_at ?? '',
+      to: v.delivered_at ?? '',
+      fromTime: v.received_time ?? '',
+      toTime: v.delivered_time ?? '',
+    });
     visitsByTicket.set(v.ticket_id, list);
   }
 
-  type Appointment = { t: (typeof shopTickets)[number]; appt: Date | null; row: UpcomingTicket };
-  const asDate = (v: string) => (v ? new Date(`${v}T00:00:00+07:00`) : null);
+  /*
+    การเคลมประกัน ก็เป็นการนัดหมาย.
 
-  const appointments: Appointment[] = [];
-  for (const t of shopTickets) {
-    const base: UpcomingTicket = {
-      id: t.id,
-      customer: t.customer,
-      brand: t.brand,
-      model: t.model,
-      plate: t.plate,
-      serviceType: t.serviceType,
-      categories: t.categories,
-      products: t.products,
-      dropOff: t.dropOff as Date,
-      status: t.status,
-      pickup: t.pickup,
-    };
-    appointments.push({ t, appt: appointmentDate(t), row: base });
-
-    const rework = t.extras['แก้งาน'];
-    if (rework?.checked) {
-      const from = asDate(String(rework.receivedAt ?? ''));
-      const to = asDate(String(rework.deliveredAt ?? ''));
-      if (from || to) {
-        const category = String(rework.category ?? '').trim();
-        appointments.push({
-          t,
-          appt: appointmentDate({ status: t.status, dropOff: from, pickup: to }),
-          row: {
-            ...base,
-            serviceType: 'แก้งาน',
-            categories: category ? [category] : t.categories,
-            products: [String(rework.detail ?? '').trim()].filter(Boolean),
-            dropOff: (from ?? to) as Date,
-            pickup: to,
-          },
-        });
-      }
-    }
-
-    for (const v of visitsByTicket.get(t.id) ?? []) {
-      const from = asDate(v.from);
-      const to = asDate(v.to);
-      if (!from && !to) continue;
-      appointments.push({
-        t,
-        appt: appointmentDate({ status: t.status, dropOff: from, pickup: to }),
-        row: {
-          ...base,
-          serviceType: 'Service',
-          dropOff: (from ?? to) as Date,
-          pickup: to,
-        },
-      });
-    }
+    A claim is a day the customer brings the car in, exactly like a เซอร์วิส —
+    it was simply invisible here because a claim had no dates of its own until
+    0041. Keyed back to the ticket through its policy, because that is what the
+    card groups by.
+  */
+  const ticketByPolicy = new Map(policies.map((p) => [p.id, p.ticket_id]));
+  const claimsByTicket = new Map<string, VisitDates[]>();
+  for (const c of claimRows ?? []) {
+    const ticketId = ticketByPolicy.get(c.policy_id);
+    if (!ticketId) continue;
+    const list = claimsByTicket.get(ticketId) ?? [];
+    list.push({
+      from: c.received_at ?? '',
+      to: c.delivered_at ?? '',
+      fromTime: c.received_time ?? '',
+      toTime: c.delivered_time ?? '',
+      detail: c.detail ?? '',
+    });
+    claimsByTicket.set(ticketId, list);
   }
+
+  const appointments = buildAppointments(shopTickets, visitsByTicket, claimsByTicket);
 
   const upcoming: UpcomingTicket[] = appointments
     .filter(({ appt }) => appt && appt >= windowStart && appt <= windowEnd)
@@ -494,7 +487,7 @@ export default async function DashboardPage({
     }));
 
   for (const a of appointments) {
-    if (a.row.serviceType !== 'แก้งาน' && a.row.serviceType !== 'Service') continue;
+    if (!VISIT_KINDS.some((v) => v[0] === a.row.serviceType)) continue;
     if (!a.appt) continue;
     calendarTickets.push({
       id: a.t.id,
@@ -516,12 +509,7 @@ export default async function DashboardPage({
     them, and an event on a job that already has a status would be the same car
     counted twice.
   */
-  const visitTotals: VisitTotal[] = (
-    [
-      ['แก้งาน', 'แก้งาน', '#B23A48'],
-      ['Service', 'Service', '#2563EB'],
-    ] as const
-  ).map(([key, label, dot]) => ({
+  const visitTotals: VisitTotal[] = VISIT_KINDS.map(([key, label, dot]) => ({
     key,
     label,
     dot,

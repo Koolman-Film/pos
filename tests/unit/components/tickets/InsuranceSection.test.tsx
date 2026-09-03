@@ -9,6 +9,7 @@ import {
   remainingCover,
 } from '@/components/tickets/detail/InsuranceSection';
 import type { InsurancePlan, InsurancePolicy, Ticket } from '@/components/tickets/types';
+import { dateInputValue } from '@/lib/domain/now';
 
 /**
  * ประกัน was a ticket line at ราคา 0 that someone typed a price into, which tied
@@ -124,7 +125,11 @@ describe('InsuranceSection', () => {
     const sent = onSave.mock.calls[0][0];
     // Today, because that is when the money came in — on an old ticket the two
     // are months apart, and the ticket's own total never moves.
-    expect(sent.soldAt).toBe(new Date().toISOString().slice(0, 10));
+    // dateInputValue(), not toISOString(): the component stamps soldAt in
+    // Asia/Bangkok (a716082), and toISOString() is UTC — which is the previous
+    // day for every Thai time before 07:00. Asserting UTC here made this test
+    // fail only between midnight and 07:00 Bangkok, a window CI never ran in.
+    expect(sent.soldAt).toBe(dateInputValue(new Date()));
     expect(sent.planName).toBe('ประกันฟิล์มกันรอย 1 ปี');
   });
 
@@ -165,7 +170,7 @@ describe('InsuranceSection', () => {
   it('warns when the cover is nearly up, and says so once it is gone', () => {
     const soon = new Date();
     soon.setDate(soon.getDate() + 10);
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const iso = (d: Date) => dateInputValue(d); // Bangkok, to match daysLeft()
     const { unmount } = render(
       <InsuranceSection
         t={ticket()}

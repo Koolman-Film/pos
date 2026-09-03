@@ -47,6 +47,16 @@ export type WsOrder = {
   payments: WsPayment[];
 };
 
+/**
+ * A PO in ถังขยะ (migration 0040). The deleter is resolved to a name at load
+ * time rather than embedded, so a PO whose deleter has since been removed from
+ * the staff list still lists.
+ */
+export type WsDeletedOrder = WsOrder & {
+  deletedAt: Date | null;
+  deletedByName: string;
+};
+
 export type WsCustomer = { id: number; name: string; phone: string; address: string };
 
 /** Colour triple per status key — the prototype's `DEFAULT_WS_STATUS` shape. */

@@ -5,6 +5,7 @@ import {
   blankOrder,
   type Shop,
   type WsCustomer,
+  type WsDeletedOrder,
   type WsOrder,
   type WsShopInfo,
   type WsStatusMap,
@@ -118,6 +119,46 @@ async function loadWsStatuses(): Promise<WsStatusMap> {
   return map;
 }
 
+/**
+ * ถังขยะ PO — orders flagged by `deleteOrder`, newest deletion first.
+ *
+ * Only ever rendered for a caller holding `wholesale.restore`, and RLS still
+ * scopes the rows to their branches. `deleted_by` is resolved to a name here
+ * rather than embedded, so a PO whose deleter has since left still lists.
+ */
+export async function loadDeletedOrders(session: SessionContext): Promise<{
+  orders: WsDeletedOrder[];
+  customers: WsCustomer[];
+  shops: Shop[];
+}> {
+  const supabase = await createClient();
+  const [ordersRes, usersRes, customers, shops] = await Promise.all([
+    supabase
+      .from('orders')
+      .select(`${ORDER_SELECT}, deleted_at, deleted_by`)
+      .in('shop_id', session.accessibleShopIds)
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false }),
+    supabase.from('app_users').select('id, name'),
+    loadCustomers(),
+    loadShops(session),
+  ]);
+
+  const nameById = new Map((usersRes.data ?? []).map((u) => [u.id, u.name]));
+  const rows = (ordersRes.data ?? []) as (OrderRow & {
+    deleted_at: string | null;
+    deleted_by: string | null;
+  })[];
+
+  const orders: WsDeletedOrder[] = rows.map((row) => ({
+    ...mapOrder(row),
+    deletedAt: row.deleted_at ? new Date(row.deleted_at) : null,
+    deletedByName: (row.deleted_by && nameById.get(row.deleted_by)) || '',
+  }));
+
+  return { orders, customers, shops };
+}
+
 export async function loadWholesaleListData(session: SessionContext): Promise<{
   orders: WsOrder[];
   customers: WsCustomer[];
@@ -126,7 +167,13 @@ export async function loadWholesaleListData(session: SessionContext): Promise<{
 }> {
   const supabase = await createClient();
   const [ordersRes, customers, wsStatuses, shops] = await Promise.all([
-    supabase.from('orders').select(ORDER_SELECT).in('shop_id', session.accessibleShopIds),
+    supabase
+      .from('orders')
+      .select(ORDER_SELECT)
+      .in('shop_id', session.accessibleShopIds)
+      // Deleted POs (migration 0040) are out of the list and out of every
+      // figure derived from it. The bin below is the only place they surface.
+      .is('deleted_at', null),
     loadCustomers(),
     loadWsStatuses(),
     loadShops(session),
@@ -157,7 +204,12 @@ export async function loadOrderDetailData(
   if (isNew) {
     order = blankOrder(shops[0]?.id ?? 'cm');
   } else {
-    const { data } = await supabase.from('orders').select(ORDER_SELECT).eq('id', id).maybeSingle();
+    const { data } = await supabase
+      .from('orders')
+      .select(ORDER_SELECT)
+      .eq('id', id)
+      .is('deleted_at', null)
+      .maybeSingle();
     if (!data) return null;
     order = mapOrder(data as OrderRow);
     // Do not surface an order from a shop the caller cannot access.
@@ -168,11 +220,27 @@ export async function loadOrderDetailData(
     await Promise.all([
       loadCustomers(),
       loadWsStatuses(),
-      supabase.from('orders').select(ORDER_SELECT).in('shop_id', session.accessibleShopIds),
+      supabase
+        .from('orders')
+        .select(ORDER_SELECT)
+        .in('shop_id', session.accessibleShopIds)
+        .is('deleted_at', null),
+      /*
+        Stock for EVERY branch the caller can reach, not just the one the PO
+        opens on.
+
+        A new PO starts on the first branch in the list and the branch can be
+        changed while it is new — but this read was pinned to the starting
+        branch, and the product picker filters what it was given by `o.shop`.
+        So switching a new PO to another branch left the picker with nothing
+        to offer: goods really were on that branch's shelf and the PO could
+        not sell them. Finnix North, whose whole purpose is wholesale, could
+        not raise a single line.
+      */
       supabase
         .from('stock')
         .select('id, name, short_name, shop_id, qty, sell_price')
-        .eq('shop_id', order.shop),
+        .in('shop_id', session.accessibleShopIds),
       supabase.from('shop_info').select('shop_id, company_name, address, phone, payment_channels'),
       supabase
         .from('option_lists')

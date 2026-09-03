@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { fmtThaiDate } from '@/lib/domain/format';
 import { dateInputValue } from '@/lib/domain/now';
+import { TimeSelect } from '@/components/ui/TimeSelect';
 
 import type { InsuranceClaim, InsurancePlan, InsurancePolicy, Ticket } from '../types';
 
@@ -490,6 +491,64 @@ export function InsuranceSection({
                     placeholder="ชิ้นเล็ก"
                     className="field text-xs px-2 py-1"
                   />
+                </div>
+                {/*
+                  วันรับรถ/ส่งมอบรถ ของการเคลมครั้งนี้.
+
+                  Separate from the job's own dates on purpose: the ใบเคลม used
+                  to print the day the film was fitted, which can be a year ago.
+                  What the shop has to evidence is the day the customer actually
+                  brought the car in for the claim.
+                */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-1.5">
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                      วันรับรถ
+                    </label>
+                    <input
+                      aria-label={`วันรับรถเคลมครั้งที่ ${i + 1}`}
+                      type="date"
+                      value={c.receivedAt ?? ''}
+                      onChange={(e) => setClaim(i, 'receivedAt', e.target.value)}
+                      className="field text-xs px-2 py-1 w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                      เวลารับรถ
+                    </label>
+                    <TimeSelect
+                      value={c.receivedTime ?? ''}
+                      onChange={(v) => setClaim(i, 'receivedTime', v)}
+                      ariaLabel={`เวลารับรถเคลมครั้งที่ ${i + 1}`}
+                      placeholder="เวลา..."
+                      className="field text-xs px-2 py-1 w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                      วันส่งมอบรถ
+                    </label>
+                    <input
+                      aria-label={`วันส่งมอบรถเคลมครั้งที่ ${i + 1}`}
+                      type="date"
+                      value={c.deliveredAt ?? ''}
+                      onChange={(e) => setClaim(i, 'deliveredAt', e.target.value)}
+                      className="field text-xs px-2 py-1 w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                      เวลาส่งมอบรถ
+                    </label>
+                    <TimeSelect
+                      value={c.deliveredTime ?? ''}
+                      onChange={(v) => setClaim(i, 'deliveredTime', v)}
+                      ariaLabel={`เวลาส่งมอบรถเคลมครั้งที่ ${i + 1}`}
+                      placeholder="เวลา..."
+                      className="field text-xs px-2 py-1 w-full"
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <input

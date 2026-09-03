@@ -277,6 +277,10 @@ export type Database = {
       }
       insurance_claims: {
         Row: {
+          delivered_at: string | null
+          delivered_time: string
+          received_at: string | null
+          received_time: string
           big_used: number
           claimed_at: string
           created_at: string
@@ -288,6 +292,10 @@ export type Database = {
           technician: string
         }
         Insert: {
+          delivered_at?: string | null
+          delivered_time?: string
+          received_at?: string | null
+          received_time?: string
           big_used?: number
           claimed_at?: string
           created_at?: string
@@ -299,6 +307,10 @@ export type Database = {
           technician?: string
         }
         Update: {
+          delivered_at?: string | null
+          delivered_time?: string
+          received_at?: string | null
+          received_time?: string
           big_used?: number
           claimed_at?: string
           created_at?: string
@@ -595,6 +607,8 @@ export type Database = {
         Row: {
           created_at: string
           customer_id: number | null
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           shop_id: string
           status: string
@@ -602,6 +616,8 @@ export type Database = {
         Insert: {
           created_at?: string
           customer_id?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id: string
           shop_id: string
           status: string
@@ -609,11 +625,20 @@ export type Database = {
         Update: {
           created_at?: string
           customer_id?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           shop_id?: string
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "orders_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "orders_customer_id_fkey"
             columns: ["customer_id"]

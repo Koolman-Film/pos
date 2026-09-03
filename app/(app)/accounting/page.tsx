@@ -99,6 +99,7 @@ export default async function AccountingPage() {
     type: p.type,
     amount: Number(p.amount),
     date: fmtThaiDate(new Date(p.entry_at)),
+    dateObj: new Date(p.entry_at),
     note: p.note,
   }));
 

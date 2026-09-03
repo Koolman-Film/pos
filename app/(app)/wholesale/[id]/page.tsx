@@ -6,6 +6,7 @@ import { getSessionContext } from '@/lib/auth/session';
 import { updateOptionListAction } from '../../optionListActions';
 import {
   approveOrderPrice,
+  deleteOrder,
   markOrderBadDebt,
   rejectOrderPrice,
   saveCustomer,
@@ -36,6 +37,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
     'wholesale.createNew': session.canDo('wholesale.createNew'),
     'wholesale.priceApproval': session.canDo('wholesale.priceApproval'),
     'wholesale.badDebt': session.canDo('wholesale.badDebt'),
+    'wholesale.delete': session.canDo('wholesale.delete'),
     'wholesale.export': session.canDo('wholesale.export'),
     'options.manage': session.canDo('options.manage'),
   };
@@ -56,6 +58,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       onApprovePrice={approveOrderPrice}
       onRejectPrice={rejectOrderPrice}
       onMarkBadDebt={markOrderBadDebt}
+      onDeleteOrder={deleteOrder}
       onSaveCustomer={saveCustomer}
       updateOptionListAction={updateOptionListAction}
     />

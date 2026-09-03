@@ -179,6 +179,116 @@ async function storedOrderNetQty(
   );
 }
 
+/**
+ * ลบ PO — a soft delete (migration 0040), the wholesale twin of `deleteTicket`.
+ *
+ * The row keeps its PO number and all four child tables; it simply stops
+ * appearing in the list and in every figure derived from it. A holder of
+ * `wholesale.restore` sees it in ถังขยะ and can put it back.
+ *
+ * Unlike a ticket, the goods go back on the shelf. A PO deducts stock the
+ * moment it is saved, so a PO that should never have existed did not take
+ * anything off the shelf, and leaving the deduction behind would make the count
+ * wrong in the one module whose whole job is moving goods.
+ *
+ * The capability is re-checked here per C2 AND enforced by a trigger in the
+ * database, because `orders_rw` lets any member of the branch update the row.
+ */
+export async function deleteOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.delete')) return { ok: false, error: 'ไม่มีสิทธิ์ลบ PO' };
+  const supabase = await createClient();
+
+  const { data: order } = await supabase
+    .from('orders')
+    .select('shop_id')
+    .eq('id', orderId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (!order) return { ok: false, error: 'ไม่พบ PO นี้' };
+
+  // Read the net BEFORE flagging the row: the reversal is its exact negation.
+  const net = await storedOrderNetQty(supabase, orderId);
+
+  const { error } = await supabase
+    .from('orders')
+    .update({ deleted_at: new Date().toISOString(), deleted_by: session.userId })
+    .eq('id', orderId)
+    .is('deleted_at', null);
+  if (error) return { ok: false, error: error.message };
+
+  await moveOrderStock(supabase, orderId, order.shop_id, net, -1);
+
+  revalidatePath('/wholesale');
+  revalidatePath('/stock');
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+/** กู้คืน PO — the other half of `deleteOrder`, gated by `wholesale.restore`. */
+export async function restoreOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.restore')) return { ok: false, error: 'ไม่มีสิทธิ์กู้คืน PO' };
+  const supabase = await createClient();
+
+  const { data: order } = await supabase
+    .from('orders')
+    .select('shop_id')
+    .eq('id', orderId)
+    .not('deleted_at', 'is', null)
+    .maybeSingle();
+  if (!order) return { ok: false, error: 'ไม่พบ PO นี้ในถังขยะ' };
+
+  const net = await storedOrderNetQty(supabase, orderId);
+
+  const { error } = await supabase
+    .from('orders')
+    .update({ deleted_at: null, deleted_by: null })
+    .eq('id', orderId)
+    .not('deleted_at', 'is', null);
+  if (error) return { ok: false, error: error.message };
+
+  // Back on: the goods leave the shelf again, exactly as they did on save.
+  await moveOrderStock(supabase, orderId, order.shop_id, net, 1);
+
+  revalidatePath('/wholesale');
+  revalidatePath('/stock');
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+/**
+ * Put a PO's whole net quantity through stock in one direction.
+ *
+ * `sign` is 1 to consume (the PO is on) and -1 to give back (it is off). Non-
+ * fatal for the same reason the save path is: the delete is already recorded,
+ * and refusing to delete over a stock lookup would leave the shop with a PO it
+ * cannot get rid of.
+ */
+async function moveOrderStock(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orderId: string,
+  shopId: string,
+  net: QtyMap,
+  sign: 1 | -1,
+) {
+  const delta: QtyMap = {};
+  for (const [name, qty] of Object.entries(net)) {
+    if (qty !== 0) delta[name] = qty * sign;
+  }
+  if (Object.keys(delta).length === 0) return;
+  try {
+    await applyStockMovements(supabase, delta, {
+      kind: sign === -1 ? 'ลบ PO ขายส่ง' : 'กู้คืน PO ขายส่ง',
+      documentId: orderId,
+      by: 'ระบบ (ขายส่ง)',
+      shopId,
+    });
+  } catch {
+    // Swallowed on purpose — see the doc comment above.
+  }
+}
+
 /** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
 export async function approveOrderPrice(orderId: string) {
   const session = await getSessionContext();

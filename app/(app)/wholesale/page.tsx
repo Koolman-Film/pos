@@ -29,6 +29,7 @@ export default async function WholesalePage({
     'wholesale.createNew': session.canDo('wholesale.createNew'),
     'wholesale.export': session.canDo('wholesale.export'),
     'wholesale.updateStatus': session.canDo('wholesale.updateStatus'),
+    'wholesale.restore': session.canDo('wholesale.restore'),
   };
 
   /*
