@@ -1,6 +1,6 @@
--- supabase/revert-0031-0039.sql
+-- supabase/revert-0031-0041.sql
 --
--- ทางถอยกลับของ 0031-0039 — ใช้เมื่อจำเป็นเท่านั้น
+-- ทางถอยกลับของ 0031-0041 — ใช้เมื่อจำเป็นเท่านั้น
 --
 -- ลำดับที่ควรใช้จริง:
 --   1. ถอย CODE ที่ Vercel ก่อนเสมอ (rollback ทันที ไม่เสียข้อมูล). สคีมานี้
@@ -13,6 +13,8 @@
 --   - tickets.revenue_kind   ใบงานไหนเป็น "รับแทน Finnix"
 --   - expenses.expense_kind  ค่าใช้จ่ายไหนจ่ายแทน Finnix
 --   - shop_info.vat_registered  สาขาไหนจดทะเบียน VAT
+--   - orders.deleted_at         PO ไหนถูกลบไว้ (จะกลับมาเป็น PO ปกติ)
+--   - insurance_claims รับ-ส่ง  วันเวลารับ-ส่งรถของการเคลม
 --
 -- สิ่งที่จงใจไม่ถอย เพราะถอยแล้วเสียมากกว่าได้:
 --   - แถวสิทธิ์ที่ 0033/0037 เพิ่มไว้ — ไม่มีโค้ดเก่าอ่าน จึงไม่มีผล และการลบ
@@ -20,6 +22,98 @@
 --   - on update cascade บน FK ของ orders (0036) — ปลอดภัยกว่าของเดิม
 
 set search_path = pos, public, extensions;
+
+-- ---- 0041: วันเวลารับ-ส่งของการเคลม ---------------------------------------
+drop index if exists insurance_claims_received_idx;
+alter table insurance_claims
+  drop column if exists received_at,
+  drop column if exists received_time,
+  drop column if exists delivered_at,
+  drop column if exists delivered_time;
+
+create or replace function save_insurance_policy(
+  p_id bigint,
+  p_ticket_id text,
+  p_policy jsonb,
+  p_claims jsonb
+)
+returns bigint
+language plpgsql
+security invoker
+set search_path = pos
+as $$
+declare
+  v_id bigint;
+begin
+  if p_id is null then
+    insert into insurance_policies (
+      ticket_id, plate, plan_name, price, big_pieces, small_pieces, terms,
+      sold_at, starts_at, ends_at, notes, created_by
+    ) values (
+      p_ticket_id,
+      coalesce(p_policy->>'plate', ''),
+      coalesce(p_policy->>'planName', ''),
+      coalesce((p_policy->>'price')::numeric, 0),
+      coalesce((p_policy->>'bigPieces')::int, 0),
+      coalesce((p_policy->>'smallPieces')::int, 0),
+      coalesce(p_policy->>'terms', ''),
+      coalesce((p_policy->>'soldAt')::date, current_date),
+      (p_policy->>'startsAt')::date,
+      (p_policy->>'endsAt')::date,
+      coalesce(p_policy->>'notes', ''),
+      auth.uid()
+    )
+    returning id into v_id;
+  else
+    update insurance_policies set
+      plate        = coalesce(p_policy->>'plate', ''),
+      plan_name    = coalesce(p_policy->>'planName', ''),
+      price        = coalesce((p_policy->>'price')::numeric, 0),
+      big_pieces   = coalesce((p_policy->>'bigPieces')::int, 0),
+      small_pieces = coalesce((p_policy->>'smallPieces')::int, 0),
+      terms        = coalesce(p_policy->>'terms', ''),
+      sold_at      = coalesce((p_policy->>'soldAt')::date, current_date),
+      starts_at    = (p_policy->>'startsAt')::date,
+      ends_at      = (p_policy->>'endsAt')::date,
+      notes        = coalesce(p_policy->>'notes', '')
+    where id = p_id and ticket_id = p_ticket_id
+    returning id into v_id;
+
+    if v_id is null then
+      raise exception 'ไม่พบกรมธรรม์ที่ต้องการแก้ไข' using errcode = 'P0002';
+    end if;
+  end if;
+
+  delete from insurance_claims where policy_id = v_id;
+  insert into insurance_claims (policy_id, claimed_at, big_used, small_used, detail, technician, created_by)
+  select
+    v_id,
+    coalesce((c->>'claimedAt')::date, current_date),
+    coalesce((c->>'bigUsed')::int, 0),
+    coalesce((c->>'smallUsed')::int, 0),
+    coalesce(c->>'detail', ''),
+    coalesce(c->>'technician', ''),
+    auth.uid()
+  from jsonb_array_elements(coalesce(p_claims, '[]'::jsonb)) as c
+  -- A claim that used nothing and says nothing is an empty row on the form.
+  where coalesce((c->>'bigUsed')::int, 0) > 0
+     or coalesce((c->>'smallUsed')::int, 0) > 0
+     or coalesce(c->>'detail', '') <> '';
+
+  return v_id;
+end;
+$$;
+
+revoke all on function save_insurance_policy(bigint, text, jsonb, jsonb) from public, anon;
+grant execute on function save_insurance_policy(bigint, text, jsonb, jsonb) to authenticated;
+
+-- ---- 0040: ลบ PO แบบกู้คืนได้ ----------------------------------------------
+drop trigger if exists orders_delete_capability on orders;
+drop function if exists enforce_order_delete_capability();
+drop index if exists orders_live_idx;
+alter table orders
+  drop column if exists deleted_at,
+  drop column if exists deleted_by;
 
 -- ---- 0036: เลขที่ PO อัตโนมัติ -------------------------------------------
 drop trigger if exists orders_assign_id on orders;
@@ -122,4 +216,4 @@ grant execute on function reset_permissions_to_defaults() to authenticated;
 
 -- ---- ถอนทะเบียน migration ------------------------------------------------
 delete from supabase_migrations.schema_migrations
- where version in ('0031','0032','0033','0034','0035','0036','0037','0038','0039');
+ where version in ('0031','0032','0033','0034','0035','0036','0037','0038','0039','0040','0041');
