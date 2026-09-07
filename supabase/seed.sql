@@ -14,6 +14,14 @@
 -- price_matrix, film_price_matrix and corporate_buyers start empty because the
 -- prototype starts them empty (`useState([])` at :4358-4370).
 --
+-- ทุกใบงานอยู่ในอนาคต. Every sample ticket is booked between today and a week
+-- out, one per สถานะ, so the dashboard demonstrates ALL SIX at once — the card,
+-- the calendar and the status bars only reach a few days either side of today,
+-- so a sample sitting in the past proves nothing about how it looks. The two
+-- finished states (ส่งมอบแล้ว, ค้างชำระ) sit at the far end of that window: a job
+-- delivered on a future date is not a thing that happens, and this is sample
+-- data whose whole purpose is showing the shop what each state looks like.
+--
 -- DATES. The prototype expresses ticket dates relatively, as `daysFromNow(n)`
 -- (:239-273), and its `daysFromNow` also pins the time to 09:00 local. Those stay
 -- relative here, so the dashboard's "today" filter and its 7-day booking window
@@ -30,6 +38,9 @@
 set search_path = pos, public, extensions;
 
 truncate table
+  -- service_visits / insurance_* would come along by cascade from tickets;
+  -- naming them keeps the list readable as "what this file owns".
+  service_visit_points, service_visits, insurance_claims, insurance_policies,
   ticket_item_positions, ticket_items, ticket_payments, ticket_status_history, tickets,
   order_items, order_returns, order_payments, order_adjustments, orders,
   commission_rule_teams, commission_rules,
@@ -64,37 +75,107 @@ insert into tickets (
    'คุณ เอ', '081-234-5678', '250 กก', 'เก๋งเล็ก', 'Toyota', 'Vios', 'ขาว',
    'เข้าทำ/ติดตั้ง', 'กำลัง QC ก่อนติดตั้ง', 'Walk-in',
    '{"ฟิล์มกรองแสง": ["ช่างเอก"], "เครื่องเสียง": ["ช่างบอย"]}'::jsonb,
-   (current_date - 2) + time '09:00', (current_date - 1) + time '09:00',
+   (current_date + 1) + time '09:00', (current_date + 1) + time '17:00',
    '{"ประกัน": {"checked": true}}'::jsonb),
 
   ('JT-CM-00212', 'cm', (select id from retail_customers where name = 'คุณ สมชาย'),
    'คุณ สมชาย', '082-345-6789', '1กข 4521', 'เก๋งเล็ก', 'Honda', 'City', 'ดำ',
    'เข้าทำ/ติดตั้ง', 'กำลังติดตั้ง', 'เพจร้าน',
    '{"เครื่องเสียง": ["ช่างบอย"], "ฟิล์มกันรอย": ["ช่างเอ"]}'::jsonb,
-   (current_date - 3) + time '09:00', (current_date - 2) + time '09:00',
-   '{}'::jsonb),
+   (current_date + 2) + time '10:00', (current_date + 2) + time '16:00',
+   -- Service ticked, so the recorded visit further down has something to hang
+   -- off and the ใบงาน shows its own dates in the header. `serviceDate` is the
+   -- next visit the customer is entitled to; the visits themselves are rows.
+   jsonb_build_object('Service', jsonb_build_object(
+     'checked', true,
+     'serviceCount', 12,
+     'serviceDate', to_char(current_date + 4, 'YYYY-MM-DD')))),
 
   ('JT-CM-00209', 'cm', (select id from retail_customers where name = 'คุณ วิภา'),
    'คุณ วิภา', '083-456-7890', 'กท 8890', 'SUV', 'Mazda', '2', 'แดง',
    'เข้าทำ/ติดตั้ง', 'รอส่งมอบ', 'Dex',
    '{"เครื่องเสียง": ["ช่างนัท"]}'::jsonb,
-   (current_date - 4) + time '09:00', (current_date - 3) + time '09:00',
+   -- Came in yesterday, due back in three days: รอส่งมอบ is the one status the
+   -- card windows on the pickup, so that is the day it appears under.
+   (current_date - 1) + time '09:00', (current_date + 3) + time '14:00',
    '{}'::jsonb),
 
   ('JT-LP-00088', 'lp', (select id from retail_customers where name = 'คุณ ปรีชา'),
    'คุณ ปรีชา', '084-567-8901', '3ขค 112', 'กระบะ', 'Isuzu', 'D-Max', 'บรอนซ์',
    'เข้าทำ/ติดตั้ง', 'ค้างชำระ', '33Film',
    '{"ฟิล์มกรองแสง": ["ช่างเอ"]}'::jsonb,
-   (current_date - 6) + time '09:00', (current_date - 5) + time '09:00',
-   '{"นอกสถานที่": {"checked": true, "mapLink": "https://maps.google.com/?q=13.7563,100.5018"}}'::jsonb),
+   (current_date + 6) + time '09:00', (current_date + 6) + time '15:00',
+   -- แก้งาน with dates AND times of its own (0041): the car comes back on a
+   -- different day from the job it belongs to, and both the ใบงานติดตั้ง and
+   -- the dashboard read those rather than the ticket’s.
+   jsonb_build_object(
+     'นอกสถานที่', jsonb_build_object(
+       'checked', true, 'mapLink', 'https://maps.google.com/?q=13.7563,100.5018'),
+     'แก้งาน', jsonb_build_object(
+       'checked', true,
+       'detail', 'ฟิล์มบานหน้ามีฟองอากาศ ต้องลอกแล้วติดใหม่',
+       'category', 'ฟิล์มกรองแสง',
+       'receivedAt', to_char(current_date + 4, 'YYYY-MM-DD'),
+       'receivedTime', '10:00',
+       'deliveredAt', to_char(current_date + 4, 'YYYY-MM-DD'),
+       'deliveredTime', '16:00'))),
 
-  -- The only future booking: lands inside the dashboard's next-7-days window.
   ('JT-CM-00207', 'cm', (select id from retail_customers where name = 'คุณ นภา'),
    'คุณ นภา', '085-678-9012', '9กท 220', 'เก๋งใหญ่', 'Toyota', 'Camry', 'เทา',
    'เข้าทำ/ติดตั้ง', 'จองแล้ว', 'FINNIX บางแค',
    '{}'::jsonb,
-   (current_date + 2) + time '09:00', (current_date + 3) + time '09:00',
-   '{"รถสไลด์": {"checked": true, "slideType": "Showroom"}}'::jsonb);
+   (current_date + 2) + time '09:00', (current_date + 2) + time '17:00',
+   -- รถสไลด์ with both legs dated. The truck fetching the car and the truck
+   -- taking it home are two separate days somebody has to be ready for, so
+   -- each shows on the dashboard as its own appointment.
+   jsonb_build_object('รถสไลด์', jsonb_build_object(
+     'checked', true,
+     'slideType', 'Showroom',
+     'legs', jsonb_build_array(
+       jsonb_build_object('from', 'โชว์รูม', 'to', 'ร้าน',
+         'date', to_char(current_date + 2, 'YYYY-MM-DD'), 'time', '08:00'),
+       jsonb_build_object('from', 'ร้าน', 'to', 'บ้านลูกค้า',
+         'date', to_char(current_date + 3, 'YYYY-MM-DD'), 'time', '17:00'))))),
+
+  -- ส่งมอบแล้ว — the sixth สถานะ, which no sample ticket used, so both the
+  -- status bar and the calendar legend carried a permanently empty row.
+  ('JT-CM-00218', 'cm', (select id from retail_customers where name = 'คุณ วิภา'),
+   'คุณ วิภา', '083-456-7890', 'ขข 4417', 'SUV เล็ก', 'Honda', 'HR-V', 'ขาว',
+   'เข้าทำ/ติดตั้ง', 'ส่งมอบแล้ว', 'Walk-in',
+   '{"ฟิล์มกรองแสง": ["ช่างเอก"]}'::jsonb,
+   (current_date + 5) + time '09:00', (current_date + 5) + time '16:00',
+   '{}'::jsonb),
+
+  -- พะเยา / ลำปาง / Central Audio had no sample work at all, so three of the
+  -- five rows in เปรียบเทียบรายสาขา were empty and the card demonstrated
+  -- nothing. One job each, at different sizes, so the ranking has something
+  -- to rank.
+  ('JT-PY-00031', 'py', (select id from retail_customers where name = 'คุณ สมชาย'),
+   'คุณ สมชาย', '082-345-6789', 'พย 1188', 'กระบะ', 'Toyota', 'Hilux Revo', 'เทา',
+   'เข้าทำ/ติดตั้ง', 'รอส่งมอบ', 'Walk-in',
+   '{"ฟิล์มกรองแสง": ["ช่างนัท"]}'::jsonb,
+   (current_date + 1) + time '09:00', (current_date + 4) + time '16:00',
+   '{}'::jsonb),
+
+  ('JT-LPG-00019', 'lpg', (select id from retail_customers where name = 'คุณ ปรีชา'),
+   'คุณ ปรีชา', '084-567-8901', 'ลป 7723', 'เก๋งเล็ก', 'Mazda', '3', 'ขาว',
+   'เข้าทำ/ติดตั้ง', 'กำลังติดตั้ง', 'เพจร้าน',
+   '{"ฟิล์มกันรอย": ["ช่างบอย"]}'::jsonb,
+   (current_date + 3) + time '10:00', (current_date + 3) + time '17:00',
+   '{}'::jsonb),
+
+  -- รับแทน Finnix: Central Audio collected the money for a เชียงใหม่ job, so it
+  -- shows in รอคืน Finnix and NOT in its ยอดขาย (migration 0031). The card
+  -- needs a branch where those two columns disagree, or the distinction the
+  -- shop asked for cannot be seen.
+  ('JT-CA-00007', 'ca', (select id from retail_customers where name = 'คุณ นภา'),
+   'คุณ นภา', '085-678-9012', 'ชม 9042', 'เก๋งใหญ่', 'Honda', 'Accord', 'ดำ',
+   'เข้าทำ/ติดตั้ง', 'ส่งมอบแล้ว', 'Walk-in',
+   '{"เครื่องเสียง": ["ช่างบอย"]}'::jsonb,
+   (current_date + 2) + time '09:00', (current_date + 2) + time '15:00',
+   '{}'::jsonb);
+
+update tickets set revenue_kind = 'รับแทน' where id = 'JT-CA-00007';
 
 insert into ticket_items (ticket_id, category, booked, booked_price, sold, sold_price) values
   ('JT-CM-00214', 'ฟิล์มกรองแสง', '', 0,
@@ -105,7 +186,11 @@ insert into ticket_items (ticket_id, category, booked, booked_price, sold, sold_
   ('JT-CM-00209', 'เครื่องเสียง', 'จอ 7 นิ้ว', 5000, 'จอแอนดรอยด์ 9 นิ้ว', 6500),
   ('JT-LP-00088', 'ฟิล์มกรองแสง', '', 0,
    'บานหน้า: ฟิล์ม 3M CRM 60%, บานหลัง: ฟิล์ม 3M CRM 60%', 3800),
-  ('JT-CM-00207', 'ฟิล์มกรองแสง', 'ฟิล์ม 3M CRM', 9000, '', 0);
+  ('JT-CM-00207', 'ฟิล์มกรองแสง', 'ฟิล์ม 3M CRM', 9000, '', 0),
+  ('JT-CM-00218', 'ฟิล์มกรองแสง', '', 0, 'รอบคัน: ฟิล์ม FINNIX CT 40%', 6400),
+  ('JT-PY-00031', 'ฟิล์มกรองแสง', '', 0, 'รอบคัน: ฟิล์ม 3M CRM 60%', 8900),
+  ('JT-LPG-00019', 'ฟิล์มกันรอย', '', 0, 'เต็มคัน: TPU กันรอยเกรดพรีเมียม', 15500),
+  ('JT-CA-00007', 'เครื่องเสียง', '', 0, 'ชุดเครื่องเสียง JBL ครบชุด', 24000);
 
 -- Positions hang off the film/wrap items. Looked up by (ticket, category) rather
 -- than by a hardcoded id, since ticket_items.id is an identity column.
@@ -121,11 +206,20 @@ insert into ticket_item_positions (ticket_item_id, position, product, price) val
   ((select id from ticket_items where ticket_id = 'JT-LP-00088' and category = 'ฟิล์มกรองแสง'),
    'บานหน้า', 'ฟิล์ม 3M CRM 60%', 1900),
   ((select id from ticket_items where ticket_id = 'JT-LP-00088' and category = 'ฟิล์มกรองแสง'),
-   'บานหลัง', 'ฟิล์ม 3M CRM 60%', 1900);
+   'บานหลัง', 'ฟิล์ม 3M CRM 60%', 1900),
+  ((select id from ticket_items where ticket_id = 'JT-CM-00218' and category = 'ฟิล์มกรองแสง'),
+   'รอบคัน', 'ฟิล์ม FINNIX CT 40%', 6400);
 
 insert into ticket_payments (ticket_id, type, method, amount, paid_at) values
   ('JT-CM-00214', 'มัดจำ', 'โอน TTB', 2000, date '2026-07-20'),
-  ('JT-CM-00209', 'ชำระเต็มจำนวน', 'เงินสด', 6500, date '2026-07-26');
+  ('JT-CM-00209', 'ชำระเต็มจำนวน', 'เงินสด', 6500, date '2026-07-26'),
+  -- Paid in full, which is what ส่งมอบแล้ว means; the ค้างชำระ ticket
+  -- deliberately has none, so the two states differ in the numbers as well as
+  -- in the label.
+  ('JT-CM-00218', 'ชำระเต็มจำนวน', 'โอน TTB', 6400, current_date),
+  -- พะเยา has taken a deposit only, so it carries a balance in ค้างรับ.
+  ('JT-PY-00031', 'มัดจำ', 'เงินสด', 3000, current_date - 1),
+  ('JT-CA-00007', 'ชำระเต็มจำนวน', 'โอน TTB', 24000, current_date);
 
 insert into ticket_status_history (ticket_id, status, changed_at) values
   ('JT-CM-00214', 'จองแล้ว', (current_date - 3) + time '09:00'),
@@ -139,7 +233,70 @@ insert into ticket_status_history (ticket_id, status, changed_at) values
   ('JT-LP-00088', 'จองแล้ว', (current_date - 8) + time '09:00'),
   ('JT-LP-00088', 'กำลังติดตั้ง', (current_date - 7) + time '09:00'),
   ('JT-LP-00088', 'ค้างชำระ', (current_date - 5) + time '09:00'),
-  ('JT-CM-00207', 'จองแล้ว', current_date + time '09:00');
+  ('JT-CM-00207', 'จองแล้ว', current_date + time '09:00'),
+  ('JT-CM-00218', 'จองแล้ว', (current_date - 2) + time '09:00'),
+  ('JT-CM-00218', 'กำลังติดตั้ง', (current_date - 1) + time '09:00'),
+  ('JT-CM-00218', 'ส่งมอบแล้ว', current_date + time '09:00'),
+  ('JT-PY-00031', 'จองแล้ว', (current_date - 1) + time '09:00'),
+  ('JT-PY-00031', 'รอส่งมอบ', current_date + time '09:00'),
+  ('JT-LPG-00019', 'จองแล้ว', (current_date - 1) + time '09:00'),
+  ('JT-LPG-00019', 'กำลังติดตั้ง', current_date + time '09:00'),
+  ('JT-CA-00007', 'จองแล้ว', (current_date - 2) + time '09:00'),
+  ('JT-CA-00007', 'ส่งมอบแล้ว', current_date + time '09:00');
+
+-- ------------------------------------------------- เซอร์วิส / เคลมประกัน --
+--
+-- The other two kinds of appointment, so the dashboard shows all four headings
+-- and the ใบเซอร์วิส / ใบเคลมประกัน have something real to print. Both carry
+-- their OWN date and time (migration 0041) — the whole point of those columns
+-- is that a visit is not the job it belongs to.
+
+-- Two visits, and both filled in the way a technician actually leaves the
+-- paper form: the walk-around answers in `checks` and the จุดที่ลูกค้าต้องการ
+-- แก้ไข rows underneath. An empty visit prints a blank sheet, which shows the
+-- layout but not what a finished one looks like.
+insert into service_visits (
+  ticket_id, visit_no, plate, received_at, received_time, delivered_at, delivered_time,
+  sales_by, qc_by, technicians, film_product, customer_waits, overall_ok, checks, notes
+) values
+  ('JT-CM-00212', 1, '1กข 4521',
+   current_date - 30, '09:00', current_date - 30, '11:30',
+   'แอดมินระบบ', 'ช่างเอ', '["ช่างเอ"]'::jsonb, 'TPU กันรอยเกรดพรีเมียม',
+   false, true,
+   '{"หน้าจอ 1": "ปกติ", "หน้าปัดรถ": "ปกติ", "กาบประตู หน้า-ซ้าย": "ปกติ"}'::jsonb,
+   'เซอร์วิสรอบแรกหลังติดตั้ง'),
+
+  ('JT-CM-00212', 2, '1กข 4521',
+   current_date + 4, '13:00', current_date + 4, '15:00',
+   'แอดมินระบบ', 'ช่างเอ', '["ช่างเอ", "ช่างบอย"]'::jsonb, 'TPU กันรอยเกรดพรีเมียม',
+   true, true,
+   ('{"หน้าจอ 1": "ปกติ", "หน้าจอ 2": "ปกติ", "หน้าปัดรถ": "ปกติ",'
+    ' "กาบประตู หน้า-ซ้าย": "มีรอยขีดเล็กน้อย", "กาบประตู หน้า-ขวา": "ปกติ",'
+    ' "Piano Black": "ปกติ", "นิรภัยหน้า": "ปกติ"}')::jsonb,
+   'ล้างและเคลือบตามรอบ ลูกค้ารอรับรถ');
+
+-- จุดพิเศษที่ลูกค้าต้องการแก้ไข on the upcoming visit.
+insert into service_visit_points (visit_id, seq, position, detail, note) values
+  ((select id from service_visits where ticket_id = 'JT-CM-00212' and visit_no = 2),
+   1, 'กาบประตู หน้า-ซ้าย', 'ฟิล์มเริ่มเปิดขอบ', 'ลอกแล้วติดใหม่'),
+  ((select id from service_visits where ticket_id = 'JT-CM-00212' and visit_no = 2),
+   2, 'ฝากระโปรงหน้า', 'มีรอยขนแมวจากการล้าง', 'ขัดเคลือบ');
+
+insert into insurance_policies (
+  ticket_id, plate, plan_name, price, big_pieces, small_pieces, terms,
+  sold_at, starts_at, ends_at, notes
+) values (
+  'JT-CM-00214', '250 กก', 'ประกันฟิล์มกันรอย 1 ปี', 2500, 2, 20,
+  'คุ้มครองฟองอากาศและการหลุดล่อนจากการติดตั้ง',
+  current_date - 30, current_date - 30, current_date + 335, '');
+
+insert into insurance_claims (
+  policy_id, claimed_at, big_used, small_used, detail, technician,
+  received_at, received_time, delivered_at, delivered_time
+) values (
+  (select id from insurance_policies where ticket_id = 'JT-CM-00214'),
+  current_date + 5, 1, 0, 'กันชนหน้ามีรอยขีด ขอเคลมชิ้นใหญ่ 1 ชิ้น', 'ช่างเอก',
+  current_date + 5, '10:00', current_date + 5, '15:00');
 
 -- ---------------------------------------------------------------- wholesale --
 
@@ -215,16 +372,45 @@ join (values
 -- The two 'รอจ่าย' rows are what the dashboard's เจ้าหนี้ card totals: 12,400 +
 -- 96,000 = 108,400.
 
+-- Spread across all five branches, and anchored to the START OF THIS MONTH.
+--
+-- They used to be pinned to July 2026 and to เชียงใหม่ alone, so from August
+-- onwards every ค่าใช้จ่าย figure on the dashboard read 0.00 and the
+-- เปรียบเทียบรายสาขา card had one branch with numbers and four empty rows —
+-- the sample could not demonstrate the thing it exists to show.
+--
+-- `current_date - 12` would not fix it either: run on the 7th that lands in
+-- LAST month, and the dashboard defaults to รายเดือน. `date_trunc('month')`
+-- plus a few days, clamped to today, reads the same on the 1st as on the 28th.
 insert into expenses (shop_id, description, category, source, amount, status, paid_at, due_at) values
-  ('cm', 'ค่าเช่าร้านเดือนกรกฎาคม', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 35000, 'จ่ายแล้ว', date '2026-07-01', null),
-  ('cm', 'ค่ากาแฟรับลูกค้า', 'การตลาด', 'เงินสดย่อย', 150, 'จ่ายแล้ว', date '2026-07-16', null),
-  ('cm', 'ค่าน้ำมันรถส่งของ', 'ค่าวัสดุสิ้นเปลือง', 'เงินสดย่อย', 400, 'จ่ายแล้ว', date '2026-07-15', null),
-  ('cm', 'ค่าไฟฟ้าเดือนกรกฎาคม', 'ค่าน้ำ-ไฟ', 'บัญชีธนาคารสาขา', 12400, 'รอจ่าย', null, date '2026-07-25'),
-  ('cm', 'เงินเดือนพนักงานเดือนกรกฎาคม', 'เงินเดือน', 'บัญชีธนาคารสาขา', 96000, 'รอจ่าย', null, date '2026-07-30');
+  ('cm', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 35000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
+  ('cm', 'ค่ากาแฟรับลูกค้า', 'การตลาด', 'เงินสดย่อย', 150, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 5, current_date), null),
+  ('cm', 'ค่าน้ำมันรถส่งของ', 'ค่าวัสดุสิ้นเปลือง', 'เงินสดย่อย', 400, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 4, current_date), null),
+  ('cm', 'ค่าไฟฟ้า', 'ค่าน้ำ-ไฟ', 'บัญชีธนาคารสาขา', 12400, 'รอจ่าย', null, current_date + 9),
+  ('cm', 'เงินเดือนพนักงาน', 'เงินเดือน', 'บัญชีธนาคารสาขา', 96000, 'รอจ่าย', null, current_date + 14),
 
--- Petty cash: 10,000 topped up, 550 spent from เงินสดย่อย above → balance 9,450.
+  ('lp', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 18000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
+  ('lp', 'ค่าไฟฟ้า', 'ค่าน้ำ-ไฟ', 'บัญชีธนาคารสาขา', 4200, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 6, current_date), null),
+
+  ('py', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 15000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
+  ('py', 'ค่าวัสดุติดตั้ง', 'ค่าวัสดุสิ้นเปลือง', 'เงินสดย่อย', 1250, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 7, current_date), null),
+
+  ('lpg', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 14000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
+  -- จ่ายแทน Finnix: money really did leave this branch’s drawer, so เงินสดย่อย
+  -- moves, but it is another shop’s cost and never counts as ลำปาง’s.
+  ('lpg', 'ค่าฟิล์มให้สาขาเชียงใหม่', 'ค่าวัสดุสิ้นเปลือง', 'เงินสดย่อย', 3000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 8, current_date), null),
+
+  ('ca', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 22000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
+  ('ca', 'ค่าโฆษณาเพจร้าน', 'การตลาด', 'บัญชีธนาคารสาขา', 5500, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 9, current_date), null);
+
+update expenses set expense_kind = 'จ่ายแทน' where description = 'ค่าฟิล์มให้สาขาเชียงใหม่';
+
+-- Petty cash, topped up per branch. เชียงใหม่ 10,000 with 550 spent → 9,450;
+-- พะเยา 5,000 − 1,250 → 3,750; ลำปาง 5,000 − 3,000 → 2,000.
 insert into petty_cash (shop_id, type, amount, entry_at, note) values
-  ('cm', 'เติมเงิน', 10000, date '2026-07-10', 'อนุมัติโดยแอดมิน');
+  ('cm', 'เติมเงิน', 10000, current_date - 14, 'อนุมัติโดยแอดมิน'),
+  ('py', 'เติมเงิน', 5000, current_date - 14, 'อนุมัติโดยแอดมิน'),
+  ('lpg', 'เติมเงิน', 5000, current_date - 14, 'อนุมัติโดยแอดมิน');
 
 -- ---------------------------------------------------------------------------
 -- A working admin login, so a bare `supabase db reset` leaves you able to sign

@@ -31,21 +31,36 @@ const inputOfType = (container: HTMLElement, type: string) =>
   container.querySelectorAll(`input[type="${type}"]`);
 
 describe('PeriodShopFilter', () => {
-  it('offers an "all shops" option with the shop count when allowAllShops is true', () => {
+  // Buttons, not a dropdown: every branch is on screen and one tap away, which
+  // is the whole point of the change — switching between two branches used to
+  // be three actions and you could not see what else was there.
+  it('offers an "all shops" button with the shop count when allowAllShops is true', () => {
     setup();
-    expect(screen.getByRole('option', { name: 'ทุกร้าน (2)' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'FINNIX FILM ลำพูน' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ทุกร้าน (2)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'FINNIX FILM ลำพูน' })).toBeInTheDocument();
   });
 
-  it('omits the "all shops" option when allowAllShops is false', () => {
+  it('marks the chosen branch as pressed, so it reads as chosen without colour alone', () => {
+    setup({ shopFilter: 'lp' });
+    expect(screen.getByRole('button', { name: 'FINNIX FILM ลำพูน' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'ทุกร้าน (2)' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('omits the "all shops" button when allowAllShops is false', () => {
     setup({ allowAllShops: false, shopFilter: 'cm' });
-    expect(screen.queryByRole('option', { name: /ทุกร้าน/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ทุกร้าน/ })).not.toBeInTheDocument();
   });
 
-  it('selecting a shop calls setShopFilter with its id', async () => {
+  it('clicking a branch calls setShopFilter with its id', async () => {
     const user = userEvent.setup();
     const { props } = setup();
-    await user.selectOptions(screen.getByRole('combobox'), 'lp');
+    await user.click(screen.getByRole('button', { name: 'FINNIX FILM ลำพูน' }));
     expect(props.setShopFilter).toHaveBeenCalledWith('lp');
   });
 

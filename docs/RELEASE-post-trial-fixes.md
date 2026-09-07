@@ -62,10 +62,11 @@ it twice changes nothing, and each records its versions in
 | 20    | `supabase/release-0037.sql`                   | a normal connection                                 |
 | 21    | `supabase/release-0040.sql`                   | a normal connection                                 |
 | 22    | `supabase/release-0041.sql`                   | a normal connection                                 |
-| 23    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 23    | `supabase/release-0042.sql`                   | a normal connection                                 |
+| 24    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all twenty-four in order
+already been handed over. If nothing has been run yet, running all twenty-five in order
 is still correct.
 
 `release-0030.sql` is numbered 0 because it is the one file that is urgent and
@@ -121,6 +122,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0037_wholesale_status_capability` | สิทธิ์ใหม่ "ขายส่ง: เปลี่ยนสถานะ PO" ตั้งต้นเปิดให้ทุกบทบาทที่เคยทำได้ จึงไม่มีใครเสียสิทธิ์ และเขียน `reset_permissions_to_defaults()` ใหม่ให้มีคีย์ครบ                                                                                                                                                                                                             | ต่ำ. ไม่ลบสิทธิ์เดิม                                                                        |
 | `0040_order_soft_delete`           | ลบ PO ขายส่งได้ — แบบย้ายเข้าถังขยะ เดิมโมดูลขายส่งไม่มีการลบเลย PO ที่เปิดผิดจึงค้างอยู่ในรายการตลอดไป PO ที่ลบยังเก็บเลขที่ไว้ (ไม่ถูกแจกซ้ำ) เก็บรายการ/การคืนของ/การรับเงินไว้ครบ และคืนสินค้าเข้าสต็อกให้ กู้คืนได้จากถังขยะ พร้อมสิทธิ์ใหม่ "ขายส่ง: ลบ PO" (ตั้งต้น แอดมิน/ผู้บริหาร/พนักงานขาย) และ "ขายส่ง: กู้คืน PO จากถังขยะ" (ตั้งต้น แอดมิน/ผู้บริหาร) | ต่ำ. เพิ่มคอลัมน์ที่เป็น NULL ได้ ไม่แตะข้อมูลเดิม                                          |
 | `0041_claim_visit_dates`           | ใบเคลมประกันมีวันรับรถ/ส่งมอบรถ พร้อมเวลา เป็นของตัวเอง เดิมใบเคลมพิมพ์วันที่ของใบงานเดิม (วันที่ติดฟิล์ม ซึ่งอาจเป็นปีก่อน) เพราะการเคลมไม่มีวันที่ของตัวเองเลย ตอนนี้เก็บวันและเวลาที่ลูกค้าเอารถเข้ามาจริง ส่วนวันที่ติดตั้งเดิมยังพิมพ์อยู่ในบรรทัดของตัวเองที่ระบุชัดว่าเป็นงานเดิม การเคลมที่บันทึกไว้ก่อนหน้านี้เว้นว่างไว้ ไม่เดาให้                         | ต่ำ. เพิ่มคอลัมน์ที่เป็น NULL ได้ ไม่แตะข้อมูลเดิม                                          |
+| `0042_branch_compare_widget`       | สิทธิ์ใหม่ "การ์ดเปรียบเทียบรายสาขา" — การ์ดใหม่บนแดชบอร์ดที่วางทุกสาขาเทียบกันในตารางเดียว (ยอดขาย/ค่าใช้จ่าย/คงเหลือ/งาน/ค้างรับ/ค้างจ่าย/รอคืน Finnix) เดิมดูได้แค่ทีละสาขาหรือแบบรวม ตั้งต้นตามสิทธิ์ "ดูข้อมูลทุกสาขา" ที่มีอยู่แล้ว จึงไม่มีใครเห็นอะไรเพิ่มโดยไม่ตั้งใจ                                                                                       | ต่ำ. เพิ่มสิทธิ์อย่างเดียว ไม่แตะข้อมูล                                                     |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

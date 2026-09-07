@@ -4,7 +4,7 @@ import { daysAgoValue } from '@/lib/domain/now';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
-import { ticketTotal } from '@/lib/domain/tickets';
+import { itemNetPrice, ticketTotal } from '@/lib/domain/tickets';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
 import { Dashboard } from '@/components/dashboard/Dashboard';
@@ -26,6 +26,7 @@ import {
 } from '@/components/dashboard/receivables';
 import type { CalendarTicket } from '@/components/dashboard/JobCalendar';
 import { buildAppointments, type VisitDates } from '@/components/dashboard/appointments';
+import { buildBranchComparison } from '@/components/dashboard/branchTotals';
 
 /**
  * การนัดหมายที่ไม่ใช่การจองครั้งแรก — one place, read by the calendar and by
@@ -187,6 +188,7 @@ export default async function DashboardPage({
     categories: [...new Set((t.ticket_items ?? []).map((i) => i.category).filter(Boolean))],
     products: [...new Set((t.ticket_items ?? []).map((i) => i.sold || i.booked).filter(Boolean))],
     items: (t.ticket_items ?? []).map((i) => ({
+      category: i.category,
       soldPrice: num(i.sold_price),
       discountType: (i.discount_type ?? undefined) as 'percent' | 'amount' | undefined,
       discountValue: i.discount_value == null ? undefined : num(i.discount_value),
@@ -324,10 +326,76 @@ export default async function DashboardPage({
     .reduce((s, e) => s + e.amount, 0);
   const cashBalance = cashTopups - cashSpent;
 
-  const shopBreakdown = accessibleShops.map((s) => ({
-    name: s.name,
-    count: tickets.filter((t) => t.shop === s.id && inPeriod(t.dropOff)).length,
-  }));
+  /*
+    ยอดขายแยกตามชนิดสินค้า.
+
+    The same items and the same `itemNetPrice` the headline uses, grouped by
+    ชนิดสินค้า, plus ประกัน — which hangs off no ticket line (0023) and would
+    otherwise be money in the total with no row explaining it. So the rows add
+    up to the figure above them, exactly.
+  */
+  const revenueItems = visibleTickets
+    .filter((t) => !t.held)
+    .flatMap((t) => t.items.map((i) => ({ category: i.category, net: itemNetPrice(i) })));
+  const revenueByCategory = [...new Set(revenueItems.map((i) => i.category))]
+    .map((name) => ({
+      name,
+      amount: revenueItems.filter((i) => i.category === name).reduce((n, i) => n + i.net, 0),
+    }))
+    .concat(insuranceRevenue > 0 ? [{ name: 'ประกัน', amount: insuranceRevenue }] : [])
+    .filter((c) => c.name && c.amount !== 0)
+    .sort((a, b) => b.amount - a.amount);
+
+  /*
+    เปรียบเทียบรายสาขา.
+
+    Management could ask "how is this branch doing" or "how is the business
+    doing" and nothing in between, so comparing five branches meant picking
+    each one from the filter in turn and writing the numbers down.
+
+    Every figure is the SAME expression the card above uses, with the shop
+    fixed instead of read from the filter — deliberately, because a table that
+    computed ยอดขาย its own way would eventually disagree with the ยอดขาย card
+    on the same screen, and then neither number could be trusted.
+
+    Only built for ทุกร้าน, and only for a caller who may see other branches:
+    with one branch selected there is nothing to compare it against.
+  */
+  const branchComparison =
+    shopFilter === 'all' && session.hasDashboardWidget('branchCompare')
+      ? buildBranchComparison(accessibleShops, (shop) => {
+          const shopJobs = tickets.filter((t) => t.shop === shop && inPeriod(t.dropOff));
+          const shopPolicies = ((policyRows ?? []) as unknown as PolicyRow[]).filter(
+            (p) =>
+              shopByTicketId.get(p.ticket_id) === shop &&
+              inPeriod(p.sold_at ? new Date(`${p.sold_at}T00:00:00`) : null),
+          );
+          const revenue =
+            shopJobs.filter((t) => !t.held).reduce((n, t) => n + ticketTotal(t), 0) +
+            shopPolicies.reduce((n, p) => n + num(p.price), 0);
+          const spend = expenses
+            .filter(
+              (e) =>
+                e.shop === shop &&
+                !e.paidForFinnix &&
+                e.status === 'จ่ายแล้ว' &&
+                inPeriod(e.paidAt),
+            )
+            .reduce((n, e) => n + e.amount, 0);
+          return {
+            revenue,
+            expenses: spend,
+            profit: revenue - spend,
+            jobs: shopJobs.length,
+            receivable: computeReceivables(tickets, orders, customers, shop).reduce(
+              (n, a) => n + a.amount,
+              0,
+            ),
+            payable: computePayables(expenses, shop).reduce((n, a) => n + a.amount, 0),
+            heldForFinnix: shopJobs.filter((t) => t.held).reduce((n, t) => n + ticketTotal(t), 0),
+          };
+        })
+      : undefined;
 
   const expenseCategories = [...new Set(paidExpenses.map((e) => e.category))];
   const expenseByCategory = expenseCategories.map((cat) => ({
@@ -526,13 +594,14 @@ export default async function DashboardPage({
       cashBalance={cashBalance}
       arItems={arItems}
       apItems={apItems}
-      shopBreakdown={shopBreakdown}
+      revenueByCategory={revenueByCategory}
       expenseByCategory={expenseByCategory}
       stockByCategory={stockByCategory}
       stockTotal={stockTotal}
       trend={trend}
       calendarTickets={calendarTickets}
       visitTotals={visitTotals}
+      branchComparison={branchComparison}
       shopFilter={shopFilter}
       caption={periodCaption(period, periodValue, rangeStart, rangeEnd, now)}
       statuses={statuses}

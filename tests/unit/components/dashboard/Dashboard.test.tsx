@@ -28,7 +28,7 @@ describe('Dashboard', () => {
         cashBalance={0}
         arItems={[]}
         apItems={[]}
-        shopBreakdown={[]}
+        revenueByCategory={[]}
         expenseByCategory={[]}
         trend={emptyTrend}
       />,
@@ -45,7 +45,7 @@ describe('Dashboard', () => {
         cashBalance={0}
         arItems={[{ id: 'JT-1', name: 'คุณ เอ (1กก)', amount: 3100, source: 'ใบงานติดตั้ง' }]}
         apItems={[]}
-        shopBreakdown={[]}
+        revenueByCategory={[]}
         expenseByCategory={[]}
         trend={emptyTrend}
       />,
@@ -68,7 +68,7 @@ const base = {
   cashBalance: 0,
   arItems: [],
   apItems: [],
-  shopBreakdown: [],
+  revenueByCategory: [],
   expenseByCategory: [],
   trend: emptyTrend,
   statuses: STATUSES,
@@ -417,5 +417,49 @@ describe('Dashboard — นัดหมายนับแยกจากสถ�
   it('says nothing when the period holds no visits', () => {
     render(<Dashboard {...base} totalJobs={8} visitTotals={[]} />);
     expect(screen.queryByText(/ไม่รวมในยอดงานทั้งหมด/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * ยอดขายแยกตามชนิดสินค้า.
+ *
+ * The breakdown inside the ยอดขายรวม card used to be the JOB COUNT per branch —
+ * a different question from the baht figure above it, and from the ค่าใช้จ่าย
+ * card beside it, whose breakdown has always been amounts by category.
+ */
+describe('Dashboard — ยอดขายแยกตามชนิดสินค้า', () => {
+  const base = {
+    hasDashboardWidget: () => true,
+    revenue: 33_000,
+    totalExpenses: 0,
+    cashBalance: 0,
+    arItems: [],
+    apItems: [],
+    expenseByCategory: [],
+    trend: { labels: [], revenue: [], expense: [], profit: [] },
+  } as unknown as Parameters<typeof Dashboard>[0];
+
+  it('lists each ชนิดสินค้า with its baht, not a count', () => {
+    render(
+      <Dashboard
+        {...base}
+        revenueByCategory={[
+          { name: 'ฟิล์มกรองแสง', amount: 20_500 },
+          { name: 'เครื่องเสียง', amount: 10_000 },
+          { name: 'ประกัน', amount: 2_500 },
+        ]}
+      />,
+    );
+    expect(screen.getByText('ฟิล์มกรองแสง')).toBeInTheDocument();
+    expect(screen.getByText('20,500.00')).toBeInTheDocument();
+    // ประกัน hangs off no ticket line, so it needs a row of its own or the
+    // rows would not add up to the figure above them.
+    expect(screen.getByText('ประกัน')).toBeInTheDocument();
+    expect(screen.getByText('2,500.00')).toBeInTheDocument();
+  });
+
+  it('says so rather than drawing an empty bar chart when nothing sold', () => {
+    render(<Dashboard {...base} revenueByCategory={[]} />);
+    expect(screen.getByText('ยังไม่มียอดขายในช่วงเวลานี้')).toBeInTheDocument();
   });
 });

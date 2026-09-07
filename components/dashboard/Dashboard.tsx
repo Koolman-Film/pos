@@ -18,6 +18,8 @@
 // only interactive leaf is the status dropdown (TicketStatusSelect).
 
 import Link from 'next/link';
+import { BranchComparison as BranchComparisonCard } from './BranchComparison';
+import type { BranchComparison as BranchComparisonData } from './branchTotals';
 import type { ReactNode } from 'react';
 
 import { LineChart } from '@/components/charts/LineChart';
@@ -28,7 +30,19 @@ import { JobCalendar, type CalendarTicket } from './JobCalendar';
 import { TicketStatusSelect } from './TicketStatusSelect';
 import type { APItem, ARItem, TrendSeries } from './receivables';
 
-export type ShopBreakdown = { name: string; count: number };
+/**
+ * ยอดขายแยกตามชนิดสินค้า — the breakdown inside the ยอดขายรวม card.
+ *
+ * It used to be the JOB COUNT per branch, which answered a different question
+ * from the baht figure it sat under and from the ค่าใช้จ่าย card beside it,
+ * where the breakdown has always been amounts by category. Comparing branches
+ * is its own card now, so this one says what the money was earned ON.
+ *
+ * The rows add up to the headline exactly: same `itemNetPrice`, same tickets,
+ * with ประกัน as its own row because it is revenue that hangs off no ticket
+ * line (migration 0023).
+ */
+export type RevenueByCategory = { name: string; amount: number };
 export type ExpenseByCategory = { name: string; amount: number };
 export type StockByCategory = { name: string; qty: number };
 
@@ -131,7 +145,7 @@ export type DashboardProps = {
   cashBalance: number;
   arItems: ARItem[];
   apItems: APItem[];
-  shopBreakdown: ShopBreakdown[];
+  revenueByCategory: RevenueByCategory[];
   expenseByCategory: ExpenseByCategory[];
   stockByCategory?: StockByCategory[];
   stockTotal?: number;
@@ -153,6 +167,12 @@ export type DashboardProps = {
   upcoming?: UpcomingTicket[];
   /** งานแก้ / เซอร์วิส in the selected period — beside the status bars. */
   visitTotals?: VisitTotal[];
+  /**
+   * เปรียบเทียบรายสาขา. Absent when the caller may not see other branches, or
+   * when the dashboard is filtered to one — both cases where the card would
+   * have nothing to say.
+   */
+  branchComparison?: BranchComparisonData;
   expiringInsurance?: ExpiringInsurance[];
   pendingApprovals?: PendingApprovals;
   recentJobs?: RecentJob[];
@@ -169,7 +189,7 @@ export function Dashboard({
   cashBalance,
   arItems,
   apItems,
-  shopBreakdown,
+  revenueByCategory,
   expenseByCategory,
   stockByCategory = [],
   stockTotal = 0,
@@ -187,13 +207,14 @@ export function Dashboard({
   statusTotals = [],
   upcoming = [],
   visitTotals = [],
+  branchComparison,
   expiringInsurance = [],
   pendingApprovals,
   recentJobs = [],
   canDo = () => false,
   onUpdateTicketStatus,
 }: DashboardProps) {
-  const maxShopCount = Math.max(...shopBreakdown.map((s) => s.count), 1);
+  const maxRevenueCat = Math.max(...revenueByCategory.map((c) => c.amount), 1);
   const maxExpenseCat = Math.max(...expenseByCategory.map((c) => c.amount), 1);
   const maxStockCat = Math.max(...stockByCategory.map((c) => c.qty), 1);
   const totalAR = arItems.reduce((s, i) => s + i.amount, 0);
@@ -228,17 +249,22 @@ export function Dashboard({
               ยอดขายรวม (บาท)
             </p>
             <div className="mt-4 flex flex-col gap-2.5">
-              {shopBreakdown.map((s) => (
-                <div key={s.name}>
+              {revenueByCategory.length === 0 && (
+                <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                  ยังไม่มียอดขายในช่วงเวลานี้
+                </p>
+              )}
+              {revenueByCategory.map((c) => (
+                <div key={c.name}>
                   <div className="flex justify-between text-xs mb-1">
-                    <span style={{ color: 'var(--ink-soft)' }}>{s.name}</span>
-                    <span className="font-medium">{s.count}</span>
+                    <span style={{ color: 'var(--ink-soft)' }}>{c.name}</span>
+                    <span className="font-medium">{fmt(c.amount)}</span>
                   </div>
                   <div className="h-1.5 rounded-full" style={{ background: 'var(--paper)' }}>
                     <div
                       className="h-1.5 rounded-full"
                       style={{
-                        width: `${(s.count / maxShopCount) * 100}%`,
+                        width: `${(c.amount / maxRevenueCat) * 100}%`,
                         background: 'var(--revenue)',
                       }}
                     ></div>
@@ -634,6 +660,18 @@ export function Dashboard({
           </div>
         )}
       </div>
+
+      {/* Row 3a: every branch beside every other one.
+
+          Above the week-ahead card because it answers the question management
+          opens the dashboard with — who is ahead — and below the money cards,
+          which are where the same figures are defined. Only on ทุกร้าน: with
+          one branch chosen there is nothing to compare it with. */}
+      {branchComparison && branchComparison.rows.length > 1 && (
+        <div className="mb-4">
+          <BranchComparisonCard data={branchComparison} caption={caption} />
+        </div>
+      )}
 
       {/* Row 3b: the week ahead, on a row of its own.
 

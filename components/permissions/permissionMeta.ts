@@ -76,6 +76,7 @@ export const DASHBOARD_WIDGETS: LabeledKey[] = [
   { key: 'receivablesPayables', label: 'การ์ดเจ้าหนี้/ลูกหนี้' },
   { key: 'pendingApprovals', label: 'การ์ดรอการอนุมัติ' },
   { key: 'insuranceExpiry', label: 'การ์ดประกันใกล้หมดอายุ' },
+  { key: 'branchCompare', label: 'การ์ดเปรียบเทียบรายสาขา' },
 ];
 
 /** reference/v0.4/finnix-film.html:192-195 */

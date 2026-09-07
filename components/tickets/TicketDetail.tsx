@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { SavedToast } from '@/components/ui/SavedToast';
 import { useMemo, useState } from 'react';
 
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
@@ -223,6 +224,8 @@ export function TicketDetail({
   const [deleting, setDeleting] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** "บันทึกแล้ว" — set on a successful save, cleared by the toast itself. */
+  const [saved, setSaved] = useState<string | null>(null);
 
   // Frozen record. `initialTicket.locked` rather than `t.locked` on purpose: the
   // flag is not something the form edits, and reading it from the draft would
@@ -535,6 +538,7 @@ export function TicketDetail({
 
   async function save() {
     setSaveError(null);
+    setSaved(null);
     setSaving(true);
     const finalTicket: Ticket = t.createdBy ? t : { ...t, createdBy: currentUserName || 'ไม่ระบุ' };
     try {
@@ -546,12 +550,28 @@ export function TicketDetail({
       }
       window.__hasUnsavedFormChanges = false;
       // The save worked, so this is not an error banner — but the shop has to
-      // SEE it, and the next line navigates away. A product renamed after its
-      // usage was recorded stops being deducted, and stock drifts from then on
-      // unless somebody fixes the name.
+      // SEE it. A product renamed after its usage was recorded stops being
+      // deducted, and stock drifts from then on unless somebody fixes the name.
       if (result.stockWarning) window.alert(result.stockWarning);
-      router.push('/tickets');
+      /*
+        บันทึกแล้ว แต่ไม่ปิดใบงาน.
+
+        Saving used to close the ticket and drop the user back on the list, so
+        carrying on with the same job meant finding it again — and on a list of
+        any length that is a search, after every single save. The ticket stays
+        open and the toast says the save happened.
+
+        A NEW ticket is the one case that still navigates: it was created at
+        /tickets/new and now has a real job number, so the URL has to become
+        that ticket or the next save would create a second one. `replace`, not
+        `push`, so Back does not lead to a blank form for a job already saved.
+      */
+      if (isNew && result.id) {
+        router.replace(`/tickets/${result.id}`);
+      }
       router.refresh();
+      setSaved(`บันทึกแล้ว${result.id ? ` · ${result.id}` : ''}`);
+      setSaving(false);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
       setSaving(false);
@@ -1457,6 +1477,7 @@ export function TicketDetail({
           technicianOptions={options.technicians}
         />
       </div>
+      <SavedToast message={saved} onDone={() => setSaved(null)} />
     </OptionManageProvider>
   );
 }

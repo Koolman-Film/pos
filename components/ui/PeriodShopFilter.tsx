@@ -38,34 +38,38 @@ export function PeriodShopFilter({
 }) {
   return (
     <div className="card p-3 mb-4 flex flex-wrap items-center gap-2">
-      {allowAllShops ? (
-        <select
-          value={shopFilter}
-          onChange={(e) => setShopFilter(e.target.value)}
-          aria-label="เลือกสาขา"
-          className="field text-sm px-3 py-2 font-medium"
-        >
-          <option value="all">ทุกร้าน ({shopOptions.length})</option>
-          {shopOptions.map((s) => (
-            <option key={s.id} value={s.id}>
+      {/*
+        สาขาเป็นปุ่ม ไม่ใช่ดรอปดาวน์.
+
+        A dropdown hides every branch but the chosen one, so switching between
+        two of them is three actions and you cannot see what else is there. The
+        period control beside it has always been a row of buttons; the branches
+        are the same kind of choice — a short, fixed list — and now read the
+        same way. The row wraps, so a sixth branch costs a line, not a redesign.
+      */}
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="เลือกสาขา">
+        {(allowAllShops
+          ? [{ id: 'all', name: `ทุกร้าน (${shopOptions.length})` }, ...shopOptions]
+          : shopOptions
+        ).map((s) => {
+          const on = shopFilter === s.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setShopFilter(s.id)}
+              aria-pressed={on}
+              className="text-xs px-3 py-2 rounded-xl font-semibold"
+              style={{
+                background: on ? 'var(--primary)' : 'transparent',
+                color: on ? '#fff' : 'var(--ink-soft)',
+                border: on ? '1.5px solid var(--primary)' : '1.5px solid var(--line)',
+              }}
+            >
               {s.name}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <select
-          value={shopFilter}
-          onChange={(e) => setShopFilter(e.target.value)}
-          aria-label="เลือกสาขา"
-          className="field text-sm px-3 py-2 font-medium"
-        >
-          {shopOptions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      )}
+            </button>
+          );
+        })}
+      </div>
       <div
         className="flex rounded-xl overflow-hidden"
         style={{ border: '1.5px solid var(--line)' }}
