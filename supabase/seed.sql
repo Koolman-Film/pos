@@ -144,38 +144,7 @@ insert into tickets (
    'เข้าทำ/ติดตั้ง', 'ส่งมอบแล้ว', 'Walk-in',
    '{"ฟิล์มกรองแสง": ["ช่างเอก"]}'::jsonb,
    (current_date + 5) + time '09:00', (current_date + 5) + time '16:00',
-   '{}'::jsonb),
-
-  -- พะเยา / ลำปาง / Central Audio had no sample work at all, so three of the
-  -- five rows in เปรียบเทียบรายสาขา were empty and the card demonstrated
-  -- nothing. One job each, at different sizes, so the ranking has something
-  -- to rank.
-  ('JT-PY-00031', 'py', (select id from retail_customers where name = 'คุณ สมชาย'),
-   'คุณ สมชาย', '082-345-6789', 'พย 1188', 'กระบะ', 'Toyota', 'Hilux Revo', 'เทา',
-   'เข้าทำ/ติดตั้ง', 'รอส่งมอบ', 'Walk-in',
-   '{"ฟิล์มกรองแสง": ["ช่างนัท"]}'::jsonb,
-   (current_date + 1) + time '09:00', (current_date + 4) + time '16:00',
-   '{}'::jsonb),
-
-  ('JT-LPG-00019', 'lpg', (select id from retail_customers where name = 'คุณ ปรีชา'),
-   'คุณ ปรีชา', '084-567-8901', 'ลป 7723', 'เก๋งเล็ก', 'Mazda', '3', 'ขาว',
-   'เข้าทำ/ติดตั้ง', 'กำลังติดตั้ง', 'เพจร้าน',
-   '{"ฟิล์มกันรอย": ["ช่างบอย"]}'::jsonb,
-   (current_date + 3) + time '10:00', (current_date + 3) + time '17:00',
-   '{}'::jsonb),
-
-  -- รับแทน Finnix: Central Audio collected the money for a เชียงใหม่ job, so it
-  -- shows in รอคืน Finnix and NOT in its ยอดขาย (migration 0031). The card
-  -- needs a branch where those two columns disagree, or the distinction the
-  -- shop asked for cannot be seen.
-  ('JT-CA-00007', 'ca', (select id from retail_customers where name = 'คุณ นภา'),
-   'คุณ นภา', '085-678-9012', 'ชม 9042', 'เก๋งใหญ่', 'Honda', 'Accord', 'ดำ',
-   'เข้าทำ/ติดตั้ง', 'ส่งมอบแล้ว', 'Walk-in',
-   '{"เครื่องเสียง": ["ช่างบอย"]}'::jsonb,
-   (current_date + 2) + time '09:00', (current_date + 2) + time '15:00',
    '{}'::jsonb);
-
-update tickets set revenue_kind = 'รับแทน' where id = 'JT-CA-00007';
 
 insert into ticket_items (ticket_id, category, booked, booked_price, sold, sold_price) values
   ('JT-CM-00214', 'ฟิล์มกรองแสง', '', 0,
@@ -187,10 +156,7 @@ insert into ticket_items (ticket_id, category, booked, booked_price, sold, sold_
   ('JT-LP-00088', 'ฟิล์มกรองแสง', '', 0,
    'บานหน้า: ฟิล์ม 3M CRM 60%, บานหลัง: ฟิล์ม 3M CRM 60%', 3800),
   ('JT-CM-00207', 'ฟิล์มกรองแสง', 'ฟิล์ม 3M CRM', 9000, '', 0),
-  ('JT-CM-00218', 'ฟิล์มกรองแสง', '', 0, 'รอบคัน: ฟิล์ม FINNIX CT 40%', 6400),
-  ('JT-PY-00031', 'ฟิล์มกรองแสง', '', 0, 'รอบคัน: ฟิล์ม 3M CRM 60%', 8900),
-  ('JT-LPG-00019', 'ฟิล์มกันรอย', '', 0, 'เต็มคัน: TPU กันรอยเกรดพรีเมียม', 15500),
-  ('JT-CA-00007', 'เครื่องเสียง', '', 0, 'ชุดเครื่องเสียง JBL ครบชุด', 24000);
+  ('JT-CM-00218', 'ฟิล์มกรองแสง', '', 0, 'รอบคัน: ฟิล์ม FINNIX CT 40%', 6400);
 
 -- Positions hang off the film/wrap items. Looked up by (ticket, category) rather
 -- than by a hardcoded id, since ticket_items.id is an identity column.
@@ -216,10 +182,7 @@ insert into ticket_payments (ticket_id, type, method, amount, paid_at) values
   -- Paid in full, which is what ส่งมอบแล้ว means; the ค้างชำระ ticket
   -- deliberately has none, so the two states differ in the numbers as well as
   -- in the label.
-  ('JT-CM-00218', 'ชำระเต็มจำนวน', 'โอน TTB', 6400, current_date),
-  -- พะเยา has taken a deposit only, so it carries a balance in ค้างรับ.
-  ('JT-PY-00031', 'มัดจำ', 'เงินสด', 3000, current_date - 1),
-  ('JT-CA-00007', 'ชำระเต็มจำนวน', 'โอน TTB', 24000, current_date);
+  ('JT-CM-00218', 'ชำระเต็มจำนวน', 'โอน TTB', 6400, current_date);
 
 insert into ticket_status_history (ticket_id, status, changed_at) values
   ('JT-CM-00214', 'จองแล้ว', (current_date - 3) + time '09:00'),
@@ -236,13 +199,7 @@ insert into ticket_status_history (ticket_id, status, changed_at) values
   ('JT-CM-00207', 'จองแล้ว', current_date + time '09:00'),
   ('JT-CM-00218', 'จองแล้ว', (current_date - 2) + time '09:00'),
   ('JT-CM-00218', 'กำลังติดตั้ง', (current_date - 1) + time '09:00'),
-  ('JT-CM-00218', 'ส่งมอบแล้ว', current_date + time '09:00'),
-  ('JT-PY-00031', 'จองแล้ว', (current_date - 1) + time '09:00'),
-  ('JT-PY-00031', 'รอส่งมอบ', current_date + time '09:00'),
-  ('JT-LPG-00019', 'จองแล้ว', (current_date - 1) + time '09:00'),
-  ('JT-LPG-00019', 'กำลังติดตั้ง', current_date + time '09:00'),
-  ('JT-CA-00007', 'จองแล้ว', (current_date - 2) + time '09:00'),
-  ('JT-CA-00007', 'ส่งมอบแล้ว', current_date + time '09:00');
+  ('JT-CM-00218', 'ส่งมอบแล้ว', current_date + time '09:00');
 
 -- ------------------------------------------------- เซอร์วิส / เคลมประกัน --
 --
@@ -372,45 +329,25 @@ join (values
 -- The two 'รอจ่าย' rows are what the dashboard's เจ้าหนี้ card totals: 12,400 +
 -- 96,000 = 108,400.
 
--- Spread across all five branches, and anchored to the START OF THIS MONTH.
+-- Anchored to the START OF THIS MONTH, not to a fixed date.
 --
--- They used to be pinned to July 2026 and to เชียงใหม่ alone, so from August
--- onwards every ค่าใช้จ่าย figure on the dashboard read 0.00 and the
--- เปรียบเทียบรายสาขา card had one branch with numbers and four empty rows —
--- the sample could not demonstrate the thing it exists to show.
---
--- `current_date - 12` would not fix it either: run on the 7th that lands in
--- LAST month, and the dashboard defaults to รายเดือน. `date_trunc('month')`
--- plus a few days, clamped to today, reads the same on the 1st as on the 28th.
+-- They used to be pinned to July 2026, so from August onwards every ค่าใช้จ่าย
+-- figure on the dashboard read 0.00 — the sample looked like a shop that had
+-- never paid a bill. `current_date - 12` would not fix it either: run on the
+-- 7th that lands in LAST month, and the dashboard defaults to รายเดือน.
+-- `date_trunc('month')` plus a few days, clamped to today, reads the same on
+-- the 1st as on the 28th.
 insert into expenses (shop_id, description, category, source, amount, status, paid_at, due_at) values
   ('cm', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 35000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
   ('cm', 'ค่ากาแฟรับลูกค้า', 'การตลาด', 'เงินสดย่อย', 150, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 5, current_date), null),
   ('cm', 'ค่าน้ำมันรถส่งของ', 'ค่าวัสดุสิ้นเปลือง', 'เงินสดย่อย', 400, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 4, current_date), null),
   ('cm', 'ค่าไฟฟ้า', 'ค่าน้ำ-ไฟ', 'บัญชีธนาคารสาขา', 12400, 'รอจ่าย', null, current_date + 9),
-  ('cm', 'เงินเดือนพนักงาน', 'เงินเดือน', 'บัญชีธนาคารสาขา', 96000, 'รอจ่าย', null, current_date + 14),
+  ('cm', 'เงินเดือนพนักงาน', 'เงินเดือน', 'บัญชีธนาคารสาขา', 96000, 'รอจ่าย', null, current_date + 14);
 
-  ('lp', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 18000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
-  ('lp', 'ค่าไฟฟ้า', 'ค่าน้ำ-ไฟ', 'บัญชีธนาคารสาขา', 4200, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 6, current_date), null),
 
-  ('py', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 15000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
-  ('py', 'ค่าวัสดุติดตั้ง', 'ค่าวัสดุสิ้นเปลือง', 'เงินสดย่อย', 1250, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 7, current_date), null),
-
-  ('lpg', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 14000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
-  -- จ่ายแทน Finnix: money really did leave this branch’s drawer, so เงินสดย่อย
-  -- moves, but it is another shop’s cost and never counts as ลำปาง’s.
-  ('lpg', 'ค่าฟิล์มให้สาขาเชียงใหม่', 'ค่าวัสดุสิ้นเปลือง', 'เงินสดย่อย', 3000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 8, current_date), null),
-
-  ('ca', 'ค่าเช่าร้าน', 'ค่าเช่า', 'บัญชีธนาคารสาขา', 22000, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 1, current_date), null),
-  ('ca', 'ค่าโฆษณาเพจร้าน', 'การตลาด', 'บัญชีธนาคารสาขา', 5500, 'จ่ายแล้ว', least(date_trunc('month', current_date)::date + 9, current_date), null);
-
-update expenses set expense_kind = 'จ่ายแทน' where description = 'ค่าฟิล์มให้สาขาเชียงใหม่';
-
--- Petty cash, topped up per branch. เชียงใหม่ 10,000 with 550 spent → 9,450;
--- พะเยา 5,000 − 1,250 → 3,750; ลำปาง 5,000 − 3,000 → 2,000.
+-- Petty cash: 10,000 topped up, 550 spent from เงินสดย่อย above → 9,450.
 insert into petty_cash (shop_id, type, amount, entry_at, note) values
-  ('cm', 'เติมเงิน', 10000, current_date - 14, 'อนุมัติโดยแอดมิน'),
-  ('py', 'เติมเงิน', 5000, current_date - 14, 'อนุมัติโดยแอดมิน'),
-  ('lpg', 'เติมเงิน', 5000, current_date - 14, 'อนุมัติโดยแอดมิน');
+  ('cm', 'เติมเงิน', 10000, current_date - 14, 'อนุมัติโดยแอดมิน');
 
 -- ---------------------------------------------------------------------------
 -- A working admin login, so a bare `supabase db reset` leaves you able to sign
