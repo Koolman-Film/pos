@@ -20,7 +20,14 @@ export type WsItem = {
   reason: string;
 };
 
-export type WsReturn = { item: string; qty: number; reason: string };
+/**
+ * การคืนสินค้าหนึ่งรายการ.
+ *
+ * `date` is what the return reduces revenue ON (migration 0045). Without it a
+ * return could only ever be netted off the PO as a whole, so a March sale
+ * returned in May took March’s figure down two months after it was reported.
+ */
+export type WsReturn = { item: string; qty: number; reason: string; date: string };
 
 export type WsAdjustment = { amount: number; reason: string; date: string };
 
@@ -36,6 +43,14 @@ export type WsOrder = {
   shop: string;
   customerId: number | null;
   status: string;
+  /**
+   * วันที่ส่งของ — the date the sale is earned, set by issuing ใบส่งของ.
+   *
+   * Empty means the goods have not gone out (or, on a PO from before
+   * migration 0045, that nobody wrote the date down). Wholesale sells on
+   * credit, so this and not the payment date is when the revenue belongs.
+   */
+  deliveredAt?: string;
   /**
    * `orders.created_at`, the date the period filter windows the list on. Absent
    * on an unsaved draft from `blankOrder`, which the filter then always shows.
@@ -56,6 +71,14 @@ export type WsDeletedOrder = WsOrder & {
   deletedAt: Date | null;
   deletedByName: string;
 };
+
+/**
+ * เอกสารขายส่ง. ขายส่งไม่ออกใบกำกับภาษี — สี่ใบนี้เท่านั้น.
+ *
+ * `delivery` and `ret` are not only paperwork: issuing them records the two
+ * dates the money figures are built on (migration 0045).
+ */
+export type WsPrintMode = 'invoice' | 'delivery' | 'ret' | 'receipt' | null;
 
 export type WsCustomer = { id: number; name: string; phone: string; address: string };
 

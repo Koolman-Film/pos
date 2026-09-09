@@ -1,14 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { createPortal } from 'react-dom';
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { OptionManageProvider } from '@/components/ui/optionManage';
-import { fmt, fmtThaiDateLong, thaiBahtText } from '@/lib/domain/format';
+import { fmt, fmtThaiDateLong, fmtThaiDayString, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { orderTotal, orderPaid } from '@/lib/domain/orders';
+import { dateInputValue } from '@/lib/domain/now';
 
 import { CustomerPicker } from './CustomerPicker';
 import {
@@ -22,6 +24,7 @@ import {
   type WsOrder,
   type WsShopInfo,
   type WsStatusMap,
+  type WsPrintMode,
   type WsStockItem,
 } from './types';
 
@@ -43,6 +46,40 @@ import {
  * Everything except `order` is optional so the component can be rendered bare
  * (see the Step-3 component test).
  */
+/** ขายส่งออกสี่ใบนี้ ไม่มีใบกำกับภาษี — ยืนยันกับร้านแล้ว. */
+const DOCS: {
+  key: Exclude<WsPrintMode, null>;
+  label: string;
+  icon: string;
+  /** Why the button is off, shown only while it is. */
+  blocked: string;
+}[] = [
+  {
+    key: 'invoice',
+    label: 'ใบแจ้งหนี้',
+    icon: 'fa-file-lines',
+    blocked: 'ต้องบันทึก PO ก่อนจึงจะออกใบแจ้งหนี้ได้',
+  },
+  {
+    key: 'delivery',
+    label: 'ใบส่งของ',
+    icon: 'fa-truck-fast',
+    blocked: 'ต้องมีรายการสินค้าก่อนจึงจะออกใบส่งของได้',
+  },
+  {
+    key: 'ret',
+    label: 'ใบรับคืนสินค้า',
+    icon: 'fa-rotate-left',
+    blocked: 'ต้องบันทึกการคืนสินค้าก่อนจึงจะออกใบรับคืนได้',
+  },
+  {
+    key: 'receipt',
+    label: 'ใบเสร็จรับเงิน',
+    icon: 'fa-receipt',
+    blocked: 'ต้องมีการรับชำระเงินก่อนจึงจะออกใบเสร็จรับเงินได้',
+  },
+];
+
 export function WholesaleDetail({
   order,
   canDo,
@@ -60,6 +97,7 @@ export function WholesaleDetail({
   onRejectPrice,
   onMarkBadDebt,
   onDeleteOrder,
+  onRecordDelivery,
   onSaveCustomer,
   onBack,
   updateOptionListAction,
@@ -88,6 +126,17 @@ export function WholesaleDetail({
   onMarkBadDebt?: (orderId: string) => Promise<void> | void;
   /** ลบ PO — gated by `wholesale.delete`. Absent in the bare unit test. */
   onDeleteOrder?: (orderId: string) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * บันทึกวันส่งของ — called when ใบส่งของ is issued for the first time.
+   *
+   * Separate from `onSaveOrder` because it is not an edit the user typed: it
+   * is the consequence of issuing the document, and it must land even if the
+   * PO has no other unsaved changes.
+   */
+  onRecordDelivery?: (
+    orderId: string,
+    deliveredAt: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
   onSaveCustomer?: (input: {
     id?: number;
     name: string;
@@ -112,12 +161,20 @@ export function WholesaleDetail({
     void updateOptionListAction?.('payment_methods', next);
   }
   const mounted = useIsMounted();
-  const [printMode, setPrintMode] = useState<'invoice' | 'receipt' | null>(null);
+  /*
+    เอกสารขายส่ง สี่ใบ.
+
+    ขายส่งไม่ออกใบกำกับภาษี — ใบแจ้งหนี้ ใบส่งของ ใบรับคืนสินค้า ใบเสร็จรับเงิน
+    เท่านั้น. Two of them are also the accounting events: issuing a ใบส่งของ IS
+    the delivery, which is when a wholesale sale is earned, and a ใบรับคืนสินค้า
+    IS the return.
+  */
+  const [printMode, setPrintMode] = useState<WsPrintMode>(null);
 
   const isDirty = JSON.stringify(o) !== JSON.stringify(order);
   useUnsavedChangesGuard(isDirty, 'มีข้อมูลใน PO นี้ที่ยังไม่ได้บันทึก');
 
-  function doPrint(mode: 'invoice' | 'receipt') {
+  function doPrint(mode: Exclude<WsPrintMode, null>) {
     setPrintMode(mode);
     setTimeout(() => window.print(), 50);
   }
@@ -239,7 +296,13 @@ export function WholesaleDetail({
   function addReturn() {
     setO({
       ...o,
-      returns: [...o.returns, { item: purchasedProducts[0] || '', qty: 1, reason: '' }],
+      returns: [
+        ...o.returns,
+        // Dated today by default. A return typed with no date at all used to
+        // be stamped with whenever the PO was next saved, which could be weeks
+        // later and in the wrong month.
+        { item: purchasedProducts[0] || '', qty: 1, reason: '', date: dateInputValue(new Date()) },
+      ],
     });
   }
   function updateReturn(idx: number, k: keyof WsOrder['returns'][number], v: string | number) {
@@ -306,6 +369,104 @@ export function WholesaleDetail({
   const hasBreakdown = o.returns.length > 0 || o.adjustments.length > 0;
   const canInvoice = !isNew;
   const canReceipt = o.payments.length > 0 && paid > 0;
+
+  /*
+    ใบส่งของ records the delivery date, which is when a wholesale sale is
+    earned — the shop delivers first and is paid weeks later, so the payment
+    date would put the revenue in the wrong month entirely.
+
+    Re-issuing it does NOT move the date. A second copy is a reprint (the
+    customer lost theirs); silently re-dating the sale because somebody printed
+    it again would move revenue between months without anyone deciding to.
+  */
+  const canDeliver = !isNew && o.items.some((it) => Number(it.qty) > 0);
+  const canReturn = !isNew && o.returns.length > 0;
+
+  const docAllowed: Record<Exclude<WsPrintMode, null>, boolean> = {
+    invoice: canInvoice,
+    delivery: canDeliver,
+    ret: canReturn,
+    receipt: canReceipt,
+  };
+
+  /*
+    What the sheet being printed actually IS.
+
+    All four documents share one layout — same letterhead, same buyer block,
+    same table — and differ in four things: the number prefix, the title, which
+    rows it lists, and who signs it. Keeping that as data rather than four
+    copies of the JSX is what stops the ใบส่งของ drifting away from the
+    ใบแจ้งหนี้ the next time the shop’s address changes.
+  */
+  const sheetFor = (mode: Exclude<WsPrintMode, null>) => {
+    const itemRows = o.items.map((it) => ({
+      name: it.name,
+      qty: Number(it.qty) || 0,
+      unit: Number(it.requestedPrice) || 0,
+    }));
+    // A returned line is priced at what it was SOLD for, not at list price:
+    // the credit has to undo the sale, and the sale may have been discounted.
+    const returnRows = o.returns.map((r) => ({
+      name: r.item,
+      qty: Number(r.qty) || 0,
+      unit: Number(o.items.find((it) => it.name === r.item)?.requestedPrice) || 0,
+    }));
+
+    switch (mode) {
+      case 'delivery':
+        return {
+          prefix: 'DO',
+          title: 'ใบส่งของ',
+          rows: itemRows,
+          showTotals: false,
+          signatures: ['ผู้ส่งของ', 'ผู้รับของ'],
+          dateText: fmtThaiDayString(o.deliveredAt || dateInputValue(new Date())),
+        };
+      case 'ret':
+        return {
+          prefix: 'RTN',
+          title: 'ใบรับคืนสินค้า',
+          rows: returnRows,
+          showTotals: false,
+          signatures: ['ผู้คืนสินค้า', 'ผู้รับคืน'],
+          dateText: fmtThaiDayString(
+            o.returns
+              .map((r) => r.date)
+              .filter(Boolean)
+              .sort()
+              .at(-1) || dateInputValue(new Date()),
+          ),
+        };
+      case 'receipt':
+        return {
+          prefix: 'RCT',
+          title: 'ใบเสร็จรับเงิน',
+          rows: itemRows,
+          showTotals: true,
+          signatures: ['ผู้รับเงิน'],
+          dateText: fmtThaiDateLong(new Date()),
+        };
+      default:
+        return {
+          prefix: 'INV',
+          title: 'ใบแจ้งหนี้',
+          rows: itemRows,
+          showTotals: true,
+          signatures: ['ผู้ออกเอกสาร'],
+          dateText: fmtThaiDateLong(new Date()),
+        };
+    }
+  };
+  const sheet = sheetFor(printMode ?? 'invoice');
+
+  async function issueDocument(mode: Exclude<WsPrintMode, null>) {
+    if (mode === 'delivery' && !o.deliveredAt && onRecordDelivery) {
+      const on = dateInputValue(new Date());
+      const res = await onRecordDelivery(o.id, on);
+      if (res?.ok) setO({ ...o, deliveredAt: on });
+    }
+    doPrint(mode);
+  }
   const hasDiscount = o.items.some((i) => i.requestedPrice < i.listPrice);
   const st = wsStatuses[o.status] || {};
 
@@ -524,6 +685,13 @@ export function WholesaleDetail({
                   onChange={(e) => updateReturn(idx, 'reason', e.target.value)}
                   className="field text-xs px-2.5 py-1.5 flex-1"
                 />
+                {/* The date the return reduces revenue on — see migration 0045. */}
+                <ThaiDateInput
+                  value={r.date || ''}
+                  onChange={(v) => updateReturn(idx, 'date', v)}
+                  ariaLabel={`วันที่รับคืนรายการที่ ${idx + 1}`}
+                  className="field text-xs px-2.5 py-1.5"
+                />
               </div>
             ))}
             <button
@@ -717,40 +885,37 @@ export function WholesaleDetail({
             <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
               <i className="fa-solid fa-file-invoice mr-1.5"></i>ออกเอกสาร
             </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => canInvoice && doPrint('invoice')}
-                disabled={!canInvoice}
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
-                style={{
-                  background: canInvoice ? 'var(--primary)' : 'var(--line)',
-                  color: canInvoice ? '#fff' : 'var(--ink-faint)',
-                  cursor: canInvoice ? 'pointer' : 'not-allowed',
-                }}
-              >
-                <i className="fa-solid fa-file-lines"></i>ใบแจ้งหนี้
-              </button>
-              <button
-                onClick={() => canReceipt && doPrint('receipt')}
-                disabled={!canReceipt}
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
-                style={{
-                  background: canReceipt ? 'var(--primary)' : 'var(--line)',
-                  color: canReceipt ? '#fff' : 'var(--ink-faint)',
-                  cursor: canReceipt ? 'pointer' : 'not-allowed',
-                }}
-              >
-                <i className="fa-solid fa-receipt"></i>ใบเสร็จรับเงิน
-              </button>
+            <div className="grid grid-cols-2 gap-2">
+              {DOCS.map((d) => {
+                const allowed = docAllowed[d.key];
+                return (
+                  <button
+                    key={d.key}
+                    onClick={() => allowed && issueDocument(d.key)}
+                    disabled={!allowed}
+                    className="rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
+                    style={{
+                      background: allowed ? 'var(--primary)' : 'var(--line)',
+                      color: allowed ? '#fff' : 'var(--ink-faint)',
+                      cursor: allowed ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    <i className={`fa-solid ${d.icon}`}></i>
+                    {d.label}
+                  </button>
+                );
+              })}
             </div>
-            {!canInvoice && (
-              <p className="text-xs mt-2" style={{ color: 'var(--ink-faint)' }}>
-                ต้องบันทึก PO ก่อนจึงจะออกใบแจ้งหนี้ได้
+            {DOCS.filter((d) => !docAllowed[d.key]).map((d) => (
+              <p key={d.key} className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                {d.blocked}
               </p>
-            )}
-            {!canReceipt && (
-              <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-                ต้องมีการรับชำระเงินก่อนจึงจะออกใบเสร็จรับเงินได้
+            ))}
+            {/* The one document that changes the books as well as printing. */}
+            {o.deliveredAt && (
+              <p className="text-xs mt-2 font-medium" style={{ color: '#3F6B33' }}>
+                <i className="fa-solid fa-truck-fast mr-1.5"></i>
+                ส่งของแล้วเมื่อ {fmtThaiDayString(o.deliveredAt)} — นับเป็นยอดขายของวันนี้
               </p>
             )}
           </div>
@@ -828,14 +993,13 @@ export function WholesaleDetail({
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <p style={{ margin: 0, fontSize: 12 }}>
-                    เลขที่เอกสาร {printMode === 'invoice' ? 'INV' : 'RCT'}-{o.id.replace('WS-', '')}
+                    เลขที่เอกสาร {sheet.prefix}-{o.id.replace('WS-', '')}
                   </p>
-                  <h3 style={{ margin: '4px 0 0' }}>
-                    {printMode === 'invoice' ? 'ใบแจ้งหนี้' : 'ใบเสร็จรับเงิน'}
-                  </h3>
-                  <p style={{ fontSize: 12, margin: '2px 0 0' }}>
-                    วันที่ {fmtThaiDateLong(new Date())}
-                  </p>
+                  <h3 style={{ margin: '4px 0 0' }}>{sheet.title}</h3>
+                  {/* The document's OWN date. A ใบส่งของ reprinted next month still
+                      says the day the goods went out, because that is the day the
+                      sale was earned. */}
+                  <p style={{ fontSize: 12, margin: '2px 0 0' }}>วันที่ {sheet.dateText}</p>
                 </div>
               </div>
               <table style={{ marginBottom: 12 }}>
@@ -866,17 +1030,17 @@ export function WholesaleDetail({
                   </tr>
                 </thead>
                 <tbody>
-                  {o.items.map((it, idx) => (
+                  {sheet.rows.map((r, idx) => (
                     <tr key={idx}>
-                      <td>{it.name}</td>
-                      <td style={{ textAlign: 'right' }}>{it.qty}</td>
-                      <td style={{ textAlign: 'right' }}>{fmt(it.requestedPrice)}</td>
-                      <td style={{ textAlign: 'right' }}>{fmt(it.qty * it.requestedPrice)}</td>
+                      <td>{r.name}</td>
+                      <td style={{ textAlign: 'right' }}>{r.qty}</td>
+                      <td style={{ textAlign: 'right' }}>{fmt(r.unit)}</td>
+                      <td style={{ textAlign: 'right' }}>{fmt(r.qty * r.unit)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {o.returns.length > 0 && (
+              {sheet.showTotals && o.returns.length > 0 && (
                 <div
                   style={{
                     display: 'flex',
@@ -890,7 +1054,7 @@ export function WholesaleDetail({
                   <span>-{fmt(returnsTotal)}</span>
                 </div>
               )}
-              {o.adjustments.length > 0 && (
+              {sheet.showTotals && o.adjustments.length > 0 && (
                 <div
                   style={{
                     display: 'flex',
@@ -996,8 +1160,15 @@ export function WholesaleDetail({
                 style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 44, fontSize: 12 }}
               >
                 <span>
-                  ลงชื่อ.....................{' '}
-                  {printMode === 'invoice' ? 'ผู้ออกเอกสาร' : 'ผู้รับเงิน'}
+                  {/* ใบส่งของ and ใบรับคืนสินค้า need BOTH hands on them: one
+                      side says the goods left, the other says they arrived, and
+                      a delivery note with only the sender's name settles no
+                      argument about a short delivery. */}
+                  {sheet.signatures.map((who) => (
+                    <span key={who} style={{ marginLeft: 28 }}>
+                      ลงชื่อ..................... {who}
+                    </span>
+                  ))}
                 </span>
               </div>
             </div>,

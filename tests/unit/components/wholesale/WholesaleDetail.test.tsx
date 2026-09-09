@@ -316,3 +316,64 @@ describe('WholesaleDetail — สาขา และ ถังขยะ', () => 
     confirm.mockRestore();
   });
 });
+
+/**
+ * เอกสารขายส่ง สี่ใบ และวันที่ที่มากับสองใบในนั้น.
+ *
+ * ขายส่งไม่ออกใบกำกับภาษี — ใบแจ้งหนี้ ใบส่งของ ใบรับคืนสินค้า ใบเสร็จรับเงิน
+ * เท่านั้น. Two of them are also the accounting events: a ใบส่งของ IS the
+ * delivery, which is when a wholesale sale is earned (the shop delivers first
+ * and is paid weeks later), and a ใบรับคืนสินค้า IS the return.
+ */
+describe('WholesaleDetail — เอกสารขายส่ง', () => {
+  const saved = {
+    ...order,
+    items: [{ name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 10, listPrice: 1000, requestedPrice: 1000 }],
+    returns: [],
+    payments: [],
+  } as unknown as WsOrder;
+
+  it('offers exactly the four wholesale documents, and no ใบกำกับภาษี', () => {
+    render(<WholesaleDetail order={saved} canDo={() => true} />);
+    for (const label of ['ใบแจ้งหนี้', 'ใบส่งของ', 'ใบรับคืนสินค้า', 'ใบเสร็จรับเงิน']) {
+      expect(screen.getByRole('button', { name: new RegExp(label) })).toBeInTheDocument();
+    }
+    expect(screen.queryByText(/ใบกำกับภาษี/)).not.toBeInTheDocument();
+  });
+
+  it('will not issue ใบรับคืนสินค้า until something has been returned', () => {
+    render(<WholesaleDetail order={saved} canDo={() => true} />);
+    expect(screen.getByRole('button', { name: /ใบรับคืนสินค้า/ })).toBeDisabled();
+    expect(screen.getByText(/ต้องบันทึกการคืนสินค้าก่อน/)).toBeInTheDocument();
+  });
+
+  it('records the delivery date when ใบส่งของ is issued', async () => {
+    const user = userEvent.setup();
+    const onRecordDelivery = vi.fn(async () => ({ ok: true }));
+    render(
+      <WholesaleDetail order={saved} canDo={() => true} onRecordDelivery={onRecordDelivery} />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+    expect(onRecordDelivery).toHaveBeenCalledWith(
+      saved.id,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    );
+  });
+
+  it('does NOT re-date a delivery that already happened', async () => {
+    // A second ใบส่งของ is a reprint. Re-dating the sale because somebody printed
+    // it again would move revenue between months with nobody deciding to.
+    const user = userEvent.setup();
+    const onRecordDelivery = vi.fn(async () => ({ ok: true }));
+    render(
+      <WholesaleDetail
+        order={{ ...saved, deliveredAt: '2026-08-20' } as unknown as WsOrder}
+        canDo={() => true}
+        onRecordDelivery={onRecordDelivery}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+    expect(onRecordDelivery).not.toHaveBeenCalled();
+    expect(screen.getByText(/ส่งของแล้วเมื่อ 20 ส\.ค\. 2569/)).toBeInTheDocument();
+  });
+});

@@ -6,10 +6,12 @@ import { adminClient } from './_helpers';
 const supabase = adminClient();
 
 describe('identity schema seed data', () => {
-  it('has all 5 shops', async () => {
+  it('has all 6 shops, in sidebar order', async () => {
+    // `north` (Finnix North) is the wholesale-only branch, added last so it
+    // sorts after the five the shop started with.
     const { data, error } = await supabase.from('shops').select('id').order('sort_order');
     expect(error).toBeNull();
-    expect(data?.map((s) => s.id)).toEqual(['cm', 'lp', 'py', 'lpg', 'ca']);
+    expect(data?.map((s) => s.id)).toEqual(['cm', 'lp', 'py', 'lpg', 'ca', 'north']);
   });
 
   it('has all 4 default roles', async () => {

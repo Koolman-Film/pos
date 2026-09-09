@@ -7,7 +7,10 @@ const supabase = adminClient();
 
 describe('config-as-data seed', () => {
   it('seeds all 12 flat option list keys with at least one value', async () => {
-    const { data } = await supabase.from('option_lists').select('list_key');
+    // Flat = shop-wide. `sales_people` is deliberately NOT here: it is scoped
+    // per branch (โหน่ง and เคน belong to Finnix North), so it must not appear
+    // in the pickers of shops those two do not sell for.
+    const { data } = await supabase.from('option_lists').select('list_key').is('shop_id', null);
     const keys = new Set(data!.map((r) => r.list_key));
     expect([...keys].sort()).toEqual(
       [

@@ -7,6 +7,7 @@ import { updateOptionListAction } from '../../optionListActions';
 import {
   approveOrderPrice,
   deleteOrder,
+  recordOrderDelivery,
   markOrderBadDebt,
   rejectOrderPrice,
   saveCustomer,
@@ -59,6 +60,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       onRejectPrice={rejectOrderPrice}
       onMarkBadDebt={markOrderBadDebt}
       onDeleteOrder={deleteOrder}
+      onRecordDelivery={recordOrderDelivery}
       onSaveCustomer={saveCustomer}
       updateOptionListAction={updateOptionListAction}
     />

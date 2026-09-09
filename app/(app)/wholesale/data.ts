@@ -22,9 +22,9 @@ import {
  */
 
 const ORDER_SELECT = `
-  id, shop_id, customer_id, status, created_at,
+  id, shop_id, customer_id, status, created_at, delivered_at,
   order_items(name, qty, list_price, requested_price, reason),
-  order_returns(item_name, qty, reason),
+  order_returns(item_name, qty, reason, returned_at),
   order_adjustments(amount, reason),
   order_payments(amount, method)
 `;
@@ -35,6 +35,7 @@ type OrderRow = {
   customer_id: number | null;
   status: string;
   created_at: string | null;
+  delivered_at: string | null;
   order_items:
     | {
         name: string;
@@ -44,7 +45,9 @@ type OrderRow = {
         reason: string;
       }[]
     | null;
-  order_returns: { item_name: string; qty: number; reason: string }[] | null;
+  order_returns:
+    | { item_name: string; qty: number; reason: string; returned_at: string }[]
+    | null;
   order_adjustments: { amount: number; reason: string }[] | null;
   order_payments: { amount: number; method: string }[] | null;
 };
@@ -56,6 +59,7 @@ function mapOrder(row: OrderRow): WsOrder {
     customerId: row.customer_id,
     status: row.status,
     createdAt: row.created_at ?? undefined,
+    deliveredAt: row.delivered_at ?? undefined,
     items: (row.order_items ?? []).map((it) => ({
       name: it.name,
       qty: it.qty,
@@ -67,6 +71,7 @@ function mapOrder(row: OrderRow): WsOrder {
       item: r.item_name,
       qty: r.qty,
       reason: r.reason ?? '',
+      date: r.returned_at ?? '',
     })),
     adjustments: (row.order_adjustments ?? []).map((a) => ({
       amount: a.amount,

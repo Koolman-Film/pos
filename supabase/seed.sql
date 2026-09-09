@@ -57,6 +57,37 @@ insert into retail_customers (name, phone) values
   ('คุณ ปรีชา', '084-567-8901'),
   ('คุณ นภา', '085-678-9012');
 
+/*
+  Finnix North — the wholesale-only branch.
+
+  Created in the live system already; added here so development can exercise a
+  branch that sells through ขายส่ง and nothing else. `on conflict do nothing`
+  because 0001 owns the original five and this file must stay re-runnable.
+*/
+insert into shops (id, name, sort_order) values ('north', 'Finnix North', 6)
+  on conflict (id) do nothing;
+insert into shop_info (shop_id) values ('north') on conflict (shop_id) do nothing;
+
+-- 0045 backfills money accounts for every shop that exists when it RUNS, and
+-- migrations run before this file. North is created here, so it needs its own
+-- four. A branch added through the app gets them from `save_shop`.
+insert into money_accounts (shop_id, name, kind, match_names, sort_order)
+select 'north', a.name, a.kind, a.match_names, a.sort_order
+from (values
+  ('เงินสดหน้าร้าน', 'cash',  array['เงินสด'],                                       1),
+  ('บัญชีธนาคารสาขา', 'bank',  array['บัญชีธนาคารสาขา','โอนเงิน','โอน TTB','โอน BBK'], 2),
+  ('เงินสดย่อย',      'petty', array['เงินสดย่อย'],                                   3),
+  ('บัตรเครดิตบริษัท',  'credit', array['บัตรเครดิตบริษัท','บัตรเครดิต'],                  4)
+) as a(name, kind, match_names, sort_order)
+on conflict (shop_id, name) do nothing;
+
+-- โหน่ง และ เคน ขายภายใต้ชื่อ Finnix North. Scoped to that branch, so the two
+-- names do not appear in the pickers of shops they do not work at.
+insert into option_lists (list_key, value, sort_order, shop_id) values
+  ('sales_people', 'โหน่ง', 1, 'north'),
+  ('sales_people', 'เคน', 2, 'north')
+  on conflict do nothing;
+
 insert into wholesale_customers (name, phone, address) values
   ('ร้านออโต้สไตล์', '081-234-5678', 'เชียงใหม่'),
   ('ร้านออโต้เซอร์วิส บางแค', '082-345-6789', 'กรุงเทพฯ'),

@@ -62,7 +62,10 @@ const anonKey = pick('SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY');
 const serviceKey = pick('SUPABASE_SERVICE_ROLE_KEY');
 
 const PASSWORD = 'test-password-123';
-const ALL_SHOPS = ['cm', 'lp', 'py', 'lpg', 'ca'];
+// In sidebar order: `accessibleShopIds` filters the canonical shop list, so it
+// comes back in sort_order and not in whatever order the access rows are.
+// `north` (Finnix North) is the wholesale-only branch, added last.
+const ALL_SHOPS = ['cm', 'lp', 'py', 'lpg', 'ca', 'north'];
 
 // Memory-only auth state: several clients share one jsdom `localStorage`, and
 // the default storage key is per-project, so persisting would let one signed-in

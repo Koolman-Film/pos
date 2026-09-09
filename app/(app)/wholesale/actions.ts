@@ -289,6 +289,46 @@ async function moveOrderStock(
   }
 }
 
+/**
+ * บันทึกวันส่งของ — called when ใบส่งของ is issued (migration 0045).
+ *
+ * Wholesale sells on credit: the goods go out and the money follows weeks
+ * later, so DELIVERY is when the sale is earned. This is the date every
+ * wholesale figure will be attributed to, which is why issuing the document
+ * writes it rather than leaving it to somebody to remember.
+ *
+ * Written ONCE. A second ใบส่งของ is a reprint — the customer lost theirs —
+ * and silently re-dating the sale because a page was printed again would move
+ * revenue between months with nobody deciding to. Changing a delivery date that
+ * is wrong is a deliberate edit, not a side effect of pressing print.
+ *
+ * Moves the PO to จัดส่งแล้ว at the same time, since that is what has happened.
+ */
+export async function recordOrderDelivery(
+  orderId: string,
+  deliveredAt: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.hasNav('wholesale')) return { ok: false, error: 'ไม่มีสิทธิ์ในโมดูลขายส่ง' };
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ delivered_at: deliveredAt, status: 'จัดส่งแล้ว' })
+    .eq('id', orderId)
+    .is('delivered_at', null)
+    .select('id');
+  if (error) return { ok: false, error: error.message };
+  // No row updated means it already had a delivery date. Not an error: the
+  // document prints either way, and the first date stands.
+  if ((data ?? []).length > 0) {
+    revalidatePath('/wholesale');
+    revalidatePath(`/wholesale/${orderId}`);
+    revalidatePath('/dashboard');
+  }
+  return { ok: true };
+}
+
 /** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
 export async function approveOrderPrice(orderId: string) {
   const session = await getSessionContext();

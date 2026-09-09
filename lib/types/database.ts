@@ -736,6 +736,7 @@ export type Database = {
       }
       order_returns: {
         Row: {
+          returned_at: string
           id: number
           item_name: string
           order_id: string
@@ -743,6 +744,7 @@ export type Database = {
           reason: string
         }
         Insert: {
+          returned_at?: string
           id?: never
           item_name: string
           order_id: string
@@ -750,6 +752,7 @@ export type Database = {
           reason?: string
         }
         Update: {
+          returned_at?: string
           id?: never
           item_name?: string
           order_id?: string
@@ -768,6 +771,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          delivered_at: string | null
           created_at: string
           customer_id: number | null
           deleted_at: string | null
@@ -777,6 +781,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          delivered_at?: string | null
           created_at?: string
           customer_id?: number | null
           deleted_at?: string | null
@@ -786,6 +791,7 @@ export type Database = {
           status: string
         }
         Update: {
+          delivered_at?: string | null
           created_at?: string
           customer_id?: number | null
           deleted_at?: string | null
