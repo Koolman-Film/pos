@@ -26,7 +26,7 @@ import type { ReactNode } from 'react';
 
 import { LineChart } from '@/components/charts/LineChart';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
-import { shopDayKey, hhmm, fmt, fmtThaiDate } from '@/lib/domain/format';
+import { fmt, fmtThaiDate, fmtThaiDateLong, hhmm, shopDayKey } from '@/lib/domain/format';
 
 import { JobCalendar, type CalendarTicket } from './JobCalendar';
 import { TicketStatusSelect } from './TicketStatusSelect';
@@ -203,11 +203,7 @@ export function Dashboard({
   calendarTickets = [],
   shopFilter = 'all',
   filter,
-  caption = `สรุปข้อมูลวันนี้ · ${new Date().toLocaleDateString('th-TH', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })}`,
+  caption = `สรุปข้อมูลวันนี้ · ${fmtThaiDateLong(new Date())}`,
   statuses = [],
   totalJobs = 0,
   statusTotals = [],

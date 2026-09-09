@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Badge, getStatus, type StatusConfig } from '@/components/ui/Badge';
-import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { fmt, fmtThaiDate, fmtThaiDateLong } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -212,11 +212,7 @@ export function TicketList({
             style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
           >
             <i className="fa-regular fa-calendar mr-1.5"></i>
-            {new Date().toLocaleDateString('th-TH', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
+            {fmtThaiDateLong(new Date())}
           </span>
         )}
         {period === 'month' && (
@@ -451,7 +447,7 @@ export function TicketList({
               {customerFilter !== 'all' ? ' · ' + customerFilter : ''}
               {statusFilter !== 'all' ? ' · ' + statusFilter : ''}
             </h2>
-            <p>วันที่พิมพ์: {new Date().toLocaleDateString('th-TH')}</p>
+            <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
             {exportGroups.map((g) => (
               <div key={g.shopId} style={{ marginBottom: 16 }}>
                 <h3>{shopName(g.shopId)}</h3>

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { SavedToast } from '@/components/ui/SavedToast';
-import { fmt, shortShopName } from '@/lib/domain/format';
+import { fmt, fmtThaiDayString, shortShopName } from '@/lib/domain/format';
 import { dateInputValue } from '@/lib/domain/now';
 import type { MoneyAccount, MoneyOverview } from '@/components/dashboard/moneyFlow';
 
@@ -416,7 +416,7 @@ export function MoneyModule({
                   style={{ borderTop: '1px solid var(--line)' }}
                 >
                   <span className="min-w-0">
-                    <span style={{ color: 'var(--ink-soft)' }}>{t.movedAt}</span>{' '}
+                    <span style={{ color: 'var(--ink-soft)' }}>{fmtThaiDayString(t.movedAt)}</span>{' '}
                     {accountName(t.fromAccountId)} → {accountName(t.toAccountId)}
                     {t.note && (
                       <span style={{ color: 'var(--ink-faint)' }}> &middot; {t.note}</span>
@@ -506,7 +506,9 @@ export function MoneyModule({
                     style={{ borderTop: '1px solid var(--line)' }}
                   >
                     <span className="min-w-0">
-                      <span style={{ color: 'var(--ink-soft)' }}>{r.countedAt}</span>{' '}
+                      <span style={{ color: 'var(--ink-soft)' }}>
+                        {fmtThaiDayString(r.countedAt)}
+                      </span>{' '}
                       {accountName(r.accountId)}
                       {r.note && (
                         <span style={{ color: 'var(--ink-faint)' }}> &middot; {r.note}</span>

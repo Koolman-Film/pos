@@ -25,12 +25,27 @@ export function daysFromNow(n: number): Date {
  */
 export const SHOP_TIME_ZONE = 'Asia/Bangkok';
 
-const thaiDateFmt = new Intl.DateTimeFormat('th-TH', {
-  timeZone: SHOP_TIME_ZONE,
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-});
+/**
+ * ภาษาไทย และ พ.ศ. — เสมอ ไม่ว่าเครื่องจะตั้งภาษาอะไร.
+ *
+ * `th-TH` alone is not enough. Which calendar a locale uses is a DEFAULT, and
+ * a default is a property of whichever ICU build the browser shipped with, not
+ * a promise: the same date can come out 2569 on one phone and 2026 on the next,
+ * and a ใบงาน read aloud between two people looking at different screens is
+ * exactly where that goes wrong. `-u-ca-buddhist` states it outright.
+ *
+ * Every date the app shows goes through a formatter built from this constant,
+ * so the answer does not depend on the device, its language, or its clock.
+ */
+export const THAI_LOCALE = 'th-TH-u-ca-buddhist';
+
+const dateFmt = (options: Intl.DateTimeFormatOptions) =>
+  new Intl.DateTimeFormat(THAI_LOCALE, { timeZone: SHOP_TIME_ZONE, ...options });
+
+const thaiDateFmt = dateFmt({ day: 'numeric', month: 'short', year: 'numeric' });
+const thaiLongDateFmt = dateFmt({ day: 'numeric', month: 'long', year: 'numeric' });
+const thaiMonthYearFmt = dateFmt({ month: 'long', year: 'numeric' });
+const thaiDayMonthFmt = dateFmt({ day: 'numeric', month: 'short' });
 
 const clockFmt = new Intl.DateTimeFormat('en-GB', {
   timeZone: SHOP_TIME_ZONE,
@@ -149,4 +164,48 @@ export function thaiBahtText(num: number): string {
  */
 export function shortShopName(name: string): string {
   return name.replace(/^FINNIX\s+FILM\s+/i, 'FN ');
+}
+
+/** วันที่แบบเต็ม เช่น "9 กันยายน 2569" — for headings and printed sheets. */
+export function fmtThaiDateLong(d: Date | null | undefined): string {
+  if (!usable(d)) return '-';
+  return thaiLongDateFmt.format(d);
+}
+
+/** เดือนและปี เช่น "กันยายน 2569" — the period caption and the calendar header. */
+export function fmtThaiMonthYear(d: Date | null | undefined): string {
+  if (!usable(d)) return '-';
+  return thaiMonthYearFmt.format(d);
+}
+
+/** วันและเดือน เช่น "9 ก.ย." — axis labels and due dates, where the year is noise. */
+export function fmtThaiDayMonth(d: Date | null | undefined): string {
+  if (!usable(d)) return '-';
+  return thaiDayMonthFmt.format(d);
+}
+
+/**
+ * วันที่พร้อมเวลา เช่น "9 ก.ย. 2569 16:00".
+ *
+ * Built from the two pinned formatters rather than a third one with
+ * `timeStyle`, so the clock reads the same here as everywhere else in the app —
+ * 24-hour, no seconds, no "น." suffix that only some locales add.
+ */
+export function fmtThaiDateTime(d: Date | null | undefined): string {
+  if (!usable(d)) return '-';
+  const clock = hhmm(d);
+  return clock ? `${fmtThaiDate(d)} ${clock}` : fmtThaiDate(d);
+}
+
+/**
+ * A stored `YYYY-MM-DD` shown to a reader.
+ *
+ * Date-only columns (`moved_at`, `counted_at`, `paid_at`) are days, not
+ * instants: parsed as UTC midnight they slide to the previous day for anyone
+ * west of Greenwich. Reading them on the shop's clock keeps 9 September the 9th.
+ */
+export function fmtThaiDayString(value: string | null | undefined): string {
+  if (!value) return '-';
+  const d = new Date(`${value}T00:00:00+07:00`);
+  return usable(d) ? fmtThaiDate(d) : '-';
 }

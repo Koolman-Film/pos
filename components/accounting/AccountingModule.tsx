@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 import { uploadAttachments } from '@/lib/storage/attachments';
 import { createPortal } from 'react-dom';
 
-import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { fmt, fmtThaiDate, fmtThaiDateLong } from '@/lib/domain/format';
 import { currentMonthValue, dateInputValue, daysAgoValue, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -721,11 +721,7 @@ export function AccountingModule({
               style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
             >
               <i className="fa-regular fa-calendar mr-1.5"></i>
-              {new Date().toLocaleDateString('th-TH', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
+              {fmtThaiDateLong(new Date())}
             </span>
           )}
           {period === 'month' && (
@@ -929,11 +925,7 @@ export function AccountingModule({
                   style={{ background: 'var(--surface)', color: 'var(--ink-soft)' }}
                 >
                   <i className="fa-regular fa-calendar mr-1.5"></i>
-                  {new Date().toLocaleDateString('th-TH', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
+                  {fmtThaiDateLong(new Date())}
                 </span>
               )}
               {cashPeriod === 'month' && (
@@ -1661,7 +1653,7 @@ export function AccountingModule({
                         ? ' · ' + rangeStart + ' ถึง ' + rangeEnd
                         : ''}
               </h2>
-              <p>วันที่พิมพ์: {new Date().toLocaleDateString('th-TH')}</p>
+              <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
               {exportGroups.map((g) => (
                 <div key={g.shopId} style={{ marginBottom: 16 }}>
                   <h3>{shopName(g.shopId)}</h3>

@@ -15,6 +15,7 @@
 // swap called out in the plan.
 
 import { ticketTotal, ticketPaid, type TicketForTotals } from '@/lib/domain/tickets';
+import { fmtThaiDayMonth } from '@/lib/domain/format';
 import { orderTotal, orderPaid, type OrderForTotals } from '@/lib/domain/orders';
 
 export type ARItem = {
@@ -201,7 +202,7 @@ export function buildTrend(
   for (let i = 0; i < days; i += step) {
     const d = new Date(start);
     d.setDate(d.getDate() + i);
-    labels.push(d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }));
+    labels.push(fmtThaiDayMonth(d));
     // For a coarse step (long ranges), fold every day in the bucket window.
     let r = 0;
     let e = 0;

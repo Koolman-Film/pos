@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
 
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
-import { fmt } from '@/lib/domain/format';
+import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -361,7 +361,7 @@ export function WholesaleList({
               รายการขายส่ง
               {custFilter !== 'all' ? ' — ' + customerName(Number(custFilter), customers) : ''}
             </h2>
-            <p>วันที่พิมพ์: {new Date().toLocaleDateString('th-TH')}</p>
+            <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
             {exportGroups.map((g) => (
               <div key={g.customerId} style={{ marginBottom: 16 }}>
                 <h3>{customerName(g.customerId, customers)}</h3>

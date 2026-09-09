@@ -1,6 +1,6 @@
 'use client';
 
-import { shortShopName } from '@/lib/domain/format';
+import { fmtThaiDateLong, shortShopName } from '@/lib/domain/format';
 
 export type Shop = { id: string; name: string };
 
@@ -103,11 +103,7 @@ export function PeriodShopFilter({
           style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
         >
           <i className="fa-regular fa-calendar mr-1.5"></i>
-          {new Date().toLocaleDateString('th-TH', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          })}
+          {fmtThaiDateLong(new Date())}
         </span>
       )}
       {period === 'month' && (

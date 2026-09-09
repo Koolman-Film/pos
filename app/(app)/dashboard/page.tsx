@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { shopDayKey, startOfShopDay } from '@/lib/domain/format';
+import { fmtThaiDayMonth, shopDayKey, startOfShopDay } from '@/lib/domain/format';
 import { daysAgoValue } from '@/lib/domain/now';
 
 import { getSessionContext } from '@/lib/auth/session';
@@ -257,12 +257,7 @@ export default async function DashboardPage({
     // Paid on behalf of another Finnix shop (migration 0032).
     paidForFinnix: e.expense_kind === 'จ่ายแทน',
     paidAt: toDate(e.paid_at),
-    due: e.due_at
-      ? new Date(`${e.due_at}T00:00:00`).toLocaleDateString('th-TH', {
-          day: 'numeric',
-          month: 'short',
-        })
-      : '',
+    due: e.due_at ? fmtThaiDayMonth(new Date(`${e.due_at}T00:00:00+07:00`)) : '',
   }));
 
   // ---- Aggregate (same output as the prototype's inline client math) ----

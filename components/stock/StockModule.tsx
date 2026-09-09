@@ -2332,7 +2332,7 @@ export function StockModule({
               <h2>
                 รายการสต็อกสินค้า{branchFilter !== 'all' ? ' · ' + shopName(branchFilter) : ''}
               </h2>
-              <p>วันที่พิมพ์: {new Date().toLocaleDateString('th-TH')}</p>
+              <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
               {exportGroups.map((g) => (
                 <div key={g.shopId} style={{ marginBottom: 16 }}>
                   <h3>{shopName(g.shopId)}</h3>

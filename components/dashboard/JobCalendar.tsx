@@ -9,6 +9,7 @@
 // counts are all preserved verbatim.
 
 import { useState } from 'react';
+import { fmtThaiMonthYear } from '@/lib/domain/format';
 import { useRouter } from 'next/navigation';
 
 export type CalendarStatus = { key: string; short: string; dot: string };
@@ -119,10 +120,7 @@ export function JobCalendar({
         >
           <i className="fa-solid fa-chevron-left text-xs"></i>
         </button>
-        <p className="text-sm font-semibold">
-          ปฏิทินงาน &middot;{' '}
-          {calDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
-        </p>
+        <p className="text-sm font-semibold">ปฏิทินงาน &middot; {fmtThaiMonthYear(calDate)}</p>
         <button
           aria-label="เดือนถัดไป"
           onClick={() => setCalDate(new Date(year, month + 1, 1))}

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { OptionManageProvider } from '@/components/ui/optionManage';
-import { fmt, thaiBahtText } from '@/lib/domain/format';
+import { fmt, fmtThaiDateLong, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { orderTotal, orderPaid } from '@/lib/domain/orders';
@@ -834,12 +834,7 @@ export function WholesaleDetail({
                     {printMode === 'invoice' ? 'ใบแจ้งหนี้' : 'ใบเสร็จรับเงิน'}
                   </h3>
                   <p style={{ fontSize: 12, margin: '2px 0 0' }}>
-                    วันที่{' '}
-                    {new Date().toLocaleDateString('th-TH', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    })}
+                    วันที่ {fmtThaiDateLong(new Date())}
                   </p>
                 </div>
               </div>

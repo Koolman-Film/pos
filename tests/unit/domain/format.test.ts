@@ -1,12 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import {
+  THAI_LOCALE,
+  daysFromNow,
   fmt,
   fmtThaiDate,
+  fmtThaiDateLong,
+  fmtThaiDateTime,
+  fmtThaiDayMonth,
+  fmtThaiDayString,
+  fmtThaiMonthYear,
   hhmm,
   shopDayKey,
   startOfShopDay,
   thaiBahtText,
-  daysFromNow,
 } from '@/lib/domain/format';
 
 describe('fmt', () => {
@@ -141,5 +147,47 @@ describe('shop-clock formatting', () => {
     expect(hhmm(new Date('nonsense'))).toBe('');
     expect(fmtThaiDate(null)).toBe('-');
     expect(shopDayKey(undefined)).toBe('');
+  });
+});
+
+/**
+ * ภาษาไทย และ พ.ศ. เสมอ.
+ *
+ * `th-TH` on its own leaves the CALENDAR to whichever ICU build the device
+ * shipped with, so the same date can read 2569 on one phone and 2026 on the
+ * next — and a ใบงาน discussed between two people looking at different screens
+ * is exactly where that costs something. The locale tag names the calendar
+ * outright, and these pin it.
+ */
+describe('Thai dates are Thai and Buddhist, whatever the device is set to', () => {
+  const d = new Date('2026-09-09T02:00:00Z'); // 09:00 in Bangkok
+
+  it('shows the Buddhist year, not the Gregorian one', () => {
+    expect(fmtThaiDate(d)).toContain('2569');
+    expect(fmtThaiDate(d)).not.toContain('2026');
+  });
+
+  it('names the month in Thai', () => {
+    expect(fmtThaiDate(d)).toContain('ก.ย.');
+    expect(fmtThaiDateLong(d)).toContain('กันยายน');
+    expect(fmtThaiMonthYear(d)).toBe('กันยายน 2569');
+    expect(fmtThaiDayMonth(d)).toBe('9 ก.ย.');
+  });
+
+  it('states the calendar in the locale rather than relying on a default', () => {
+    // The guard that keeps the rest of this block true on a device whose ICU
+    // defaults `th-TH` to the Gregorian calendar.
+    expect(THAI_LOCALE).toContain('ca-buddhist');
+  });
+
+  it('reads a stored YYYY-MM-DD on the shop’s clock, not the device’s', () => {
+    // Parsed as UTC midnight this slides to the 8th for anyone west of
+    // Greenwich; the 9th is the day the shop wrote down.
+    expect(fmtThaiDayString('2026-09-09')).toBe('9 ก.ย. 2569');
+    expect(fmtThaiDayString('')).toBe('-');
+  });
+
+  it('puts the clock after the date, on the shop’s clock', () => {
+    expect(fmtThaiDateTime(d)).toBe('9 ก.ย. 2569 09:00');
   });
 });

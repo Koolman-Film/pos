@@ -16,7 +16,7 @@
 //    yesterday until 07:00;
 //  - `year` accepts either a Buddhist-era year (2569) or a CE one.
 
-import { SHOP_TIME_ZONE, shopDayKey } from './format';
+import { fmtThaiDateLong, fmtThaiMonthYear, shopDayKey } from './format';
 
 /** The four period modes of the shared period/shop filter bar. */
 export type PeriodKey = 'today' | 'month' | 'year' | 'range';
@@ -39,18 +39,15 @@ export function periodCaption(
   rangeEnd: string,
   now: Date,
 ): string {
-  const thaiDate = (d: Date) =>
-    d.toLocaleDateString('th-TH', {
-      timeZone: SHOP_TIME_ZONE,
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
+  // Through the pinned formatter: `th-TH` alone leaves the CALENDAR to the
+  // device, so the same caption could read 2569 on one screen and 2026 on the
+  // next.
+  const thaiDate = fmtThaiDateLong;
 
   if (period === 'month') {
     const [y, m] = (periodValue || '').split('-').map(Number);
     const d = y && m ? new Date(y, m - 1, 1) : new Date(now.getFullYear(), now.getMonth(), 1);
-    return `สรุปข้อมูลรายเดือน · ${d.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}`;
+    return `สรุปข้อมูลรายเดือน · ${fmtThaiMonthYear(d)}`;
   }
   if (period === 'year') {
     const rawY = Number(periodValue);

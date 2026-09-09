@@ -127,3 +127,46 @@ describe('buildMoneySources', () => {
     expect(buildMoneySources(shops, [], [], []).branches).toEqual([]);
   });
 });
+
+/**
+ * ยอดคงเหลือ ต้องไม่รวม ค้างรับ และ ค้างจ่าย.
+ *
+ * A ticket invoiced and unpaid is revenue; a bill accepted and unpaid is a cost.
+ * Neither has moved a baht, and this card counts where money IS — so both stay
+ * out. The page feeds in recorded payments and expenses already marked จ่ายแล้ว,
+ * and this pins the consequence rather than trusting the caller to keep doing it.
+ */
+describe('balances follow money that actually moved', () => {
+  const bankOnly = account({
+    id: 1,
+    matchNames: ['โอน TTB', 'บัญชีธนาคารสาขา'],
+    openingBalance: 100_000,
+  });
+
+  it('counts a payment that was received', () => {
+    const b = only(
+      [bankOnly],
+      [{ shop: 'cm', source: 'โอน TTB', amount: 5_000, on: '2026-09-05' }],
+    );
+    expect(b.accounts[0].balance).toBe(105_000);
+  });
+
+  it('does not move on an unpaid bill, however large', () => {
+    // The 108,400 salary bill sitting in ค้างจ่าย has left nobody's account. It
+    // reaches this function only once it is paid, which is when it is real.
+    const b = only([bankOnly], []);
+    expect(b.accounts[0].balance).toBe(100_000);
+    expect(b.accounts[0].outflow).toBe(0);
+  });
+
+  it('ignores a label no account claims, rather than guessing', () => {
+    // ค้างรับ has no payment method, so nothing about it can match an account.
+    // A stray label must not silently land on the first account either.
+    const b = only(
+      [bankOnly],
+      [{ shop: 'cm', source: 'เงินสด', amount: 40_900, on: '2026-09-05' }],
+    );
+    expect(b.accounts[0].balance).toBe(100_000);
+    expect(b.total).toBe(100_000);
+  });
+});

@@ -15,6 +15,13 @@
  * Nothing before `opened_at` counts. That date is what the opening balance was
  * true ON, so adding older movements on top would count the same money twice —
  * once inside the figure the shop typed, once again as a transaction.
+ *
+ * WHAT IS DELIBERATELY NOT IN HERE: ค้างรับ and ค้างจ่าย. A ticket invoiced and
+ * not yet paid is revenue, and a bill accepted and not yet paid is a cost, but
+ * neither has moved a single baht — and this is a count of where money IS. The
+ * caller only ever hands over recorded PAYMENTS and expenses already marked
+ * จ่ายแล้ว; those two figures have their own columns on the branch-comparison
+ * card, where they belong.
  */
 
 /** Where the money is, and how much of it. */
