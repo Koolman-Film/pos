@@ -347,7 +347,47 @@ insert into expenses (shop_id, description, category, source, amount, status, pa
 
 -- Petty cash: 10,000 topped up, 550 spent from เงินสดย่อย above → 9,450.
 insert into petty_cash (shop_id, type, amount, entry_at, note) values
-  ('cm', 'เติมเงิน', 10000, current_date - 14, 'อนุมัติโดยแอดมิน');
+  ('cm', 'เติมเงิน', 10000, least(date_trunc('month', current_date)::date, current_date), 'อนุมัติโดยแอดมิน');
+
+/*
+  ...and the same top-up in the money register (migration 0043).
+
+  0043's own copy runs at migration time, before this file inserts anything, so
+  on a fresh reset it finds no petty cash to copy. On the live database it runs
+  against real history and does the job; here the seed has to say it itself, or
+  เงินสดย่อย would read 0 on the dashboard while บัญชี/ค่าใช้จ่าย shows 9,450.
+
+  `from` is เงินสดหน้าร้าน: the shop's cash is where a top-up actually comes
+  from, and recording it as a transfer is what stops the same note being
+  counted once in the drawer and once in the tin.
+*/
+insert into money_transfers (shop_id, from_account_id, to_account_id, amount, moved_at, note)
+select
+  'cm',
+  (select id from money_accounts where shop_id = 'cm' and name = 'เงินสดหน้าร้าน'),
+  (select id from money_accounts where shop_id = 'cm' and name = 'เงินสดย่อย'),
+  10000,
+  least(date_trunc('month', current_date)::date, current_date),
+  'เติมเงินสดย่อย · อนุมัติโดยแอดมิน';
+
+/*
+  Opening balances, so the card shows what a shop that has done the setup sees
+  rather than a column of zeros.
+
+  `opened_at` moves for EVERY account, not just the ones with a figure: it
+  defaults to the day the account was created, and anything dated before it is
+  excluded on purpose (the opening figure already contains that money). Left at
+  today, the whole month of sample movement would be filtered out and every
+  account would read as its opening balance exactly.
+*/
+update money_accounts set opened_at = date_trunc('month', current_date)::date;
+
+update money_accounts set opening_balance = 120000
+ where shop_id = 'cm' and name = 'บัญชีธนาคารสาขา';
+update money_accounts set opening_balance = 15000
+ where shop_id = 'cm' and name = 'เงินสดหน้าร้าน';
+update money_accounts set opening_balance = 45000
+ where shop_id = 'lp' and name = 'บัญชีธนาคารสาขา';
 
 -- ---------------------------------------------------------------------------
 -- A working admin login, so a bare `supabase db reset` leaves you able to sign

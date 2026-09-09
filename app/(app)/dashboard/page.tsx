@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { startOfShopDay } from '@/lib/domain/format';
+import { shopDayKey, startOfShopDay } from '@/lib/domain/format';
 import { daysAgoValue } from '@/lib/domain/now';
 
 import { getSessionContext } from '@/lib/auth/session';
@@ -27,6 +27,12 @@ import {
 import type { CalendarTicket } from '@/components/dashboard/JobCalendar';
 import { buildAppointments, type VisitDates } from '@/components/dashboard/appointments';
 import { buildBranchComparison } from '@/components/dashboard/branchTotals';
+import {
+  buildMoneySources,
+  type MoneyAccount,
+  type MoneyMovement,
+  type MoneyTransfer,
+} from '@/components/dashboard/moneyFlow';
 
 /**
  * การนัดหมายที่ไม่ใช่การจองครั้งแรก — one place, read by the calendar and by
@@ -65,7 +71,9 @@ export default async function DashboardPage({
     { data: orderRows },
     { data: customerRows },
     { data: expenseRows },
-    { data: pettyRows },
+
+    { data: accountRows },
+    { data: transferRows },
     { data: visitRows },
     { data: stockRows },
     { data: shopRows },
@@ -76,7 +84,7 @@ export default async function DashboardPage({
     supabase
       .from('tickets')
       .select(
-        'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount), ticket_status_history(status, changed_at)',
+        'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
       )
       // Soft-deleted tickets (migration 0013) are out of every figure on this
       // screen — revenue, job counts, the calendar and the bookings window.
@@ -85,7 +93,7 @@ export default async function DashboardPage({
     supabase
       .from('orders')
       .select(
-        'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount)',
+        'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount, method, paid_at)',
       )
       // Deleted POs (migration 0040) are out of the wholesale figures here for
       // the same reason deleted tickets are out of the ticket ones above.
@@ -96,7 +104,19 @@ export default async function DashboardPage({
       .select(
         'id, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at',
       ),
-    supabase.from('petty_cash').select('shop_id, type, amount'),
+
+    // ทะเบียนแหล่งเงิน (migration 0043) — the opening balances and the
+    // transfers between accounts that turn movement into a real balance.
+    supabase
+      .from('money_accounts')
+      .select(
+        'id, shop_id, name, kind, account_no, opening_balance, opened_at, match_names, sort_order',
+      )
+      .eq('active', true)
+      .order('sort_order'),
+    supabase
+      .from('money_transfers')
+      .select('shop_id, from_account_id, to_account_id, amount, moved_at'),
     // เซอร์วิสที่บันทึกไว้ — each recorded visit is its own appointment, with
     // its own dates, and belongs on the 7-day card beside the bookings.
     supabase
@@ -193,7 +213,11 @@ export default async function DashboardPage({
       discountType: (i.discount_type ?? undefined) as 'percent' | 'amount' | undefined,
       discountValue: i.discount_value == null ? undefined : num(i.discount_value),
     })),
-    payments: (t.ticket_payments ?? []).map((p) => ({ amount: num(p.amount) })),
+    payments: (t.ticket_payments ?? []).map((p) => ({
+      amount: num(p.amount),
+      method: p.method ?? '',
+      paidAt: toDate(p.paid_at),
+    })),
     statusHistory: (t.ticket_status_history ?? []).map((h) => ({
       status: h.status,
       changedAt: new Date(h.changed_at),
@@ -213,7 +237,11 @@ export default async function DashboardPage({
     })),
     returns: (o.order_returns ?? []).map((r) => ({ item: r.item_name, qty: num(r.qty) })),
     adjustments: (o.order_adjustments ?? []).map((a) => ({ amount: num(a.amount) })),
-    payments: (o.order_payments ?? []).map((p) => ({ amount: num(p.amount) })),
+    payments: (o.order_payments ?? []).map((p) => ({
+      amount: num(p.amount),
+      method: p.method ?? '',
+      paidAt: toDate(p.paid_at),
+    })),
   }));
 
   const customers = (customerRows ?? []).map((c) => ({ id: num(c.id), name: c.name }));
@@ -315,16 +343,64 @@ export default async function DashboardPage({
     (e) => inShop(e.shop) && !e.paidForFinnix && e.status === 'จ่ายแล้ว' && inPeriod(e.paidAt),
   );
   const totalExpenses = paidExpenses.reduce((s, e) => s + e.amount, 0);
-  // Petty cash is a running balance, not a period total: `petty_cash` rows carry
-  // no date to window on, and a month-scoped "cash on hand" would be wrong. Both
-  // legs therefore stay all-time.
-  const cashTopups = (pettyRows ?? [])
-    .filter((p) => inShop(p.shop_id) && p.type === 'เติมเงิน')
-    .reduce((s, p) => s + num(p.amount), 0);
-  const cashSpent = expenses
-    .filter((e) => inShop(e.shop) && e.source === 'เงินสดย่อย' && e.status === 'จ่ายแล้ว')
-    .reduce((s, e) => s + e.amount, 0);
-  const cashBalance = cashTopups - cashSpent;
+
+  /*
+    เงินอยู่ที่ไหนบ้าง — แยกตามสาขา แล้วตามแหล่งเงิน.
+
+    Real balances, not movement: ยอดตั้งต้น + รับเข้า − จ่ายออก + โอนเข้า −
+    โอนออก, per account (migration 0043). `components/dashboard/moneyFlow.ts`
+    holds the arithmetic and the reasoning.
+
+    NOT period-scoped, and NOT shop-filtered. A balance is "as of now" by
+    definition — windowing it to September would produce a number that is
+    nobody’s money — and management asked to see every branch at once, so the
+    branch is the first level of the grouping rather than something to filter
+    down to. Every branch here is one the caller may already see.
+  */
+  const day = (d: Date | null | undefined) => (d ? shopDayKey(d) : '');
+  const moneyMovements: MoneyMovement[] = [
+    ...tickets.flatMap((t) =>
+      t.payments
+        .filter((p) => p.method && p.paidAt)
+        .map((p) => ({ shop: t.shop, source: p.method, amount: p.amount, on: day(p.paidAt) })),
+    ),
+    ...orders.flatMap((o) =>
+      o.payments
+        .filter((p) => p.method && p.paidAt)
+        .map((p) => ({ shop: o.shop, source: p.method, amount: p.amount, on: day(p.paidAt) })),
+    ),
+    // Out of the drawer it went, whoever the bill belonged to — a จ่ายแทน
+    // expense is still money that physically left this branch, which is the
+    // question this card answers.
+    ...expenses
+      .filter((e) => e.source && e.status === 'จ่ายแล้ว' && e.paidAt)
+      .map((e) => ({ shop: e.shop, source: e.source, amount: -e.amount, on: day(e.paidAt) })),
+  ];
+
+  const moneyAccounts: MoneyAccount[] = (accountRows ?? []).map((a) => ({
+    id: a.id,
+    shop: a.shop_id,
+    name: a.name,
+    kind: a.kind,
+    accountNo: a.account_no ?? '',
+    openingBalance: num(a.opening_balance),
+    openedAt: a.opened_at,
+    matchNames: a.match_names ?? [],
+    sortOrder: a.sort_order,
+  }));
+  const moneyTransfers: MoneyTransfer[] = (transferRows ?? []).map((t) => ({
+    shop: t.shop_id,
+    fromAccountId: t.from_account_id,
+    toAccountId: t.to_account_id,
+    amount: num(t.amount),
+    on: t.moved_at,
+  }));
+  const moneySources = buildMoneySources(
+    accessibleShops,
+    moneyAccounts,
+    moneyMovements,
+    moneyTransfers,
+  );
 
   /*
     ยอดขายแยกตามชนิดสินค้า.
@@ -591,7 +667,7 @@ export default async function DashboardPage({
       hasDashboardWidget={session.hasDashboardWidget}
       revenue={revenue}
       totalExpenses={totalExpenses}
-      cashBalance={cashBalance}
+      moneySources={moneySources}
       arItems={arItems}
       apItems={apItems}
       revenueByCategory={revenueByCategory}

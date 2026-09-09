@@ -18,6 +18,8 @@
 // only interactive leaf is the status dropdown (TicketStatusSelect).
 
 import Link from 'next/link';
+import { MoneySources } from './MoneySources';
+import type { BranchMoney } from './moneyFlow';
 import { BranchComparison as BranchComparisonCard } from './BranchComparison';
 import type { BranchComparison as BranchComparisonData } from './branchTotals';
 import type { ReactNode } from 'react';
@@ -142,7 +144,11 @@ export type DashboardProps = {
   hasDashboardWidget: (key: string) => boolean;
   revenue: number;
   totalExpenses: number;
-  cashBalance: number;
+  /**
+   * แหล่งเงินแยกตามสาขา. Movement in the period, never a balance — the card
+   * says so, and `moneySources.ts` says why.
+   */
+  moneySources?: BranchMoney[];
   arItems: ARItem[];
   apItems: APItem[];
   revenueByCategory: RevenueByCategory[];
@@ -186,7 +192,7 @@ export function Dashboard({
   hasDashboardWidget,
   revenue,
   totalExpenses,
-  cashBalance,
+  moneySources = [],
   arItems,
   apItems,
   revenueByCategory,
@@ -343,12 +349,18 @@ export function Dashboard({
                 <i className="fa-solid fa-wallet" style={{ color: 'var(--primary)' }}></i>
               </div>
             </div>
-            <p className="text-2xl font-extrabold" style={{ color: 'var(--primary)' }}>
-              {fmt(cashBalance)}
+            <p className="text-sm font-semibold" style={{ color: 'var(--primary)' }}>
+              เงินอยู่ที่ไหนบ้าง
             </p>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--primary)', opacity: 0.8 }}>
-              เงินสดย่อยคงเหลือ
+            {/*
+              Real balances (migration 0043), which is why a branch total is
+              shown at all. The caption matters: these are the figures the shop
+              reconciles against the drawer and the bank statement.
+            */}
+            <p className="text-xs mt-0.5 mb-3" style={{ color: 'var(--primary)', opacity: 0.75 }}>
+              ยอดคงเหลือ ณ ตอนนี้ · แยกตามสาขาและแหล่งเงิน
             </p>
+            <MoneySources branches={moneySources} />
           </div>
         )}
       </div>

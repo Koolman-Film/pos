@@ -437,6 +437,169 @@ export type Database = {
           },
         ]
       }
+      money_accounts: {
+        Row: {
+          account_no: string
+          active: boolean
+          created_at: string
+          id: number
+          kind: string
+          match_names: string[]
+          name: string
+          opened_at: string
+          opening_balance: number
+          shop_id: string
+          sort_order: number
+        }
+        Insert: {
+          account_no?: string
+          active?: boolean
+          created_at?: string
+          id?: never
+          kind?: string
+          match_names?: string[]
+          name: string
+          opened_at?: string
+          opening_balance?: number
+          shop_id: string
+          sort_order?: number
+        }
+        Update: {
+          account_no?: string
+          active?: boolean
+          created_at?: string
+          id?: never
+          kind?: string
+          match_names?: string[]
+          name?: string
+          opened_at?: string
+          opening_balance?: number
+          shop_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "money_accounts_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      money_reconciliations: {
+        Row: {
+          account_id: number
+          counted_at: string
+          counted_balance: number
+          created_at: string
+          created_by: string | null
+          id: number
+          note: string
+          system_balance: number
+        }
+        Insert: {
+          account_id: number
+          counted_at?: string
+          counted_balance: number
+          created_at?: string
+          created_by?: string | null
+          id?: never
+          note?: string
+          system_balance: number
+        }
+        Update: {
+          account_id?: number
+          counted_at?: string
+          counted_balance?: number
+          created_at?: string
+          created_by?: string | null
+          id?: never
+          note?: string
+          system_balance?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "money_reconciliations_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "money_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "money_reconciliations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      money_transfers: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          from_account_id: number | null
+          id: number
+          moved_at: string
+          note: string
+          shop_id: string
+          to_account_id: number | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          from_account_id?: number | null
+          id?: never
+          moved_at?: string
+          note?: string
+          shop_id: string
+          to_account_id?: number | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          from_account_id?: number | null
+          id?: never
+          moved_at?: string
+          note?: string
+          shop_id?: string
+          to_account_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "money_transfers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "money_transfers_from_account_id_fkey"
+            columns: ["from_account_id"]
+            isOneToOne: false
+            referencedRelation: "money_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "money_transfers_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "money_transfers_to_account_id_fkey"
+            columns: ["to_account_id"]
+            isOneToOne: false
+            referencedRelation: "money_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       option_lists: {
         Row: {
           id: number
