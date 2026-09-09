@@ -46,6 +46,17 @@ export type BranchMoney = {
   total: number;
 };
 
+/** The branches on the card, and every baht across them. */
+export type MoneyOverview = {
+  branches: BranchMoney[];
+  /**
+   * Every account in every branch shown. Safe to add up only because these are
+   * balances: the movement version this replaced would have counted banked cash
+   * once in the drawer and again in the bank.
+   */
+  total: number;
+};
+
 export type MoneyAccount = {
   id: number;
   shop: string;
@@ -85,8 +96,8 @@ export function buildMoneySources(
   accounts: MoneyAccount[],
   movements: MoneyMovement[],
   transfers: MoneyTransfer[],
-): BranchMoney[] {
-  return shops
+): MoneyOverview {
+  const branches = shops
     .map((s) => {
       const mine = accounts
         .filter((a) => a.shop === s.id)
@@ -138,4 +149,6 @@ export function buildMoneySources(
       };
     })
     .filter((b) => b.accounts.length > 0);
+
+  return { branches, total: branches.reduce((n, b) => n + b.total, 0) };
 }

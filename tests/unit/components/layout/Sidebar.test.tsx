@@ -27,7 +27,9 @@ describe('Sidebar', () => {
     // the ids AND that each is individually gated is what keeps a later
     // "gate the whole group on one key" refactor from going unnoticed.
     // `customers` (ทะเบียนลูกค้า) joined after the trial run, `revenue` (รายได้)
-    // with the sales report.
+    // with the sales report, and `money` (การจัดการเงิน/บัญชี) with the account
+    // register — its own key so the register can be shut to everyone who is not
+    // doing the books.
     expect(NAV_ITEMS.map((i) => i.id)).toEqual([
       'dashboard',
       'list',
@@ -37,6 +39,7 @@ describe('Sidebar', () => {
       'commission',
       'accounting',
       'revenue',
+      'money',
       'permissions',
     ]);
 

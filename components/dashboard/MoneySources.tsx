@@ -1,8 +1,8 @@
 'use client';
 
-import { fmt } from '@/lib/domain/format';
+import { fmt, shortShopName } from '@/lib/domain/format';
 
-import type { BranchMoney } from './moneyFlow';
+import type { MoneyOverview } from './moneyFlow';
 
 /**
  * เงินอยู่ที่ไหนบ้าง — สาขา แล้วแหล่งเงิน แล้วจำนวน.
@@ -23,7 +23,8 @@ const KIND_ICON: Record<string, string> = {
   credit: 'fa-credit-card',
 };
 
-export function MoneySources({ branches }: { branches: BranchMoney[] }) {
+export function MoneySources({ data }: { data: MoneyOverview }) {
+  const { branches } = data;
   if (branches.length === 0) {
     return (
       <p className="text-xs" style={{ color: 'var(--primary)', opacity: 0.7 }}>
@@ -33,16 +34,41 @@ export function MoneySources({ branches }: { branches: BranchMoney[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {branches.map((b) => (
-        <div key={b.shop}>
+    <div className="flex flex-col gap-2.5">
+      {/*
+        เงินทั้งหมด first, because it is the question the card is opened with.
+        Filtered to one branch it repeats that branch’s total, and the
+        repetition costs less than a headline figure that does not move when
+        the filter does.
+      */}
+      <div
+        className="flex items-baseline justify-between gap-2 pb-2"
+        style={{ color: 'var(--primary)', borderBottom: '1px solid rgba(255,255,255,.45)' }}
+      >
+        <span className="text-xs" style={{ opacity: 0.85 }}>
+          เงินทั้งหมด
+        </span>
+        <span className="text-lg font-extrabold">{fmt(data.total)}</span>
+      </div>
+      {branches.map((b, i) => (
+        /*
+          Each branch is a block with a rule above it and its own tinted
+          heading. Five branches of four accounts is twenty near-identical rows,
+          and with only whitespace between them the eye loses which total belongs
+          to which shop — the rule is what makes the grouping readable at a
+          glance rather than something to be counted out.
+        */
+        <div
+          key={b.shop}
+          style={
+            i === 0 ? undefined : { borderTop: '1px solid rgba(255,255,255,.5)', paddingTop: 10 }
+          }
+        >
           <div
-            className="flex items-baseline justify-between gap-2 mb-1"
-            style={{ color: 'var(--primary)' }}
+            className="flex items-baseline justify-between gap-2 mb-1.5 px-2 py-1 rounded-lg"
+            style={{ color: 'var(--primary)', background: 'rgba(255,255,255,.55)' }}
           >
-            <p className="text-xs font-semibold" style={{ opacity: 0.9 }}>
-              {b.name}
-            </p>
+            <p className="text-xs font-bold">{shortShopName(b.name)}</p>
             <p className="text-xs font-bold">{fmt(b.total)}</p>
           </div>
           <div className="flex flex-col gap-1">

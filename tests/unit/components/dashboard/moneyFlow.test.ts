@@ -49,7 +49,7 @@ const petty = account({
 });
 
 const only = (accounts: MoneyAccount[], m: MoneyMovement[] = [], t: MoneyTransfer[] = []) =>
-  buildMoneySources(shops, accounts, m, t)[0];
+  buildMoneySources(shops, accounts, m, t).branches[0];
 
 describe('buildMoneySources', () => {
   it('starts from the opening balance the shop reconciled to', () => {
@@ -124,6 +124,6 @@ describe('buildMoneySources', () => {
   });
 
   it('drops a branch with no accounts rather than printing an empty heading', () => {
-    expect(buildMoneySources(shops, [], [], [])).toEqual([]);
+    expect(buildMoneySources(shops, [], [], []).branches).toEqual([]);
   });
 });

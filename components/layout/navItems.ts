@@ -28,13 +28,22 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'wholesale', label: 'ขายส่ง', icon: 'fa-truck-fast', href: '/wholesale' },
   { id: 'stock', label: 'สต็อกสินค้า', icon: 'fa-boxes-stacked', href: '/stock' },
   { id: 'commission', label: 'ค่าคอมมิชชั่น', icon: 'fa-percent', href: '/commission' },
-  {
-    id: 'accounting',
-    label: 'บัญชี/ค่าใช้จ่าย',
-    icon: 'fa-file-invoice-dollar',
-    href: '/accounting',
-  },
+  // Just ค่าใช้จ่าย now. It was บัญชี/ค่าใช้จ่าย while it was the only place
+  // money was handled; การจัดการเงิน/บัญชี below owns the accounts, the
+  // transfers and the reconciliation, so this module is the expense ledger and
+  // nothing else, and the two names should not both claim to be บัญชี.
+  { id: 'accounting', label: 'ค่าใช้จ่าย', icon: 'fa-file-invoice-dollar', href: '/accounting' },
+  /*
+    การจัดการเงิน/บัญชี — the money register.
+
+    Its own module rather than a panel inside ค่าใช้จ่าย, because it is a
+    different job for different people: opening balances, moving money between
+    accounts and reconciling against the bank are the bookkeeper’s work, and the
+    shop asked for it to be shut to everyone else. A nav key is the only gate
+    that does that — a panel would inherit whoever can see expenses.
+  */
   { id: 'revenue', label: 'รายได้', icon: 'fa-sack-dollar', href: '/revenue' },
+  { id: 'money', label: 'การจัดการเงิน/บัญชี', icon: 'fa-vault', href: '/money' },
   { id: 'permissions', label: 'จัดการสิทธิ์', icon: 'fa-user-shield', href: '/permissions' },
 ];
 

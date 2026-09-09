@@ -208,3 +208,48 @@ create policy money_reconciliations_rw on money_reconciliations for all
       select a.id from money_accounts a where a.shop_id in (select current_user_shops())
     )
   );
+
+/*
+  ทั้งสองด้านของการโอน ต้องเป็นบัญชีของสาขาเดียวกับรายการ.
+
+  `money_transfers.shop_id` decides which branch the transfer belongs to, and the
+  two account ids decide which balances move. Nothing tied them together, so a
+  caller could file a transfer under one branch while moving another branch's
+  money — and the row would then be invisible to the branch whose balances it
+  changed, which is the worst of both: the money moves and nobody can see why.
+
+  Enforced here rather than only in the server action, because the action is a
+  plain POST and RLS on its own checks `shop_id` without ever looking at the
+  accounts.
+*/
+create or replace function enforce_transfer_accounts_match_shop()
+returns trigger
+language plpgsql
+security invoker
+set search_path = pos
+as $$
+begin
+  if new.from_account_id is not null
+     and not exists (
+       select 1 from money_accounts a
+       where a.id = new.from_account_id and a.shop_id = new.shop_id
+     ) then
+    raise exception 'แหล่งเงินต้นทางไม่ได้อยู่ในสาขานี้' using errcode = '23514';
+  end if;
+
+  if new.to_account_id is not null
+     and not exists (
+       select 1 from money_accounts a
+       where a.id = new.to_account_id and a.shop_id = new.shop_id
+     ) then
+    raise exception 'แหล่งเงินปลายทางไม่ได้อยู่ในสาขานี้' using errcode = '23514';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists money_transfers_accounts_match_shop on money_transfers;
+create trigger money_transfers_accounts_match_shop
+  before insert or update on money_transfers
+  for each row execute function enforce_transfer_accounts_match_shop();

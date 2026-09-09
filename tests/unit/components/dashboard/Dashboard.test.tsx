@@ -25,7 +25,7 @@ describe('Dashboard', () => {
         hasDashboardWidget={(k) => k !== 'revenue'}
         revenue={99999}
         totalExpenses={0}
-        moneySources={[]}
+        moneySources={{ branches: [], total: 0 }}
         arItems={[]}
         apItems={[]}
         revenueByCategory={[]}
@@ -42,7 +42,7 @@ describe('Dashboard', () => {
         hasDashboardWidget={() => true}
         revenue={0}
         totalExpenses={0}
-        moneySources={[]}
+        moneySources={{ branches: [], total: 0 }}
         arItems={[{ id: 'JT-1', name: 'คุณ เอ (1กก)', amount: 3100, source: 'ใบงานติดตั้ง' }]}
         apItems={[]}
         revenueByCategory={[]}
@@ -65,7 +65,7 @@ const base = {
   hasDashboardWidget: () => true,
   revenue: 0,
   totalExpenses: 0,
-  moneySources: [],
+  moneySources: { branches: [], total: 0 },
   arItems: [],
   apItems: [],
   revenueByCategory: [],
@@ -432,7 +432,7 @@ describe('Dashboard — ยอดขายแยกตามชนิดสิ�
     hasDashboardWidget: () => true,
     revenue: 33_000,
     totalExpenses: 0,
-    moneySources: [],
+    moneySources: { branches: [], total: 0 },
     arItems: [],
     apItems: [],
     expenseByCategory: [],

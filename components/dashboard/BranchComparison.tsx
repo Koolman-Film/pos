@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { fmt } from '@/lib/domain/format';
+import { fmt, shortShopName } from '@/lib/domain/format';
 
 import type { BranchComparison as Data, BranchRow } from './branchTotals';
 
@@ -13,15 +13,24 @@ import type { BranchComparison as Data, BranchRow } from './branchTotals';
  * is nothing to compare it against, and a one-row table pretending otherwise is
  * worse than no table.
  *
- * A table rather than a chart. Management reads these figures to the baht and
- * photographs the screen to send on; a bar chart makes the ranking obvious and
- * the amounts unreadable, so the ranking is carried by the row ORDER and by a
- * bar drawn behind the number, and the number itself stays legible.
+ * A plain table. It first carried a tinted bar behind every figure to show the
+ * ranking; across seven columns that is seven overlapping washes of colour on
+ * one screen, and the shop said it read as harder rather than easier. The
+ * ranking is carried by the row ORDER and by the stated rank number, which is
+ * what people were reading anyway. Colour is now reserved for the one thing it
+ * has to say: a negative figure.
  */
 
 /** Which column the table is ranked by. */
 type SortKey =
-  'revenue' | 'expenses' | 'profit' | 'jobs' | 'receivable' | 'payable' | 'heldForFinnix';
+  | 'revenue'
+  | 'expenses'
+  | 'profit'
+  | 'jobs'
+  | 'receivable'
+  | 'payable'
+  | 'netDue'
+  | 'heldForFinnix';
 
 const COLUMNS: { key: SortKey; label: string; hint: string; money: boolean }[] = [
   { key: 'revenue', label: 'ยอดขาย', hint: 'งานที่ส่งมอบ + ประกันที่ขายในช่วงนี้', money: true },
@@ -51,6 +60,12 @@ const COLUMNS: { key: SortKey; label: string; hint: string; money: boolean }[] =
     money: true,
   },
   {
+    key: 'netDue',
+    label: 'ค้างสุทธิ',
+    hint: 'ค้างรับ − ค้างจ่าย · บวกคือมีเงินจะเข้ามากกว่าที่ต้องจ่าย',
+    money: true,
+  },
+  {
     key: 'heldForFinnix',
     label: 'รอคืน Finnix',
     hint: 'รับเงินแทนร้านอื่น ไม่นับเป็นยอดขายของสาขา',
@@ -62,40 +77,20 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
   const [sortKey, setSortKey] = useState<SortKey>('revenue');
   const rows = [...data.rows].sort((a, b) => b[sortKey] - a[sortKey]);
 
-  // The bar behind each figure is relative to the biggest branch in THAT column,
-  // so a column of small numbers still spreads across the width instead of
-  // collapsing into invisible slivers.
-  const peak = (key: SortKey) => Math.max(...rows.map((r) => Math.abs(r[key])), 1);
-
   const cell = (r: BranchRow, key: SortKey, money: boolean) => {
     const value = r[key];
-    const width = `${Math.min(100, (Math.abs(value) / peak(key)) * 100)}%`;
-    const negative = value < 0;
     return (
-      <td key={key} style={{ padding: 0 }}>
-        <div style={{ position: 'relative', padding: '10px 12px', textAlign: 'right' }}>
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              inset: '4px 4px 4px auto',
-              right: 4,
-              width,
-              borderRadius: 4,
-              background: negative ? 'rgba(178,58,72,0.13)' : 'var(--paper)',
-            }}
-          ></div>
-          <span
-            style={{
-              position: 'relative',
-              fontWeight: sortKey === key ? 700 : 500,
-              color: negative ? '#B23A48' : 'var(--ink)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {money ? fmt(value) : value}
-          </span>
-        </div>
+      <td
+        key={key}
+        style={{
+          padding: '10px 12px',
+          textAlign: 'right',
+          fontWeight: sortKey === key ? 700 : 500,
+          color: value < 0 ? '#B23A48' : 'var(--ink)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {money ? fmt(value) : value}
       </td>
     );
   };
@@ -168,7 +163,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
                   >
                     {i + 1}
                   </span>
-                  <span className="font-medium">{r.name}</span>
+                  <span className="font-medium">{shortShopName(r.name)}</span>
                 </td>
                 {COLUMNS.map((c) => cell(r, c.key, c.money))}
               </tr>

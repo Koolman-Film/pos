@@ -5,7 +5,7 @@ import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 
 const shops: Shop[] = [
   { id: 'cm', name: 'FINNIX FILM เชียงใหม่' },
-  { id: 'lp', name: 'FINNIX FILM ลำพูน' },
+  { id: 'lp', name: 'FN ลำพูน' },
 ];
 
 function setup(overrides: Partial<React.ComponentProps<typeof PeriodShopFilter>> = {}) {
@@ -37,12 +37,12 @@ describe('PeriodShopFilter', () => {
   it('offers an "all shops" button with the shop count when allowAllShops is true', () => {
     setup();
     expect(screen.getByRole('button', { name: 'ทุกร้าน (2)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'FINNIX FILM ลำพูน' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'FN ลำพูน' })).toBeInTheDocument();
   });
 
   it('marks the chosen branch as pressed, so it reads as chosen without colour alone', () => {
     setup({ shopFilter: 'lp' });
-    expect(screen.getByRole('button', { name: 'FINNIX FILM ลำพูน' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'FN ลำพูน' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
@@ -60,7 +60,7 @@ describe('PeriodShopFilter', () => {
   it('clicking a branch calls setShopFilter with its id', async () => {
     const user = userEvent.setup();
     const { props } = setup();
-    await user.click(screen.getByRole('button', { name: 'FINNIX FILM ลำพูน' }));
+    await user.click(screen.getByRole('button', { name: 'FN ลำพูน' }));
     expect(props.setShopFilter).toHaveBeenCalledWith('lp');
   });
 

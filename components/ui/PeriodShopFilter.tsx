@@ -1,5 +1,7 @@
 'use client';
 
+import { shortShopName } from '@/lib/domain/format';
+
 export type Shop = { id: string; name: string };
 
 /**
@@ -65,7 +67,7 @@ export function PeriodShopFilter({
                 border: on ? '1.5px solid var(--primary)' : '1.5px solid var(--line)',
               }}
             >
-              {s.name}
+              {shortShopName(s.name)}
             </button>
           );
         })}

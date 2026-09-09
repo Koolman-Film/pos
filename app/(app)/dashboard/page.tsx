@@ -351,11 +351,12 @@ export default async function DashboardPage({
     โอนออก, per account (migration 0043). `components/dashboard/moneyFlow.ts`
     holds the arithmetic and the reasoning.
 
-    NOT period-scoped, and NOT shop-filtered. A balance is "as of now" by
-    definition — windowing it to September would produce a number that is
-    nobody’s money — and management asked to see every branch at once, so the
-    branch is the first level of the grouping rather than something to filter
-    down to. Every branch here is one the caller may already see.
+    NOT period-scoped: a balance is "as of now" by definition, and windowing it
+    to September would produce a number that is nobody’s money.
+
+    Shop-filtered, though. On ทุกร้าน the branch is the first level of the
+    grouping and management sees the lot; picking one branch narrows the card
+    to it, like every other card on the screen.
   */
   const day = (d: Date | null | undefined) => (d ? shopDayKey(d) : '');
   const moneyMovements: MoneyMovement[] = [
@@ -396,7 +397,7 @@ export default async function DashboardPage({
     on: t.moved_at,
   }));
   const moneySources = buildMoneySources(
-    accessibleShops,
+    accessibleShops.filter((s) => inShop(s.id)),
     moneyAccounts,
     moneyMovements,
     moneyTransfers,

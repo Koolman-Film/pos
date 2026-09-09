@@ -19,7 +19,7 @@
 
 import Link from 'next/link';
 import { MoneySources } from './MoneySources';
-import type { BranchMoney } from './moneyFlow';
+import type { MoneyOverview } from './moneyFlow';
 import { BranchComparison as BranchComparisonCard } from './BranchComparison';
 import type { BranchComparison as BranchComparisonData } from './branchTotals';
 import type { ReactNode } from 'react';
@@ -148,7 +148,7 @@ export type DashboardProps = {
    * แหล่งเงินแยกตามสาขา. Movement in the period, never a balance — the card
    * says so, and `moneySources.ts` says why.
    */
-  moneySources?: BranchMoney[];
+  moneySources?: MoneyOverview;
   arItems: ARItem[];
   apItems: APItem[];
   revenueByCategory: RevenueByCategory[];
@@ -192,7 +192,7 @@ export function Dashboard({
   hasDashboardWidget,
   revenue,
   totalExpenses,
-  moneySources = [],
+  moneySources = { branches: [], total: 0 },
   arItems,
   apItems,
   revenueByCategory,
@@ -360,7 +360,7 @@ export function Dashboard({
             <p className="text-xs mt-0.5 mb-3" style={{ color: 'var(--primary)', opacity: 0.75 }}>
               ยอดคงเหลือ ณ ตอนนี้ · แยกตามสาขาและแหล่งเงิน
             </p>
-            <MoneySources branches={moneySources} />
+            <MoneySources data={moneySources} />
           </div>
         )}
       </div>

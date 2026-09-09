@@ -64,10 +64,11 @@ it twice changes nothing, and each records its versions in
 | 22    | `supabase/release-0041.sql`                   | a normal connection                                 |
 | 23    | `supabase/release-0042.sql`                   | a normal connection                                 |
 | 24    | `supabase/release-0043.sql`                   | a normal connection                                 |
-| 25    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 25    | `supabase/release-0044.sql`                   | a normal connection                                 |
+| 26    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all twenty-six in order
+already been handed over. If nothing has been run yet, running all twenty-seven in order
 is still correct.
 
 `release-0030.sql` is numbered 0 because it is the one file that is urgent and
@@ -125,6 +126,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0041_claim_visit_dates`           | ใบเคลมประกันมีวันรับรถ/ส่งมอบรถ พร้อมเวลา เป็นของตัวเอง เดิมใบเคลมพิมพ์วันที่ของใบงานเดิม (วันที่ติดฟิล์ม ซึ่งอาจเป็นปีก่อน) เพราะการเคลมไม่มีวันที่ของตัวเองเลย ตอนนี้เก็บวันและเวลาที่ลูกค้าเอารถเข้ามาจริง ส่วนวันที่ติดตั้งเดิมยังพิมพ์อยู่ในบรรทัดของตัวเองที่ระบุชัดว่าเป็นงานเดิม การเคลมที่บันทึกไว้ก่อนหน้านี้เว้นว่างไว้ ไม่เดาให้                                                | ต่ำ. เพิ่มคอลัมน์ที่เป็น NULL ได้ ไม่แตะข้อมูลเดิม                                          |
 | `0042_branch_compare_widget`       | สิทธิ์ใหม่ "การ์ดเปรียบเทียบรายสาขา" — การ์ดใหม่บนแดชบอร์ดที่วางทุกสาขาเทียบกันในตารางเดียว (ยอดขาย/ค่าใช้จ่าย/คงเหลือ/งาน/ค้างรับ/ค้างจ่าย/รอคืน Finnix) เดิมดูได้แค่ทีละสาขาหรือแบบรวม ตั้งต้นตามสิทธิ์ "ดูข้อมูลทุกสาขา" ที่มีอยู่แล้ว จึงไม่มีใครเห็นอะไรเพิ่มโดยไม่ตั้งใจ                                                                                                              | ต่ำ. เพิ่มสิทธิ์อย่างเดียว ไม่แตะข้อมูล                                                     |
 | `0043_money_accounts`              | ทะเบียนแหล่งเงิน — `money_accounts` (ที่เก็บเงินของแต่ละสาขา พร้อมยอดตั้งต้นและวันที่ยอดนั้นเป็นจริง แก้ไขได้), `money_transfers` (โอน/ฝากเงินระหว่างแหล่งเงิน รวมถึงเงินที่ออกไปโดยไม่เป็นค่าใช้จ่าย เช่น คืนเงินสำรองจ่ายกรรมการ) และ `money_reconciliations` (บันทึกยอดที่นับได้จริงเทียบกับยอดระบบ) สร้างบัญชีตั้งต้นให้ทุกสาขาจากแหล่งเงินเดิม และคัดลอกการเติมเงินสดย่อยเป็นรายการโอน | ต่ำ. เพิ่มตารางใหม่ ไม่แตะข้อมูลเดิม ยอดตั้งต้นเริ่มที่ 0 จนกว่าร้านจะกรอก                  |
+| `0044_money_module`                | สิทธิ์เมนูใหม่ `money` สำหรับโมดูล การจัดการเงิน/บัญชี — หน้าจอตั้งยอดตั้งต้น บันทึกโอน/ฝากเงิน และกระทบยอดกับเงินจริง ตั้งต้นเปิดให้แอดมินกับผู้บริหารเท่านั้น ไม่มีใครได้สิทธิ์เพิ่มจากเดิมเพราะหน้าจอนี้เพิ่งมี พร้อมเปลี่ยนชื่อเมนู บัญชี/ค่าใช้จ่าย เป็น ค่าใช้จ่าย (ชื่อเมนูเท่านั้น คีย์สิทธิ์เดิมไม่เปลี่ยน)                                                                        | ต่ำ. เพิ่มสิทธิ์อย่างเดียว ไม่แตะข้อมูล                                                     |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

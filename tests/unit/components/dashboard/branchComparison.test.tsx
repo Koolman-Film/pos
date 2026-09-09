@@ -65,6 +65,15 @@ describe('buildBranchComparison', () => {
     expect(data.total.payable).toBe(120_400);
   });
 
+  it('states ค้างสุทธิ rather than leaving the subtraction to the reader', () => {
+    // เชียงใหม่ is owed 9,000 and owes 108,400: the headline "ค้างรับ 9,000"
+    // reads as money coming in, and the sign is the thing to act on.
+    const cm = data.rows.find((r) => r.shop === 'cm')!;
+    expect(cm.netDue).toBe(-99_400);
+    expect(data.rows.find((r) => r.shop === 'py')!.netDue).toBe(-10_000);
+    expect(data.total.netDue).toBe(data.total.receivable - data.total.payable);
+  });
+
   it('keeps ค้างจ่าย out of ค่าใช้จ่าย, so คงเหลือ is not understated', () => {
     // เชียงใหม่ owes 108,400 that has not left the bank. Folding it into
     // ค่าใช้จ่าย would drag its คงเหลือ from 80,000 to a loss on money it still

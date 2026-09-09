@@ -133,3 +133,20 @@ export function thaiBahtText(num: number): string {
   });
   return (result || 'ศูนย์') + 'บาทถ้วน';
 }
+
+/**
+ * ชื่อสาขาแบบสั้น — 'FINNIX FILM เชียงใหม่' becomes 'FN เชียงใหม่'.
+ *
+ * Every branch but one is called "FINNIX FILM <place>", so in a list of five the
+ * first two words are the same every time and carry nothing: what the reader is
+ * picking out is the place. Full width, that repetition pushed the figures off
+ * the edge of the branch-comparison table and wrapped the filter buttons onto
+ * three lines.
+ *
+ * Only that exact prefix is touched. 'Central Audio' is a different shop with a
+ * different name and is left exactly as the shop typed it — a generic
+ * "abbreviate the first two words" rule would mangle it.
+ */
+export function shortShopName(name: string): string {
+  return name.replace(/^FINNIX\s+FILM\s+/i, 'FN ');
+}

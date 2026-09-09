@@ -37,6 +37,15 @@ export type BranchRow = {
    * carrying the largest unpaid pile at the same time.
    */
   payable: number;
+  /**
+   * ค้างรับ − ค้างจ่าย. What the branch is owed net of what it owes.
+   *
+   * Derived rather than eyeballed from the two columns beside it, because that
+   * subtraction is the follow-up question every time: a branch owed 40,900 and
+   * owing 108,400 is not a branch with money coming, and the sign is the thing
+   * you act on.
+   */
+  netDue: number;
   /** เงินรอคืน Finnix: collected here, owed to another shop (migration 0031). */
   heldForFinnix: number;
 };
@@ -56,11 +65,14 @@ type Shop = { id: string; name: string };
  * จ่ายแทน, how a ticket total handles discounts) and re-implementing any of
  * them here is how two figures on one screen start to disagree.
  */
-export type BranchFigures = (shop: string) => Omit<BranchRow, 'shop' | 'name'>;
+export type BranchFigures = (shop: string) => Omit<BranchRow, 'shop' | 'name' | 'netDue'>;
 
 export function buildBranchComparison(shops: Shop[], figures: BranchFigures): BranchComparison {
   const rows = shops
-    .map((s) => ({ shop: s.id, name: s.name, ...figures(s.id) }))
+    .map((s) => {
+      const f = figures(s.id);
+      return { shop: s.id, name: s.name, ...f, netDue: f.receivable - f.payable };
+    })
     // Highest ยอดขาย first: the question being asked is who is ahead, and a
     // table in the shops' own sort order makes that a reading exercise.
     .sort((a, b) => b.revenue - a.revenue);
@@ -76,6 +88,7 @@ export function buildBranchComparison(shops: Shop[], figures: BranchFigures): Br
       jobs: sum((r) => r.jobs),
       receivable: sum((r) => r.receivable),
       payable: sum((r) => r.payable),
+      netDue: sum((r) => r.netDue),
       heldForFinnix: sum((r) => r.heldForFinnix),
     },
   };
