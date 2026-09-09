@@ -288,12 +288,26 @@ insert into insurance_claims (
 
 -- ---------------------------------------------------------------- wholesale --
 
-insert into orders (id, shop_id, customer_id, status) values
-  ('WS-CM-0091', 'cm', (select id from wholesale_customers where name = 'ร้านออโต้สไตล์'), 'รออนุมัติราคา'),
-  ('WS-CM-0088', 'cm', (select id from wholesale_customers where name = 'ร้านออโต้เซอร์วิส บางแค'), 'ค้างชำระ'),
-  ('WS-LP-0044', 'lp', (select id from wholesale_customers where name = 'ร้านดีคาร์แคร์'), 'จัดส่งแล้ว'),
-  ('WS-PY-0012', 'py', (select id from wholesale_customers where name = 'ร้านทีเอสออโต้'), 'รอจัดส่ง'),
-  ('WS-LPG-0005', 'lpg', (select id from wholesale_customers where name = 'ร้านเจริญยนต์'), 'ปิดงานแล้ว');
+/*
+  วันส่งของ ของ PO ที่ส่งไปแล้ว.
+
+  0046 backfills this from `created_at` for a live database, but migrations run
+  BEFORE this file, so on a fresh reset it finds no orders to fix. Set here
+  instead — anchored to the start of the month like every other sample date, so
+  the POs land in the period the dashboard opens on.
+
+  The two still at รออนุมัติราคา / รอจัดส่ง keep no date: they have not been
+  delivered, and wholesale revenue is earned on delivery.
+*/
+insert into orders (id, shop_id, customer_id, status, delivered_at) values
+  ('WS-CM-0091', 'cm', (select id from wholesale_customers where name = 'ร้านออโต้สไตล์'), 'รออนุมัติราคา', null),
+  ('WS-CM-0088', 'cm', (select id from wholesale_customers where name = 'ร้านออโต้เซอร์วิส บางแค'), 'ค้างชำระ',
+   least(date_trunc('month', current_date)::date + 3, current_date)),
+  ('WS-LP-0044', 'lp', (select id from wholesale_customers where name = 'ร้านดีคาร์แคร์'), 'จัดส่งแล้ว',
+   least(date_trunc('month', current_date)::date + 6, current_date)),
+  ('WS-PY-0012', 'py', (select id from wholesale_customers where name = 'ร้านทีเอสออโต้'), 'รอจัดส่ง', null),
+  ('WS-LPG-0005', 'lpg', (select id from wholesale_customers where name = 'ร้านเจริญยนต์'), 'ปิดงานแล้ว',
+   least(date_trunc('month', current_date)::date + 2, current_date));
 
 -- WS-CM-0091 and WS-LPG-0005 are the two with requested < list, i.e. the two the
 -- dashboard's "ส่วนลด PO รออนุมัติ" counter looks for (only the first is still
