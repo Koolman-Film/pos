@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 import { TimeSelect } from '@/components/ui/TimeSelect';
 
@@ -158,11 +159,10 @@ export function ExtrasSection({
                       >
                         <p className="text-xs font-semibold mb-1.5">ถึงหน้าร้าน</p>
                         <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="date"
+                          <ThaiDateInput
                             value={leg.date || ''}
-                            onChange={(e) => updateSlideLeg(legIdx, 'date', e.target.value)}
-                            className="field text-xs px-2.5 py-1.5"
+                            onChange={(v) => updateSlideLeg(legIdx, 'date', v)}
+                            className="field text-xs px-2.5 py-1.5 w-full"
                           />
                           <TimeSelect
                             value={leg.time || ''}
@@ -196,11 +196,10 @@ export function ExtrasSection({
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="date"
+                          <ThaiDateInput
                             value={leg.date || ''}
-                            onChange={(e) => updateSlideLeg(legIdx, 'date', e.target.value)}
-                            className="field text-xs px-2.5 py-1.5"
+                            onChange={(v) => updateSlideLeg(legIdx, 'date', v)}
+                            className="field text-xs px-2.5 py-1.5 w-full"
                           />
                           <TimeSelect
                             value={leg.time || ''}
@@ -277,12 +276,11 @@ export function ExtrasSection({
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                         วันที่รับงาน (งานแก้)
                       </label>
-                      <input
-                        type="date"
-                        aria-label="วันที่รับงานแก้"
+                      <ThaiDateInput
                         value={(ex.receivedAt as string) || ''}
-                        onChange={(e) => updateExtraDetail(name, 'receivedAt', e.target.value)}
+                        onChange={(v) => updateExtraDetail(name, 'receivedAt', v)}
                         className="field w-full text-sm px-3 py-2"
+                        ariaLabel="วันที่รับงานแก้"
                       />
                     </div>
                     <div>
@@ -301,12 +299,11 @@ export function ExtrasSection({
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                         วันที่ส่งงาน (งานแก้)
                       </label>
-                      <input
-                        type="date"
-                        aria-label="วันที่ส่งงานแก้"
+                      <ThaiDateInput
                         value={(ex.deliveredAt as string) || ''}
-                        onChange={(e) => updateExtraDetail(name, 'deliveredAt', e.target.value)}
+                        onChange={(v) => updateExtraDetail(name, 'deliveredAt', v)}
                         className="field w-full text-sm px-3 py-2"
+                        ariaLabel="วันที่ส่งงานแก้"
                       />
                     </div>
                     <div>
@@ -351,10 +348,9 @@ export function ExtrasSection({
                           <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
                             วันที่เข้า Service
                           </label>
-                          <input
-                            type="date"
+                          <ThaiDateInput
                             value={(ex.serviceDate as string) || ''}
-                            onChange={(e) => updateExtraDetail(name, 'serviceDate', e.target.value)}
+                            onChange={(v) => updateExtraDetail(name, 'serviceDate', v)}
                             className="field text-xs px-2.5 py-1.5 w-full"
                           />
                         </div>

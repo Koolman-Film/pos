@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 import { fmtThaiDate } from '@/lib/domain/format';
 import { dateInputValue } from '@/lib/domain/now';
@@ -368,12 +369,11 @@ export function InsuranceSection({
               <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
                 วันที่ขาย
               </label>
-              <input
-                aria-label="วันที่ขายประกัน"
-                type="date"
+              <ThaiDateInput
                 value={draft.soldAt}
-                onChange={(e) => set('soldAt', e.target.value)}
+                onChange={(v) => set('soldAt', v)}
                 className="field w-full text-xs px-2.5 py-1.5"
+                ariaLabel="วันที่ขายประกัน"
               />
             </div>
           </div>
@@ -435,24 +435,22 @@ export function InsuranceSection({
               <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
                 วันเริ่มคุ้มครอง
               </label>
-              <input
-                aria-label="วันเริ่มคุ้มครอง"
-                type="date"
+              <ThaiDateInput
                 value={draft.startsAt}
-                onChange={(e) => set('startsAt', e.target.value)}
+                onChange={(v) => set('startsAt', v)}
                 className="field w-full text-xs px-2.5 py-1.5"
+                ariaLabel="วันเริ่มคุ้มครอง"
               />
             </div>
             <div>
               <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
                 วันหมดอายุ
               </label>
-              <input
-                aria-label="วันหมดอายุประกัน"
-                type="date"
+              <ThaiDateInput
                 value={draft.endsAt}
-                onChange={(e) => set('endsAt', e.target.value)}
+                onChange={(v) => set('endsAt', v)}
                 className="field w-full text-xs px-2.5 py-1.5"
+                ariaLabel="วันหมดอายุประกัน"
               />
             </div>
           </div>
@@ -468,12 +466,11 @@ export function InsuranceSection({
             {draft.claims.map((c, i) => (
               <div key={i} className="rounded-lg p-2 mb-1.5" style={{ background: 'var(--paper)' }}>
                 <div className="grid grid-cols-3 gap-2 mb-1.5">
-                  <input
-                    aria-label={`วันที่เคลมครั้งที่ ${i + 1}`}
-                    type="date"
+                  <ThaiDateInput
                     value={c.claimedAt}
-                    onChange={(e) => setClaim(i, 'claimedAt', e.target.value)}
-                    className="field text-xs px-2 py-1"
+                    onChange={(v) => setClaim(i, 'claimedAt', v)}
+                    className="field text-xs px-2 py-1 w-full"
+                    ariaLabel={`วันที่เคลมครั้งที่ ${i + 1}`}
                   />
                   <input
                     aria-label={`ชิ้นใหญ่ที่ใช้ครั้งที่ ${i + 1}`}
@@ -505,12 +502,11 @@ export function InsuranceSection({
                     <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
                       วันรับรถ
                     </label>
-                    <input
-                      aria-label={`วันรับรถเคลมครั้งที่ ${i + 1}`}
-                      type="date"
+                    <ThaiDateInput
                       value={c.receivedAt ?? ''}
-                      onChange={(e) => setClaim(i, 'receivedAt', e.target.value)}
+                      onChange={(v) => setClaim(i, 'receivedAt', v)}
                       className="field text-xs px-2 py-1 w-full"
+                      ariaLabel={`วันรับรถเคลมครั้งที่ ${i + 1}`}
                     />
                   </div>
                   <div>
@@ -529,12 +525,11 @@ export function InsuranceSection({
                     <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
                       วันส่งมอบรถ
                     </label>
-                    <input
-                      aria-label={`วันส่งมอบรถเคลมครั้งที่ ${i + 1}`}
-                      type="date"
+                    <ThaiDateInput
                       value={c.deliveredAt ?? ''}
-                      onChange={(e) => setClaim(i, 'deliveredAt', e.target.value)}
+                      onChange={(v) => setClaim(i, 'deliveredAt', v)}
                       className="field text-xs px-2 py-1 w-full"
+                      ariaLabel={`วันส่งมอบรถเคลมครั้งที่ ${i + 1}`}
                     />
                   </div>
                   <div>

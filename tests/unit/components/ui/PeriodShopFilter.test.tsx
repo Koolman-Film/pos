@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
@@ -102,5 +103,34 @@ describe('PeriodShopFilter', () => {
     await user.clear(end);
     await user.type(end, '2026-06-30');
     expect(props.setRangeEnd).toHaveBeenCalled();
+  });
+});
+
+/**
+ * ช่องวันที่ ต้องอ่านออกว่าเป็นวันไหน.
+ *
+ * `<input type="date">` is drawn by the browser in the DEVICE's locale, and
+ * nothing in the app can change that: on a phone set to English it reads
+ * `09/10/2026`, which is 9 October to half the world and 10 September to the
+ * other half. The caption underneath is what removes the doubt.
+ */
+describe('ThaiDateInput', () => {
+  it('states the date in Thai beneath the native picker', () => {
+    render(<ThaiDateInput value="2026-09-10" onChange={() => {}} ariaLabel="วันที่รับงาน" />);
+    expect(screen.getByLabelText('วันที่รับงาน')).toHaveValue('2026-09-10');
+    expect(screen.getByText('10 ก.ย. 2569')).toBeInTheDocument();
+  });
+
+  it('says nothing when no date is set, rather than printing a dash', () => {
+    render(<ThaiDateInput value="" onChange={() => {}} ariaLabel="วันที่" />);
+    expect(screen.queryByText('-')).not.toBeInTheDocument();
+  });
+
+  it('hands back the raw YYYY-MM-DD, so callers keep storing what they stored', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<ThaiDateInput value="" onChange={onChange} ariaLabel="วันที่" />);
+    await user.type(screen.getByLabelText('วันที่'), '2026-09-10');
+    expect(onChange).toHaveBeenLastCalledWith('2026-09-10');
   });
 });

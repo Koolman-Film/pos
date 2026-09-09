@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 import { fmtThaiDate } from '@/lib/domain/format';
@@ -273,12 +274,11 @@ export function ServiceVisitsSection({
               <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
                 วันรับรถ
               </label>
-              <input
-                type="date"
-                aria-label="วันรับรถ"
+              <ThaiDateInput
                 value={draft.receivedAt}
-                onChange={(e) => set('receivedAt', e.target.value)}
+                onChange={(v) => set('receivedAt', v)}
                 className="field w-full text-xs px-2.5 py-1.5"
+                ariaLabel="วันรับรถ"
               />
             </div>
             <div>
@@ -297,12 +297,11 @@ export function ServiceVisitsSection({
               <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
                 วันส่งมอบรถ
               </label>
-              <input
-                type="date"
-                aria-label="วันส่งมอบรถ"
+              <ThaiDateInput
                 value={draft.deliveredAt}
-                onChange={(e) => set('deliveredAt', e.target.value)}
+                onChange={(v) => set('deliveredAt', v)}
                 className="field w-full text-xs px-2.5 py-1.5"
+                ariaLabel="วันส่งมอบรถ"
               />
             </div>
             <div>

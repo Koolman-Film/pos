@@ -1,5 +1,6 @@
 'use client';
 
+import { ThaiDateInput } from './ThaiDateInput';
 import { TimeSelect } from './TimeSelect';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -43,12 +44,13 @@ export function DateTimeField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <input
-        type="date"
+      {/* Through ThaiDateInput so the date is also stated as 10 ก.ย. 2569: the
+          native control renders in the DEVICE locale, and 09/10/2026 means two
+          different months to two different readers. */}
+      <ThaiDateInput
         value={dateStr}
-        aria-label={label ? `${label} — วันที่` : undefined}
-        onChange={(e) => setDate(e.target.value)}
-        className="field w-full text-sm px-3 py-2"
+        onChange={setDate}
+        ariaLabel={label ? `${label} — วันที่` : undefined}
       />
       <TimeSelect value={timeStr} onChange={setTime} />
     </div>

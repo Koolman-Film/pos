@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -240,21 +241,19 @@ export function TicketList({
         )}
         {period === 'range' && (
           <div className="flex items-center gap-2">
-            <input
-              type="date"
+            <ThaiDateInput
               value={rangeStart}
-              onChange={(e) => setRangeStart(e.target.value)}
-              className="field text-sm px-3 py-2"
+              onChange={(v) => setRangeStart(v)}
+              className="field text-sm px-3 py-2 w-full"
             />
             <i
               className="fa-solid fa-arrow-right text-xs"
               style={{ color: 'var(--ink-faint)' }}
             ></i>
-            <input
-              type="date"
+            <ThaiDateInput
               value={rangeEnd}
-              onChange={(e) => setRangeEnd(e.target.value)}
-              className="field text-sm px-3 py-2"
+              onChange={(v) => setRangeEnd(v)}
+              className="field text-sm px-3 py-2 w-full"
             />
           </div>
         )}
