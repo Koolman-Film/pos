@@ -243,15 +243,33 @@ describe('WholesaleDetail — สาขา และ ถังขยะ', () => 
     render(<WholesaleDetail order={draft} isNew shops={shops} stock={stock} canDo={() => true} />);
 
     await user.click(screen.getByText(/เพิ่มรายการสินค้า|เพิ่มสินค้า/));
-    const picker = screen.getByLabelText('สินค้าในรายการ');
-    expect(within(picker).getByText(/ฟิล์ม CT 40%/)).toBeInTheDocument();
-    expect(within(picker).queryByText(/ฟิล์มกันรอย/)).not.toBeInTheDocument();
+    // The picker is type-to-search: the list opens on focus, and what it offers
+    // is the shelf of the branch the PO is currently on.
+    await user.click(screen.getByLabelText('สินค้าในรายการ'));
+    expect(screen.getByText(/ฟิล์ม CT 40%/)).toBeInTheDocument();
+    expect(screen.queryByText(/ฟิล์มกันรอย/)).not.toBeInTheDocument();
 
     // Switch to the wholesale-only branch: its shelf is what the PO now sells.
     await user.selectOptions(screen.getByLabelText('สาขาที่เปิด PO'), 'north');
-    expect(
-      within(screen.getByLabelText('สินค้าในรายการ')).getByText(/ฟิล์มกันรอย/),
-    ).toBeInTheDocument();
+    await user.click(screen.getByLabelText('สินค้าในรายการ'));
+    expect(screen.getByText(/ฟิล์มกันรอย/)).toBeInTheDocument();
+  });
+
+  it('ค้นหาสินค้าด้วยการพิมพ์ ทั้งชื่อเต็มและชื่อย่อ', async () => {
+    // A branch carrying 135+ products whose names share long prefixes cannot be
+    // scrolled through, and staff know the short name rather than the full one.
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={draft} isNew shops={shops} stock={stock} canDo={() => true} />);
+
+    await user.click(screen.getByText(/เพิ่มรายการสินค้า|เพิ่มสินค้า/));
+    await user.type(screen.getByLabelText('สินค้าในรายการ'), 'CT40');
+    expect(screen.getByText(/ฟิล์ม CT 40%/)).toBeInTheDocument();
+
+    await user.click(screen.getByText(/ฟิล์ม CT 40%/));
+    // Choosing a product still fills the price from that branch's stock.
+    expect(screen.getByLabelText('สินค้าในรายการ')).toHaveValue('CT40 · ฟิล์ม CT 40%');
+    // ราคามาตรฐาน and ราคาที่เสนอ both come from that shelf, so both read 900.
+    expect(screen.getAllByDisplayValue('900')).toHaveLength(2);
   });
 
   it('drops a product the new branch does not carry rather than selling from an empty shelf', async () => {
@@ -267,7 +285,7 @@ describe('WholesaleDetail — สาขา และ ถังขยะ', () => 
     await user.selectOptions(screen.getByLabelText('สาขาที่เปิด PO'), 'north');
     // Kept as a line (the quantity is still wanted) but no longer claiming to
     // sell a product that branch has never stocked.
-    expect((screen.getByLabelText('สินค้าในรายการ') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByLabelText('สินค้าในรายการ')).toHaveValue('');
   });
 
   it('offers ลบ PO only on a saved PO, and only with the capability', () => {

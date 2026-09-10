@@ -5,6 +5,7 @@ import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { createPortal } from 'react-dom';
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { ProductPicker, type ProductOption } from '@/components/ui/ProductPicker';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { fmt, fmtThaiDateLong, fmtThaiDayString, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -351,6 +352,24 @@ export function WholesaleDetail({
     items[idx] = { ...items[idx], [k]: v };
     setO({ ...o, items });
   }
+  /*
+    สินค้าที่สาขานี้ขายได้ ในรูปแบบที่ค้นหาได้.
+
+    Same `ProductPicker` the ใบงาน form uses, for the same reason: a shop
+    carrying 135+ products whose names share long prefixes cannot be scrolled
+    through, and staff know the short name ("3M CRM 35") rather than the full
+    one. Typing beats scrolling, and the picker still opens as a list when
+    nothing is typed — so the old way of working is untouched.
+  */
+  const productOptions: ProductOption[] = stock
+    .filter((st) => st.shop === o.shop)
+    .map((st) => ({
+      id: st.id,
+      name: st.name,
+      shortName: st.shortName,
+      note: `คงเหลือ ${st.qty}`,
+    }));
+
   function selectProduct(idx: number, name: string) {
     const match = stock.find((s) => s.shop === o.shop && s.name === name);
     const items = [...o.items];
@@ -779,26 +798,23 @@ export function WholesaleDetail({
                       : '1px solid var(--line)',
                 }}
               >
-                <select
-                  value={it.name}
-                  aria-label="สินค้าในรายการ"
-                  onChange={(e) => selectProduct(idx, e.target.value)}
-                  className="field text-sm px-3 py-2 w-full mb-2 font-medium"
-                >
-                  <option value="" disabled>
-                    เลือกสินค้า...
-                  </option>
-                  {it.name && !stock.some((s) => s.shop === o.shop && s.name === it.name) && (
-                    <option value={it.name}>{it.name}</option>
-                  )}
-                  {stock
-                    .filter((s) => s.shop === o.shop)
-                    .map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name} ({s.shortName || '-'}) &middot; คงเหลือ {s.qty}
-                      </option>
-                    ))}
-                </select>
+                <div className="mb-2">
+                  <ProductPicker
+                    value={it.name}
+                    label="สินค้าในรายการ"
+                    placeholder="เลือกสินค้า... หรือพิมพ์ชื่อ/ชื่อย่อเพื่อค้นหา"
+                    options={
+                      // A product the branch no longer stocks still has to show
+                      // on the PO that sold it, or editing an old PO would
+                      // silently blank the line.
+                      it.name && !productOptions.some((p) => p.name === it.name)
+                        ? [...productOptions, { id: `kept-${idx}`, name: it.name, muted: true }]
+                        : productOptions
+                    }
+                    className="field text-sm px-3 py-2 w-full font-medium"
+                    onChange={(name) => selectProduct(idx, name)}
+                  />
+                </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
