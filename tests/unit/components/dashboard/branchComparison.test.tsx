@@ -108,10 +108,11 @@ describe('BranchComparison card', () => {
     render(<BranchComparison data={data} />);
     // By ค้างรับ, ลำพูน (0) drops to the bottom and พะเยา rises above it.
     await user.click(screen.getByRole('button', { name: /จัดอันดับตาม ค้างรับ/ }));
-    const names = screen
-      .getAllByRole('row')
-      .slice(1, 4)
-      .map((r) => r.textContent);
+    // Read the body rows themselves: the head carries two rows now (the หมวด
+    // captions and the sortable labels), so counting from the top is brittle.
+    const names = [...screen.getByRole('table').querySelectorAll('tbody tr')].map(
+      (r) => r.textContent,
+    );
     expect(names[0]).toContain('เชียงใหม่');
     expect(names[2]).toContain('ลำพูน');
   });
@@ -157,5 +158,40 @@ describe('BranchComparison — ช่องทางการขาย', () => {
   it('รวมทุกสาขา บวกยอดขายส่งของทุกสาขาเข้าด้วยกัน', () => {
     expect(withWholesale.total.wholesale).toBe(30_000);
     expect(withWholesale.total.revenue).toBe(275_000);
+  });
+});
+
+/**
+ * หมวดของคอลัมน์.
+ *
+ * Eleven columns of baht read as one wall, and they answer three different
+ * questions: what the branch took in this period, how the period went, and what
+ * is owed right now regardless of period. Without the grouping, ค้างรับ sitting
+ * beside ยอดขาย invites subtracting one from the other — and they do not even
+ * cover the same days.
+ */
+describe('BranchComparison — หมวดของคอลัมน์', () => {
+  const withWholesale = buildBranchComparison(shops, (id) =>
+    id === 'cm'
+      ? { ...figures.cm, revenue: 150_000, retail: 120_000, wholesale: 30_000 }
+      : figures[id],
+  );
+
+  it('ขึ้นหัวหมวดคร่อมคอลัมน์ที่อยู่ในหมวดเดียวกัน', () => {
+    render(<BranchComparison data={withWholesale} />);
+    const sales = screen.getByText('ยอดขายในช่วงนี้');
+    // ยอดขาย + ปลีก + ส่ง
+    expect(sales).toHaveAttribute('colspan', '3');
+    expect(screen.getByText('ผลประกอบการในช่วงนี้')).toHaveAttribute('colspan', '3');
+    // ค้างรับ + ค้างจ่าย + ค้างสุทธิ — deliberately NOT period-scoped, which is
+    // the whole reason they are captioned apart from the two blocks above.
+    expect(screen.getByText('ยอดค้าง ณ ตอนนี้')).toHaveAttribute('colspan', '3');
+  });
+
+  it('หัวหมวดยอดขายหดตามคอลัมน์ที่แสดงจริง', () => {
+    // A shop with no wholesale desk shows only ยอดขาย, so a caption still
+    // spanning three would sit crooked over one.
+    render(<BranchComparison data={data} />);
+    expect(screen.getByText('ยอดขายในช่วงนี้')).toHaveAttribute('colspan', '1');
   });
 });

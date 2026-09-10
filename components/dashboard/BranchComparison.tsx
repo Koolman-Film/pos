@@ -35,6 +35,29 @@ type SortKey =
   | 'heldForFinnix';
 
 /**
+ * หมวดของคอลัมน์.
+ *
+ * Eleven columns of Thai baht read as one undifferentiated wall, and they are
+ * not one kind of number: three are takings in the period, three are how the
+ * period went, four are what is owed RIGHT NOW regardless of the period. A
+ * reader comparing branches has to know which question a column answers before
+ * the figure means anything — ค้างรับ 40,900 beside ยอดขาย 53,300 invites
+ * subtracting one from the other, and they do not even cover the same days.
+ *
+ * Marked with a caption and a rule rather than a fill: the shop asked for the
+ * colour-graded comparison to come out ("มองแล้วยาก"), and grouping is
+ * structure, not emphasis.
+ */
+const GROUPS = {
+  sales: { label: 'ยอดขายในช่วงนี้' },
+  result: { label: 'ผลประกอบการในช่วงนี้' },
+  due: { label: 'ยอดค้าง ณ ตอนนี้' },
+  other: { label: 'อื่นๆ' },
+} as const;
+
+type GroupKey = keyof typeof GROUPS;
+
+/**
  * `channelOnly` columns appear only where some branch actually sells that way.
  *
  * Most branches sell retail only, and for them a ขายส่ง column of zeros would
@@ -48,14 +71,22 @@ const COLUMNS: {
   label: string;
   hint: string;
   money: boolean;
+  group: GroupKey;
   channelOnly?: boolean;
 }[] = [
-  { key: 'revenue', label: 'ยอดขาย', hint: 'ขายปลีก + ขายส่ง ในช่วงนี้', money: true },
+  {
+    key: 'revenue',
+    label: 'ยอดขาย',
+    hint: 'ขายปลีก + ขายส่ง ในช่วงนี้',
+    money: true,
+    group: 'sales',
+  },
   {
     key: 'retail',
     label: 'ปลีก',
     hint: 'งานที่ส่งมอบ + ประกันที่ขายในช่วงนี้ (Book งาน)',
     money: true,
+    group: 'sales',
     channelOnly: true,
   },
   {
@@ -63,6 +94,7 @@ const COLUMNS: {
     label: 'ส่ง',
     hint: 'ขายส่งที่ส่งของแล้วในช่วงนี้ หักคืนสินค้าและปรับราคาตามวันที่ของมันเอง',
     money: true,
+    group: 'sales',
     channelOnly: true,
   },
   {
@@ -70,37 +102,51 @@ const COLUMNS: {
     label: 'ค่าใช้จ่าย',
     hint: 'ที่จ่ายแล้วในช่วงนี้ ไม่รวมจ่ายแทน Finnix',
     money: true,
+    group: 'result',
   },
   {
     key: 'profit',
     label: 'คงเหลือ',
     hint: 'ยอดขาย − ค่าใช้จ่าย (ยังไม่หักต้นทุนสินค้า)',
     money: true,
+    group: 'result',
   },
-  { key: 'jobs', label: 'งาน', hint: 'จำนวนใบงานที่รับเข้าในช่วงนี้', money: false },
+  {
+    key: 'jobs',
+    label: 'งาน',
+    hint: 'จำนวนใบงานที่รับเข้าในช่วงนี้',
+    money: false,
+    group: 'result',
+  },
   {
     key: 'receivable',
     label: 'ค้างรับ',
     hint: 'ยอดค้างรับ ณ ตอนนี้ ไม่ผูกกับช่วงเวลา',
     money: true,
+    group: 'due',
   },
   {
     key: 'payable',
     label: 'ค้างจ่าย',
     hint: 'บิลที่รับไว้แล้วยังไม่ได้จ่าย ณ ตอนนี้ ไม่ผูกกับช่วงเวลา',
     money: true,
+    group: 'due',
   },
   {
     key: 'netDue',
     label: 'ค้างสุทธิ',
     hint: 'ค้างรับ − ค้างจ่าย · บวกคือมีเงินจะเข้ามากกว่าที่ต้องจ่าย',
     money: true,
+    group: 'due',
   },
   {
+    // Its own group rather than sitting with ยอดค้าง: this one IS scoped to
+    // the period, and the ค้าง columns deliberately are not.
     key: 'heldForFinnix',
     label: 'รอคืน Finnix',
-    hint: 'รับเงินแทนร้านอื่น ไม่นับเป็นยอดขายของสาขา',
+    hint: 'รับเงินแทนร้านอื่นในช่วงนี้ ไม่นับเป็นยอดขายของสาขา',
     money: true,
+    group: 'other',
   },
 ];
 
@@ -110,7 +156,22 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
   const hasWholesale = data.rows.some((r) => r.wholesale !== 0);
   const columns = COLUMNS.filter((c) => !c.channelOnly || hasWholesale);
 
-  const cell = (r: BranchRow, key: SortKey, money: boolean) => {
+  /*
+    Spans computed from the columns actually on screen, not from GROUPS: the
+    ปลีก/ส่ง pair drops out for a shop with no wholesale desk, and a header
+    that still spanned three would sit crooked over two.
+  */
+  const headerGroups: { key: GroupKey; span: number }[] = [];
+  for (const c of columns) {
+    const last = headerGroups.at(-1);
+    if (last && last.key === c.group) last.span += 1;
+    else headerGroups.push({ key: c.group, span: 1 });
+  }
+  /** A rule down the left edge of every column that opens a group. */
+  const startsGroup = (i: number) => i > 0 && columns[i - 1].group !== columns[i].group;
+  const groupRule = (i: number) => (startsGroup(i) ? '1px solid var(--line-strong)' : undefined);
+
+  const cell = (r: BranchRow, key: SortKey, money: boolean, i: number) => {
     const value = r[key];
     return (
       <td
@@ -121,6 +182,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
           fontWeight: sortKey === key ? 700 : 500,
           color: value < 0 ? '#B23A48' : 'var(--ink)',
           whiteSpace: 'nowrap',
+          borderLeft: groupRule(i),
         }}
       >
         {money ? fmt(value) : value}
@@ -159,11 +221,34 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
           }}
         >
           <thead>
+            {/* หมวด — which question each block of columns answers. The rule
+                under it runs only over the columns it covers, so the eye reads
+                the caption and the block as one thing. */}
+            <tr>
+              <th style={{ padding: '0 12px 4px' }}></th>
+              {headerGroups.map((g, gi) => (
+                <th
+                  key={g.key}
+                  colSpan={g.span}
+                  className="text-xs font-semibold"
+                  style={{
+                    padding: '0 12px 4px',
+                    textAlign: 'right',
+                    color: 'var(--ink-faint)',
+                    whiteSpace: 'nowrap',
+                    borderLeft: gi > 0 ? '1px solid var(--line-strong)' : undefined,
+                    borderBottom: '1px solid var(--line)',
+                  }}
+                >
+                  {GROUPS[g.key].label}
+                </th>
+              ))}
+            </tr>
             <tr style={{ borderBottom: '1.5px solid var(--line-strong)' }}>
               <th
                 style={{
                   textAlign: 'left',
-                  padding: '0 12px 8px',
+                  padding: '6px 12px 8px',
                   color: 'var(--ink-soft)',
                   fontWeight: 600,
                   whiteSpace: 'nowrap',
@@ -171,8 +256,8 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
               >
                 สาขา
               </th>
-              {columns.map((c) => (
-                <th key={c.key} style={{ padding: '0 12px 8px' }}>
+              {columns.map((c, i) => (
+                <th key={c.key} style={{ padding: '6px 12px 8px', borderLeft: groupRule(i) }}>
                   <button
                     onClick={() => setSortKey(c.key)}
                     title={c.hint}
@@ -207,7 +292,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
                   </span>
                   <span className="font-medium">{shortShopName(r.name)}</span>
                 </td>
-                {columns.map((c) => cell(r, c.key, c.money))}
+                {columns.map((c, i) => cell(r, c.key, c.money, i))}
               </tr>
             ))}
             {rows.length === 0 && (
@@ -228,7 +313,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
                 <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
                   รวมทุกสาขา
                 </td>
-                {columns.map((c) => (
+                {columns.map((c, i) => (
                   <td
                     key={c.key}
                     style={{
@@ -237,6 +322,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
                       fontWeight: 700,
                       whiteSpace: 'nowrap',
                       color: data.total[c.key] < 0 ? '#B23A48' : 'var(--ink)',
+                      borderLeft: groupRule(i),
                     }}
                   >
                     {c.money ? fmt(data.total[c.key]) : data.total[c.key]}
