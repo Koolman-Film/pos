@@ -179,6 +179,20 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('\nSeeding failed:', err instanceof Error ? err.message : err);
+  /*
+    Print the WHOLE error, not just `.message`.
+
+    supabase-js rejects with plain objects (`{ message, code, status }`) and with
+    AuthError instances whose fields are non-enumerable, so the old
+    `err instanceof Error ? err.message : err` printed a bare `{}` for the most
+    common failures — a seed that failed and said nothing about why. Losing the
+    reason costs more than the extra lines here: the symptom shows up much later
+    as e2e specs failing to log in.
+  */
+  const detail =
+    err instanceof Error
+      ? (err.stack ?? err.message)
+      : JSON.stringify(err, Object.getOwnPropertyNames(Object(err)), 2);
+  console.error('\nSeeding failed:', detail);
   process.exit(1);
 });
