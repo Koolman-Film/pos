@@ -82,6 +82,7 @@ export function RevenueModule({
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [docFilter, setDocFilter] = useState('all');
+  const [channelFilter, setChannelFilter] = useState('all');
 
   const shopName = (id: string) => accessibleShops.find((s) => s.id === id)?.name ?? id;
 
@@ -107,8 +108,31 @@ export function RevenueModule({
   const visible = scoped.filter(
     (l) =>
       (categoryFilter === 'all' || l.category === categoryFilter) &&
+      (channelFilter === 'all' || l.channel === channelFilter) &&
       (docFilter === 'all' || (docFilter === 'tax' ? !!l.taxInvoiceNo : !l.taxInvoiceNo)),
   );
+
+  /*
+    ปลีก / ส่ง.
+
+    Wholesale used to appear in no figure on this page at all, so adding it
+    would have moved every total with nothing on screen to say why. Both
+    figures are computed over the period and branch in view, and over `scoped`
+    rather than `visible`, so the split keeps reading as the whole period even
+    while the table below is filtered down to one of them.
+  */
+  const retailTotal = scoped.filter((l) => l.channel === 'ปลีก').reduce((n, l) => n + l.amount, 0);
+  const wholesaleTotal = scoped
+    .filter((l) => l.channel === 'ส่ง')
+    .reduce((n, l) => n + l.amount, 0);
+  const wholesaleOrders = new Set(scoped.filter((l) => l.channel === 'ส่ง').map((l) => l.ticketId))
+    .size;
+  // Counted apart from `jobCount`, which counts distinct ids across both
+  // channels: standing next to a PO count, "8 ใบงาน" has to mean ใบงาน.
+  const retailJobs = new Set(scoped.filter((l) => l.channel === 'ปลีก').map((l) => l.ticketId))
+    .size;
+  /** Whether this branch sells wholesale at all — Central Audio does, most do not. */
+  const hasWholesale = wholesaleOrders > 0;
 
   const total = visible.reduce((s, l) => s + l.amount, 0);
   const heldTotal = heldLines.reduce((s, l) => s + l.amount, 0);
@@ -134,6 +158,13 @@ export function RevenueModule({
   // A ticket selling three categories is ONE job, counted once.
   const jobCount = new Set(visible.map((l) => l.ticketId)).size;
   const taxTotal = visible.filter((l) => l.taxInvoiceNo).reduce((s, l) => s + l.amount, 0);
+  /*
+    ขายส่งไม่ออกใบกำกับภาษี by design — four documents and no tax invoice. So
+    the percentage is taken against RETAIL takings: measured against the total
+    it would fall every time the shop sold a case of film, and read as a
+    compliance problem that is not one.
+  */
+  const taxBase = visible.filter((l) => l.channel === 'ปลีก').reduce((n, l) => n + l.amount, 0);
   // Cost comes from the lots the jobs actually drew on (migration 0027), so
   // this is a real margin rather than a quantity times an average.
   const costTotal = visible.reduce((s, l) => s + l.cost, 0);
@@ -161,6 +192,7 @@ export function RevenueModule({
       สาขา: shopName(l.shop),
       ลูกค้า: l.customer,
       ทะเบียน: l.plate,
+      ช่องทาง: l.channel,
       ชนิดสินค้า: l.category,
       สินค้า: l.product,
       ยอดขาย: l.amount,
@@ -176,6 +208,7 @@ export function RevenueModule({
         สาขา: shopName(j.shop),
         ลูกค้า: j.customer,
         ทะเบียน: j.plate,
+        ช่องทาง: 'ปลีก',
         ชนิดสินค้า: 'เงินรอคืน Finnix',
         สินค้า: j.products.join(', '),
         ยอดขาย: 0,
@@ -237,12 +270,31 @@ export function RevenueModule({
             {fmt(total)}
           </p>
         </div>
-        <div className="card p-4">
-          <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-            จำนวนใบงาน
-          </p>
-          <p className="text-2xl font-extrabold">{jobCount}</p>
-        </div>
+        {/* ปลีก/ส่ง takes the place of the plain job count wherever the branch
+            sells both, because "how much of this is wholesale" is the question
+            the count was standing in for. */}
+        {hasWholesale ? (
+          <div className="card p-4">
+            <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              ปลีก / ส่ง
+            </p>
+            <p className="text-lg font-extrabold">
+              {fmt(retailTotal)}
+              <span style={{ color: 'var(--ink-faint)' }}> / </span>
+              <span style={{ color: '#2F6F8F' }}>{fmt(wholesaleTotal)}</span>
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-faint)' }}>
+              {retailJobs} ใบงาน · {wholesaleOrders} PO
+            </p>
+          </div>
+        ) : (
+          <div className="card p-4">
+            <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              จำนวนใบงาน
+            </p>
+            <p className="text-2xl font-extrabold">{jobCount}</p>
+          </div>
+        )}
         {/* Held money gets a card of its own rather than a line inside ยอดขาย:
             it is a different pile, and the shop settles it separately. */}
         <div className="card p-4">
@@ -263,7 +315,7 @@ export function RevenueModule({
           </p>
           <p className="text-2xl font-extrabold">{fmt(taxTotal)}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--ink-faint)' }}>
-            {total > 0 ? `${Math.round((taxTotal / total) * 100)}% ของยอดขาย` : '—'}
+            {taxBase > 0 ? `${Math.round((taxTotal / taxBase) * 100)}% ของยอดขายปลีก` : '—'}
           </p>
         </div>
         {canSeeCost && (
@@ -300,7 +352,10 @@ export function RevenueModule({
               <span className="font-medium">
                 {c.category}
                 <span className="ml-1.5 text-xs font-normal" style={{ color: 'var(--ink-soft)' }}>
-                  {c.jobs} ใบงาน
+                  {/* The count is of distinct ids, and once wholesale is in the
+                      figure some of those ids are POs. Calling them all ใบงาน
+                      would misdescribe the number it is sitting next to. */}
+                  {c.jobs} {hasWholesale ? 'รายการ' : 'ใบงาน'}
                 </span>
                 {categoryFilter === c.category && (
                   <span className="ml-1.5 text-xs" style={{ color: 'var(--primary)' }}>
@@ -414,6 +469,20 @@ export function RevenueModule({
                 </option>
               ))}
             </select>
+            {/* Only where both channels exist — a branch that sells one way
+                gets no control that cannot change anything. */}
+            {hasWholesale && (
+              <select
+                aria-label="กรองตามช่องทางการขาย"
+                value={channelFilter}
+                onChange={(e) => setChannelFilter(e.target.value)}
+                className="field text-xs px-2.5 py-1.5"
+              >
+                <option value="all">ทุกช่องทาง</option>
+                <option value="ปลีก">ขายปลีก</option>
+                <option value="ส่ง">ขายส่ง</option>
+              </select>
+            )}
             <select
               aria-label="กรองตามใบกำกับภาษี"
               value={docFilter}
@@ -432,7 +501,8 @@ export function RevenueModule({
             <thead>
               <tr style={{ color: 'var(--ink-soft)' }}>
                 <th className="text-left font-medium py-2">วันที่ขาย</th>
-                <th className="text-left font-medium py-2">ใบงาน</th>
+                <th className="text-left font-medium py-2">ใบงาน/PO</th>
+                {hasWholesale && <th className="text-left font-medium py-2">ช่องทาง</th>}
                 <th className="text-left font-medium py-2">ลูกค้า</th>
                 <th className="text-left font-medium py-2">ชนิดสินค้า</th>
                 <th className="text-left font-medium py-2">สินค้า</th>
@@ -443,7 +513,11 @@ export function RevenueModule({
             <tbody>
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-4 text-xs" style={{ color: 'var(--ink-faint)' }}>
+                  <td
+                    colSpan={hasWholesale ? 8 : 7}
+                    className="py-4 text-xs"
+                    style={{ color: 'var(--ink-faint)' }}
+                  >
                     ไม่มีรายการในเงื่อนไขนี้
                   </td>
                 </tr>
@@ -457,14 +531,28 @@ export function RevenueModule({
                     {l.soldAt ? fmtThaiDate(new Date(`${l.soldAt}T00:00:00`)) : '-'}
                   </td>
                   <td className="py-2">
-                    <a href={`/tickets/${l.ticketId}`} style={{ color: 'var(--primary)' }}>
+                    <a
+                      href={`${l.channel === 'ส่ง' ? '/wholesale' : '/tickets'}/${l.ticketId}`}
+                      style={{ color: 'var(--primary)' }}
+                    >
                       {l.ticketId}
                     </a>
                   </td>
+                  {hasWholesale && (
+                    <td className="py-2 text-xs">
+                      {l.channel === 'ส่ง' ? (
+                        <span style={{ color: '#2F6F8F' }}>ขายส่ง</span>
+                      ) : (
+                        <span style={{ color: 'var(--ink-faint)' }}>ขายปลีก</span>
+                      )}
+                    </td>
+                  )}
                   <td className="py-2">
                     {l.customer}
+                    {/* ทะเบียนรถ for retail; a wholesale sale has no vehicle and
+                        carries the พนักงานขาย in the same place instead. */}
                     <div className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                      {l.plate}
+                      {l.channel === 'ส่ง' && l.plate ? `ขายโดย ${l.plate}` : l.plate}
                     </div>
                   </td>
                   <td className="py-2">{l.category}</td>

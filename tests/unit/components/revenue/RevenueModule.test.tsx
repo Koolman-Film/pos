@@ -27,6 +27,7 @@ const line = (over: Partial<SaleLine> = {}): SaleLine => ({
   amount: 30000,
   cost: 0,
   held: false,
+  channel: 'ปลีก',
   taxInvoiceNo: '',
   documents: [],
   ...over,
@@ -248,5 +249,77 @@ describe('RevenueModule — เงินรอคืน Finnix', () => {
     // The card still shows, so the shop can see the figure is zero.
     expect(screen.getByText('เงินรอคืน Finnix')).toBeInTheDocument();
     expect(screen.getByText('ไม่มีในช่วงนี้')).toBeInTheDocument();
+  });
+});
+
+/**
+ * ปลีก / ส่ง (ข้อ 5 ของ docs/DESIGN-wholesale-sales-and-channel.md).
+ *
+ * Central Audio sells retail through Book งาน and wholesale through the ขายส่ง
+ * module, and wholesale used to appear in no figure anywhere in the app. Adding
+ * it to the totals without saying where it came from would read as takings
+ * jumping for no reason, so the split is part of the feature, not decoration.
+ */
+describe('RevenueModule — ช่องทางการขาย', () => {
+  const ws = (over: Partial<SaleLine> = {}) =>
+    line({
+      ticketId: 'WS-CM-0088',
+      channel: 'ส่ง',
+      customer: 'ร้านออโต้เซอร์วิส บางแค',
+      plate: 'โหน่ง',
+      category: 'ฟิล์มกรองแสง',
+      product: 'ฟิล์ม 3M CRM (ม้วน)',
+      amount: 12000,
+      ...over,
+    });
+
+  it('แยกยอดปลีกกับยอดส่งให้เห็น', () => {
+    renderModule([line({ amount: 30000 }), ws()]);
+    const card = screen.getByText('ปลีก / ส่ง').parentElement!;
+    expect(card).toHaveTextContent('30,000.00');
+    expect(card).toHaveTextContent('12,000.00');
+    // One ใบงาน and one PO, counted as what each of them is.
+    expect(card).toHaveTextContent('1 ใบงาน · 1 PO');
+  });
+
+  it('ไม่แสดงตัวเลือกช่องทางในสาขาที่ไม่ได้ขายส่ง', () => {
+    renderModule([line()]);
+    expect(screen.queryByLabelText('กรองตามช่องทางการขาย')).not.toBeInTheDocument();
+    // The plain count stays where nothing is being split.
+    expect(screen.getByText('จำนวนใบงาน')).toBeInTheDocument();
+  });
+
+  it('กรองรายการตามช่องทางได้', async () => {
+    const user = userEvent.setup();
+    renderModule([line({ amount: 30000 }), ws()]);
+
+    await user.selectOptions(screen.getByLabelText('กรองตามช่องทางการขาย'), 'ส่ง');
+    expect(screen.getByText('WS-CM-0088')).toBeInTheDocument();
+    expect(screen.queryByText('JT-CM-00216')).not.toBeInTheDocument();
+    // The split card keeps reading as the whole period, not as the filter.
+    expect(screen.getByText('ปลีก / ส่ง').parentElement!).toHaveTextContent('30,000.00');
+  });
+
+  it('คิดสัดส่วนใบกำกับภาษีจากยอดขายปลีก ไม่ใช่ยอดรวม', () => {
+    // ขายส่งไม่ออกใบกำกับภาษี by design. Measured against the total, the ratio
+    // would fall every time the shop sold a case of film and read as a
+    // compliance problem that is not one.
+    renderModule([line({ amount: 10000, taxInvoiceNo: 'INV-1' }), ws({ amount: 90000 })]);
+    expect(screen.getByText('ยอดที่ออกใบกำกับภาษี').parentElement!).toHaveTextContent(
+      '100% ของยอดขายปลีก',
+    );
+  });
+
+  it('ลิงก์ไปหน้า PO ไม่ใช่หน้าใบงาน', () => {
+    renderModule([ws()]);
+    expect(screen.getByText('WS-CM-0088').closest('a')).toHaveAttribute(
+      'href',
+      '/wholesale/WS-CM-0088',
+    );
+  });
+
+  it('รายการขายส่งขึ้นชื่อพนักงานขายแทนทะเบียนรถ', () => {
+    renderModule([ws()]);
+    expect(screen.getByText('ขายโดย โหน่ง')).toBeInTheDocument();
   });
 });

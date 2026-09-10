@@ -368,7 +368,17 @@ insert into stock (sku, name, short_name, category, shop_id, qty, min_qty, cost,
   ('SKU-FLM-FN40', 'ฟิล์ม FINNIX CT 40%', 'FNCT40', 'ฟิล์มกรองแสง', 'cm', 18, 10, 600, 1300),
   ('SKU-TPU-PR01', 'TPU กันรอยเกรดพรีเมียม', 'TPU-PR', 'ฟิล์มกันรอย', 'cm', 22, 8, 1100, 2200),
   ('SKU-SPK-JBL1', 'ลำโพงคู่ JBL Stage', 'JBL-ST', 'เครื่องเสียง', 'cm', 6, 5, 2200, 4500),
-  ('SKU-FLM-3M60-LP', 'ฟิล์ม 3M CRM 60%', '3M60', 'ฟิล์มกรองแสง', 'lp', 14, 10, 850, 1700);
+  ('SKU-FLM-3M60-LP', 'ฟิล์ม 3M CRM 60%', '3M60', 'ฟิล์มกรองแสง', 'lp', 14, 10, 850, 1700),
+  -- สินค้าที่ขายส่งขายเป็นม้วน/ลัง.
+  --
+  -- โมดูลขายส่งเลือกสินค้าจากทะเบียนสต็อกเท่านั้น so a PO whose product is not
+  -- in `stock` could not have been raised through the real screen — and in the
+  -- รายได้ report it reads as ไม่ระบุชนิด, which is the report telling the truth
+  -- about sample data that was never consistent.
+  ('SKU-FLM-3M60-RL', 'ฟิล์ม 3M CRM (ม้วน)', '3M-RL', 'ฟิล์มกรองแสง', 'cm', 40, 10, 9000, 12000),
+  ('SKU-FLM-FNCT-RL', 'ฟิล์ม FINNIX CT (ม้วน)', 'FNCT-RL', 'ฟิล์มกรองแสง', 'cm', 35, 10, 11000, 15000),
+  ('SKU-FLM-3M60-RL-NT', 'ฟิล์ม 3M CRM (ม้วน)', '3M-RL', 'ฟิล์มกรองแสง', 'north', 60, 20, 9000, 12000),
+  ('SKU-FLM-FNCT-RL-NT', 'ฟิล์ม FINNIX CT (ม้วน)', 'FNCT-RL', 'ฟิล์มกรองแสง', 'north', 45, 20, 11000, 15000);
 
 insert into withdrawals (item, shop_id, qty, type, withdrawn_by, withdrawn_at, status) values
   ('ฟิล์ม FINNIX CT 40%', 'cm', 1, 'สินค้าตัวอย่าง', 'พนักงาน กมล', date '2026-07-14', 'รออนุมัติ');

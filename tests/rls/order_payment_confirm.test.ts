@@ -12,7 +12,7 @@ import {
   supabaseUrl,
 } from './_helpers';
 
-import type { Database } from '@/lib/types/database';
+import type { Database, Json } from '@/lib/types/database';
 
 /**
  * ยืนยันเงินเข้า ต้องมีสิทธิ์ และห้ามผ่านหน้าจอแก้ไข PO (migration 0048).
@@ -121,7 +121,8 @@ async function saveChildren(client: PosClient, payments: Record<string, unknown>
     p_items: [{ name: 'ฟิล์ม 3M CRM', qty: 10, listPrice: 3000, requestedPrice: 3000, reason: '' }],
     p_returns: [],
     p_adjustments: [],
-    p_payments: payments,
+    // The RPC types the payload as Json; the fixtures are plain objects.
+    p_payments: payments as unknown as Json,
     p_saved_on: '2026-09-01',
   });
 }
