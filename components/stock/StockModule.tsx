@@ -2208,7 +2208,7 @@ export function StockModule({
                     label={w.status}
                     colorMap={{
                       รออนุมัติ: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
-                      อนุมัติแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
+                      อนุมัติแล้ว: { bg: '#E6EFDC', text: '#3F6B33', dot: '#6BA24F' },
                       ไม่อนุมัติ: { bg: '#FBEAEC', text: '#B23A48', dot: '#D08A94' },
                     }}
                   />

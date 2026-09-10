@@ -250,7 +250,7 @@ export function CommissionModule({
                   <StatusPill
                     label={r.active ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}
                     colorMap={{
-                      ใช้งานอยู่: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
+                      ใช้งานอยู่: { bg: '#E6EFDC', text: '#3F6B33', dot: '#6BA24F' },
                       ปิดใช้งาน: { bg: '#F1EDE7', text: '#6B5F55', dot: '#B5AAA1' },
                     }}
                   />

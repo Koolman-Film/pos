@@ -85,7 +85,7 @@ export function ItemsSection({
             className="text-xs px-2.5 py-1 rounded-full font-semibold"
             style={{
               background: upsell >= 0 ? '#E6EFDC' : '#FBEAEC',
-              color: upsell >= 0 ? '#4C7A3E' : '#B23A48',
+              color: upsell >= 0 ? '#3F6B33' : '#B23A48',
             }}
           >
             ส่วนต่างเชียร์ขาย {upsell >= 0 ? '+' : ''}

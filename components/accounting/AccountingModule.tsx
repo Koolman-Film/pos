@@ -1605,7 +1605,7 @@ export function AccountingModule({
                     <StatusPill
                       label={e.status}
                       colorMap={{
-                        จ่ายแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
+                        จ่ายแล้ว: { bg: '#E6EFDC', text: '#3F6B33', dot: '#6BA24F' },
                         รอจ่าย: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
                       }}
                     />

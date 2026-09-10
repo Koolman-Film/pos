@@ -417,7 +417,7 @@ export function Dashboard({
               </div>
               <span
                 className="text-xs px-2 py-1 rounded-full font-medium"
-                style={{ background: '#E6EFDC', color: '#4C7A3E' }}
+                style={{ background: '#E6EFDC', color: '#3F6B33' }}
               >
                 {arItems.length} รายการ
               </span>
@@ -637,7 +637,7 @@ export function Dashboard({
                   </span>
                   <span
                     className="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0"
-                    style={{ background: '#FBF0DF', color: '#B26A00' }}
+                    style={{ background: '#FBF0DF', color: '#8A5A12' }}
                   >
                     {p.daysLeft === 0 ? 'หมดวันนี้' : `อีก ${p.daysLeft} วัน`}
                   </span>
@@ -802,7 +802,7 @@ export function Dashboard({
                               {t.status === HANDOVER_STATUS && (
                                 <span
                                   className="text-xs font-semibold px-1.5 py-0.5 rounded-full ml-1.5 align-middle"
-                                  style={{ background: '#E8F1E4', color: '#4C7A3E' }}
+                                  style={{ background: '#E8F1E4', color: '#3F6B33' }}
                                 >
                                   {t.status}
                                 </span>
