@@ -377,3 +377,100 @@ describe('WholesaleDetail — เอกสารขายส่ง', () => {
     expect(screen.getByText(/ส่งของแล้วเมื่อ 20 ส\.ค\. 2569/)).toBeInTheDocument();
   });
 });
+
+/**
+ * หัวเอกสารของสาขาที่ขายผ่านพนักงานขาย.
+ *
+ * Finnix North sells through โหน่ง and เคน, and a wholesale buyer rings the
+ * person who sold to them — not a branch switchboard. So those documents carry
+ * the shop name and THAT rep's phone, and nothing else: an address block buries
+ * the one number the customer wants.
+ */
+describe('WholesaleDetail — หัวเอกสาร และใบส่งของ', () => {
+  const NORTH = [
+    { id: 1, shop: 'north', name: 'โหน่ง', phone: '081-111-2222' },
+    { id: 2, shop: 'north', name: 'เคน', phone: '082-333-4444' },
+  ];
+  const shopInfo = {
+    north: {
+      companyName: 'บริษัท ฟินนิกซ์ นอร์ท จำกัด',
+      address: '99 ถนนทดสอบ เชียงใหม่',
+      phone: '053-000-000',
+      paymentChannels: [],
+    },
+  };
+  const northOrder = {
+    ...order,
+    shop: 'north',
+    salesBy: 'โหน่ง',
+    createdAt: '2026-09-01T02:00:00Z',
+    items: [{ name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 10, listPrice: 1000, requestedPrice: 1000 }],
+    returns: [],
+    payments: [],
+  } as unknown as WsOrder;
+
+  const printed = () => document.querySelector('.print-area')!;
+
+  it('heads the document with the rep’s phone, not the branch address', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={northOrder}
+        canDo={() => true}
+        salesPeople={NORTH}
+        shopInfo={shopInfo}
+        shops={[{ id: 'north', name: 'Finnix North' }]}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบแจ้งหนี้/ }));
+
+    const sheet = printed();
+    expect(sheet.textContent).toContain('โหน่ง โทร 081-111-2222');
+    expect(sheet.textContent).not.toContain('99 ถนนทดสอบ');
+    expect(sheet.textContent).not.toContain('053-000-000');
+  });
+
+  it('signs the issuer’s line for them, and leaves the customer’s blank', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(<WholesaleDetail order={northOrder} canDo={() => true} salesPeople={NORTH} />);
+    await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+
+    const sheet = printed();
+    expect(sheet.textContent).toContain('ลงชื่อ โหน่ง ผู้ส่งของ');
+    expect(sheet.textContent).toContain('ผู้รับของ');
+    expect(sheet.textContent).toMatch(/ลงชื่อ\.+ ผู้รับของ/);
+  });
+
+  it('puts the invoice reference and the PO date on the ใบส่งของ', async () => {
+    // The two dates on a wholesale sale are days apart, and this is the only
+    // document where the customer can see both.
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(<WholesaleDetail order={northOrder} canDo={() => true} salesPeople={NORTH} />);
+    await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+
+    const sheet = printed();
+    expect(sheet.textContent).toContain('อ้างอิง INV-CM-0091');
+    expect(sheet.textContent).toContain('เปิด PO 1 ก.ย. 2569');
+    // Same form as the invoice: the amounts are on it.
+    expect(sheet.textContent).toContain('ยอดรวมสุทธิ');
+  });
+
+  it('keeps the full company block for a branch with no sales team', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={{ ...northOrder, shop: 'north' } as unknown as WsOrder}
+        canDo={() => true}
+        salesPeople={[]}
+        shopInfo={shopInfo}
+        shops={[{ id: 'north', name: 'Finnix North' }]}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบแจ้งหนี้/ }));
+    expect(printed().textContent).toContain('99 ถนนทดสอบ');
+  });
+});

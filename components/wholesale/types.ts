@@ -52,6 +52,14 @@ export type WsOrder = {
    */
   deliveredAt?: string;
   /**
+   * พนักงานขายที่ขาย PO ใบนี้ — a NAME (migration 0047), not an id.
+   *
+   * Their phone heads the documents this PO produces, and their name signs
+   * them. Empty on POs raised before the field existed; those read as
+   * "ไม่ระบุ" rather than being assigned to whoever is on the list today.
+   */
+  salesBy?: string;
+  /**
    * `orders.created_at`, the date the period filter windows the list on. Absent
    * on an unsaved draft from `blankOrder`, which the filter then always shows.
    */
@@ -79,6 +87,15 @@ export type WsDeletedOrder = WsOrder & {
  * dates the money figures are built on (migration 0045).
  */
 export type WsPrintMode = 'invoice' | 'delivery' | 'ret' | 'receipt' | null;
+
+/**
+ * พนักงานขายของสาขาหนึ่ง (migration 0047).
+ *
+ * A table rather than an option list because the phone is a second field, and
+ * it is printed on a customer’s document: a wholesale buyer rings the rep who
+ * sold to them, not a branch switchboard.
+ */
+export type SalesPerson = { id: number; shop: string; name: string; phone: string };
 
 export type WsCustomer = { id: number; name: string; phone: string; address: string };
 

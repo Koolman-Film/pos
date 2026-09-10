@@ -4,6 +4,7 @@ import {
   DEFAULT_PAYMENT_METHODS,
   blankOrder,
   type Shop,
+  type SalesPerson,
   type WsCustomer,
   type WsDeletedOrder,
   type WsOrder,
@@ -22,7 +23,7 @@ import {
  */
 
 const ORDER_SELECT = `
-  id, shop_id, customer_id, status, created_at, delivered_at,
+  id, shop_id, customer_id, status, created_at, delivered_at, sales_by,
   order_items(name, qty, list_price, requested_price, reason),
   order_returns(item_name, qty, reason, returned_at),
   order_adjustments(amount, reason),
@@ -36,6 +37,7 @@ type OrderRow = {
   status: string;
   created_at: string | null;
   delivered_at: string | null;
+  sales_by: string | null;
   order_items:
     | {
         name: string;
@@ -45,9 +47,7 @@ type OrderRow = {
         reason: string;
       }[]
     | null;
-  order_returns:
-    | { item_name: string; qty: number; reason: string; returned_at: string }[]
-    | null;
+  order_returns: { item_name: string; qty: number; reason: string; returned_at: string }[] | null;
   order_adjustments: { amount: number; reason: string }[] | null;
   order_payments: { amount: number; method: string }[] | null;
 };
@@ -60,6 +60,7 @@ function mapOrder(row: OrderRow): WsOrder {
     status: row.status,
     createdAt: row.created_at ?? undefined,
     deliveredAt: row.delivered_at ?? undefined,
+    salesBy: row.sales_by ?? '',
     items: (row.order_items ?? []).map((it) => ({
       name: it.name,
       qty: it.qty,
@@ -196,6 +197,7 @@ export async function loadOrderDetailData(
   customers: WsCustomer[];
   orders: WsOrder[];
   stock: WsStockItem[];
+  salesPeople: SalesPerson[];
   wsStatuses: WsStatusMap;
   shops: Shop[];
   shopInfo: Record<string, WsShopInfo>;
@@ -221,7 +223,7 @@ export async function loadOrderDetailData(
     if (!session.accessibleShopIds.includes(order.shop)) return null;
   }
 
-  const [customers, wsStatuses, allOrdersRes, stockRes, shopInfoRes, methodsRes] =
+  const [customers, wsStatuses, allOrdersRes, stockRes, shopInfoRes, salesRes, methodsRes] =
     await Promise.all([
       loadCustomers(),
       loadWsStatuses(),
@@ -247,6 +249,14 @@ export async function loadOrderDetailData(
         .select('id, name, short_name, shop_id, qty, sell_price')
         .in('shop_id', session.accessibleShopIds),
       supabase.from('shop_info').select('shop_id, company_name, address, phone, payment_channels'),
+      // Every branch the caller can reach, so switching a new PO’s branch
+      // switches the พนักงานขาย list with it.
+      supabase
+        .from('sales_people')
+        .select('id, shop_id, name, phone')
+        .eq('active', true)
+        .in('shop_id', session.accessibleShopIds)
+        .order('sort_order'),
       supabase
         .from('option_lists')
         .select('value, sort_order, list_key')
@@ -277,12 +287,20 @@ export async function loadOrderDetailData(
 
   const paymentMethods = (methodsRes.data ?? []).map((m) => m.value);
 
+  const salesPeople: SalesPerson[] = (salesRes.data ?? []).map((p) => ({
+    id: p.id,
+    shop: p.shop_id,
+    name: p.name,
+    phone: p.phone ?? '',
+  }));
+
   return {
     order,
     isNew,
     customers,
     orders,
     stock,
+    salesPeople,
     wsStatuses,
     shops,
     shopInfo,

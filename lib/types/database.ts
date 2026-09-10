@@ -771,6 +771,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          sales_by: string
           delivered_at: string | null
           created_at: string
           customer_id: number | null
@@ -781,6 +782,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          sales_by?: string
           delivered_at?: string | null
           created_at?: string
           customer_id?: number | null
@@ -791,6 +793,7 @@ export type Database = {
           status: string
         }
         Update: {
+          sales_by?: string
           delivered_at?: string | null
           created_at?: string
           customer_id?: number | null
@@ -1057,6 +1060,44 @@ export type Database = {
             columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_people: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: number
+          name: string
+          phone: string
+          shop_id: string
+          sort_order: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: never
+          name: string
+          phone?: string
+          shop_id: string
+          sort_order?: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: never
+          name?: string
+          phone?: string
+          shop_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_people_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
             referencedColumns: ["id"]
           },
         ]

@@ -67,10 +67,11 @@ it twice changes nothing, and each records its versions in
 | 25    | `supabase/release-0044.sql`                   | a normal connection                                 |
 | 26    | `supabase/release-0045.sql`                   | a normal connection                                 |
 | 27    | `supabase/release-0046.sql`                   | a normal connection                                 |
-| 28    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 28    | `supabase/release-0047.sql`                   | a normal connection                                 |
+| 29    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all twenty-nine in order
+already been handed over. If nothing has been run yet, running all thirty in order
 is still correct.
 
 `release-0030.sql` is numbered 0 because it is the one file that is urgent and
@@ -131,6 +132,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0044_money_module`                   | สิทธิ์เมนูใหม่ `money` สำหรับโมดูล การจัดการเงิน/บัญชี — หน้าจอตั้งยอดตั้งต้น บันทึกโอน/ฝากเงิน และกระทบยอดกับเงินจริง ตั้งต้นเปิดให้แอดมินกับผู้บริหารเท่านั้น ไม่มีใครได้สิทธิ์เพิ่มจากเดิมเพราะหน้าจอนี้เพิ่งมี พร้อมเปลี่ยนชื่อเมนู บัญชี/ค่าใช้จ่าย เป็น ค่าใช้จ่าย (ชื่อเมนูเท่านั้น คีย์สิทธิ์เดิมไม่เปลี่ยน)                                                                                                                                           | ต่ำ. เพิ่มสิทธิ์อย่างเดียว ไม่แตะข้อมูล                                                                                                                  |
 | `0045_wholesale_delivery_and_returns` | `orders.delivered_at` และ `order_returns.returned_at` — วันที่ที่ยอดขายส่งต้องใช้ ขายส่งส่งของก่อนแล้วได้เงินทีหลัง วันส่งของจึงเป็นวันที่รับรู้รายได้ ตั้งเมื่อออกใบส่งของ และวันรับคืนเป็นวันที่ลดยอดขาย พร้อมแก้ `save_order_children` ที่เดิมประทับวันที่บันทึก PO ทับวันที่จริงของทุกการรับเงินและการปรับราคา และแก้ `save_shop` ให้สาขาที่เพิ่มใหม่ได้แหล่งเงินตั้งต้นและ `shop_info` ด้วย พร้อมเติมย้อนหลังให้สาขาที่เพิ่มหลัง 0043 (เช่น Finnix North) | ต่ำ. เพิ่มคอลัมน์ที่เป็น NULL ได้หรือมีค่าตั้งต้น ไม่แตะข้อมูลเดิม PO เดิมยังไม่มีวันส่งของจนกว่าจะระบุ                                                  |
 | `0046_backfill_delivered_at`          | เติม `orders.delivered_at` ย้อนหลังด้วยวันที่สร้าง PO เฉพาะใบที่สถานะเป็น จัดส่งแล้ว / ค้างชำระ / ปิดงานแล้ว และยังไม่มีวันส่งของ ใบที่ยังอยู่ที่ รออนุมัติราคา หรือ รอจัดส่ง ไม่ถูกแตะ                                                                                                                                                                                                                                                                        | **ปานกลาง — อ่านหมายเหตุ.** วันที่สร้าง PO ไม่ใช่วันส่งของจริง เป็นวันที่ใกล้เคียงที่สุดที่แถวเหล่านั้นมี ถ้าไม่เติม ใบเหล่านั้นจะไม่ถูกนับเป็นยอดขายเลย |
+| `0047_sales_people`                   | ตาราง `sales_people` (พนักงานขายรายสาขา พร้อมเบอร์โทร) และ `orders.sales_by` เก็บชื่อคนขายของแต่ละ PO เอกสารขายส่งของสาขาที่มีทีมขายจะขึ้นหัวเป็นชื่อร้าน + เบอร์ของ sale คนที่ออกเอกสาร และเซ็นชื่อให้อัตโนมัติ สาขาที่ไม่มีทีมขายยังใช้หัวเอกสารแบบเดิม                                                                                                                                                                                                      | ต่ำ. เพิ่มตารางและคอลัมน์ที่มีค่าตั้งต้น PO เดิมขึ้นว่า ไม่ระบุ ไม่เดาให้                                                                                |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

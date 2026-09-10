@@ -73,6 +73,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         shop_id: input.shop,
         customer_id: input.customerId,
         status: input.status,
+        sales_by: input.salesBy ?? '',
       })
       .select('id')
       .single();
@@ -85,6 +86,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         shop_id: input.shop,
         customer_id: input.customerId,
         status: input.status,
+        sales_by: input.salesBy ?? '',
       })
       .eq('id', orderId);
     if (error) throw new Error(error.message);

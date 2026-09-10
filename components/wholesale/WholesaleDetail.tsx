@@ -20,6 +20,7 @@ import {
   DEFAULT_WS_STATUS,
   DEFAULT_PAYMENT_METHODS,
   type Shop,
+  type SalesPerson,
   type WsCustomer,
   type WsOrder,
   type WsShopInfo,
@@ -91,6 +92,7 @@ export function WholesaleDetail({
   shopInfo = {},
   wsStatuses = DEFAULT_WS_STATUS,
   shops = [],
+  salesPeople = [],
   isNew = false,
   onSaveOrder,
   onApprovePrice,
@@ -118,6 +120,8 @@ export function WholesaleDetail({
   shopInfo?: Record<string, WsShopInfo>;
   wsStatuses?: WsStatusMap;
   shops?: Shop[];
+  /** พนักงานขายของทุกสาขาที่ผู้ใช้เข้าถึงได้ — filtered to `o.shop` in the picker. */
+  salesPeople?: SalesPerson[];
   isNew?: boolean;
   onBack?: () => void;
   onSaveOrder?: (order: WsOrder, isNew: boolean) => Promise<void> | void;
@@ -367,6 +371,24 @@ export function WholesaleDetail({
   }, 0);
   const adjustmentsTotal = o.adjustments.reduce((s, a) => s + Number(a.amount || 0), 0);
   const hasBreakdown = o.returns.length > 0 || o.adjustments.length > 0;
+  /*
+    พนักงานขายของ PO ใบนี้.
+
+    Their phone heads the document and their name signs it, so the document
+    identifies a person the customer can ring — which is the whole point of
+    recording it. Looked up within the PO’s own branch: two branches may both
+    have a "โหน่ง" and they are not the same person.
+  */
+  const branchSales = salesPeople.filter((p) => p.shop === o.shop);
+  const seller = branchSales.find((p) => p.name === (o.salesBy ?? '')) ?? null;
+  /**
+   * Whether this branch’s documents are headed by the rep rather than by the
+   * company block. Keyed on HAVING a sales team, not on the branch id: hard-
+   * coding `north` would break the day a second wholesale branch opens, and
+   * "the branch has named sellers" is the actual reason the layout differs.
+   */
+  const repLetterhead = branchSales.length > 0;
+
   const canInvoice = !isNew;
   const canReceipt = o.payments.length > 0 && paid > 0;
 
@@ -418,9 +440,23 @@ export function WholesaleDetail({
           prefix: 'DO',
           title: 'ใบส่งของ',
           rows: itemRows,
-          showTotals: false,
+          // Same sheet as the ใบแจ้งหนี้, money included: the customer checks
+          // the goods against the amount they are being billed, and a delivery
+          // note without values makes them fetch the invoice to do it.
+          showTotals: true,
           signatures: ['ผู้ส่งของ', 'ผู้รับของ'],
           dateText: fmtThaiDayString(o.deliveredAt || dateInputValue(new Date())),
+          /*
+            อ้างอิงใบแจ้งหนี้.
+
+            The two dates on a wholesale sale are days or weeks apart — the PO
+            is agreed, the goods follow — and the delivery note is the only
+            place they meet. Printing the invoice number and the day the PO was
+            opened lets the customer match this delivery to the bill they
+            already have, without a phone call.
+          */
+          reference: `INV-${o.id.replace('WS-', '')}`,
+          referenceDate: o.createdAt ?? null,
         };
       case 'ret':
         return {
@@ -436,6 +472,8 @@ export function WholesaleDetail({
               .sort()
               .at(-1) || dateInputValue(new Date()),
           ),
+          reference: null,
+          referenceDate: null,
         };
       case 'receipt':
         return {
@@ -445,6 +483,8 @@ export function WholesaleDetail({
           showTotals: true,
           signatures: ['ผู้รับเงิน'],
           dateText: fmtThaiDateLong(new Date()),
+          reference: null,
+          referenceDate: null,
         };
       default:
         return {
@@ -454,6 +494,8 @@ export function WholesaleDetail({
           showTotals: true,
           signatures: ['ผู้ออกเอกสาร'],
           dateText: fmtThaiDateLong(new Date()),
+          reference: null,
+          referenceDate: null,
         };
     }
   };
@@ -535,6 +577,30 @@ export function WholesaleDetail({
               onSelect={(id) => field('customerId', id)}
               onSaveCustomer={onSaveCustomer}
             />
+            {/* Only where the branch has a sales team. Most branches sell
+                wholesale through whoever is on the counter, and an empty picker
+                asking for a name nobody has is a field that gets ignored. */}
+            {branchSales.length > 0 && (
+              <div className="mt-2">
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  พนักงานขาย
+                </label>
+                <select
+                  aria-label="พนักงานขายของ PO นี้"
+                  value={o.salesBy ?? ''}
+                  onChange={(e) => field('salesBy', e.target.value)}
+                  className="field w-full text-sm px-3 py-2"
+                >
+                  <option value="">ยังไม่ระบุ</option>
+                  {branchSales.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                      {p.phone ? ` · ${p.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <div className="mb-5">
             <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
@@ -964,7 +1030,7 @@ export function WholesaleDetail({
           </div>
         </div>
         {mounted &&
-          (printMode === 'invoice' || printMode === 'receipt') &&
+          printMode &&
           createPortal(
             <div className="print-area">
               <div
@@ -979,17 +1045,33 @@ export function WholesaleDetail({
                   <h2 style={{ margin: 0 }}>
                     {shopInfo?.[o.shop]?.companyName || shopName(o.shop, shops)}
                   </h2>
-                  {shopInfo?.[o.shop]?.companyName && (
+                  {!repLetterhead && shopInfo?.[o.shop]?.companyName && (
                     <p style={{ margin: '2px 0 0', fontSize: 12, color: '#333' }}>
                       {shopName(o.shop, shops)}
                     </p>
                   )}
-                  {(shopInfo?.[o.shop]?.address || shopInfo?.[o.shop]?.phone) && (
-                    <p style={{ margin: '4px 0 0', fontSize: 11, color: '#555', maxWidth: 280 }}>
-                      {shopInfo?.[o.shop]?.address}
-                      {shopInfo?.[o.shop]?.phone ? ` โทร ${shopInfo[o.shop].phone}` : ''}
-                    </p>
-                  )}
+                  {/*
+                    A branch that sells through named reps puts the REP's phone
+                    here and nothing else — no address, no branch line. A
+                    wholesale buyer rings the person who sold to them, and a
+                    letterhead full of company detail buries the one number they
+                    actually want. Branches without a sales team keep the full
+                    company block, because there the shop IS the contact.
+                  */}
+                  {repLetterhead
+                    ? seller?.phone && (
+                        <p style={{ margin: '4px 0 0', fontSize: 12, color: '#333' }}>
+                          {seller.name} โทร {seller.phone}
+                        </p>
+                      )
+                    : (shopInfo?.[o.shop]?.address || shopInfo?.[o.shop]?.phone) && (
+                        <p
+                          style={{ margin: '4px 0 0', fontSize: 11, color: '#555', maxWidth: 280 }}
+                        >
+                          {shopInfo?.[o.shop]?.address}
+                          {shopInfo?.[o.shop]?.phone ? ` โทร ${shopInfo[o.shop].phone}` : ''}
+                        </p>
+                      )}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <p style={{ margin: 0, fontSize: 12 }}>
@@ -1000,6 +1082,14 @@ export function WholesaleDetail({
                       says the day the goods went out, because that is the day the
                       sale was earned. */}
                   <p style={{ fontSize: 12, margin: '2px 0 0' }}>วันที่ {sheet.dateText}</p>
+                  {sheet.reference && (
+                    <p style={{ fontSize: 11, margin: '2px 0 0', color: '#555' }}>
+                      อ้างอิง {sheet.reference}
+                      {sheet.referenceDate
+                        ? ` · เปิด PO ${fmtThaiDayString(sheet.referenceDate.slice(0, 10))}`
+                        : ''}
+                    </p>
+                  )}
                 </div>
               </div>
               <table style={{ marginBottom: 12 }}>
@@ -1164,9 +1254,20 @@ export function WholesaleDetail({
                       side says the goods left, the other says they arrived, and
                       a delivery note with only the sender's name settles no
                       argument about a short delivery. */}
-                  {sheet.signatures.map((who) => (
+                  {sheet.signatures.map((who, i) => (
                     <span key={who} style={{ marginLeft: 28 }}>
-                      ลงชื่อ..................... {who}
+                      {/* The issuer’s line is filled in: the PO already records
+                          who sold it, and making them write their own name on
+                          every copy is asking for a fact the system has. The
+                          customer’s side stays blank — that signature is the
+                          point of the document. */}
+                      {i === 0 && seller?.name && who !== 'ผู้รับของ' && who !== 'ผู้คืนสินค้า' ? (
+                        <>
+                          ลงชื่อ {seller.name} {who}
+                        </>
+                      ) : (
+                        <>ลงชื่อ..................... {who}</>
+                      )}
                     </span>
                   ))}
                 </span>
