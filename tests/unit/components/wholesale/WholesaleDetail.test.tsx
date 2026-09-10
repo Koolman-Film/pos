@@ -459,12 +459,38 @@ describe('WholesaleDetail — หัวเอกสาร และใบส่�
     expect(sheet.textContent).toContain('ยอดรวมสุทธิ');
   });
 
-  it('keeps the full company block for a branch with no sales team', async () => {
+  it('ไม่พิมพ์ที่อยู่บนเอกสารขายส่ง ไม่ว่าใบไหน', async () => {
+    // เอกสารขายส่งระบุแค่ชื่อร้านกับชื่อพนักงานขาย. A wholesale buyer rings the
+    // person who sold to them; the address buries that line, and for a
+    // wholesale-only branch it is not a place anyone visits.
     const user = userEvent.setup();
     vi.spyOn(window, 'print').mockImplementation(() => {});
     render(
       <WholesaleDetail
-        order={{ ...northOrder, shop: 'north' } as unknown as WsOrder}
+        order={northOrder}
+        canDo={() => true}
+        salesPeople={NORTH}
+        shopInfo={shopInfo}
+        shops={[{ id: 'north', name: 'Finnix North' }]}
+      />,
+    );
+
+    for (const doc of [/ใบแจ้งหนี้/, /ใบส่งของ/]) {
+      await user.click(screen.getByRole('button', { name: doc }));
+      expect(printed().textContent).not.toContain('99 ถนนทดสอบ');
+    }
+  });
+
+  it('พิมพ์ชื่อพนักงานขาย แม้ยังไม่ได้บันทึกเบอร์โทรไว้', async () => {
+    // The production case this was found in: the reps were named on the POs but
+    // had no rows in `sales_people`, so the letterhead — which looked the phone
+    // up first — printed no seller at all. The PO says who sold it; that is the
+    // fact the document has to carry.
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={northOrder}
         canDo={() => true}
         salesPeople={[]}
         shopInfo={shopInfo}
@@ -472,7 +498,11 @@ describe('WholesaleDetail — หัวเอกสาร และใบส่�
       />,
     );
     await user.click(screen.getByRole('button', { name: /ใบแจ้งหนี้/ }));
-    expect(printed().textContent).toContain('99 ถนนทดสอบ');
+
+    const sheet = printed();
+    expect(sheet.textContent).toContain('โหน่ง');
+    expect(sheet.textContent).toContain('ลงชื่อ โหน่ง');
+    expect(sheet.textContent).not.toContain('99 ถนนทดสอบ');
   });
 });
 

@@ -502,14 +502,19 @@ export function WholesaleDetail({
     have a "โหน่ง" and they are not the same person.
   */
   const branchSales = salesPeople.filter((p) => p.shop === o.shop);
-  const seller = branchSales.find((p) => p.name === (o.salesBy ?? '')) ?? null;
-  /**
-   * Whether this branch’s documents are headed by the rep rather than by the
-   * company block. Keyed on HAVING a sales team, not on the branch id: hard-
-   * coding `north` would break the day a second wholesale branch opens, and
-   * "the branch has named sellers" is the actual reason the layout differs.
-   */
-  const repLetterhead = branchSales.length > 0;
+  /*
+    The NAME comes from the PO, not from the staff list.
+
+    `orders.sales_by` is what this PO was sold under, and it has to keep
+    naming that person even when no `sales_people` row matches — the row may
+    never have been created, or the person may have left. Looking the name up
+    first meant a document quietly printed no seller at all, which is exactly
+    what the shop hit: the reps existed on the POs but not in the table.
+  */
+  const sellerName = (o.salesBy ?? '').trim();
+  // The staff row is only the phone book. Matched within the PO’s own branch:
+  // two branches may both have a "โหน่ง" and they are not the same person.
+  const seller = branchSales.find((p) => p.name === sellerName) ?? null;
 
   const canInvoice = !isNew;
   /*
@@ -1130,33 +1135,33 @@ export function WholesaleDetail({
                   <h2 style={{ margin: 0 }}>
                     {shopInfo?.[o.shop]?.companyName || shopName(o.shop, shops)}
                   </h2>
-                  {!repLetterhead && shopInfo?.[o.shop]?.companyName && (
+                  {shopInfo?.[o.shop]?.companyName && (
                     <p style={{ margin: '2px 0 0', fontSize: 12, color: '#333' }}>
                       {shopName(o.shop, shops)}
                     </p>
                   )}
                   {/*
-                    A branch that sells through named reps puts the REP's phone
-                    here and nothing else — no address, no branch line. A
-                    wholesale buyer rings the person who sold to them, and a
-                    letterhead full of company detail buries the one number they
-                    actually want. Branches without a sales team keep the full
-                    company block, because there the shop IS the contact.
+                    ชื่อร้าน และชื่อพนักงานขาย เท่านั้น — ไม่มีที่อยู่.
+
+                    เอกสารขายส่งทั้งสี่ใบใช้หัวเดียวกัน. A wholesale buyer rings
+                    the person who sold to them; the address on a wholesale
+                    document is noise that buries the one line they want, and
+                    for a wholesale-only branch it is not even a place anyone
+                    visits. The phone is appended when the rep has one on
+                    record — the NAME prints either way.
                   */}
-                  {repLetterhead
-                    ? seller?.phone && (
-                        <p style={{ margin: '4px 0 0', fontSize: 12, color: '#333' }}>
-                          {seller.name} โทร {seller.phone}
-                        </p>
-                      )
-                    : (shopInfo?.[o.shop]?.address || shopInfo?.[o.shop]?.phone) && (
-                        <p
-                          style={{ margin: '4px 0 0', fontSize: 11, color: '#555', maxWidth: 280 }}
-                        >
-                          {shopInfo?.[o.shop]?.address}
-                          {shopInfo?.[o.shop]?.phone ? ` โทร ${shopInfo[o.shop].phone}` : ''}
-                        </p>
-                      )}
+                  {sellerName ? (
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#333' }}>
+                      {sellerName}
+                      {seller?.phone ? ` โทร ${seller.phone}` : ''}
+                    </p>
+                  ) : (
+                    shopInfo?.[o.shop]?.phone && (
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: '#333' }}>
+                        โทร {shopInfo[o.shop].phone}
+                      </p>
+                    )
+                  )}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <p style={{ margin: 0, fontSize: 12 }}>
@@ -1369,9 +1374,9 @@ export function WholesaleDetail({
                           every copy is asking for a fact the system has. The
                           customer’s side stays blank — that signature is the
                           point of the document. */}
-                      {i === 0 && seller?.name && who !== 'ผู้รับของ' && who !== 'ผู้คืนสินค้า' ? (
+                      {i === 0 && sellerName && who !== 'ผู้รับของ' && who !== 'ผู้คืนสินค้า' ? (
                         <>
-                          ลงชื่อ {seller.name} {who}
+                          ลงชื่อ {sellerName} {who}
                         </>
                       ) : (
                         <>ลงชื่อ..................... {who}</>

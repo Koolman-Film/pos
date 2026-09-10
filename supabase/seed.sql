@@ -81,12 +81,22 @@ from (values
 ) as a(name, kind, match_names, sort_order)
 on conflict (shop_id, name) do nothing;
 
--- โหน่ง และ เคน ขายภายใต้ชื่อ Finnix North. Scoped to that branch, so the two
--- names do not appear in the pickers of shops they do not work at.
-insert into option_lists (list_key, value, sort_order, shop_id) values
-  ('sales_people', 'โหน่ง', 1, 'north'),
-  ('sales_people', 'เคน', 2, 'north')
-  on conflict do nothing;
+/*
+  โหน่ง และ เคน ขายภายใต้ชื่อ Finnix North.
+
+  ลงในตาราง `sales_people` (0047) ไม่ใช่ `option_lists`. The design put these
+  names in an option list first and moved them to a table when the phone number
+  became a second field — but this file kept writing the option-list rows, which
+  nothing reads. The result was a sample database where the reps existed on the
+  POs and nowhere else, so every wholesale document printed with no seller on it.
+
+  เบอร์โทรใส่ไว้ด้วย เพราะเบอร์นี้คือสิ่งที่พิมพ์บนหัวเอกสารของคนนั้น — ตัวอย่างที่
+  ไม่มีเบอร์ ทำให้ดูไม่ออกว่าเอกสารจริงจะหน้าตาเป็นยังไง
+*/
+insert into sales_people (shop_id, name, phone, sort_order) values
+  ('north', 'โหน่ง', '089-431-2278', 1),
+  ('north', 'เคน', '086-514-9903', 2)
+  on conflict (shop_id, name) do update set phone = excluded.phone;
 
 insert into wholesale_customers (name, phone, address) values
   ('ร้านออโต้สไตล์', '081-234-5678', 'เชียงใหม่'),
