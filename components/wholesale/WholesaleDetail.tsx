@@ -46,6 +46,34 @@ import {
  * later save. `crypto.randomUUID` is not in every browser this shop runs
  * (nor in jsdom), and uniqueness within one PO is all that is asked of it.
  */
+/*
+  แผงรายการสินค้า และแผงการคืนสินค้า.
+
+  These two are where a PO is actually built, and on a long form they read as
+  two more headings among six. A tinted panel with a coloured spine lifts each
+  one off the page, and the two colours differ so the eye can tell "สินค้าที่
+  ขายไป" from "ของที่รับคืนมา" without reading either heading.
+
+  Colours picked from the ones this screen has NOT already spent on meaning:
+  red is a discount awaiting approval or a debt, amber is money reported but
+  not confirmed, green is money received. Blue and violet are free, so neither
+  panel accidentally reads as a warning.
+
+  Both live in `globals.css` with a dark-mode pair: the light hues measure
+  under 3:1 on the dark ground, and a 7% tint on it is invisible.
+*/
+const PANEL = {
+  items: { spine: 'var(--panel-goods)', tint: 'var(--panel-goods-soft)' },
+  returns: { spine: 'var(--panel-return)', tint: 'var(--panel-return-soft)' },
+} as const;
+
+/** The shared shape: a tinted box with a thicker spine down its left edge. */
+const panelStyle = (p: { spine: string; tint: string }): React.CSSProperties => ({
+  background: p.tint,
+  border: '1px solid var(--line)',
+  borderLeft: `3px solid ${p.spine}`,
+});
+
 function newPaymentUid(): string {
   return `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -736,8 +764,8 @@ export function WholesaleDetail({
               </div>
             )}
           </div>
-          <div className="mb-5">
-            <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
+          <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.items)}>
+            <p className="text-xs font-semibold mb-3" style={{ color: PANEL.items.spine }}>
               <i className="fa-solid fa-boxes-stacked mr-1.5"></i>รายการสินค้า
             </p>
             {o.items.map((it, idx) => (
@@ -852,8 +880,8 @@ export function WholesaleDetail({
               </p>
             </div>
           )}
-          <div className="mb-5">
-            <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
+          <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.returns)}>
+            <p className="text-xs font-semibold mb-3" style={{ color: PANEL.returns.spine }}>
               <i className="fa-solid fa-rotate-left mr-1.5"></i>การคืนสินค้า
             </p>
             {o.returns.map((r, idx) => (

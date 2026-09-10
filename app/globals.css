@@ -23,6 +23,17 @@
   --shadow-sm: 0 1px 2px rgba(42, 33, 29, 0.05), 0 1px 1px rgba(42, 33, 29, 0.03);
   --shadow-md: 0 8px 24px rgba(42, 33, 29, 0.08), 0 2px 6px rgba(42, 33, 29, 0.04);
   --shadow-red: 0 10px 24px rgba(122, 35, 51, 0.22);
+  /* แผงรายการสินค้า และแผงการคืนสินค้า ในหน้าขายส่ง.
+
+     Two hues kept apart so the eye can tell "goods going out" from "goods
+     coming back" without reading the heading, and chosen from what this app
+     has NOT already spent on meaning: red is a debt or a discount awaiting
+     approval, amber is money reported but not confirmed, green is money
+     received. A panel in any of those would read as a warning it is not. */
+  --panel-goods: #2f6f8f;
+  --panel-goods-soft: rgba(47, 111, 143, 0.07);
+  --panel-return: #7a4e8f;
+  --panel-return-soft: rgba(122, 78, 143, 0.07);
 }
 html[data-theme='dark'] {
   --primary: #b23a48;
@@ -41,6 +52,12 @@ html[data-theme='dark'] {
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 1px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-red: 0 10px 24px rgba(178, 58, 72, 0.32);
+  /* Lifted off the dark ground: the light-mode hues measure under 3:1 here,
+     and a tint at 0.07 on #221c18 is not visible at all. */
+  --panel-goods: #6fb0d0;
+  --panel-goods-soft: rgba(111, 176, 208, 0.11);
+  --panel-return: #b18ac9;
+  --panel-return-soft: rgba(177, 138, 201, 0.11);
 }
 * {
   box-sizing: border-box;
