@@ -564,3 +564,109 @@ describe('WholesaleList — พนักงานขาย', () => {
     expect(screen.queryByText('สรุปรายพนักงานขาย')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * เช็คลงวันที่ล่วงหน้า และการยืนยันเงินเข้า (migration 0048).
+ *
+ * The shop is paid mostly by post-dated cheque, so a payment row now spans
+ * three days: taken in, dated on its face, and actually cleared. Only the last
+ * one is money, and only `wholesale.confirmPayment` may declare it.
+ */
+describe('WholesaleDetail — การรับเงินแบบเช็ค', () => {
+  const chequePayment = {
+    amount: 20000,
+    method: 'เช็คธนาคารกสิกร',
+    date: '2026-09-01',
+    uid: 'p-cheque-1',
+    status: 'แจ้งแล้ว',
+    chequeNo: '0012345',
+    chequeBank: 'KBANK',
+    chequeDate: '2026-10-15',
+    attachments: [],
+  };
+  const chequeOrder = {
+    ...order,
+    id: 'WS-N-0101',
+    shop: 'north',
+    payments: [chequePayment],
+  } as unknown as WsOrder;
+
+  it('ยอดที่แจ้งแล้วไม่ถูกนับเป็นชำระแล้ว', () => {
+    render(<WholesaleDetail order={chequeOrder} canDo={() => true} />);
+    // 10,000 owed and a 20,000 cheque in the drawer: still 10,000 outstanding.
+    expect(screen.getByText('แจ้งแล้ว รอยืนยัน')).toBeInTheDocument();
+    expect(screen.queryByText('ชำระครบแล้ว')).not.toBeInTheDocument();
+  });
+
+  it('ให้กรอกเลขที่เช็ค ธนาคาร และวันที่หน้าเช็ค เมื่อวิธีชำระเป็นเช็ค', () => {
+    render(<WholesaleDetail order={chequeOrder} canDo={() => true} />);
+    expect(screen.getByLabelText('เลขที่เช็ค')).toHaveValue('0012345');
+    expect(screen.getByLabelText('ธนาคารของเช็ค')).toHaveValue('KBANK');
+    expect(screen.getByLabelText('วันที่หน้าเช็ค')).toHaveValue('2026-10-15');
+  });
+
+  it('ซ่อนปุ่มยืนยันเงินเข้าเมื่อไม่มีสิทธิ์', () => {
+    render(
+      <WholesaleDetail
+        order={chequeOrder}
+        caps={{ 'wholesale.confirmPayment': false }}
+        onConfirmPayment={async () => ({ ok: true })}
+      />,
+    );
+    expect(screen.queryByText('ยืนยันเงินเข้า')).not.toBeInTheDocument();
+  });
+
+  it('ยืนยันเงินเข้าแล้วยอดที่รอยืนยันหายไป', async () => {
+    const user = userEvent.setup();
+    const onConfirmPayment = vi.fn(async () => ({ ok: true }));
+    render(
+      <WholesaleDetail
+        order={chequeOrder}
+        caps={{ 'wholesale.confirmPayment': true }}
+        onConfirmPayment={onConfirmPayment}
+      />,
+    );
+
+    await user.click(screen.getByText('ยืนยันเงินเข้า'));
+    await user.clear(screen.getByLabelText('วันที่เงินเข้าจริง'));
+    await user.type(screen.getByLabelText('วันที่เงินเข้าจริง'), '2026-10-16');
+    await user.click(screen.getByText('ยืนยันว่าเงินเข้าแล้ว'));
+
+    // The date the money landed is the confirmer's to type: a cheque banked on
+    // Friday and credited on Monday belongs to Monday.
+    expect(onConfirmPayment).toHaveBeenCalledWith('WS-N-0101', 'p-cheque-1', '2026-10-16');
+    expect(screen.queryByText('แจ้งแล้ว รอยืนยัน')).not.toBeInTheDocument();
+  });
+
+  it('ไม่ให้ยืนยันรายการที่ยังไม่ได้บันทึก', async () => {
+    const user = userEvent.setup();
+    render(
+      <WholesaleDetail
+        order={{ ...chequeOrder, payments: [] } as unknown as WsOrder}
+        caps={{ 'wholesale.confirmPayment': true }}
+        onConfirmPayment={async () => ({ ok: true })}
+      />,
+    );
+    await user.click(screen.getByText(/เพิ่มรายการรับเงิน/));
+    // The server cannot confirm a row it has never seen, and the error it would
+    // return is not something the user could act on.
+    expect(screen.getByText(/บันทึก PO ก่อน/)).toBeInTheDocument();
+    expect(screen.queryByText('ยืนยันเงินเข้า')).not.toBeInTheDocument();
+  });
+
+  it('ใบเสร็จออกได้ตั้งแต่รับเช็ค และพิมพ์รายละเอียดเช็คไว้บนใบ', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(<WholesaleDetail order={chequeOrder} canDo={() => true} />);
+
+    await user.click(screen.getByRole('button', { name: /ใบเสร็จรับเงิน/ }));
+    const sheet = document.querySelector('.print-area') as HTMLElement;
+    expect(sheet.textContent).toContain('0012345');
+    expect(sheet.textContent).toContain('KBANK');
+    // Says on its own face that the money has not arrived — a receipt reading
+    // only "รับเงินแล้ว 20,000" against a cheque dated next month is read by
+    // each side as meaning something different.
+    expect(sheet.textContent).toContain('ยังไม่ได้ขึ้นเงิน');
+    expect(sheet.textContent).toContain('หนี้จะถูกตัดเมื่อเช็คขึ้นเงิน');
+  });
+});

@@ -31,10 +31,38 @@ export type WsReturn = { item: string; qty: number; reason: string; date: string
 
 export type WsAdjustment = { amount: number; reason: string; date: string };
 
+/**
+ * การรับชำระหนึ่งรายการ (migration 0048).
+ *
+ * ขายส่งรับเป็นเช็คลงวันที่ล่วงหน้าเป็นส่วนใหญ่ — so one of these covers three
+ * separate days: `date` is when it was taken in, `chequeDate` is what is
+ * written on the cheque, and `clearedAt` is when the money actually arrived.
+ * Only the last one is money.
+ */
 export type WsPayment = {
   amount: number;
   method: string;
+  /** วันที่รับชำระ — `order_payments.paid_at`. */
   date: string;
+  /**
+   * คีย์ประจำรายการที่ไคลเอนต์สร้าง.
+   *
+   * `save_order_children` deletes and re-inserts every child row, so the
+   * database id changes on each save. This is what a confirmation is keyed on,
+   * and what carries the confirmed state back across a save. Empty on a row
+   * typed by an older client; those cannot be confirmed until saved again.
+   */
+  uid?: string;
+  /** แจ้งแล้ว / รับเงินแล้ว / เด้ง. Empty from a pre-0048 client — read as รับเงินแล้ว. */
+  status?: string;
+  chequeNo?: string;
+  chequeBank?: string;
+  /** วันที่หน้าเช็ค — วันที่ที่คาดว่าเงินจะเข้า. */
+  chequeDate?: string;
+  /** วันที่เงินเข้าจริง. Set by ยืนยันเงินเข้า, never typed on this form. */
+  clearedAt?: string;
+  bouncedAt?: string;
+  bounceNote?: string;
   attachments: string[];
 };
 

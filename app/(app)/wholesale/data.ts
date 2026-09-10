@@ -26,8 +26,8 @@ const ORDER_SELECT = `
   id, shop_id, customer_id, status, created_at, delivered_at, sales_by,
   order_items(name, qty, list_price, requested_price, reason),
   order_returns(item_name, qty, reason, returned_at),
-  order_adjustments(amount, reason),
-  order_payments(amount, method)
+  order_adjustments(amount, reason, adjusted_at),
+  order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, cleared_at, bounced_at, bounce_note)
 `;
 
 type OrderRow = {
@@ -48,8 +48,22 @@ type OrderRow = {
       }[]
     | null;
   order_returns: { item_name: string; qty: number; reason: string; returned_at: string }[] | null;
-  order_adjustments: { amount: number; reason: string }[] | null;
-  order_payments: { amount: number; method: string }[] | null;
+  order_adjustments: { amount: number; reason: string; adjusted_at: string }[] | null;
+  order_payments:
+    | {
+        amount: number;
+        method: string;
+        paid_at: string;
+        uid: string;
+        status: string;
+        cheque_no: string;
+        cheque_bank: string;
+        cheque_date: string | null;
+        cleared_at: string | null;
+        bounced_at: string | null;
+        bounce_note: string;
+      }[]
+    | null;
 };
 
 function mapOrder(row: OrderRow): WsOrder {
@@ -74,15 +88,26 @@ function mapOrder(row: OrderRow): WsOrder {
       reason: r.reason ?? '',
       date: r.returned_at ?? '',
     })),
+    // The dates were being dropped on the way OUT, so saving an untouched PO
+    // re-stamped every adjustment and payment with the day somebody last
+    // opened it — undoing, on the next save, exactly what 0045 fixed.
     adjustments: (row.order_adjustments ?? []).map((a) => ({
       amount: a.amount,
       reason: a.reason ?? '',
-      date: '',
+      date: a.adjusted_at ?? '',
     })),
     payments: (row.order_payments ?? []).map((p) => ({
       amount: p.amount,
       method: p.method,
-      date: '',
+      date: p.paid_at ?? '',
+      uid: p.uid ?? '',
+      status: p.status ?? '',
+      chequeNo: p.cheque_no ?? '',
+      chequeBank: p.cheque_bank ?? '',
+      chequeDate: p.cheque_date ?? '',
+      clearedAt: p.cleared_at ?? '',
+      bouncedAt: p.bounced_at ?? '',
+      bounceNote: p.bounce_note ?? '',
       attachments: [],
     })),
   };

@@ -6,11 +6,13 @@ import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
 
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
-import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { fmt, fmtThaiDate, fmtThaiDayString } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { orderTotal, orderPaid } from '@/lib/domain/orders';
+
+import { pendingCheques } from './cheques';
 
 import {
   customerName,
@@ -141,6 +143,15 @@ export function WholesaleList({
     })
     .filter((t) => t.count > 0)
     .sort((a, b) => b.revenue - a.revenue);
+
+  /*
+    เช็คที่รอยืนยัน.
+
+    Computed over the rows on screen, like every other summary here, so the
+    period and branch the reader chose apply to it too. Rendered only when
+    there is something in it: a branch paid in cash sees nothing new.
+  */
+  const cheques = pendingCheques(visible, todayValue());
 
   const groupCustIds = [...new Set(visible.map((o) => o.customerId))];
   const exportGroups = groupCustIds
@@ -317,6 +328,49 @@ export function WholesaleList({
             </button>
           ))}
         </div>
+        {cheques.rows.length > 0 && (
+          <div className="card p-4 mb-4">
+            <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
+              <p className="text-xs font-semibold" style={{ color: 'var(--ink-soft)' }}>
+                <i className="fa-solid fa-money-check mr-1.5"></i>เช็ค/เงินที่แจ้งแล้ว
+                รอยืนยันเงินเข้า
+              </p>
+              <span className="text-sm font-semibold">{fmt(cheques.total)}</span>
+            </div>
+            {/* The number that means somebody has to pick up the phone. */}
+            {cheques.overdueTotal > 0 && (
+              <p className="text-xs mb-2" style={{ color: '#B23A48' }}>
+                เลยวันที่หน้าเช็คแล้วยังไม่ยืนยัน {fmt(cheques.overdueTotal)}
+              </p>
+            )}
+            <div className="flex flex-col gap-1.5">
+              {cheques.rows.map((c, idx) => (
+                <div
+                  key={`${c.orderId}-${idx}`}
+                  className="flex items-baseline justify-between gap-3 text-sm"
+                >
+                  <span className="truncate">
+                    {customerName(c.customerId, customers)}
+                    <span className="text-xs ml-1.5" style={{ color: 'var(--ink-faint)' }}>
+                      {c.orderId}
+                      {c.chequeNo ? ` · เช็ค ${c.chequeNo}` : ''}
+                      {c.chequeBank ? ` ${c.chequeBank}` : ''}
+                    </span>
+                  </span>
+                  <span className="flex items-baseline gap-3 flex-shrink-0">
+                    <span
+                      className="text-xs"
+                      style={{ color: c.overdue ? '#B23A48' : 'var(--ink-soft)' }}
+                    >
+                      {c.due ? fmtThaiDayString(c.due) : 'ไม่ระบุวันที่'}
+                    </span>
+                    <span className="font-semibold">{fmt(c.amount)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {/*
           สรุปรายพนักงานขาย.
 

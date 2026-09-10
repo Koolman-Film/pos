@@ -93,7 +93,7 @@ export default async function DashboardPage({
     supabase
       .from('orders')
       .select(
-        'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount, method, paid_at)',
+        'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount, method, paid_at, status, cleared_at)',
       )
       // Deleted POs (migration 0040) are out of the wholesale figures here for
       // the same reason deleted tickets are out of the ticket ones above.
@@ -241,6 +241,9 @@ export default async function DashboardPage({
       amount: num(p.amount),
       method: p.method ?? '',
       paidAt: toDate(p.paid_at),
+      // ค้างรับ counts only รับเงินแล้ว (0048) — `orderPaid` reads this.
+      status: p.status ?? '',
+      clearedAt: toDate(p.cleared_at),
     })),
   }));
 
@@ -360,10 +363,17 @@ export default async function DashboardPage({
         .filter((p) => p.method && p.paidAt)
         .map((p) => ({ shop: t.shop, source: p.method, amount: p.amount, on: day(p.paidAt) })),
     ),
+    // เฉพาะที่ยืนยันแล้ว ลงวันที่ที่เงินเข้าจริง — a cheque in the drawer is
+    // not money in the drawer, and not money on the day it arrived either.
     ...orders.flatMap((o) =>
       o.payments
-        .filter((p) => p.method && p.paidAt)
-        .map((p) => ({ shop: o.shop, source: p.method, amount: p.amount, on: day(p.paidAt) })),
+        .filter((p) => p.method && p.status === 'รับเงินแล้ว' && (p.clearedAt || p.paidAt))
+        .map((p) => ({
+          shop: o.shop,
+          source: p.method,
+          amount: p.amount,
+          on: day(p.clearedAt ?? p.paidAt),
+        })),
     ),
     // Out of the drawer it went, whoever the bill belonged to — a จ่ายแทน
     // expense is still money that physically left this branch, which is the

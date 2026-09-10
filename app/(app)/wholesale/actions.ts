@@ -331,6 +331,69 @@ export async function recordOrderDelivery(
   return { ok: true };
 }
 
+/**
+ * ยืนยันว่าเงินเข้าจริง — the step that turns a reported payment into money.
+ *
+ * Gated by `wholesale.confirmPayment` HERE and again inside
+ * `confirm_order_payment`, which is the check that actually holds: this action
+ * is a plain POST anyone can send (CORRECTION C2). `clearedOn` is the date the
+ * money landed, not today — a cheque banked on Friday and credited on Monday
+ * belongs to Monday, and only the person holding the statement knows which.
+ */
+export async function confirmOrderPayment(
+  orderId: string,
+  uid: string,
+  clearedOn: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.confirmPayment')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์ยืนยันการรับเงิน' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('confirm_order_payment', {
+    p_order_id: orderId,
+    p_uid: uid,
+    p_on: clearedOn,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateOrder(orderId);
+  return { ok: true };
+}
+
+/**
+ * เช็คเด้ง. The debt returns on its own — `orderPaid` counts only รับเงินแล้ว —
+ * and the receipt already in the customer’s hands is left on the record.
+ */
+export async function bounceOrderPayment(
+  orderId: string,
+  uid: string,
+  bouncedOn: string,
+  note: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.confirmPayment')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์บันทึกเช็คเด้ง' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('bounce_order_payment', {
+    p_order_id: orderId,
+    p_uid: uid,
+    p_on: bouncedOn,
+    p_note: note,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateOrder(orderId);
+  return { ok: true };
+}
+
+/** Money moved: the PO, the list, the dashboard and the money register all shift. */
+function revalidateOrder(orderId: string) {
+  revalidatePath('/wholesale');
+  revalidatePath(`/wholesale/${orderId}`);
+  revalidatePath('/dashboard');
+  revalidatePath('/money');
+}
+
 /** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
 export async function approveOrderPrice(orderId: string) {
   const session = await getSessionContext();

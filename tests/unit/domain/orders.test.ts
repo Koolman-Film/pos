@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { orderTotal, orderPaid } from '@/lib/domain/orders';
+import { orderTotal, orderPaid, orderReported } from '@/lib/domain/orders';
 
 describe('orderTotal', () => {
   it('subtracts returns and adjustments from the items total', () => {
@@ -60,5 +60,56 @@ describe('orderPaid', () => {
   });
   it('returns 0 when there are no payments', () => {
     expect(orderPaid({ payments: [] })).toBe(0);
+  });
+});
+
+/**
+ * สถานะการรับเงิน (migration 0048).
+ *
+ * ขายส่งรับเป็นเช็คลงวันที่ล่วงหน้าเป็นส่วนใหญ่ — a cheque in the drawer is not
+ * money, and counting it as money cleared the customer's debt and moved the
+ * money card on the strength of a promise.
+ */
+describe('orderPaid — เฉพาะที่รับเงินแล้ว', () => {
+  it('ไม่นับรายการที่แจ้งแล้วแต่ยังไม่ยืนยัน', () => {
+    expect(
+      orderPaid({
+        payments: [
+          { amount: 5000, status: 'รับเงินแล้ว' },
+          { amount: 20000, status: 'แจ้งแล้ว' },
+        ],
+      }),
+    ).toBe(5000);
+  });
+
+  it('ไม่นับเช็คที่เด้ง — หนี้กลับมาเอง', () => {
+    expect(
+      orderPaid({
+        payments: [
+          { amount: 5000, status: 'รับเงินแล้ว' },
+          { amount: 30000, status: 'เด้ง' },
+        ],
+      }),
+    ).toBe(5000);
+  });
+
+  it('นับรายการที่ไม่มีสถานะเป็นเงินที่ได้แล้ว', () => {
+    // Everything recorded before 0048 was money the moment it was typed, and the
+    // migration backfills it to รับเงินแล้ว for that reason. Retail payments
+    // never set the field at all. Defaulting the other way would re-open every
+    // settled debt in the shop.
+    expect(orderPaid({ payments: [{ amount: 900 }] })).toBe(900);
+  });
+});
+
+describe('orderReported', () => {
+  it('นับเฉพาะที่แจ้งแล้วรอยืนยัน', () => {
+    const payments = [
+      { amount: 5000, status: 'รับเงินแล้ว' },
+      { amount: 20000, status: 'แจ้งแล้ว' },
+      { amount: 30000, status: 'เด้ง' },
+      { amount: 900 },
+    ];
+    expect(orderReported({ payments })).toBe(20000);
   });
 });

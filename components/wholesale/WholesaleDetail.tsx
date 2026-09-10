@@ -9,7 +9,14 @@ import { OptionManageProvider } from '@/components/ui/optionManage';
 import { fmt, fmtThaiDateLong, fmtThaiDayString, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
-import { orderTotal, orderPaid } from '@/lib/domain/orders';
+import {
+  orderTotal,
+  orderPaid,
+  orderReported,
+  PAYMENT_BOUNCED,
+  PAYMENT_RECEIVED,
+  PAYMENT_REPORTED,
+} from '@/lib/domain/orders';
 import { dateInputValue } from '@/lib/domain/now';
 
 import { CustomerPicker } from './CustomerPicker';
@@ -23,11 +30,25 @@ import {
   type SalesPerson,
   type WsCustomer,
   type WsOrder,
+  type WsPayment,
   type WsShopInfo,
   type WsStatusMap,
   type WsPrintMode,
   type WsStockItem,
 } from './types';
+
+/**
+ * คีย์ประจำรายการรับชำระ.
+ *
+ * `save_order_children` deletes and re-inserts every child row on each save,
+ * so the database id is not stable and a confirmation cannot be keyed on it.
+ * This is: generated once when the row is added and carried through every
+ * later save. `crypto.randomUUID` is not in every browser this shop runs
+ * (nor in jsdom), and uniqueness within one PO is all that is asked of it.
+ */
+function newPaymentUid(): string {
+  return `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
 
 /**
  * Ported from reference/v0.4/finnix-film.html:2690-2967.
@@ -100,6 +121,8 @@ export function WholesaleDetail({
   onMarkBadDebt,
   onDeleteOrder,
   onRecordDelivery,
+  onConfirmPayment,
+  onBouncePayment,
   onSaveCustomer,
   onBack,
   updateOptionListAction,
@@ -140,6 +163,26 @@ export function WholesaleDetail({
   onRecordDelivery?: (
     orderId: string,
     deliveredAt: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * ยืนยันว่าเงินเข้าจริง — gated by `wholesale.confirmPayment` (migration 0048).
+   *
+   * Not part of `onSaveOrder`: a sale may edit and save this PO all day, and
+   * none of those saves may turn a cheque in the drawer into money. The
+   * database refuses it too — the save function copies the confirmed state
+   * forward and ignores whatever the browser claims about it.
+   */
+  onConfirmPayment?: (
+    orderId: string,
+    uid: string,
+    clearedOn: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  /** บันทึกเช็คเด้ง — same capability; the debt returns on its own. */
+  onBouncePayment?: (
+    orderId: string,
+    uid: string,
+    bouncedOn: string,
+    note: string,
   ) => Promise<{ ok: boolean; error?: string }>;
   onSaveCustomer?: (input: {
     id?: number;
@@ -332,7 +375,17 @@ export function WholesaleDetail({
   function addPayment() {
     setO({
       ...o,
-      payments: [...o.payments, { amount: 0, method: 'เงินสด', date: '', attachments: [] }],
+      payments: [
+        ...o.payments,
+        {
+          amount: 0,
+          method: 'เงินสด',
+          date: dateInputValue(new Date()),
+          uid: newPaymentUid(),
+          status: PAYMENT_REPORTED,
+          attachments: [],
+        },
+      ],
     });
   }
   function updatePayment(
@@ -362,8 +415,77 @@ export function WholesaleDetail({
     if (onMarkBadDebt) await onMarkBadDebt(o.id);
   }
 
+  /*
+    การยืนยันเงินเข้า.
+
+    `savedPaymentUids` comes from the PROP, not from the draft: a payment
+    typed a moment ago exists only in this browser, and asking the server to
+    confirm a row it has never seen fails with an error the user cannot act
+    on. Saving first is the honest instruction, so that is what the row says.
+  */
+  const savedPaymentUids = new Set(
+    order.payments.map((p) => p.uid).filter((u): u is string => !!u),
+  );
+  const canConfirmPayments = can('wholesale.confirmPayment');
+  const [payPanel, setPayPanel] = useState<{
+    idx: number;
+    mode: 'confirm' | 'bounce';
+    on: string;
+    note: string;
+  } | null>(null);
+  const [payError, setPayError] = useState('');
+
+  function openPayPanel(idx: number, mode: 'confirm' | 'bounce') {
+    setPayError('');
+    setPayPanel({ idx, mode, on: dateInputValue(new Date()), note: '' });
+  }
+
+  async function submitPayPanel() {
+    if (!payPanel) return;
+    const p = o.payments[payPanel.idx];
+    const uid = p?.uid ?? '';
+    const res =
+      payPanel.mode === 'confirm'
+        ? await onConfirmPayment?.(o.id, uid, payPanel.on)
+        : await onBouncePayment?.(o.id, uid, payPanel.on, payPanel.note);
+    if (res && !res.ok) {
+      setPayError(res.error ?? 'บันทึกไม่สำเร็จ');
+      return;
+    }
+    // Mirrored locally so the badge and the balance move at once; the server
+    // holds the authoritative row either way.
+    const payments = [...o.payments];
+    payments[payPanel.idx] =
+      payPanel.mode === 'confirm'
+        ? { ...p, status: PAYMENT_RECEIVED, clearedAt: payPanel.on, bouncedAt: '' }
+        : {
+            ...p,
+            status: PAYMENT_BOUNCED,
+            bouncedAt: payPanel.on,
+            bounceNote: payPanel.note,
+            clearedAt: '',
+          };
+    setO({ ...o, payments });
+    setPayPanel(null);
+  }
+
   const total = orderTotal(o);
   const paid = orderPaid(o);
+  /** แจ้งแล้วแต่ยังไม่ยืนยัน — sits beside the balance, never inside it. */
+  const reported = orderReported(o);
+  /*
+    ยอดบนใบเสร็จ.
+
+    A receipt acknowledges what the customer HANDED OVER, which for wholesale
+    is usually a post-dated cheque — so it is not `paid`, which counts only
+    money that has arrived. A bounced payment is excluded: it was handed over
+    and then failed, and printing it on a fresh receipt would acknowledge
+    receiving something the shop no longer has.
+  */
+  const receiptPayments = o.payments.filter(
+    (p) => p.status !== PAYMENT_BOUNCED && Number(p.amount || 0) > 0,
+  );
+  const receiptTotal = receiptPayments.reduce((n, p) => n + Number(p.amount || 0), 0);
   const itemsTotal = o.items.reduce((s, i) => s + i.qty * i.requestedPrice, 0);
   const returnsTotal = o.returns.reduce((s, r) => {
     const it = o.items.find((i) => i.name === r.item);
@@ -390,7 +512,14 @@ export function WholesaleDetail({
   const repLetterhead = branchSales.length > 0;
 
   const canInvoice = !isNew;
-  const canReceipt = o.payments.length > 0 && paid > 0;
+  /*
+    ใบเสร็จออกตอนรับเช็ค ไม่ใช่ตอนเช็คผ่าน — that is what the shop does, so the
+    gate is "money was handed over", not "money has cleared". The receipt
+    prints the cheque’s own number, bank and date and says it has not cleared;
+    a receipt reading only "รับเงินแล้ว 50,000" against a cheque dated next
+    month misleads both sides.
+  */
+  const canReceipt = o.payments.some((p) => Number(p.amount || 0) > 0);
 
   /*
     ใบส่งของ records the delivery date, which is when a wholesale sale is
@@ -848,6 +977,19 @@ export function WholesaleDetail({
               <span style={{ color: 'var(--ink-soft)' }}>ชำระแล้ว</span>
               <span className="font-semibold">{fmt(paid)}</span>
             </div>
+            {/* A customer who has handed over a cheque is in a different
+                position from one who has sent nothing — but neither has paid,
+                so this figure sits outside the arithmetic. */}
+            {reported > 0 && (
+              <div className="flex justify-between text-sm mb-1">
+                <span style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-regular fa-clock mr-1"></i>แจ้งแล้ว รอยืนยัน
+                </span>
+                <span className="font-semibold" style={{ color: '#B8860B' }}>
+                  {fmt(reported)}
+                </span>
+              </div>
+            )}
             <div
               className="flex justify-between text-sm pt-1"
               style={{ borderTop: '1px solid var(--line)' }}
@@ -866,79 +1008,22 @@ export function WholesaleDetail({
               <i className="fa-solid fa-money-bill-wave mr-1.5"></i>การรับชำระ
             </p>
             {o.payments.map((p, idx) => (
-              <div
+              <PaymentRow
                 key={idx}
-                className="rounded-xl p-2.5 mb-2.5"
-                style={{ border: '1px solid var(--line)' }}
-              >
-                <div className="flex gap-2 mb-2">
-                  <input
-                    type="number"
-                    placeholder="จำนวนเงิน"
-                    value={p.amount}
-                    onChange={(e) => updatePayment(idx, 'amount', e.target.value)}
-                    className="field text-xs px-2.5 py-1.5 w-28"
-                  />
-                  <div className="flex-1">
-                    <ManagedDropdown
-                      value={p.method}
-                      onChange={(v) => updatePayment(idx, 'method', v)}
-                      options={methods}
-                      setOptions={setMethods}
-                      placeholder="เลือกวิธีชำระ..."
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label
-                    className="text-xs flex items-center gap-1.5 flex-1 field px-2.5 py-1.5 cursor-pointer"
-                    style={{ color: 'var(--ink-soft)' }}
-                  >
-                    <i className="fa-solid fa-paperclip"></i>
-                    แนบหลักฐานการชำระเงิน (เลือกได้หลายไฟล์)...
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files || []);
-                        if (files.length)
-                          updatePayment(idx, 'attachments', [
-                            ...(p.attachments || []),
-                            ...files.map((f) => f.name),
-                          ]);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                  {(p.attachments || []).length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {p.attachments.map((fn, fi) => (
-                        <span
-                          key={fi}
-                          className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                          style={{ background: 'var(--paper)', color: '#4C7A3E' }}
-                        >
-                          <i className="fa-solid fa-circle-check"></i>
-                          {fn}
-                          <i
-                            className="fa-solid fa-xmark cursor-pointer"
-                            style={{ color: '#B23A48' }}
-                            onClick={() =>
-                              updatePayment(
-                                idx,
-                                'attachments',
-                                p.attachments.filter((_, fi2) => fi2 !== fi),
-                              )
-                            }
-                          ></i>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+                p={p}
+                idx={idx}
+                methods={methods}
+                setMethods={setMethods}
+                onChange={updatePayment}
+                saved={savedPaymentUids.has(p.uid ?? '')}
+                canConfirm={canConfirmPayments}
+                panel={payPanel?.idx === idx ? payPanel : null}
+                onOpenPanel={openPayPanel}
+                onPanelChange={(patch) => setPayPanel(payPanel && { ...payPanel, ...patch })}
+                onSubmitPanel={submitPayPanel}
+                onCancelPanel={() => setPayPanel(null)}
+                error={payPanel?.idx === idx ? payError : ''}
+              />
             ))}
             <button
               onClick={addPayment}
@@ -1196,7 +1281,7 @@ export function WholesaleDetail({
                 ({' '}
                 {printMode === 'invoice'
                   ? thaiBahtText(paid > 0 ? total - paid : total)
-                  : thaiBahtText(paid)}{' '}
+                  : thaiBahtText(receiptTotal)}{' '}
                 )
               </p>
               {printMode === 'receipt' && (
@@ -1206,10 +1291,27 @@ export function WholesaleDetail({
                   </p>
                   <table style={{ fontSize: 11 }}>
                     <tbody>
-                      {o.payments.map((p, idx) => (
+                      {receiptPayments.map((p, idx) => (
                         <tr key={idx}>
                           <td style={{ padding: '3px 6px' }}>
-                            {p.date || '-'} &middot; {p.method}
+                            {p.date ? fmtThaiDayString(p.date) : '-'} &middot; {p.method}
+                            {/* เลขที่เช็ค ธนาคาร และวันที่หน้าเช็ค.
+
+                                A receipt that says only "รับเงินแล้ว 50,000"
+                                against a cheque dated next month is read by
+                                each side as meaning something different. These
+                                three facts are what make it one document. */}
+                            {p.chequeNo || p.chequeBank || p.chequeDate ? (
+                              <span style={{ color: '#666' }}>
+                                {' '}
+                                (เช็ค {p.chequeNo || '-'}
+                                {p.chequeBank ? ` ${p.chequeBank}` : ''}
+                                {p.chequeDate ? ` ลงวันที่ ${fmtThaiDayString(p.chequeDate)}` : ''})
+                              </span>
+                            ) : null}
+                            {p.status === PAYMENT_REPORTED && (
+                              <span style={{ color: '#666' }}> — ยังไม่ได้ขึ้นเงิน</span>
+                            )}
                           </td>
                           <td style={{ width: 110, textAlign: 'right', padding: '3px 6px' }}>
                             {fmt(p.amount)}
@@ -1226,11 +1328,17 @@ export function WholesaleDetail({
                             padding: '3px 6px',
                           }}
                         >
-                          {fmt(paid)}
+                          {fmt(receiptTotal)}
                         </td>
                       </tr>
                     </tbody>
                   </table>
+                  {receiptPayments.some((p) => p.status === PAYMENT_REPORTED) && (
+                    <p style={{ fontSize: 11, color: '#666', margin: '6px 0 0' }}>
+                      * ใบเสร็จนี้ออกตามเอกสารการชำระที่ได้รับ
+                      หนี้จะถูกตัดเมื่อเช็คขึ้นเงินเรียบร้อยแล้ว
+                    </p>
+                  )}
                 </div>
               )}
               {printMode === 'invoice' &&
@@ -1277,5 +1385,287 @@ export function WholesaleDetail({
           )}
       </div>
     </OptionManageProvider>
+  );
+}
+
+/**
+  รายการรับชำระหนึ่งรายการ.
+
+  Its own component because a payment stopped being one number on one date:
+  it now carries a cheque, a status, and two more dates that arrive weeks
+  apart. Inlined in the map it buried the rest of the panel.
+
+  The confirm and bounce controls appear only for someone holding
+  `wholesale.confirmPayment`, and only once the row has been saved — the
+  server cannot confirm a row it has never seen, and "บันทึก PO ก่อน" is a
+  more useful thing to read than the error that would otherwise come back.
+  Hiding them is a convenience, not the gate: `confirm_order_payment` checks
+  the capability itself.
+ */
+function PaymentRow({
+  p,
+  idx,
+  methods,
+  setMethods,
+  onChange,
+  saved,
+  canConfirm,
+  panel,
+  onOpenPanel,
+  onPanelChange,
+  onSubmitPanel,
+  onCancelPanel,
+  error,
+}: {
+  p: WsPayment;
+  idx: number;
+  methods: string[];
+  setMethods: (next: string[]) => void;
+  onChange: (idx: number, k: keyof WsPayment, v: string | number | string[]) => void;
+  saved: boolean;
+  canConfirm: boolean;
+  panel: { mode: 'confirm' | 'bounce'; on: string; note: string } | null;
+  onOpenPanel: (idx: number, mode: 'confirm' | 'bounce') => void;
+  onPanelChange: (patch: { on?: string; note?: string }) => void;
+  onSubmitPanel: () => void;
+  onCancelPanel: () => void;
+  error: string;
+}) {
+  const st = p.status || PAYMENT_RECEIVED;
+  const received = st === PAYMENT_RECEIVED;
+  const bounced = st === PAYMENT_BOUNCED;
+  /*
+    เช็คหรือไม่ ดูจากชื่อวิธีชำระ.
+
+    วิธีชำระเงิน is an admin-managed free-text list — "เช็คธนาคารกสิกร",
+    "เช็ค 30 วัน" — so there is no id to key on, and no reason to stop the shop
+    adding another wording. The cheque fields simply appear when the word does.
+  */
+  const isCheque = (p.method || '').includes('เช็ค');
+
+  return (
+    <div
+      className="rounded-xl p-2.5 mb-2.5"
+      style={{
+        border: '1px solid var(--line)',
+        background: received ? 'transparent' : 'var(--paper)',
+      }}
+    >
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <span
+          className="text-xs font-medium px-2 py-0.5 rounded-full"
+          style={{
+            background: received ? '#E7F0E3' : bounced ? '#F7E2E4' : '#FBF0D9',
+            color: received ? '#4C7A3E' : bounced ? '#B23A48' : '#8A6A1F',
+          }}
+        >
+          <i
+            className={`fa-solid ${
+              received ? 'fa-circle-check' : bounced ? 'fa-circle-xmark' : 'fa-clock'
+            } mr-1`}
+          ></i>
+          {st}
+        </span>
+        {received && p.clearedAt && (
+          <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+            เงินเข้า {fmtThaiDayString(p.clearedAt)}
+          </span>
+        )}
+        {bounced && (
+          <span className="text-xs" style={{ color: '#B23A48' }}>
+            เด้ง {p.bouncedAt ? fmtThaiDayString(p.bouncedAt) : ''}
+            {p.bounceNote ? ` — ${p.bounceNote}` : ''}
+          </span>
+        )}
+      </div>
+      <div className="flex gap-2 mb-2">
+        <input
+          type="number"
+          placeholder="จำนวนเงิน"
+          aria-label="จำนวนเงินที่รับ"
+          value={p.amount}
+          onChange={(e) => onChange(idx, 'amount', e.target.value)}
+          className="field text-xs px-2.5 py-1.5 w-28"
+        />
+        <div className="flex-1">
+          <ManagedDropdown
+            value={p.method}
+            onChange={(v) => onChange(idx, 'method', v)}
+            options={methods}
+            setOptions={setMethods}
+            placeholder="เลือกวิธีชำระ..."
+          />
+        </div>
+      </div>
+      <div className="mb-2">
+        <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+          วันที่รับชำระ
+        </label>
+        <ThaiDateInput
+          ariaLabel="วันที่รับชำระ"
+          value={p.date || ''}
+          onChange={(v) => onChange(idx, 'date', v)}
+          className="field text-xs px-2.5 py-1.5 w-full"
+        />
+      </div>
+      {/* เลขที่เช็ค ธนาคาร และวันที่หน้าเช็ค — printed on the receipt, and what
+          makes "เดือนหน้าจะมีเงินเข้าเท่าไหร่" answerable at all. */}
+      {isCheque && (
+        <div className="flex flex-col gap-2 mb-2">
+          <div className="flex gap-2">
+            <input
+              placeholder="เลขที่เช็ค"
+              aria-label="เลขที่เช็ค"
+              value={p.chequeNo ?? ''}
+              onChange={(e) => onChange(idx, 'chequeNo', e.target.value)}
+              className="field text-xs px-2.5 py-1.5 flex-1"
+            />
+            <input
+              placeholder="ธนาคาร"
+              aria-label="ธนาคารของเช็ค"
+              value={p.chequeBank ?? ''}
+              onChange={(e) => onChange(idx, 'chequeBank', e.target.value)}
+              className="field text-xs px-2.5 py-1.5 flex-1"
+            />
+          </div>
+          <div>
+            <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              วันที่หน้าเช็ค
+            </label>
+            <ThaiDateInput
+              ariaLabel="วันที่หน้าเช็ค"
+              value={p.chequeDate ?? ''}
+              onChange={(v) => onChange(idx, 'chequeDate', v)}
+              className="field text-xs px-2.5 py-1.5 w-full"
+            />
+          </div>
+        </div>
+      )}
+      <div className="flex flex-col gap-1.5">
+        <label
+          className="text-xs flex items-center gap-1.5 flex-1 field px-2.5 py-1.5 cursor-pointer"
+          style={{ color: 'var(--ink-soft)' }}
+        >
+          <i className="fa-solid fa-paperclip"></i>
+          แนบหลักฐานการชำระเงิน (เลือกได้หลายไฟล์)...
+          <input
+            type="file"
+            accept="image/*,.pdf"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              if (files.length)
+                onChange(idx, 'attachments', [
+                  ...(p.attachments || []),
+                  ...files.map((fl) => fl.name),
+                ]);
+              e.target.value = '';
+            }}
+          />
+        </label>
+        {(p.attachments || []).length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {p.attachments.map((fn, fi) => (
+              <span
+                key={fi}
+                className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                style={{ background: 'var(--paper)', color: '#4C7A3E' }}
+              >
+                <i className="fa-solid fa-circle-check"></i>
+                {fn}
+                <i
+                  className="fa-solid fa-xmark cursor-pointer"
+                  style={{ color: '#B23A48' }}
+                  onClick={() =>
+                    onChange(
+                      idx,
+                      'attachments',
+                      p.attachments.filter((_, fi2) => fi2 !== fi),
+                    )
+                  }
+                ></i>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      {canConfirm && !panel && (
+        <div className="flex gap-2 mt-2.5">
+          {!saved ? (
+            <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+              บันทึก PO ก่อน จึงจะยืนยันเงินเข้าได้
+            </span>
+          ) : (
+            <>
+              {!received && (
+                <button
+                  onClick={() => onOpenPanel(idx, 'confirm')}
+                  className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                  style={{ color: '#4C7A3E' }}
+                >
+                  <i className="fa-solid fa-circle-check mr-1.5"></i>ยืนยันเงินเข้า
+                </button>
+              )}
+              {!bounced && (
+                <button
+                  onClick={() => onOpenPanel(idx, 'bounce')}
+                  className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                  style={{ color: '#B23A48' }}
+                >
+                  <i className="fa-solid fa-circle-xmark mr-1.5"></i>เช็คเด้ง
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {panel && (
+        <div
+          className="rounded-xl p-2.5 mt-2.5 flex flex-col gap-2"
+          style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}
+        >
+          <div>
+            <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              {panel.mode === 'confirm' ? 'วันที่เงินเข้าจริง' : 'วันที่เช็คเด้ง'}
+            </label>
+            <ThaiDateInput
+              ariaLabel={panel.mode === 'confirm' ? 'วันที่เงินเข้าจริง' : 'วันที่เช็คเด้ง'}
+              value={panel.on}
+              onChange={(v) => onPanelChange({ on: v })}
+              className="field text-xs px-2.5 py-1.5 w-full"
+            />
+          </div>
+          {panel.mode === 'bounce' && (
+            <input
+              placeholder="เหตุผล เช่น เงินในบัญชีไม่พอ"
+              aria-label="เหตุผลที่เช็คเด้ง"
+              value={panel.note}
+              onChange={(e) => onPanelChange({ note: e.target.value })}
+              className="field text-xs px-2.5 py-1.5 w-full"
+            />
+          )}
+          {error && (
+            <p className="text-xs" style={{ color: '#B23A48' }} role="alert">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={onSubmitPanel}
+              className="btn-primary text-xs rounded-xl px-3 py-1.5 font-medium flex-1"
+            >
+              {panel.mode === 'confirm' ? 'ยืนยันว่าเงินเข้าแล้ว' : 'บันทึกว่าเช็คเด้ง'}
+            </button>
+            <button
+              onClick={onCancelPanel}
+              className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+            >
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

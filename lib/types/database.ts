@@ -704,6 +704,17 @@ export type Database = {
       }
       order_payments: {
         Row: {
+          bounce_note: string
+          bounced_at: string | null
+          cheque_bank: string
+          cheque_date: string | null
+          cheque_no: string
+          cleared_at: string | null
+          cleared_by: string | null
+          reported_at: string | null
+          reported_by: string | null
+          status: string
+          uid: string
           amount: number
           id: number
           method: string
@@ -711,6 +722,17 @@ export type Database = {
           paid_at: string
         }
         Insert: {
+          bounce_note?: string
+          bounced_at?: string | null
+          cheque_bank?: string
+          cheque_date?: string | null
+          cheque_no?: string
+          cleared_at?: string | null
+          cleared_by?: string | null
+          reported_at?: string | null
+          reported_by?: string | null
+          status?: string
+          uid?: string
           amount: number
           id?: never
           method: string
@@ -718,6 +740,17 @@ export type Database = {
           paid_at: string
         }
         Update: {
+          bounce_note?: string
+          bounced_at?: string | null
+          cheque_bank?: string
+          cheque_date?: string | null
+          cheque_no?: string
+          cleared_at?: string | null
+          cleared_by?: string | null
+          reported_at?: string | null
+          reported_by?: string | null
+          status?: string
+          uid?: string
           amount?: number
           id?: never
           method?: string
@@ -1840,6 +1873,14 @@ export type Database = {
       }
       refresh_stock_cost: {
         Args: { p_stock_id: number }
+        Returns: undefined
+      }
+      bounce_order_payment: {
+        Args: { p_note?: string; p_on?: string; p_order_id: string; p_uid: string }
+        Returns: undefined
+      }
+      confirm_order_payment: {
+        Args: { p_on?: string; p_order_id: string; p_uid: string }
         Returns: undefined
       }
       count_stock: {

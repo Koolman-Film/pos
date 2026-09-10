@@ -101,6 +101,7 @@ export const MODULE_CAPABILITIES: LabeledKey[] = [
   { key: 'wholesale.priceApproval', label: 'ขายส่ง: อนุมัติ/ปฏิเสธราคา' },
   { key: 'wholesale.badDebt', label: 'ขายส่ง: แจ้งตัดหนี้สูญ' },
   { key: 'wholesale.updateStatus', label: 'ขายส่ง: เปลี่ยนสถานะ PO' },
+  { key: 'wholesale.confirmPayment', label: 'ขายส่ง: ยืนยันเงินเข้า/บันทึกเช็คเด้ง' },
   { key: 'wholesale.delete', label: 'ขายส่ง: ลบ PO' },
   { key: 'wholesale.restore', label: 'ขายส่ง: กู้คืน PO จากถังขยะ' },
   { key: 'wholesale.export', label: 'ขายส่ง: ส่งออก Excel/PDF' },

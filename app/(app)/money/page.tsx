@@ -55,7 +55,10 @@ export default async function MoneyPage() {
       .from('tickets')
       .select('shop_id, ticket_payments(amount, method, paid_at)')
       .is('deleted_at', null),
-    supabase.from('orders').select('shop_id, order_payments(amount, method, paid_at)'),
+    // status และ cleared_at: เงินที่ยังไม่ยืนยันไม่ใช่เงินในลิ้นชัก (0048).
+    supabase
+      .from('orders')
+      .select('shop_id, order_payments(amount, method, paid_at, status, cleared_at)'),
     supabase.from('expenses').select('shop_id, source, amount, status, paid_at'),
   ]);
 
@@ -89,15 +92,25 @@ export default async function MoneyPage() {
           on: day(p.paid_at),
         })),
     ),
+    /*
+      เฉพาะที่ยืนยันแล้ว และลงวันที่ที่เงินเข้าจริง.
+
+      A post-dated cheque in the drawer is not money in the account, and it
+      is not money on the day it was taken in either — this card answers
+      "เงินอยู่ที่ไหนบ้าง", so the movement belongs to `cleared_at`. Falls
+      back to `paid_at` for the rows migrated from before the distinction
+      existed, where the two were the same day by definition.
+    */
     ...(orderRows ?? []).flatMap((o) =>
       (o.order_payments ?? [])
-        .filter((p) => p.method && p.paid_at)
+        .filter((p) => p.method && p.status === 'รับเงินแล้ว')
         .map((p) => ({
           shop: o.shop_id,
           source: p.method,
           amount: Number(p.amount ?? 0),
-          on: day(p.paid_at),
-        })),
+          on: day(p.cleared_at ?? p.paid_at),
+        }))
+        .filter((m) => m.on),
     ),
     ...(expenseRows ?? [])
       .filter((e) => e.source && e.status === 'จ่ายแล้ว' && e.paid_at)

@@ -309,6 +309,16 @@ insert into orders (id, shop_id, customer_id, status, delivered_at) values
   ('WS-LPG-0005', 'lpg', (select id from wholesale_customers where name = 'ร้านเจริญยนต์'), 'ปิดงานแล้ว',
    least(date_trunc('month', current_date)::date + 2, current_date));
 
+-- ขายส่งของ Finnix North: ส่งของก่อน รับเป็นเช็คลงวันที่ล่วงหน้า.
+-- WS-NT-0002 is the row the shop has to act on — its cheque came due last week
+-- and nobody has confirmed the money, which means either it was never banked or
+-- it bounced unrecorded.
+insert into orders (id, shop_id, customer_id, status, sales_by, delivered_at) values
+  ('WS-NT-0001', 'north', (select id from wholesale_customers where name = 'ร้านออโต้สไตล์'), 'ค้างชำระ', 'โหน่ง',
+   current_date - 10),
+  ('WS-NT-0002', 'north', (select id from wholesale_customers where name = 'ร้านดีคาร์แคร์'), 'ค้างชำระ', 'เคน',
+   current_date - 30);
+
 -- WS-CM-0091 and WS-LPG-0005 are the two with requested < list, i.e. the two the
 -- dashboard's "ส่วนลด PO รออนุมัติ" counter looks for (only the first is still
 -- awaiting approval, so that counter reads 1).
@@ -318,15 +328,32 @@ insert into order_items (order_id, name, qty, list_price, requested_price, reaso
   ('WS-CM-0088', 'ฟิล์ม FINNIX CT (ม้วน)', 8, 1500, 1500, ''),
   ('WS-LP-0044', 'TPU กันรอยเกรดพรีเมียม', 6, 900, 900, ''),
   ('WS-PY-0012', 'ฟิล์ม FINNIX CT (ม้วน)', 5, 1500, 1500, ''),
-  ('WS-LPG-0005', 'ลำโพงคู่ JBL Stage', 2, 4500, 4300, 'ซื้อยกคู่');
+  ('WS-LPG-0005', 'ลำโพงคู่ JBL Stage', 2, 4500, 4300, 'ซื้อยกคู่'),
+  ('WS-NT-0001', 'ฟิล์ม 3M CRM (ม้วน)', 20, 1200, 1150, 'ซื้อยกลัง'),
+  ('WS-NT-0002', 'ฟิล์ม FINNIX CT (ม้วน)', 15, 1500, 1450, 'ลูกค้าประจำ');
 
 insert into order_returns (order_id, item_name, qty, reason) values
   ('WS-CM-0088', 'ฟิล์ม 3M CRM (ม้วน)', 2, 'ของชำรุด');
 
-insert into order_payments (order_id, amount, method, paid_at) values
-  ('WS-CM-0088', 5000, 'โอน BBK', date '2026-07-06'),
-  ('WS-LP-0044', 5400, 'เงินสด', date '2026-07-02'),
-  ('WS-LPG-0005', 8600, 'โอน TTB', date '2026-07-10');
+/*
+  การรับชำระ.
+
+  `status` เขียนไว้ชัดเจน ไม่ปล่อยให้เป็นค่าตั้งต้น — ค่าตั้งต้นของคอลัมน์คือ
+  แจ้งแล้ว (0048) ซึ่งแปลว่ายังไม่ใช่เงิน ถ้าไม่เขียน ตัวอย่างทุกใบจะกลายเป็น
+  "รอยืนยัน" ทั้งหมด และยอดค้างรับในตัวอย่างจะไม่ตรงกับความจริงของข้อมูลชุดนี้
+*/
+insert into order_payments (order_id, amount, method, paid_at, uid, status, cleared_at) values
+  ('WS-CM-0088', 5000, 'โอน BBK', date '2026-07-06', 'seed-p-0088', 'รับเงินแล้ว', date '2026-07-06'),
+  ('WS-LP-0044', 5400, 'เงินสด', date '2026-07-02', 'seed-p-0044', 'รับเงินแล้ว', date '2026-07-02'),
+  ('WS-LPG-0005', 8600, 'โอน TTB', date '2026-07-10', 'seed-p-0005', 'รับเงินแล้ว', date '2026-07-10');
+
+-- เช็คลงวันที่ล่วงหน้า สองใบ ใบหนึ่งยังไม่ถึงกำหนด อีกใบเลยกำหนดแล้ว.
+insert into order_payments
+  (order_id, amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date) values
+  ('WS-NT-0001', 23000, 'เช็คธนาคารกสิกร', current_date - 10, 'seed-p-nt1', 'แจ้งแล้ว',
+   '0071284', 'KBANK', current_date + 20),
+  ('WS-NT-0002', 21750, 'เช็คธนาคารกรุงเทพ', current_date - 30, 'seed-p-nt2', 'แจ้งแล้ว',
+   '0038119', 'BBL', current_date - 7);
 
 insert into order_adjustments (order_id, amount, reason, adjusted_at) values
   ('WS-LP-0044', 200, 'ลูกค้าต่อรองราคาหลังส่งของ', date '2026-07-03');
