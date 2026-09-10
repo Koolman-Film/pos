@@ -11,6 +11,7 @@ vi.mock('next/navigation', () => ({
 import { WholesaleDetail } from '@/components/wholesale/WholesaleDetail';
 import { WholesaleList } from '@/components/wholesale/WholesaleList';
 import type { WsOrder } from '@/components/wholesale/types';
+import { todayValue } from '@/lib/domain/now';
 
 // The Step-3 order: a single line, no discount (requestedPrice with no
 // listPrice), no returns/adjustments/payments — priced at 10 * 1000 = 10,000.
@@ -472,5 +473,94 @@ describe('WholesaleDetail — หัวเอกสาร และใบส่�
     );
     await user.click(screen.getByRole('button', { name: /ใบแจ้งหนี้/ }));
     expect(printed().textContent).toContain('99 ถนนทดสอบ');
+  });
+});
+
+/**
+ * ตัวกรองและสรุปรายพนักงานขาย.
+ *
+ * Finnix North sells through โหน่ง and เคน, and the shop needs to see each
+ * person's own POs, sales and outstanding balance without exporting to Excel
+ * first. Branches that do not record a seller must be unaffected.
+ */
+describe('WholesaleList — พนักงานขาย', () => {
+  // Dated today so the default period (this month) keeps them on screen.
+  const today = todayValue();
+  const po = (id: string, salesBy: string, qty: number, paid = 0) =>
+    ({
+      id,
+      shop: 'north',
+      customerId: 1,
+      status: 'ค้างชำระ',
+      createdAt: today,
+      salesBy,
+      items: [{ name: 'ฟิล์ม 3M CRM (ม้วน)', qty, requestedPrice: 1000 }],
+      returns: [],
+      adjustments: [],
+      payments: paid ? [{ amount: paid, method: 'เงินสด', date: today }] : [],
+    }) as unknown as WsOrder;
+
+  const listProps = {
+    customers: [{ id: 1, name: 'ร้านทดสอบ', phone: '', address: '' }],
+    wsStatuses: {},
+    accessibleShops: [{ id: 'north', name: 'Finnix North' }],
+    canDo: () => true,
+  };
+
+  const orders = [
+    po('WS-N-0001', 'โหน่ง', 10, 4000),
+    po('WS-N-0002', 'เคน', 3),
+    po('WS-N-0003', '', 1),
+  ];
+
+  it('สรุปยอดขายและค้างรับรายคน', () => {
+    render(<WholesaleList {...listProps} orders={orders} />);
+    const summary = screen.getByText('สรุปรายพนักงานขาย').closest('div') as HTMLElement;
+
+    // โหน่ง: one PO of 10,000 with 4,000 paid → 6,000 still owed.
+    expect(within(summary).getByText('โหน่ง')).toBeInTheDocument();
+    expect(within(summary).getByText(/6,000\.00/)).toBeInTheDocument();
+    // เคน: 3,000 and nothing paid.
+    expect(within(summary).getByText('เคน')).toBeInTheDocument();
+    // The unassigned PO belongs to nobody and gets no line of its own.
+    expect(within(summary).queryByText('ไม่ระบุ')).not.toBeInTheDocument();
+  });
+
+  it('กรองรายการตามพนักงานขาย และนับ "ไม่ระบุ" แยก', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleList {...listProps} orders={orders} />);
+
+    await user.selectOptions(screen.getByLabelText('กรองตามพนักงานขาย'), 'เคน');
+    // The id shows on the row and again in the print sheet, which the same
+    // filter feeds — assert on presence, not on a single node.
+    expect(screen.getAllByText(/WS-N-0002/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/WS-N-0001/)).toHaveLength(0);
+
+    // ไม่ระบุ is a choice of its own — "which of mine have no seller".
+    await user.selectOptions(screen.getByLabelText('กรองตามพนักงานขาย'), 'unassigned');
+    expect(screen.getAllByText(/WS-N-0003/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/WS-N-0002/)).toHaveLength(0);
+  });
+
+  it('สรุปนับเฉพาะรายการที่แสดงอยู่ ไม่ใช่ทั้งหมด', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleList {...listProps} orders={orders} />);
+
+    await user.selectOptions(screen.getByLabelText('กรองตามพนักงานขาย'), 'เคน');
+    const summary = screen.getByText('สรุปรายพนักงานขาย').closest('div') as HTMLElement;
+    // The summary sits above the rows and has to agree with them.
+    expect(within(summary).queryByText('โหน่ง')).not.toBeInTheDocument();
+    expect(within(summary).getByText('เคน')).toBeInTheDocument();
+  });
+
+  it('ไม่แสดงตัวกรองในสาขาที่ไม่ได้บันทึกพนักงานขาย', () => {
+    const anon = [
+      { ...orders[0], salesBy: '' },
+      { ...orders[1], salesBy: '' },
+    ].map((o) => o as unknown as WsOrder);
+    render(<WholesaleList {...listProps} orders={anon} />);
+    // Every PO unassigned means there is nobody to filter BY; the "ไม่ระบุ"
+    // choice alone would filter to the whole list.
+    expect(screen.queryByText('สรุปรายพนักงานขาย')).not.toBeInTheDocument();
   });
 });

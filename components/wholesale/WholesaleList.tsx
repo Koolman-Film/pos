@@ -84,12 +84,18 @@ export function WholesaleList({
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());
   const [productFilter, setProductFilter] = useState('all');
+  const [saleFilter, setSaleFilter] = useState('all');
 
   let visible = filter === 'all' ? list : list.filter((o) => o.status === filter);
   if (custFilter !== 'all') visible = visible.filter((o) => o.customerId === Number(custFilter));
   if (shopFilter !== 'all') visible = visible.filter((o) => o.shop === shopFilter);
   if (productFilter !== 'all')
     visible = visible.filter((o) => o.items.some((it) => it.name === productFilter));
+  // `unassigned` is its own choice, not a gap in the list: POs raised before
+  // the field existed have no seller, and "which of mine are missing a name"
+  // is a question somebody has to be able to ask.
+  if (saleFilter === 'unassigned') visible = visible.filter((o) => !o.salesBy);
+  else if (saleFilter !== 'all') visible = visible.filter((o) => o.salesBy === saleFilter);
   // The period bar was rendered but never consulted, so every PO showed
   // regardless of the selected window. POs are dated by `orders.created_at`.
   visible = visible.filter((o) =>
@@ -104,6 +110,38 @@ export function WholesaleList({
   const productOptions = [
     ...new Set(productScoped.flatMap((o) => o.items.map((it) => it.name)).filter(Boolean)),
   ];
+  /*
+    พนักงานขายที่เลือกได้ และสรุปรายคน.
+
+    Scoped to the branch in view, because two branches may each have a person
+    of the same name and they are not the same person. Built from the POs on
+    screen rather than from the staff list, so a seller who has left still
+    appears against the POs they sold — their history did not leave with them.
+  */
+  const branchScoped = list.filter((o) => shopFilter === 'all' || o.shop === shopFilter);
+  const sellerNames = [
+    ...new Set(branchScoped.map((o) => o.salesBy).filter((n): n is string => !!n)),
+  ].sort((a, b) => a.localeCompare(b, 'th'));
+  const hasUnassigned = branchScoped.some((o) => !o.salesBy);
+
+  /*
+    Summed over what is ON SCREEN — the same period, branch and customer the
+    reader is looking at. A per-person total computed over everything would
+    disagree with the rows underneath it, and the rows are what people check.
+  */
+  const sellerTotals = sellerNames
+    .map((name) => {
+      const mine = visible.filter((o) => o.salesBy === name);
+      return {
+        name,
+        count: mine.length,
+        revenue: mine.reduce((n, o) => n + orderTotal(o), 0),
+        due: mine.reduce((n, o) => n + orderTotal(o) - orderPaid(o), 0),
+      };
+    })
+    .filter((t) => t.count > 0)
+    .sort((a, b) => b.revenue - a.revenue);
+
   const groupCustIds = [...new Set(visible.map((o) => o.customerId))];
   const exportGroups = groupCustIds
     .map((id) => ({ customerId: id, orders: visible.filter((o) => o.customerId === id) }))
@@ -123,6 +161,9 @@ export function WholesaleList({
         const data = g.orders.map((o) => ({
           'เลขที่ PO': o.id,
           สาขา: shopName(o.shop, accessibleShops),
+          // Exported even when blank, so a column that is empty for one branch
+          // still lines up with the same column for another.
+          พนักงานขาย: o.salesBy || '',
           สถานะ: o.status,
           ยอดสุทธิ: orderTotal(o),
           ชำระแล้ว: orderPaid(o),
@@ -219,6 +260,24 @@ export function WholesaleList({
                 </option>
               ))}
             </select>
+            {/* Only where somebody has been recorded — a branch that sells
+                through whoever is on the counter gets no empty control. */}
+            {(sellerNames.length > 0 || hasUnassigned) && (
+              <select
+                value={saleFilter}
+                aria-label="กรองตามพนักงานขาย"
+                onChange={(e) => setSaleFilter(e.target.value)}
+                className="field text-sm px-3.5 py-2"
+              >
+                <option value="all">ทุกพนักงานขาย</option>
+                {sellerNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+                {hasUnassigned && <option value="unassigned">ไม่ระบุ</option>}
+              </select>
+            )}
           </div>
           {can('wholesale.export') && (
             <div className="flex gap-2">
@@ -258,6 +317,42 @@ export function WholesaleList({
             </button>
           ))}
         </div>
+        {/*
+          สรุปรายพนักงานขาย.
+
+          Above the rows and summed over exactly what is below them, so the two
+          always agree. Sorted by ยอดขาย because "who is ahead" is the question
+          it exists to answer.
+        */}
+        {sellerTotals.length > 0 && (
+          <div className="card p-4 mb-4">
+            <p className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-soft)' }}>
+              <i className="fa-solid fa-user-tie mr-1.5"></i>สรุปรายพนักงานขาย
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {sellerTotals.map((t) => (
+                <div key={t.name} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="font-medium">
+                    {t.name}
+                    <span className="text-xs ml-1.5" style={{ color: 'var(--ink-faint)' }}>
+                      {t.count} PO
+                    </span>
+                  </span>
+                  <span className="flex items-baseline gap-3 flex-shrink-0">
+                    <span className="font-semibold">{fmt(t.revenue)}</span>
+                    {/* ค้างรับ beside the sales figure, because a big number
+                        with a big balance behind it is a different result. */}
+                    {t.due > 0 && (
+                      <span className="text-xs" style={{ color: '#B23A48' }}>
+                        ค้างรับ {fmt(t.due)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex flex-col gap-2.5">
           {(shopFilter === 'all'
             ? accessibleShops
@@ -299,6 +394,15 @@ export function WholesaleList({
                               style={{ color: 'var(--ink-soft)' }}
                             >
                               {o.id}
+                              {/* Only where the branch records sellers at all,
+                                  so branches that do not are unchanged. */}
+                              {(sellerNames.length > 0 || hasUnassigned) && (
+                                <span style={{ color: 'var(--ink-faint)' }}>
+                                  {' · '}
+                                  <i className="fa-solid fa-user-tie mr-1"></i>
+                                  {o.salesBy || 'ไม่ระบุ'}
+                                </span>
+                              )}
                             </p>
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
