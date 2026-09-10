@@ -31,6 +31,21 @@ npx supabase link --project-ref <production-ref>
 npx supabase db push                     # applies 0012 … 0037 only
 ```
 
+### ขึ้นระบบจริง: ไฟล์เดียวจบ
+
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 30 ในตารางข้างล่าง
+(`release-0019` … `release-0048` และ `repair-categories-and-services.sql`)
+ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
+
+ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
+ไม่มี error และไม่มีอะไรเปลี่ยน ดังนั้นถ้าเคยรันบางไฟล์ไปแล้ว รันทับได้เลย
+
+**ไม่ได้รวมไว้สามอย่าง** — `release-0012-0018.sql` (ชุดแรก ขึ้นไปแล้ว),
+`release-0030.sql` (ดัชนี ที่ให้รันแยกก่อนตั้งแต่แรก) และ `storage-policies.sql`
+ซึ่งต้องใช้สิทธิ์เจ้าของ `storage.objects` จึงรันรวมกับไฟล์อื่นไม่ได้
+
+ไฟล์นี้สร้างจากไฟล์ต้นทางโดยตรง ไม่ได้แก้เนื้อใน ถ้าต้นทางเปลี่ยนให้สร้างใหม่
+
 ### No CLI? Paste the files instead
 
 In this order, from the dashboard → SQL Editor. Each is guarded so that running

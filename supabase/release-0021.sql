@@ -39,12 +39,29 @@ comment on column service_visits.film_product is
 
 -- Carry forward whatever the three old columns held, so a visit recorded before
 -- this migration does not print an empty ฟิล์มที่ใช้ line.
-update service_visits
-   set film_product = trim(
-         concat_ws(' ', nullif(film_type, ''), nullif(film_thickness, ''), nullif(film_colour_code, ''))
-       )
- where film_product = ''
-   and (film_type <> '' or film_thickness <> '' or film_colour_code <> '');
+--
+-- Guarded, and executed dynamically, because the three columns are DROPPED ten
+-- lines below. On a second run they are already gone, and a plain `update`
+-- naming them fails to PARSE — which aborts the whole script, not just this
+-- statement. That is what makes the ceremony worth it: this file has to be safe
+-- to paste into a database that has already had it pasted once.
+do $backfill$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'pos' and table_name = 'service_visits' and column_name = 'film_type'
+  ) then
+    execute $sql$
+      update service_visits
+         set film_product = trim(
+               concat_ws(' ', nullif(film_type, ''), nullif(film_thickness, ''), nullif(film_colour_code, ''))
+             )
+       where film_product = ''
+         and (film_type <> '' or film_thickness <> '' or film_colour_code <> '')
+    $sql$;
+  end if;
+end
+$backfill$;
 
 alter table service_visits
   drop column if exists film_type,
