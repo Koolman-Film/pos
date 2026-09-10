@@ -25,7 +25,12 @@ test('sales user can create a ticket and see it in the list', async ({ page }) =
 
   await page.click('button:has-text("บันทึกใบงาน")');
 
-  // The save action redirects to the list on success.
-  await expect(page).toHaveURL(/\/tickets(\?|$)/);
+  // A NEW ticket is the one save that still navigates: /tickets/new has to become
+  // the real job number, or the next save would create a second ticket. Saving an
+  // existing ticket stays put (components/tickets/TicketDetail.tsx).
+  await expect(page).toHaveURL(/\/tickets\/JT-[A-Z]+-\d+$/);
+
+  // …and it reached the list, which is the thing this spec is actually about.
+  await page.goto('/tickets');
   await expect(page.getByText(plate).first()).toBeVisible();
 });

@@ -62,8 +62,17 @@ test.beforeAll(async () => {
   }
 });
 
-/** Invariants of the seed that the screenshots depend on. */
-const SEED_TICKET_COUNT = 5;
+/**
+ * Invariants of the seed that the screenshots depend on.
+ *
+ * These track supabase/seed.sql BY HAND, so adding a row there means changing
+ * the number here. That is exactly how this drifted: the branch-comparison work
+ * added a sixth ticket (JT-CM-00218) to the seed and left this at 5, which made
+ * the whole visual suite abort on its own precondition. Nobody noticed for
+ * twenty-odd commits because this suite is a local gate and not part of CI
+ * (see .github/workflows/ci.yml for why). If you add a seed ticket, update this.
+ */
+const SEED_TICKET_COUNT = 6;
 const SEED_FIXTURE_STOCK_QTY = 15;
 
 /** Selectors whose rendered content changes with the clock or the RNG. */

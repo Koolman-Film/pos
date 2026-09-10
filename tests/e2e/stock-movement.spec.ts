@@ -12,6 +12,11 @@ import { dbAdmin, login } from './helpers';
  * the technician's number survives serialize → server action → database, moves the
  * right stock row, and writes the audit trail.
  *
+ * Saving does NOT navigate: the ticket stays open and a "บันทึกแล้ว" toast
+ * confirms the write (components/ui/SavedToast.tsx). So there is no URL to wait
+ * on here — `expect.poll(stockQty)` polls the database directly, which is the
+ * stronger barrier anyway: it waits for the effect under test, not for a route.
+ *
  * JT-CM-00214 is seeded with a ฟิล์มกรองแสง item whose positions use
  * "ฟิล์ม 3M CRM 60%" and "ฟิล์ม FINNIX CT 40%", both of which are stocked at cm.
  */
@@ -77,7 +82,6 @@ test('recording actual usage on a ticket decrements stock and writes an audit ro
   await qtyInput.fill('2');
 
   await page.click('button:has-text("บันทึกใบงาน")');
-  await expect(page).toHaveURL(/\/tickets(\?|$)/);
 
   // Stock went down by exactly the recorded amount.
   await expect.poll(stockQty, { timeout: 10_000 }).toBe(13);
@@ -105,7 +109,6 @@ test('the recorded quantity survives a reload, and re-saving does not double-cou
   await page.goto(`/tickets/${TICKET}`);
   await page.getByLabel(`จำนวนที่ใช้จริง ${PRODUCT}`).fill('3');
   await page.click('button:has-text("บันทึกใบงาน")');
-  await expect(page).toHaveURL(/\/tickets(\?|$)/);
   await expect.poll(stockQty, { timeout: 10_000 }).toBe(12);
 
   // Reopen: the number must come back from the database, not reset to blank.
@@ -115,7 +118,6 @@ test('the recorded quantity survives a reload, and re-saving does not double-cou
   // Saving again with the same number is a no-op for stock — this is the test that
   // fails if the save ever stops diffing against what is stored.
   await page.click('button:has-text("บันทึกใบงาน")');
-  await expect(page).toHaveURL(/\/tickets(\?|$)/);
   await page.waitForTimeout(1500);
   expect(await stockQty()).toBe(12);
   expect(await movementLog()).toHaveLength(1);

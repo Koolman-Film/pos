@@ -15,6 +15,9 @@ import { login, logout } from './helpers';
  * off → on → off cycle that leaves the seed as it found it.
  */
 const TOGGLE = 'หัวหน้าช่าง – stock: แก้ไข/ลบสินค้า';
+// exact: true matters here. The seed also stocks SKU-FLM-3M60-RL, whose button
+// label CONTAINS this one, and Playwright matches accessible names by substring
+// by default — without it the locator resolves to two buttons and trips strict mode.
 const EDIT_BUTTON = 'แก้ไขสินค้า SKU-FLM-3M60';
 
 async function setTechEditDelete(page: import('@playwright/test').Page, on: boolean) {
@@ -48,7 +51,7 @@ test('flipping stock.editDelete for the tech role adds and removes the control',
   // --- Baseline: tech cannot edit stock ---
   await login(page, 'tech');
   await page.goto('/stock');
-  await expect(page.getByRole('button', { name: EDIT_BUTTON })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: EDIT_BUTTON, exact: true })).toHaveCount(0);
 
   // --- Admin grants it ---
   await logout(page);
@@ -59,7 +62,7 @@ test('flipping stock.editDelete for the tech role adds and removes the control',
   await logout(page);
   await login(page, 'tech');
   await page.goto('/stock');
-  await expect(page.getByRole('button', { name: EDIT_BUTTON })).toBeVisible();
+  await expect(page.getByRole('button', { name: EDIT_BUTTON, exact: true })).toBeVisible();
 
   // --- Admin revokes it, restoring the seeded state ---
   await logout(page);
@@ -70,5 +73,5 @@ test('flipping stock.editDelete for the tech role adds and removes the control',
   await logout(page);
   await login(page, 'tech');
   await page.goto('/stock');
-  await expect(page.getByRole('button', { name: EDIT_BUTTON })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: EDIT_BUTTON, exact: true })).toHaveCount(0);
 });
