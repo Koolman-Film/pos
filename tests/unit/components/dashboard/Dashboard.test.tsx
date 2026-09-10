@@ -463,3 +463,37 @@ describe('Dashboard — ยอดขายแยกตามชนิดสิ�
     expect(screen.getByText('ยังไม่มียอดขายในช่วงเวลานี้')).toBeInTheDocument();
   });
 });
+
+/**
+ * ปลีก / ขายส่ง ในการ์ดยอดขาย.
+ *
+ * Wholesale takings were in no dashboard figure at all until now, so folding
+ * them into ยอดขายรวม silently would read as a branch's takings jumping for no
+ * reason. The line says where the jump came from.
+ */
+describe('Dashboard — ยอดขายรวมแยกช่องทาง', () => {
+  const props = {
+    hasDashboardWidget: () => true,
+    revenue: 68_600,
+    totalExpenses: 0,
+    moneySources: { branches: [], total: 0 },
+    arItems: [],
+    apItems: [],
+    revenueByCategory: [],
+    expenseByCategory: [],
+    trend: { labels: [], revenue: [], expense: [], profit: [] },
+  } as unknown as Parameters<typeof Dashboard>[0];
+
+  it('บอกว่าส่วนไหนเป็นปลีก ส่วนไหนเป็นขายส่ง', () => {
+    render(<Dashboard {...props} retailRevenue={33_000} wholesaleRevenue={35_600} />);
+    const card = screen.getByText('ยอดขายรวม (บาท)').parentElement!;
+    expect(card).toHaveTextContent('68,600.00');
+    expect(card).toHaveTextContent('ปลีก 33,000.00');
+    expect(card).toHaveTextContent('ขายส่ง 35,600.00');
+  });
+
+  it('ไม่ขึ้นบรรทัดแยกช่องทาง ในสาขาที่ไม่ได้ขายส่ง', () => {
+    render(<Dashboard {...props} retailRevenue={68_600} wholesaleRevenue={0} />);
+    expect(screen.queryByText(/ขายส่ง /)).not.toBeInTheDocument();
+  });
+});

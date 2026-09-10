@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { itemNetPrice } from '@/lib/domain/tickets';
+import { wholesaleRevenueLines, type WholesaleRevenueOrder } from '@/lib/domain/wholesaleRevenue';
 
 /**
  * รายการการขาย — one row per product line sold, which is what the shop asked
@@ -243,70 +244,65 @@ async function wholesaleLines(): Promise<SaleLine[]> {
     );
   }
 
-  const lines: SaleLine[] = [];
-  for (const o of orderRows ?? []) {
-    const soldAt = (o.delivered_at ?? '').slice(0, 10);
-    const customer = customerName.get(o.customer_id ?? -1) ?? 'ไม่ระบุลูกค้า';
-    // Like retail, the cost rides on the first line: the ledger records
-    // consumption against the PO, not against a line of it.
-    let costLeft = Math.max(0, -(costByOrder.get(o.id) ?? 0));
+  /*
+    วันไหนนับเป็นยอดขาย และเท่าไหร่ — อยู่ใน `lib/domain/wholesaleRevenue.ts`.
 
-    const base = {
-      ticketId: o.id,
-      shop: o.shop_id,
-      customer,
+    The dashboard counts the same takings, and two screens quoting different
+    numbers for the same month is the one failure neither of them recovers
+    from. So the rule lives in one place and this function only decorates its
+    output with the things a report needs and a total does not: who bought,
+    which ชนิดสินค้า it falls under, and what it cost.
+  */
+  const orders: WholesaleRevenueOrder[] = (orderRows ?? []).map((o) => ({
+    id: o.id,
+    shop: o.shop_id,
+    deliveredAt: o.delivered_at,
+    items: (o.order_items ?? []).map((i) => ({
+      name: i.name,
+      qty: Number(i.qty || 0),
+      requestedPrice: Number(i.requested_price || 0),
+    })),
+    returns: (o.order_returns ?? []).map((r) => ({
+      item: r.item_name,
+      qty: Number(r.qty || 0),
+      date: r.returned_at,
+    })),
+    adjustments: (o.order_adjustments ?? []).map((a) => ({
+      amount: Number(a.amount || 0),
+      reason: a.reason ?? '',
+      date: a.adjusted_at,
+    })),
+  }));
+
+  const orderById = new Map((orderRows ?? []).map((o) => [o.id, o]));
+  // The ledger records consumption against the PO, not against a line of it,
+  // so the cost rides on that PO’s first line — the same rule retail uses.
+  const costLeft = new Map<string, number>();
+  for (const o of orderRows ?? []) {
+    costLeft.set(o.id, Math.max(0, -(costByOrder.get(o.id) ?? 0)));
+  }
+
+  return wholesaleRevenueLines(orders).map((l) => {
+    const o = orderById.get(l.orderId);
+    const isSale = l.kind === 'ขาย';
+    const cost = isSale ? (costLeft.get(l.orderId) ?? 0) : 0;
+    if (isSale) costLeft.set(l.orderId, 0);
+    return {
+      ticketId: l.orderId,
+      shop: l.shop,
+      soldAt: l.on,
+      customer: customerName.get(o?.customer_id ?? -1) ?? 'ไม่ระบุลูกค้า',
       // A wholesale sale has no vehicle. The column carries the rep instead —
       // it is the 'who' the shop reads this report by.
-      plate: o.sales_by ?? '',
+      plate: o?.sales_by ?? '',
+      category: l.kind === 'ปรับราคา' ? 'ปรับราคา' : (categoryOf.get(l.item) ?? 'ไม่ระบุชนิด'),
+      product: l.kind === 'คืนสินค้า' ? `คืนสินค้า: ${l.item}` : l.item,
+      amount: l.amount,
+      cost,
       held: false,
       taxInvoiceNo: '',
       documents: [],
       channel: 'ส่ง' as const,
     };
-
-    for (const it of o.order_items ?? []) {
-      if (!it.name) continue;
-      lines.push({
-        ...base,
-        soldAt,
-        category: categoryOf.get(it.name) ?? 'ไม่ระบุชนิด',
-        product: it.name,
-        amount: Number(it.qty || 0) * Number(it.requested_price || 0),
-        cost: costLeft,
-      });
-      costLeft = 0;
-    }
-
-    // Priced off the line it came back from, exactly as `orderTotal` does.
-    const priceOf = (name: string) =>
-      Number((o.order_items ?? []).find((i) => i.name === name)?.requested_price || 0);
-    for (const r of o.order_returns ?? []) {
-      const amount = Number(r.qty || 0) * priceOf(r.item_name);
-      if (!amount) continue;
-      lines.push({
-        ...base,
-        soldAt: (r.returned_at ?? soldAt).slice(0, 10),
-        category: categoryOf.get(r.item_name) ?? 'ไม่ระบุชนิด',
-        product: `คืนสินค้า: ${r.item_name}`,
-        amount: -amount,
-        cost: 0,
-      });
-    }
-
-    for (const a of o.order_adjustments ?? []) {
-      const amount = Number(a.amount || 0);
-      if (!amount) continue;
-      lines.push({
-        ...base,
-        soldAt: (a.adjusted_at ?? soldAt).slice(0, 10),
-        category: 'ปรับราคา',
-        product: a.reason || 'ปรับราคาหลังส่งของ',
-        // Positive in the table means the bill went DOWN, so it subtracts.
-        amount: -amount,
-        cost: 0,
-      });
-    }
-  }
-
-  return lines;
+  });
 }

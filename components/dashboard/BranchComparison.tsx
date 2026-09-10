@@ -24,6 +24,8 @@ import type { BranchComparison as Data, BranchRow } from './branchTotals';
 /** Which column the table is ranked by. */
 type SortKey =
   | 'revenue'
+  | 'retail'
+  | 'wholesale'
   | 'expenses'
   | 'profit'
   | 'jobs'
@@ -32,8 +34,37 @@ type SortKey =
   | 'netDue'
   | 'heldForFinnix';
 
-const COLUMNS: { key: SortKey; label: string; hint: string; money: boolean }[] = [
-  { key: 'revenue', label: 'ยอดขาย', hint: 'งานที่ส่งมอบ + ประกันที่ขายในช่วงนี้', money: true },
+/**
+ * `channelOnly` columns appear only where some branch actually sells that way.
+ *
+ * Most branches sell retail only, and for them a ขายส่ง column of zeros would
+ * be two more columns to scroll past on a phone saying nothing. Where a
+ * wholesale desk does exist — Finnix North, Central Audio — the split is the
+ * first thing management asks about, because the two halves behave nothing
+ * alike: one is paid at the counter, the other on credit weeks later.
+ */
+const COLUMNS: {
+  key: SortKey;
+  label: string;
+  hint: string;
+  money: boolean;
+  channelOnly?: boolean;
+}[] = [
+  { key: 'revenue', label: 'ยอดขาย', hint: 'ขายปลีก + ขายส่ง ในช่วงนี้', money: true },
+  {
+    key: 'retail',
+    label: 'ปลีก',
+    hint: 'งานที่ส่งมอบ + ประกันที่ขายในช่วงนี้ (Book งาน)',
+    money: true,
+    channelOnly: true,
+  },
+  {
+    key: 'wholesale',
+    label: 'ส่ง',
+    hint: 'ขายส่งที่ส่งของแล้วในช่วงนี้ หักคืนสินค้าและปรับราคาตามวันที่ของมันเอง',
+    money: true,
+    channelOnly: true,
+  },
   {
     key: 'expenses',
     label: 'ค่าใช้จ่าย',
@@ -76,6 +107,8 @@ const COLUMNS: { key: SortKey; label: string; hint: string; money: boolean }[] =
 export function BranchComparison({ data, caption }: { data: Data; caption?: string }) {
   const [sortKey, setSortKey] = useState<SortKey>('revenue');
   const rows = [...data.rows].sort((a, b) => b[sortKey] - a[sortKey]);
+  const hasWholesale = data.rows.some((r) => r.wholesale !== 0);
+  const columns = COLUMNS.filter((c) => !c.channelOnly || hasWholesale);
 
   const cell = (r: BranchRow, key: SortKey, money: boolean) => {
     const value = r[key];
@@ -115,7 +148,16 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
       {/* Wide on purpose: six columns of Thai baht do not fit a phone, so the
           table scrolls inside its own box rather than the whole page sliding. */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 640 }}>
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            fontSize: 13,
+            // Two more columns need two more columns of room; squeezing them
+            // into the same width is how baht figures start wrapping.
+            minWidth: hasWholesale ? 800 : 640,
+          }}
+        >
           <thead>
             <tr style={{ borderBottom: '1.5px solid var(--line-strong)' }}>
               <th
@@ -129,7 +171,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
               >
                 สาขา
               </th>
-              {COLUMNS.map((c) => (
+              {columns.map((c) => (
                 <th key={c.key} style={{ padding: '0 12px 8px' }}>
                   <button
                     onClick={() => setSortKey(c.key)}
@@ -165,13 +207,13 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
                   </span>
                   <span className="font-medium">{shortShopName(r.name)}</span>
                 </td>
-                {COLUMNS.map((c) => cell(r, c.key, c.money))}
+                {columns.map((c) => cell(r, c.key, c.money))}
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={COLUMNS.length + 1}
+                  colSpan={columns.length + 1}
                   className="text-sm"
                   style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--ink-faint)' }}
                 >
@@ -186,7 +228,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
                 <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
                   รวมทุกสาขา
                 </td>
-                {COLUMNS.map((c) => (
+                {columns.map((c) => (
                   <td
                     key={c.key}
                     style={{

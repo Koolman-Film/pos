@@ -17,8 +17,18 @@
 export type BranchRow = {
   shop: string;
   name: string;
-  /** ยอดขาย in the period — delivered work plus ประกัน sold, เงินรอคืน excluded. */
+  /** ยอดขาย in the period — ปลีก + ส่ง, เงินรอคืน excluded. */
   revenue: number;
+  /** ขายปลีกผ่าน Book งาน รวมประกัน. */
+  retail: number;
+  /**
+   * ขายส่งผ่านโมดูลขายส่ง — นับตามวันส่งของ (0045).
+   *
+   * Beside ยอดขาย rather than folded silently into it: a branch that runs a
+   * wholesale desk and one that does not are different businesses, and the
+   * table is read to compare them.
+   */
+  wholesale: number;
   /** ค่าใช้จ่าย the branch paid for ITSELF in the period. */
   expenses: number;
   /** revenue − expenses. Not a margin: cost of goods is not in `expenses`. */
@@ -83,6 +93,8 @@ export function buildBranchComparison(shops: Shop[], figures: BranchFigures): Br
     rows,
     total: {
       revenue: sum((r) => r.revenue),
+      retail: sum((r) => r.retail),
+      wholesale: sum((r) => r.wholesale),
       expenses: sum((r) => r.expenses),
       profit: sum((r) => r.profit),
       jobs: sum((r) => r.jobs),

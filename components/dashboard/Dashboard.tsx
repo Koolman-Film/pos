@@ -143,6 +143,15 @@ export type PendingApprovals = { discount: number; badDebt: number };
 export type DashboardProps = {
   hasDashboardWidget: (key: string) => boolean;
   revenue: number;
+  /**
+   * ยอดขายแยกช่องทาง — ปลีกผ่าน Book งาน, ส่งผ่านโมดูลขายส่ง.
+   *
+   * Wholesale used to be in no figure on this screen at all, so folding it
+   * into ยอดขายรวม without saying so would read as takings jumping for no
+   * reason. The split line appears only where the branch actually sells both.
+   */
+  retailRevenue?: number;
+  wholesaleRevenue?: number;
   totalExpenses: number;
   /**
    * แหล่งเงินแยกตามสาขา. Movement in the period, never a balance — the card
@@ -191,6 +200,8 @@ export type DashboardProps = {
 export function Dashboard({
   hasDashboardWidget,
   revenue,
+  retailRevenue = 0,
+  wholesaleRevenue = 0,
   totalExpenses,
   moneySources = { branches: [], total: 0 },
   arItems,
@@ -250,6 +261,15 @@ export function Dashboard({
             <p className="text-sm mt-0.5" style={{ color: 'var(--ink-soft)' }}>
               ยอดขายรวม (บาท)
             </p>
+            {/* Only where both channels earned something: a branch that sells
+                one way gets a line that never changes. */}
+            {wholesaleRevenue !== 0 && (
+              <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                ปลีก {fmt(retailRevenue)}
+                <span style={{ color: 'var(--ink-faint)' }}> · </span>
+                ขายส่ง {fmt(wholesaleRevenue)}
+              </p>
+            )}
             <div className="mt-4 flex flex-col gap-2.5">
               {revenueByCategory.length === 0 && (
                 <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>

@@ -22,6 +22,8 @@ const shops = [
 const figures: Record<string, ReturnType<Parameters<typeof buildBranchComparison>[1]>> = {
   cm: {
     revenue: 120_000,
+    retail: 120_000,
+    wholesale: 0,
     expenses: 40_000,
     profit: 80_000,
     jobs: 12,
@@ -31,6 +33,8 @@ const figures: Record<string, ReturnType<Parameters<typeof buildBranchComparison
   },
   lp: {
     revenue: 45_000,
+    retail: 45_000,
+    wholesale: 0,
     expenses: 60_000,
     profit: -15_000,
     jobs: 4,
@@ -40,6 +44,8 @@ const figures: Record<string, ReturnType<Parameters<typeof buildBranchComparison
   },
   py: {
     revenue: 80_000,
+    retail: 80_000,
+    wholesale: 0,
     expenses: 20_000,
     profit: 60_000,
     jobs: 9,
@@ -113,5 +119,43 @@ describe('BranchComparison card', () => {
   it('says so rather than rendering an empty table when there are no branches', () => {
     render(<BranchComparison data={buildBranchComparison([], () => figures.cm)} />);
     expect(screen.getByText('ไม่มีสาขาให้เปรียบเทียบ')).toBeInTheDocument();
+  });
+});
+
+/**
+ * ปลีก / ส่ง ในตารางเปรียบเทียบสาขา.
+ *
+ * Wholesale used to be in no dashboard figure at all. Folding it into ยอดขาย
+ * without a column beside it would read as a branch's takings jumping for no
+ * reason — and the two halves behave nothing alike: one is paid at the counter,
+ * the other on credit weeks later.
+ */
+describe('BranchComparison — ช่องทางการขาย', () => {
+  const withWholesale = buildBranchComparison(shops, (id) =>
+    id === 'cm'
+      ? { ...figures.cm, revenue: 150_000, retail: 120_000, wholesale: 30_000 }
+      : figures[id],
+  );
+
+  it('ไม่แสดงคอลัมน์ปลีก/ส่ง เมื่อไม่มีสาขาไหนขายส่ง', () => {
+    // Most branches sell retail only. Two columns of zeros would be two more
+    // columns to scroll past on a phone, saying nothing.
+    render(<BranchComparison data={data} />);
+    expect(screen.queryByRole('button', { name: /จัดอันดับตาม ส่ง/ })).not.toBeInTheDocument();
+  });
+
+  it('แสดงคอลัมน์ปลีกและส่ง เมื่อมีสาขาที่ขายส่ง', () => {
+    render(<BranchComparison data={withWholesale} />);
+    expect(screen.getByRole('button', { name: /จัดอันดับตาม ปลีก/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /จัดอันดับตาม ส่ง/ })).toBeInTheDocument();
+    const table = screen.getByRole('table');
+    // ยอดขาย is the two halves added up, and both halves are on the row.
+    expect(within(table).getAllByText('150,000.00').length).toBeGreaterThan(0);
+    expect(within(table).getAllByText('30,000.00').length).toBeGreaterThan(0);
+  });
+
+  it('รวมทุกสาขา บวกยอดขายส่งของทุกสาขาเข้าด้วยกัน', () => {
+    expect(withWholesale.total.wholesale).toBe(30_000);
+    expect(withWholesale.total.revenue).toBe(275_000);
   });
 });

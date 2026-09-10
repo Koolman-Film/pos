@@ -5,6 +5,7 @@ import { daysAgoValue } from '@/lib/domain/now';
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { itemNetPrice, ticketTotal } from '@/lib/domain/tickets';
+import { wholesaleRevenueLines } from '@/lib/domain/wholesaleRevenue';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
 import { Dashboard } from '@/components/dashboard/Dashboard';
@@ -93,7 +94,7 @@ export default async function DashboardPage({
     supabase
       .from('orders')
       .select(
-        'id, shop_id, customer_id, status, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty), order_adjustments(amount), order_payments(amount, method, paid_at, status, cleared_at)',
+        'id, shop_id, customer_id, status, delivered_at, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at), order_payments(amount, method, paid_at, status, cleared_at)',
       )
       // Deleted POs (migration 0040) are out of the wholesale figures here for
       // the same reason deleted tickets are out of the ticket ones above.
@@ -129,7 +130,9 @@ export default async function DashboardPage({
       // calendar month nobody is looking at.
       .gte('received_at', daysAgoValue(365))
       .order('visit_no', { ascending: false }),
-    supabase.from('stock').select('category, shop_id, qty'),
+    //  is here for the ขายส่ง breakdown: a PO stores the product NAME,
+    // and the stock register is where that name has a ชนิดสินค้า.
+    supabase.from('stock').select('name, category, shop_id, qty'),
     supabase.from('shops').select('id, name, sort_order').order('sort_order'),
     supabase
       .from('statuses')
@@ -229,14 +232,25 @@ export default async function DashboardPage({
     shop: o.shop_id,
     customerId: num(o.customer_id),
     status: o.status,
+    // วันส่งของ — the day a wholesale sale is earned (0045). Null means the
+    // goods have not gone out, and nothing has been earned yet.
+    deliveredAt: o.delivered_at,
     items: (o.order_items ?? []).map((i) => ({
       name: i.name,
       qty: num(i.qty),
       listPrice: num(i.list_price),
       requestedPrice: num(i.requested_price),
     })),
-    returns: (o.order_returns ?? []).map((r) => ({ item: r.item_name, qty: num(r.qty) })),
-    adjustments: (o.order_adjustments ?? []).map((a) => ({ amount: num(a.amount) })),
+    returns: (o.order_returns ?? []).map((r) => ({
+      item: r.item_name,
+      qty: num(r.qty),
+      date: r.returned_at,
+    })),
+    adjustments: (o.order_adjustments ?? []).map((a) => ({
+      amount: num(a.amount),
+      reason: a.reason ?? '',
+      date: a.adjusted_at,
+    })),
     payments: (o.order_payments ?? []).map((p) => ({
       amount: num(p.amount),
       method: p.method ?? '',
@@ -304,12 +318,35 @@ export default async function DashboardPage({
     .filter((p) => inPeriod(p.sold_at ? new Date(`${p.sold_at}T00:00:00`) : null))
     .reduce((s, p) => s + num(p.price), 0);
 
+  /*
+    ยอดขายส่ง.
+
+    Until now wholesale appeared in NO figure on this screen, so a branch like
+    Central Audio — which sells retail through Book งาน and wholesale through
+    the ขายส่ง module — read its own dashboard as if half its business did not
+    exist. The rule for which day a PO counts on lives in
+    `lib/domain/wholesaleRevenue.ts`, shared with โมดูลรายได้, because the two
+    screens quoting different takings for the same month is the one failure
+    neither of them recovers from.
+  */
+  const wholesaleLines = wholesaleRevenueLines(orders);
+  const wholesaleRevenueIn = (shop: string | null) =>
+    wholesaleLines
+      .filter(
+        (l) =>
+          (shop === null ? inShop(l.shop) : l.shop === shop) &&
+          inPeriod(new Date(`${l.on}T00:00:00`)),
+      )
+      .reduce((n, l) => n + l.amount, 0);
+
   // ยอดขาย counts only what the branch earned. เงินรอคืน Finnix is collected
   // and recorded, but it belongs to another shop and is reported separately in
   // โมดูลรายได้ — never folded into this figure.
-  const revenue =
+  const retailRevenue =
     visibleTickets.filter((t) => !t.held).reduce((s, t) => s + ticketTotal(t), 0) +
     insuranceRevenue;
+  const wholesaleRevenue = wholesaleRevenueIn(null);
+  const revenue = retailRevenue + wholesaleRevenue;
 
   /*
     ประกันใกล้หมดอายุ — the 30-day window the shop asked for.
@@ -419,10 +456,35 @@ export default async function DashboardPage({
   const revenueItems = visibleTickets
     .filter((t) => !t.held)
     .flatMap((t) => t.items.map((i) => ({ category: i.category, net: itemNetPrice(i) })));
-  const revenueByCategory = [...new Set(revenueItems.map((i) => i.category))]
+  /*
+    ขายส่งเข้ามาในชนิดสินค้าเดียวกัน.
+
+    A roll of film sold by the case is the same ชนิดสินค้า as a sheet of it
+    sold over the counter, so it belongs in the same row — otherwise the rows
+    stop adding up to the figure above them, which is the one property this
+    breakdown has to keep. ชนิดสินค้า comes from the stock register, the same
+    place the ขายส่ง picker takes the product from.
+  */
+  const stockCategoryByName = new Map<string, string>();
+  for (const st of stockRows ?? []) {
+    if (st.name && st.category && !stockCategoryByName.has(st.name)) {
+      stockCategoryByName.set(st.name, st.category);
+    }
+  }
+  const wholesaleItems = wholesaleLines
+    .filter((l) => inShop(l.shop) && inPeriod(new Date(`${l.on}T00:00:00`)))
+    .map((l) => ({
+      category:
+        l.kind === 'ปรับราคา'
+          ? 'ปรับราคาขายส่ง'
+          : (stockCategoryByName.get(l.item) ?? 'ไม่ระบุชนิด'),
+      net: l.amount,
+    }));
+  const allRevenueItems = [...revenueItems, ...wholesaleItems];
+  const revenueByCategory = [...new Set(allRevenueItems.map((i) => i.category))]
     .map((name) => ({
       name,
-      amount: revenueItems.filter((i) => i.category === name).reduce((n, i) => n + i.net, 0),
+      amount: allRevenueItems.filter((i) => i.category === name).reduce((n, i) => n + i.net, 0),
     }))
     .concat(insuranceRevenue > 0 ? [{ name: 'ประกัน', amount: insuranceRevenue }] : [])
     .filter((c) => c.name && c.amount !== 0)
@@ -452,9 +514,10 @@ export default async function DashboardPage({
               shopByTicketId.get(p.ticket_id) === shop &&
               inPeriod(p.sold_at ? new Date(`${p.sold_at}T00:00:00`) : null),
           );
-          const revenue =
+          const retail =
             shopJobs.filter((t) => !t.held).reduce((n, t) => n + ticketTotal(t), 0) +
             shopPolicies.reduce((n, p) => n + num(p.price), 0);
+          const wholesale = wholesaleRevenueIn(shop);
           const spend = expenses
             .filter(
               (e) =>
@@ -465,9 +528,11 @@ export default async function DashboardPage({
             )
             .reduce((n, e) => n + e.amount, 0);
           return {
-            revenue,
+            revenue: retail + wholesale,
+            retail,
+            wholesale,
             expenses: spend,
-            profit: revenue - spend,
+            profit: retail + wholesale - spend,
             jobs: shopJobs.length,
             receivable: computeReceivables(tickets, orders, customers, shop).reduce(
               (n, a) => n + a.amount,
@@ -672,6 +737,8 @@ export default async function DashboardPage({
     <Dashboard
       hasDashboardWidget={session.hasDashboardWidget}
       revenue={revenue}
+      retailRevenue={retailRevenue}
+      wholesaleRevenue={wholesaleRevenue}
       totalExpenses={totalExpenses}
       moneySources={moneySources}
       arItems={arItems}
