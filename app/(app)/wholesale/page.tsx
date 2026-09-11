@@ -54,6 +54,8 @@ export default async function WholesalePage({
       accessibleShops={shops}
       canSeeAllShops={session.seesAllShops}
       onUpdateStatus={updateOrderStatus}
+      initialStatus={typeof params.status === 'string' ? params.status : undefined}
+      initialApproval={typeof params.approval === 'string' ? params.approval : undefined}
       stockWarning={stockWarning}
     />
   );

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import type { SessionContext } from '@/lib/auth/session';
 import {
   DEFAULT_PAYMENT_METHODS,
@@ -23,10 +24,11 @@ import {
  */
 
 const ORDER_SELECT = `
-  id, shop_id, customer_id, status, created_at, delivered_at, sales_by,
+  id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by,
+  price_decision, price_decided_at, price_decided_by,
   order_items(name, qty, list_price, requested_price, reason),
   order_returns(item_name, qty, reason, returned_at),
-  order_adjustments(amount, reason, adjusted_at),
+  order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
   order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, cleared_at, bounced_at, bounce_note)
 `;
 
@@ -37,7 +39,11 @@ type OrderRow = {
   status: string;
   created_at: string | null;
   delivered_at: string | null;
+  due_at: string | null;
   sales_by: string | null;
+  price_decision: string | null;
+  price_decided_at: string | null;
+  price_decided_by: string | null;
   order_items:
     | {
         name: string;
@@ -48,7 +54,17 @@ type OrderRow = {
       }[]
     | null;
   order_returns: { item_name: string; qty: number; reason: string; returned_at: string }[] | null;
-  order_adjustments: { amount: number; reason: string; adjusted_at: string }[] | null;
+  order_adjustments:
+    | {
+        amount: number;
+        reason: string;
+        adjusted_at: string;
+        uid: string;
+        status: string;
+        approved_at: string | null;
+        reject_note: string;
+      }[]
+    | null;
   order_payments:
     | {
         amount: number;
@@ -74,7 +90,11 @@ function mapOrder(row: OrderRow): WsOrder {
     status: row.status,
     createdAt: row.created_at ?? undefined,
     deliveredAt: row.delivered_at ?? undefined,
+    dueAt: row.due_at ?? '',
     salesBy: row.sales_by ?? '',
+    priceDecision: row.price_decision ?? '',
+    priceDecidedAt: row.price_decided_at ?? '',
+    priceDecidedBy: row.price_decided_by ?? '',
     items: (row.order_items ?? []).map((it) => ({
       name: it.name,
       qty: it.qty,
@@ -95,6 +115,10 @@ function mapOrder(row: OrderRow): WsOrder {
       amount: a.amount,
       reason: a.reason ?? '',
       date: a.adjusted_at ?? '',
+      uid: a.uid ?? '',
+      status: a.status ?? '',
+      approvedAt: a.approved_at ?? '',
+      rejectNote: a.reject_note ?? '',
     })),
     payments: (row.order_payments ?? []).map((p) => ({
       amount: p.amount,
@@ -227,6 +251,8 @@ export async function loadOrderDetailData(
   shops: Shop[];
   shopInfo: Record<string, WsShopInfo>;
   paymentMethods: string[];
+  /** auth id → ชื่อพนักงาน, for turning `price_decided_by` into something readable. */
+  staffNames: Record<string, string>;
 } | null> {
   const supabase = await createClient();
   const shops = await loadShops(session);
@@ -252,11 +278,22 @@ export async function loadOrderDetailData(
     await Promise.all([
       loadCustomers(),
       loadWsStatuses(),
-      supabase
-        .from('orders')
-        .select(ORDER_SELECT)
-        .in('shop_id', session.accessibleShopIds)
-        .is('deleted_at', null),
+      // Same cap, same consequence: สินค้าที่ลูกค้าเคยซื้อ is built from every
+      // PO, so a truncated read offers the wrong return list.
+      fetchAllRows<OrderRow>(
+        (from, to) =>
+          supabase
+            .from('orders')
+            .select(ORDER_SELECT)
+            .in('shop_id', session.accessibleShopIds)
+            .is('deleted_at', null)
+            .order('id')
+            .range(from, to) as unknown as PromiseLike<{
+            data: OrderRow[] | null;
+            error: { message: string } | null;
+          }>,
+        'orders',
+      ),
       /*
         Stock for EVERY branch the caller can reach, not just the one the PO
         opens on.
@@ -269,10 +306,35 @@ export async function loadOrderDetailData(
         not sell them. Finnix North, whose whole purpose is wholesale, could
         not raise a single line.
       */
-      supabase
-        .from('stock')
-        .select('id, name, short_name, shop_id, qty, sell_price')
-        .in('shop_id', session.accessibleShopIds),
+      /*
+        อ่านให้ครบทุกแถว.
+
+        This query had no limit and no order by, so PostgREST answered with an
+        arbitrary 1000 rows once the stock table passed that size — a different
+        arbitrary thousand from the one สต็อกสินค้า shows, which orders by
+        category and name. The shop opened a PO on Finnix North and was offered
+        products that branch does not carry, while the ones it does carry were
+        missing. Both screens were showing a truthful answer to their own query.
+      */
+      fetchAllRows<{
+        id: number;
+        name: string;
+        short_name: string | null;
+        shop_id: string;
+        qty: number;
+        sell_price: number;
+      }>(
+        (from, to) =>
+          supabase
+            .from('stock')
+            .select('id, name, short_name, shop_id, qty, sell_price')
+            .in('shop_id', session.accessibleShopIds)
+            .order('shop_id')
+            .order('name')
+            .order('id')
+            .range(from, to),
+        'stock',
+      ),
       supabase.from('shop_info').select('shop_id, company_name, address, phone, payment_channels'),
       // Every branch the caller can reach, so switching a new PO’s branch
       // switches the พนักงานขาย list with it.
@@ -289,9 +351,9 @@ export async function loadOrderDetailData(
         .order('sort_order'),
     ]);
 
-  const orders = ((allOrdersRes.data as OrderRow[] | null) ?? []).map(mapOrder);
+  const orders = allOrdersRes.map(mapOrder);
 
-  const stock: WsStockItem[] = (stockRes.data ?? []).map((s) => ({
+  const stock: WsStockItem[] = stockRes.map((s) => ({
     id: s.id,
     name: s.name,
     shortName: s.short_name ?? '',
@@ -319,6 +381,10 @@ export async function loadOrderDetailData(
     phone: p.phone ?? '',
   }));
 
+  const { data: staffRows } = await supabase.from('app_users').select('id, name');
+  const staffNames: Record<string, string> = {};
+  for (const u of staffRows ?? []) staffNames[u.id] = u.name;
+
   return {
     order,
     isNew,
@@ -330,5 +396,6 @@ export async function loadOrderDetailData(
     shops,
     shopInfo,
     paymentMethods: paymentMethods.length ? paymentMethods : DEFAULT_PAYMENT_METHODS,
+    staffNames,
   };
 }

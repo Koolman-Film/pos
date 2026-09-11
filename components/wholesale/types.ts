@@ -29,7 +29,24 @@ export type WsItem = {
  */
 export type WsReturn = { item: string; qty: number; reason: string; date: string };
 
-export type WsAdjustment = { amount: number; reason: string; date: string };
+/**
+ * การปรับราคาหนึ่งรายการ (migration 0050).
+ *
+ * ต้องให้ผู้บริหารอนุมัติเหมือนการเสนอราคาต่ำกว่ามาตรฐาน — it gives away the
+ * same money, and it is written after the goods have already gone out.
+ * `uid` is what the approval is keyed on across a save, exactly as on a
+ * payment: the rows are deleted and re-inserted every time the PO is saved.
+ */
+export type WsAdjustment = {
+  amount: number;
+  reason: string;
+  date: string;
+  uid?: string;
+  /** รออนุมัติ / อนุมัติแล้ว / ปฏิเสธ. Empty from a pre-0050 client — read as อนุมัติแล้ว. */
+  status?: string;
+  approvedAt?: string;
+  rejectNote?: string;
+};
 
 /**
  * การรับชำระหนึ่งรายการ (migration 0048).
@@ -80,6 +97,23 @@ export type WsOrder = {
    */
   deliveredAt?: string;
   /**
+   * ผลการตัดสินใจเรื่องราคา และใครตัดสิน (migration 0051).
+   *
+   * A discount that went through used to leave only a status behind, which
+   * anybody could have set. `priceDecidedBy` is the auth user id; the screen
+   * resolves it to a name where it has one.
+   */
+  priceDecision?: string;
+  priceDecidedAt?: string;
+  priceDecidedBy?: string;
+  /**
+   * กำหนดชำระเงิน (migration 0049) — printed on ใบแจ้งหนี้ and ใบส่งของ.
+   *
+   * Empty means nobody agreed a date, and the documents then say nothing
+   * rather than inventing one from the delivery date.
+   */
+  dueAt?: string;
+  /**
    * พนักงานขายที่ขาย PO ใบนี้ — a NAME (migration 0047), not an id.
    *
    * Their phone heads the documents this PO produces, and their name signs
@@ -114,7 +148,12 @@ export type WsDeletedOrder = WsOrder & {
  * `delivery` and `ret` are not only paperwork: issuing them records the two
  * dates the money figures are built on (migration 0045).
  */
-export type WsPrintMode = 'invoice' | 'delivery' | 'ret' | 'receipt' | null;
+/**
+ * `label` คือจ่าหน้ากล่อง ไม่ใช่เอกสาร — it is taped to a carton, printed A5
+ * landscape, and carries no amounts at all. Listed here because it shares the
+ * same print portal as the four documents.
+ */
+export type WsPrintMode = 'invoice' | 'delivery' | 'ret' | 'receipt' | 'label' | null;
 
 /**
  * พนักงานขายของสาขาหนึ่ง (migration 0047).

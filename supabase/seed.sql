@@ -365,8 +365,11 @@ insert into order_payments
   ('WS-NT-0002', 21750, 'เช็คธนาคารกรุงเทพ', current_date - 30, 'seed-p-nt2', 'แจ้งแล้ว',
    '0038119', 'BBL', current_date - 7);
 
-insert into order_adjustments (order_id, amount, reason, adjusted_at) values
-  ('WS-LP-0044', 200, 'ลูกค้าต่อรองราคาหลังส่งของ', date '2026-07-03');
+-- `status` เขียนไว้ชัดเจน เหมือนการรับชำระ — ค่าตั้งต้นของคอลัมน์คือ รออนุมัติ
+-- (0050) ตัวอย่างนี้จงใจปล่อยให้รออนุมัติ เพื่อให้เห็นทั้งการ์ดรออนุมัติในแดชบอร์ด
+-- และยอดที่ยังไม่ถูกหักออกจากบิล
+insert into order_adjustments (order_id, amount, reason, adjusted_at, uid, status) values
+  ('WS-LP-0044', 200, 'ลูกค้าต่อรองราคาหลังส่งของ', date '2026-07-03', 'seed-adj-0044', 'รออนุมัติ');
 
 -- -------------------------------------------------------------------- stock --
 -- SKU-SPK-JBL1 is the low-stock row: qty 6 vs min 5 is NOT low (the threshold is

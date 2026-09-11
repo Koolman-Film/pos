@@ -31,6 +31,7 @@ export function TicketList({
   accessibleShops,
   shops,
   canSeeAllShops = true,
+  initialStatus,
 }: {
   tickets: TicketListRow[];
   statuses: StatusConfig[];
@@ -38,6 +39,8 @@ export function TicketList({
   accessibleShops: Shop[];
   shops?: Shop[];
   canSeeAllShops?: boolean;
+  /** สถานะที่เปิดมาจากลิงก์บนแดชบอร์ด — seeds the filter, does not lock it. */
+  initialStatus?: string;
 }) {
   const shopList = shops ?? accessibleShops;
   const shopName = (id: string) => shopList.find((s) => s.id === id)?.name ?? id;
@@ -45,7 +48,7 @@ export function TicketList({
   // document.body only exists client-side; guard the print portal on mount.
   const mounted = useIsMounted();
 
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(initialStatus || 'all');
   const [shopFilter, setShopFilter] = useState<string>(
     canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
   );

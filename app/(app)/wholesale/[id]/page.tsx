@@ -5,12 +5,14 @@ import { getSessionContext } from '@/lib/auth/session';
 
 import { updateOptionListAction } from '../../optionListActions';
 import {
+  approveOrderAdjustment,
   approveOrderPrice,
   bounceOrderPayment,
   confirmOrderPayment,
   deleteOrder,
   recordOrderDelivery,
   markOrderBadDebt,
+  rejectOrderAdjustment,
   rejectOrderPrice,
   saveCustomer,
   saveOrder,
@@ -59,6 +61,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       wsStatuses={data.wsStatuses}
       shops={data.shops}
       salesPeople={data.salesPeople}
+      staffNames={data.staffNames}
       onSaveOrder={saveOrder}
       onApprovePrice={approveOrderPrice}
       onRejectPrice={rejectOrderPrice}
@@ -66,6 +69,8 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       onDeleteOrder={deleteOrder}
       onRecordDelivery={recordOrderDelivery}
       onConfirmPayment={confirmOrderPayment}
+      onApproveAdjustment={approveOrderAdjustment}
+      onRejectAdjustment={rejectOrderAdjustment}
       onBouncePayment={bounceOrderPayment}
       onSaveCustomer={saveCustomer}
       updateOptionListAction={updateOptionListAction}

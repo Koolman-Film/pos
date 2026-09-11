@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { orderTotal, orderPaid, orderReported } from '@/lib/domain/orders';
+import { orderTotal, orderPaid, orderReported, orderPendingAdjustments } from '@/lib/domain/orders';
 
 describe('orderTotal', () => {
   it('subtracts returns and adjustments from the items total', () => {
@@ -111,5 +111,56 @@ describe('orderReported', () => {
       { amount: 900 },
     ];
     expect(orderReported({ payments })).toBe(20000);
+  });
+});
+
+/**
+ * การปรับราคาต้องได้รับอนุมัติ (migration 0050).
+ *
+ * A price adjustment gives away the same money a below-standard price does, and
+ * that one has always needed ผู้บริหาร. If an unapproved one still reduced the
+ * bill, the approval would be decoration: the money would be gone before anyone
+ * agreed to it.
+ */
+describe('orderTotal — ปรับราคาที่รออนุมัติ', () => {
+  const base = {
+    items: [{ name: 'A', qty: 10, requestedPrice: 1000 }],
+    returns: [],
+  };
+
+  it('ยังไม่ลดยอด จนกว่าจะอนุมัติ', () => {
+    expect(orderTotal({ ...base, adjustments: [{ amount: 200, status: 'รออนุมัติ' }] })).toBe(
+      10000,
+    );
+  });
+
+  it('อนุมัติแล้วจึงลดยอด', () => {
+    expect(orderTotal({ ...base, adjustments: [{ amount: 200, status: 'อนุมัติแล้ว' }] })).toBe(
+      9800,
+    );
+  });
+
+  it('ปฏิเสธแล้วไม่ลดยอด แต่แถวยังอยู่', () => {
+    // The row is kept on purpose: somebody asked and somebody said no, and a
+    // deleted row leaves the next reader wondering whether it was ever raised.
+    expect(orderTotal({ ...base, adjustments: [{ amount: 200, status: 'ปฏิเสธ' }] })).toBe(10000);
+  });
+
+  it('แถวที่ไม่มีสถานะ ถือว่าอนุมัติแล้ว', () => {
+    // Everything written before 0050 had already been subtracted from figures
+    // the shop has read; the migration backfills them for the same reason.
+    expect(orderTotal({ ...base, adjustments: [{ amount: 200 }] })).toBe(9800);
+  });
+});
+
+describe('orderPendingAdjustments', () => {
+  it('นับเฉพาะที่รออนุมัติ', () => {
+    const adjustments = [
+      { amount: 200, status: 'รออนุมัติ' },
+      { amount: 500, status: 'อนุมัติแล้ว' },
+      { amount: 900, status: 'ปฏิเสธ' },
+      { amount: 100 },
+    ];
+    expect(orderPendingAdjustments({ adjustments })).toBe(200);
   });
 });

@@ -17,6 +17,11 @@ import {
   PAYMENT_BOUNCED,
   PAYMENT_RECEIVED,
   PAYMENT_REPORTED,
+  ADJUSTMENT_APPROVED,
+  ADJUSTMENT_PENDING,
+  ADJUSTMENT_REJECTED,
+  isApprovedAdjustment,
+  orderPendingAdjustments,
 } from '@/lib/domain/orders';
 import { dateInputValue } from '@/lib/domain/now';
 
@@ -99,7 +104,7 @@ function newPaymentUid(): string {
  */
 /** ขายส่งออกสี่ใบนี้ ไม่มีใบกำกับภาษี — ยืนยันกับร้านแล้ว. */
 const DOCS: {
-  key: Exclude<WsPrintMode, null>;
+  key: Exclude<WsPrintMode, null | 'label'>;
   label: string;
   icon: string;
   /** Why the button is off, shown only while it is. */
@@ -143,6 +148,7 @@ export function WholesaleDetail({
   wsStatuses = DEFAULT_WS_STATUS,
   shops = [],
   salesPeople = [],
+  staffNames,
   isNew = false,
   onSaveOrder,
   onApprovePrice,
@@ -152,6 +158,8 @@ export function WholesaleDetail({
   onRecordDelivery,
   onConfirmPayment,
   onBouncePayment,
+  onApproveAdjustment,
+  onRejectAdjustment,
   onSaveCustomer,
   onBack,
   updateOptionListAction,
@@ -172,6 +180,8 @@ export function WholesaleDetail({
   shopInfo?: Record<string, WsShopInfo>;
   wsStatuses?: WsStatusMap;
   shops?: Shop[];
+  /** ชื่อพนักงานตาม auth id — ใช้แปลง `price_decided_by` ให้อ่านออก. */
+  staffNames?: Record<string, string>;
   /** พนักงานขายของทุกสาขาที่ผู้ใช้เข้าถึงได้ — filtered to `o.shop` in the picker. */
   salesPeople?: SalesPerson[];
   isNew?: boolean;
@@ -211,6 +221,24 @@ export function WholesaleDetail({
     orderId: string,
     uid: string,
     bouncedOn: string,
+    note: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * อนุมัติ/ปฏิเสธการปรับราคา — gated by `wholesale.priceApproval` (0050).
+   *
+   * The same key that approves a below-standard price, because it is the same
+   * decision about the same money. Not part of `onSaveOrder`: saving the PO
+   * records the request, and the database refuses to let a save carry an
+   * approval with it.
+   */
+  onApproveAdjustment?: (
+    orderId: string,
+    uid: string,
+    approvedOn: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  onRejectAdjustment?: (
+    orderId: string,
+    uid: string,
     note: string,
   ) => Promise<{ ok: boolean; error?: string }>;
   onSaveCustomer?: (input: {
@@ -404,8 +432,39 @@ export function WholesaleDetail({
     returns[idx] = { ...returns[idx], [k]: v };
     setO({ ...o, returns });
   }
+  /*
+    ลบรายการสินค้า และลบรายการคืน.
+
+    No confirmation, deliberately: this whole form is a draft until บันทึก PO,
+    so a mis-click is undone by leaving without saving — and the unsaved-changes
+    guard already stops that being silent. A confirm on every row would tax the
+    common case (a line typed by mistake, deleted immediately) to protect one
+    that is already protected.
+
+    Stock follows on save: `saveOrder` compares the stored quantities with the
+    saved ones, so removing a line that was already sold puts those rolls back
+    on the shelf. Nothing extra is needed here.
+  */
+  function removeItem(idx: number) {
+    setO({ ...o, items: o.items.filter((_, i) => i !== idx) });
+  }
+  function removeReturn(idx: number) {
+    setO({ ...o, returns: o.returns.filter((_, i) => i !== idx) });
+  }
   function addAdjustment() {
-    setO({ ...o, adjustments: [...o.adjustments, { amount: 0, reason: '', date: 'วันนี้' }] });
+    setO({
+      ...o,
+      adjustments: [
+        ...o.adjustments,
+        {
+          amount: 0,
+          reason: '',
+          date: dateInputValue(new Date()),
+          uid: newPaymentUid(),
+          status: ADJUSTMENT_PENDING,
+        },
+      ],
+    });
   }
   function updateAdjustment(
     idx: number,
@@ -516,8 +575,43 @@ export function WholesaleDetail({
     setPayPanel(null);
   }
 
+  /*
+    การอนุมัติปรับราคา.
+
+    Same shape as confirming a payment, and for the same reasons: keyed on the
+    uid so it survives a save, refused for a row the server has never seen, and
+    checked again in the database because the button is not the gate.
+  */
+  const savedAdjustmentUids = new Set(
+    order.adjustments.map((a) => a.uid).filter((u): u is string => !!u),
+  );
+  const canApprovePrice = can('wholesale.priceApproval');
+  const [adjError, setAdjError] = useState('');
+
+  async function decideAdjustment(idx: number, decision: 'approve' | 'reject') {
+    setAdjError('');
+    const a = o.adjustments[idx];
+    const uid = a?.uid ?? '';
+    const res =
+      decision === 'approve'
+        ? await onApproveAdjustment?.(o.id, uid, dateInputValue(new Date()))
+        : await onRejectAdjustment?.(o.id, uid, '');
+    if (res && !res.ok) {
+      setAdjError(res.error ?? 'บันทึกไม่สำเร็จ');
+      return;
+    }
+    const adjustments = [...o.adjustments];
+    adjustments[idx] = {
+      ...a,
+      status: decision === 'approve' ? ADJUSTMENT_APPROVED : ADJUSTMENT_REJECTED,
+    };
+    setO({ ...o, adjustments });
+  }
+
   const total = orderTotal(o);
   const paid = orderPaid(o);
+  /** ยอดปรับราคาที่ยังรออนุมัติ — beside the bill, never inside it. */
+  const pendingAdjustments = orderPendingAdjustments(o);
   /** แจ้งแล้วแต่ยังไม่ยืนยัน — sits beside the balance, never inside it. */
   const reported = orderReported(o);
   /*
@@ -538,8 +632,20 @@ export function WholesaleDetail({
     const it = o.items.find((i) => i.name === r.item);
     return s + (it ? r.qty * it.requestedPrice : 0);
   }, 0);
-  const adjustmentsTotal = o.adjustments.reduce((s, a) => s + Number(a.amount || 0), 0);
-  const hasBreakdown = o.returns.length > 0 || o.adjustments.length > 0;
+  /*
+    เฉพาะที่อนุมัติแล้ว — เหมือน `orderTotal`.
+
+    This line sits directly above ยอดสุทธิ and is read as its arithmetic. Let it
+    count an adjustment the boss has not approved and the block stops adding up:
+    5,400 − 200 printed above a ยอดสุทธิ of 5,400. The pending amount has its own
+    line below, outside the sum, which is where it belongs.
+  */
+  const adjustmentsTotal = o.adjustments.reduce(
+    (s, a) => s + (isApprovedAdjustment(a) ? Number(a.amount || 0) : 0),
+    0,
+  );
+  const approvedAdjustmentCount = o.adjustments.filter(isApprovedAdjustment).length;
+  const hasBreakdown = o.returns.length > 0 || approvedAdjustmentCount > 0;
   /*
     พนักงานขายของ PO ใบนี้.
 
@@ -585,7 +691,7 @@ export function WholesaleDetail({
   const canDeliver = !isNew && o.items.some((it) => Number(it.qty) > 0);
   const canReturn = !isNew && o.returns.length > 0;
 
-  const docAllowed: Record<Exclude<WsPrintMode, null>, boolean> = {
+  const docAllowed: Record<(typeof DOCS)[number]['key'], boolean> = {
     invoice: canInvoice,
     delivery: canDeliver,
     ret: canReturn,
@@ -690,6 +796,27 @@ export function WholesaleDetail({
     }
     doPrint(mode);
   }
+  /*
+    ข้อมูลบนจ่าหน้ากล่อง.
+
+    Read off the customer record rather than the document letterhead: a label
+    is addressed to a place, and the place is what the ทะเบียนลูกค้า holds.
+  */
+  const shippingCustomer = customers.find((c) => c.id === o.customerId) ?? null;
+  const customerAddress = shippingCustomer?.address ?? '';
+  const customerPhone = shippingCustomer?.phone ?? '';
+  const senderShopName = shopInfo?.[o.shop]?.companyName || shopName(o.shop, shops);
+
+  /*
+    ชื่อคนที่ตัดสินใจเรื่องราคา.
+
+    `price_decided_by` is an auth user id, which is meaningless on screen. The
+    PO screen is not given the staff list, so it resolves what it can and falls
+    back to showing the date alone — a date with no name still says more than
+    the status did.
+  */
+  const priceDecidedByName = staffNames?.[o.priceDecidedBy ?? ''] ?? '';
+
   const hasDiscount = o.items.some((i) => i.requestedPrice < i.listPrice);
   const st = wsStatuses[o.status] || {};
 
@@ -798,22 +925,33 @@ export function WholesaleDetail({
                       : '1px solid var(--line)',
                 }}
               >
-                <div className="mb-2">
-                  <ProductPicker
-                    value={it.name}
-                    label="สินค้าในรายการ"
-                    placeholder="เลือกสินค้า... หรือพิมพ์ชื่อ/ชื่อย่อเพื่อค้นหา"
-                    options={
-                      // A product the branch no longer stocks still has to show
-                      // on the PO that sold it, or editing an old PO would
-                      // silently blank the line.
-                      it.name && !productOptions.some((p) => p.name === it.name)
-                        ? [...productOptions, { id: `kept-${idx}`, name: it.name, muted: true }]
-                        : productOptions
-                    }
-                    className="field text-sm px-3 py-2 w-full font-medium"
-                    onChange={(name) => selectProduct(idx, name)}
-                  />
+                <div className="mb-2 flex gap-2 items-start">
+                  <div className="flex-1 min-w-0">
+                    <ProductPicker
+                      value={it.name}
+                      label="สินค้าในรายการ"
+                      placeholder="เลือกสินค้า... หรือพิมพ์ชื่อ/ชื่อย่อเพื่อค้นหา"
+                      options={
+                        // A product the branch no longer stocks still has to show
+                        // on the PO that sold it, or editing an old PO would
+                        // silently blank the line.
+                        it.name && !productOptions.some((p) => p.name === it.name)
+                          ? [...productOptions, { id: `kept-${idx}`, name: it.name, muted: true }]
+                          : productOptions
+                      }
+                      className="field text-sm px-3 py-2 w-full font-medium"
+                      onChange={(name) => selectProduct(idx, name)}
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeItem(idx)}
+                    aria-label={`ลบรายการสินค้าที่ ${idx + 1}`}
+                    title="ลบรายการนี้"
+                    className="text-sm px-2 py-2 rounded-lg flex-shrink-0"
+                    style={{ color: '#B23A48' }}
+                  >
+                    <i className="fa-solid fa-trash"></i>
+                  </button>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
@@ -889,6 +1027,30 @@ export function WholesaleDetail({
               </div>
             </div>
           )}
+          {/*
+            ใครตัดสินใจเรื่องราคา และเมื่อไหร่ (migration 0051).
+
+            Before this the only evidence a discount had been agreed was a
+            status, which anybody could have set — so "ส่วนลดผ่านไปแล้ว สาวกลับ
+            ไม่ได้ว่าใครอนุมัติ" was literally true. Shown whether it was
+            approved or rejected: a rejection somebody has to explain later is
+            worth just as much as an approval.
+          */}
+          {o.priceDecision && (
+            <p
+              className="text-xs mb-4"
+              style={{ color: o.priceDecision === 'อนุมัติ' ? '#3F6B33' : '#B23A48' }}
+            >
+              <i
+                className={`fa-solid ${
+                  o.priceDecision === 'อนุมัติ' ? 'fa-circle-check' : 'fa-circle-xmark'
+                } mr-1.5`}
+              ></i>
+              ราคานี้{o.priceDecision}แล้ว
+              {o.priceDecidedAt ? ` เมื่อ ${fmtThaiDayString(o.priceDecidedAt)}` : ''}
+              {priceDecidedByName ? ` โดย ${priceDecidedByName}` : ''}
+            </p>
+          )}
           {hasDiscount && o.status === 'รออนุมัติราคา' && !can('wholesale.priceApproval') && (
             <div className="rounded-2xl p-4 mb-5" style={{ background: '#FBF1DA' }}>
               <p className="text-sm font-medium" style={{ color: '#8A5A12' }}>
@@ -896,17 +1058,43 @@ export function WholesaleDetail({
               </p>
             </div>
           )}
+          {/*
+            กำหนดชำระเงิน.
+
+            Wholesale ships first and collects later, so every PO carries a
+            credit term — and the system held no record of it, which left the
+            invoice saying what was owed and nothing about when. Sits beside the
+            goods because it is agreed when the order is taken, not when the
+            money is chased.
+          */}
+          <div className="mb-5">
+            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+              <i className="fa-solid fa-calendar-check mr-1.5"></i>กำหนดชำระเงิน
+            </label>
+            <ThaiDateInput
+              value={o.dueAt || ''}
+              onChange={(v) => field('dueAt', v)}
+              ariaLabel="กำหนดชำระเงิน"
+              className="field text-sm px-3 py-2 w-full"
+            />
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+              พิมพ์ลงในใบแจ้งหนี้และใบส่งของ เว้นว่างได้ถ้ายังไม่ได้ตกลงวันกัน
+            </p>
+          </div>
           <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.returns)}>
             <p className="text-xs font-semibold mb-3" style={{ color: PANEL.returns.spine }}>
               <i className="fa-solid fa-rotate-left mr-1.5"></i>การคืนสินค้า
             </p>
             {o.returns.map((r, idx) => (
-              <div key={idx} className="flex gap-2 mb-2">
+              // flex-wrap เพราะแถวนี้มีห้าช่องแล้ว. On a narrow card the date and
+              // the bin drop to a second line instead of the bin being pushed off
+              // the right edge of the panel, where it was unreachable.
+              <div key={idx} className="flex flex-wrap gap-2 mb-2 items-start">
                 <select
                   value={r.item}
                   aria-label="สินค้าที่รับคืน"
                   onChange={(e) => updateReturn(idx, 'item', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 flex-1"
+                  className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
                 >
                   <option value="" disabled>
                     เลือกสินค้าที่เคยซื้อ...
@@ -927,7 +1115,7 @@ export function WholesaleDetail({
                   placeholder="เหตุผล"
                   value={r.reason}
                   onChange={(e) => updateReturn(idx, 'reason', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 flex-1"
+                  className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
                 />
                 {/* The date the return reduces revenue on — see migration 0045. */}
                 <ThaiDateInput
@@ -936,6 +1124,15 @@ export function WholesaleDetail({
                   ariaLabel={`วันที่รับคืนรายการที่ ${idx + 1}`}
                   className="field text-xs px-2.5 py-1.5"
                 />
+                <button
+                  onClick={() => removeReturn(idx)}
+                  aria-label={`ลบรายการคืนสินค้าที่ ${idx + 1}`}
+                  title="ลบรายการนี้"
+                  className="text-xs px-2 rounded-lg flex-shrink-0"
+                  style={{ color: '#B23A48' }}
+                >
+                  <i className="fa-solid fa-trash"></i>
+                </button>
               </div>
             ))}
             <button
@@ -950,30 +1147,114 @@ export function WholesaleDetail({
               <i className="fa-solid fa-money-bill-transfer mr-1.5"></i>ปรับราคา
               (กรณีเก็บเงินไม่ตรงยอดเรียกเก็บ แม้ส่งของแล้ว)
             </p>
-            {o.adjustments.map((a, idx) => (
-              <div key={idx} className="flex gap-2 mb-2">
-                <input
-                  type="number"
-                  placeholder="จำนวนที่ปรับลด"
-                  value={a.amount}
-                  onChange={(e) => updateAdjustment(idx, 'amount', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 w-32"
-                />
-                <input
-                  placeholder="เหตุผล เช่น ลูกค้าต่อรองราคาหลังส่งของ"
-                  value={a.reason}
-                  onChange={(e) => updateAdjustment(idx, 'reason', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 flex-1"
-                />
-                <button
-                  onClick={() => removeAdjustment(idx)}
-                  className="text-xs px-2 rounded-lg"
-                  style={{ color: '#B23A48' }}
+            {o.adjustments.map((a, idx) => {
+              const st = a.status || ADJUSTMENT_APPROVED;
+              const approved = st === ADJUSTMENT_APPROVED;
+              const rejected = st === ADJUSTMENT_REJECTED;
+              const savedAdj = savedAdjustmentUids.has(a.uid ?? '');
+              return (
+                <div
+                  key={idx}
+                  className="rounded-xl p-2.5 mb-2"
+                  style={{
+                    border: '1px solid var(--line)',
+                    background: approved ? 'transparent' : 'var(--paper)',
+                  }}
                 >
-                  <i className="fa-solid fa-trash"></i>
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <span
+                      className="text-xs font-medium px-2 py-0.5 rounded-full"
+                      style={{
+                        background: approved ? '#E7F0E3' : rejected ? '#F7E2E4' : '#FBF0D9',
+                        color: approved ? '#4C7A3E' : rejected ? '#B23A48' : '#8A6A1F',
+                      }}
+                    >
+                      <i
+                        className={`fa-solid ${
+                          approved ? 'fa-circle-check' : rejected ? 'fa-circle-xmark' : 'fa-clock'
+                        } mr-1`}
+                      ></i>
+                      {st}
+                    </span>
+                    {rejected && a.rejectNote && (
+                      <span className="text-xs" style={{ color: '#B23A48' }}>
+                        {a.rejectNote}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <input
+                      type="number"
+                      placeholder="จำนวนที่ปรับลด"
+                      aria-label={`จำนวนที่ปรับลดรายการที่ ${idx + 1}`}
+                      value={a.amount}
+                      onChange={(e) => updateAdjustment(idx, 'amount', e.target.value)}
+                      className="field text-xs px-2.5 py-1.5 w-32"
+                    />
+                    <input
+                      placeholder="เหตุผล เช่น ลูกค้าต่อรองราคาหลังส่งของ"
+                      value={a.reason}
+                      onChange={(e) => updateAdjustment(idx, 'reason', e.target.value)}
+                      className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
+                    />
+                    <button
+                      onClick={() => removeAdjustment(idx)}
+                      aria-label={`ลบรายการปรับราคาที่ ${idx + 1}`}
+                      title="ลบรายการนี้"
+                      className="text-xs px-2 rounded-lg flex-shrink-0"
+                      style={{ color: '#B23A48' }}
+                    >
+                      <i className="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                  {/* The decision, for whoever holds the same key that approves a
+                      below-standard price. A row the server has not seen yet can
+                      only be saved first — the alternative is an error nobody
+                      could act on. */}
+                  {canApprovePrice && !approved && (
+                    <div className="flex gap-2 mt-2 items-center flex-wrap">
+                      {!savedAdj ? (
+                        <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                          บันทึก PO ก่อน จึงจะอนุมัติได้
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => decideAdjustment(idx, 'approve')}
+                            aria-label={`อนุมัติการปรับราคารายการที่ ${idx + 1}`}
+                            className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                            style={{ color: '#4C7A3E' }}
+                          >
+                            <i className="fa-solid fa-circle-check mr-1.5"></i>อนุมัติการปรับราคา
+                          </button>
+                          {!rejected && (
+                            <button
+                              onClick={() => decideAdjustment(idx, 'reject')}
+                              aria-label={`ปฏิเสธการปรับราคารายการที่ ${idx + 1}`}
+                              className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                              style={{ color: '#B23A48' }}
+                            >
+                              ปฏิเสธ
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {!canApprovePrice && st === ADJUSTMENT_PENDING && (
+                    <p className="text-xs mt-2" style={{ color: '#8A5A12' }}>
+                      <i className="fa-regular fa-clock mr-1.5"></i>รอผู้บริหาร/แอดมินอนุมัติ
+                      ยังไม่ลดยอดเรียกเก็บ
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {adjError && (
+              <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
+                {adjError}
+              </p>
+            )}
             <button
               onClick={addAdjustment}
               className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
@@ -1001,10 +1282,10 @@ export function WholesaleDetail({
                 </span>
               </div>
             )}
-            {o.adjustments.length > 0 && (
+            {approvedAdjustmentCount > 0 && (
               <div className="flex justify-between text-sm mb-1">
                 <span style={{ color: 'var(--ink-soft)' }}>
-                  ปรับราคา ({o.adjustments.length} รายการ)
+                  ปรับราคา ({approvedAdjustmentCount} รายการ)
                 </span>
                 <span
                   className="font-medium"
@@ -1029,6 +1310,19 @@ export function WholesaleDetail({
             {/* A customer who has handed over a cheque is in a different
                 position from one who has sent nothing — but neither has paid,
                 so this figure sits outside the arithmetic. */}
+            {/* A reduction the customer has been promised but nobody has approved
+                is not off the bill yet. Saying so here is the difference between
+                a figure that looks wrong and one that explains itself. */}
+            {pendingAdjustments > 0 && (
+              <div className="flex justify-between text-sm mb-1">
+                <span style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-regular fa-clock mr-1"></i>ปรับราคารออนุมัติ
+                </span>
+                <span className="font-semibold" style={{ color: '#B8860B' }}>
+                  {fmt(pendingAdjustments)}
+                </span>
+              </div>
+            )}
             {reported > 0 && (
               <div className="flex justify-between text-sm mb-1">
                 <span style={{ color: 'var(--ink-soft)' }}>
@@ -1106,6 +1400,27 @@ export function WholesaleDetail({
                 );
               })}
             </div>
+            {/*
+              จ่าหน้ากล่องส่งของ.
+
+              Outside the grid on purpose: the shop issues exactly four
+              documents and this is not one of them — it is a label for the
+              outside of a box, with no amounts on it. Grouping it with the
+              invoice would suggest it is paperwork the customer keeps.
+            */}
+            <button
+              onClick={() => doPrint('label')}
+              disabled={!o.customerId}
+              className="w-full mt-2 rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2 btn-outline"
+              style={{ cursor: o.customerId ? 'pointer' : 'not-allowed' }}
+            >
+              <i className="fa-solid fa-box"></i>พิมพ์จ่าหน้ากล่อง (A5 แนวนอน)
+            </button>
+            {!o.customerId && (
+              <p className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                ต้องเลือกลูกค้าก่อน จึงจะพิมพ์จ่าหน้ากล่องได้
+              </p>
+            )}
             {DOCS.filter((d) => !docAllowed[d.key]).map((d) => (
               <p key={d.key} className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
                 {d.blocked}
@@ -1164,7 +1479,69 @@ export function WholesaleDetail({
           </div>
         </div>
         {mounted &&
+          printMode === 'label' &&
+          createPortal(
+            /*
+              จ่าหน้ากล่อง — ผู้รับตัวใหญ่กลางกระดาษ ผู้ส่งตัวเล็กมุมซ้ายบน.
+
+              Sized for reading at arm’s length off a carton on a trolley, not
+              for reading on a desk: the recipient is the only thing that has
+              to be legible from a distance, so it gets the middle of the sheet
+              and everything else stays out of its way.
+            */
+            <div
+              className="print-area ship-label"
+              style={{ display: 'flex', flexDirection: 'column', minHeight: '120mm' }}
+            >
+              <div style={{ fontSize: 11, lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 700 }}>ผู้ส่ง</span> {senderShopName}
+                {sellerName && (
+                  <>
+                    <br />
+                    {sellerName}
+                    {seller?.phone ? ` โทร ${seller.phone}` : ''}
+                  </>
+                )}
+                {!sellerName && shopInfo?.[o.shop]?.phone && (
+                  <>
+                    <br />
+                    โทร {shopInfo[o.shop].phone}
+                  </>
+                )}
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  padding: '0 6mm',
+                }}
+              >
+                <p style={{ fontSize: 13, margin: '0 0 4mm', letterSpacing: 2 }}>ผู้รับ</p>
+                <p style={{ fontSize: 30, fontWeight: 700, margin: 0, lineHeight: 1.25 }}>
+                  {customerName(o.customerId, customers)}
+                </p>
+                {customerAddress && (
+                  <p style={{ fontSize: 18, margin: '4mm 0 0', lineHeight: 1.45 }}>
+                    {customerAddress}
+                  </p>
+                )}
+                {customerPhone && (
+                  <p style={{ fontSize: 18, margin: '3mm 0 0' }}>โทร {customerPhone}</p>
+                )}
+              </div>
+              {/* Small, at the foot: which PO this box belongs to, for the
+                  person matching cartons against paperwork at either end. */}
+              <p style={{ fontSize: 10, textAlign: 'right', margin: 0 }}>{o.id}</p>
+            </div>,
+            document.body,
+          )}
+        {mounted &&
           printMode &&
+          printMode !== 'label' &&
           createPortal(
             <div className="print-area">
               <div
@@ -1224,6 +1601,25 @@ export function WholesaleDetail({
                         : ''}
                     </p>
                   )}
+                  {/*
+                    กำหนดชำระเงิน — on the two documents that ask for money.
+
+                    Not on the ใบรับคืน (nothing is being asked for) and not on
+                    the ใบเสร็จ (it has already been paid). Printed in the
+                    document’s own corner, next to its date, because "ลงวันที่
+                    วันนี้ ครบกำหนดวันนั้น" is one thought.
+                  */}
+                  {o.dueAt && (printMode === 'invoice' || printMode === 'delivery') && (
+                    <p
+                      style={{
+                        fontSize: 12,
+                        margin: '4px 0 0',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      กำหนดชำระเงิน {fmtThaiDayString(o.dueAt)}
+                    </p>
+                  )}
                 </div>
               </div>
               <table style={{ marginBottom: 12 }}>
@@ -1278,7 +1674,7 @@ export function WholesaleDetail({
                   <span>-{fmt(returnsTotal)}</span>
                 </div>
               )}
-              {sheet.showTotals && o.adjustments.length > 0 && (
+              {sheet.showTotals && approvedAdjustmentCount > 0 && (
                 <div
                   style={{
                     display: 'flex',

@@ -1,5 +1,6 @@
 import { daysFromNow } from '@/lib/domain/format';
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import type { StatusConfig } from '@/components/ui/Badge';
 import type {
   CarModel,
@@ -175,7 +176,30 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
       .select('list_key, value, sort_order')
       .is('shop_id', null)
       .order('sort_order'),
-    supabase.from('stock').select('id, name, short_name, category, shop_id, qty, cost, sell_price'),
+    // ทุกแถว ไม่ใช่พันแถวแรก — PostgREST caps at `max_rows` (1000) in silence,
+    // and an unordered query answers with an arbitrary thousand. That is how the
+    // ขายส่ง picker came to offer a branch products it does not carry; this is
+    // the same query feeding the same picker in Book งาน.
+    fetchAllRows<{
+      id: number;
+      name: string;
+      short_name: string | null;
+      category: string;
+      shop_id: string;
+      qty: number;
+      cost: number;
+      sell_price: number;
+    }>(
+      (from, to) =>
+        supabase
+          .from('stock')
+          .select('id, name, short_name, category, shop_id, qty, cost, sell_price')
+          .order('shop_id')
+          .order('name')
+          .order('id')
+          .range(from, to),
+      'stock',
+    ),
     supabase.from('car_models').select('model, brand, car_type'),
     supabase.from('price_matrix').select('car_type, product, price'),
     supabase
@@ -211,10 +235,10 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
 
   return {
     options,
-    stock: (stockRes.data ?? []).map((s) => ({
+    stock: stockRes.map((s) => ({
       id: s.id,
       name: s.name,
-      shortName: s.short_name,
+      shortName: s.short_name ?? '',
       category: s.category,
       shop: s.shop_id,
       qty: Number(s.qty || 0),

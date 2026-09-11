@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
+
 import type { WsCustomer } from './types';
 
 /**
@@ -71,28 +73,33 @@ export function CustomerPicker({
         >
           <i className="fa-solid fa-plus"></i>ลูกค้าใหม่
         </button>
-        <select
-          value={customerId || ''}
-          aria-label="เลือกลูกค้าขายส่ง"
-          onChange={(e) => {
-            if (e.target.value === '__new__') {
-              startNew();
-            } else {
-              onSelect(Number(e.target.value));
-            }
+        {/*
+          พิมพ์ค้นหาชื่อลูกค้าได้ ไม่ใช่เลื่อนหาอย่างเดียว.
+
+          The wholesale book runs to 40+ shops and several of them start with
+          the same word — "Finnix เชียงใหม่", "Finnix เชียงราย", "Finnix ลำพูน" —
+          which is not a list anyone scrolls accurately. Searching the phone
+          number too, because that is often what the sale has in front of them.
+        */}
+        <SearchableSelect
+          value={customerId ? String(customerId) : ''}
+          label="เลือกลูกค้าขายส่ง"
+          placeholder="เลือกลูกค้า... หรือพิมพ์ชื่อ/เบอร์เพื่อค้นหา"
+          emptyText="ไม่พบลูกค้าที่ค้นหา — กด + เพิ่มลูกค้าใหม่ ด้านบน"
+          options={[
+            { value: '__new__', label: '+ เพิ่มลูกค้าใหม่', action: true },
+            ...list.map((c) => ({
+              value: String(c.id),
+              label: c.name,
+              note: c.phone,
+            })),
+          ]}
+          onChange={(v) => {
+            if (v === '__new__') startNew();
+            else onSelect(Number(v));
           }}
-          className="field flex-1 text-sm px-3 py-2 font-medium"
-        >
-          <option value="" disabled>
-            เลือกลูกค้า...
-          </option>
-          <option value="__new__">+ เพิ่มลูกค้าใหม่</option>
-          {list.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          className="field w-full text-sm px-3 py-2 font-medium"
+        />
         {current && (
           <button onClick={startEdit} className="btn-outline px-3 py-2 rounded-lg text-xs">
             <i className="fa-solid fa-pen"></i>

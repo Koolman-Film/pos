@@ -718,3 +718,250 @@ describe('WholesaleDetail — การรับเงินแบบเช็�
     expect(sheet.textContent).toContain('หนี้จะถูกตัดเมื่อเช็คขึ้นเงิน');
   });
 });
+
+/**
+ * ลบรายการสินค้า และลบรายการคืน.
+ *
+ * Neither row could be removed at all: a line typed by mistake stayed on the PO
+ * and on every document it printed. The adjustment rows had a bin from the
+ * start, so this is filling a gap rather than adding a feature.
+ */
+describe('WholesaleDetail — ลบรายการ', () => {
+  const twoLines = {
+    ...order,
+    id: 'WS-CM-0101',
+    items: [
+      { name: 'ฟิล์ม A', qty: 2, listPrice: 1000, requestedPrice: 1000, reason: '' },
+      { name: 'ฟิล์ม B', qty: 3, listPrice: 500, requestedPrice: 500, reason: '' },
+    ],
+    returns: [{ item: 'ฟิล์ม A', qty: 1, reason: 'ของชำรุด', date: '2026-09-10' }],
+  } as unknown as WsOrder;
+
+  it('ลบรายการสินค้าออกได้ และยอดรวมลดตาม', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={twoLines} canDo={() => true} />);
+
+    // 2*1,000 + 3*500 = 3,500, less the 1,000 return = 2,500.
+    expect(screen.getAllByText(/2,500.00/).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByLabelText('ลบรายการสินค้าที่ 1'));
+    // ฟิล์ม A is gone, so its return prices at nothing: 1,500 left.
+    expect(screen.getAllByText(/1,500.00/).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('ลบรายการสินค้าที่ 2')).not.toBeInTheDocument();
+  });
+
+  it('ลบรายการคืนสินค้าออกได้', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={twoLines} canDo={() => true} />);
+
+    await user.click(screen.getByLabelText('ลบรายการคืนสินค้าที่ 1'));
+    // The return no longer reduces the total: back to the full 3,500.
+    expect(screen.getAllByText(/3,500.00/).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('ลบรายการคืนสินค้าที่ 1')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * กำหนดชำระเงิน (migration 0049).
+ *
+ * ขายส่งส่งของก่อนแล้วเก็บเงินทีหลัง so every PO carries a credit term, and the
+ * system recorded it nowhere — the invoice went out saying what was owed and
+ * nothing about when, which left the shop chasing on memory.
+ */
+describe('WholesaleDetail — กำหนดชำระเงิน', () => {
+  const dueOrder = {
+    ...order,
+    id: 'WS-CM-0120',
+    dueAt: '2026-10-31',
+    deliveredAt: '2026-09-30',
+  } as unknown as WsOrder;
+  const printed = () => document.querySelector('.print-area')!;
+
+  it('พิมพ์ลงในใบแจ้งหนี้และใบส่งของ', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(<WholesaleDetail order={dueOrder} canDo={() => true} />);
+
+    for (const doc of [/ใบแจ้งหนี้/, /ใบส่งของ/]) {
+      await user.click(screen.getByRole('button', { name: doc }));
+      expect(printed().textContent).toContain('กำหนดชำระเงิน 31 ต.ค. 2569');
+    }
+  });
+
+  it('ไม่พิมพ์บนใบเสร็จ เพราะจ่ายไปแล้ว', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...dueOrder,
+            payments: [{ amount: 10000, method: 'เงินสด', date: '2026-10-02', attachments: [] }],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบเสร็จรับเงิน/ }));
+    expect(printed().textContent).not.toContain('กำหนดชำระเงิน');
+  });
+
+  it('ไม่มีวันที่ตกลงกันไว้ ก็ไม่พิมพ์อะไรเลย', async () => {
+    // Inventing one from the delivery date would put a demand on the customer's
+    // paperwork that nobody agreed to.
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={{ ...dueOrder, dueAt: '' } as unknown as WsOrder}
+        canDo={() => true}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบแจ้งหนี้/ }));
+    expect(printed().textContent).not.toContain('กำหนดชำระเงิน');
+  });
+});
+
+/**
+ * เปิดจากแดชบอร์ดแล้วเห็นเฉพาะรายการที่กดมา.
+ *
+ * Clicking a counter that says 3 and landing on a list of 40 leaves the reader
+ * to find those three by eye — which is the job the counter was supposed to
+ * have done for them.
+ */
+describe('WholesaleList — กรองตามที่กดมาจากแดชบอร์ด', () => {
+  const today = todayValue();
+  const po = (id: string, status: string, over: Record<string, unknown> = {}) =>
+    ({
+      id,
+      shop: 'cm',
+      customerId: 1,
+      status,
+      createdAt: today,
+      items: [{ name: 'ฟิล์ม A', qty: 1, listPrice: 1000, requestedPrice: 1000 }],
+      returns: [],
+      adjustments: [],
+      payments: [],
+      ...over,
+    }) as unknown as WsOrder;
+
+  const orders = [
+    po('WS-CM-0001', 'ค้างชำระ'),
+    po('WS-CM-0002', 'ปิดงานแล้ว'),
+    // A discount waiting on ผู้บริหาร.
+    po('WS-CM-0003', 'รออนุมัติราคา', {
+      items: [{ name: 'ฟิล์ม A', qty: 1, listPrice: 1000, requestedPrice: 800 }],
+    }),
+    // A reduction written after delivery, also waiting.
+    po('WS-CM-0004', 'จัดส่งแล้ว', {
+      adjustments: [{ amount: 200, reason: 'ต่อรอง', date: today, status: 'รออนุมัติ' }],
+    }),
+  ];
+
+  const listProps = {
+    orders,
+    customers: [{ id: 1, name: 'ร้านทดสอบ', phone: '', address: '' }],
+    wsStatuses: {},
+    accessibleShops: [{ id: 'cm', name: 'FINNIX FILM เชียงใหม่' }],
+    canDo: () => true,
+  };
+
+  it('เปิดด้วยสถานะ แสดงเฉพาะสถานะนั้น', () => {
+    render(<WholesaleList {...listProps} initialStatus="ค้างชำระ" />);
+    expect(screen.getAllByText(/WS-CM-0001/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/WS-CM-0002/)).toHaveLength(0);
+  });
+
+  it('เปิดด้วย approval=pending แสดงทั้งส่วนลดและปรับราคาที่รออนุมัติ', () => {
+    render(<WholesaleList {...listProps} initialApproval="pending" />);
+    // Both kinds reach the same person, so both belong in the same list.
+    expect(screen.getAllByText(/WS-CM-0003/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/WS-CM-0004/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/WS-CM-0001/)).toHaveLength(0);
+  });
+
+  it('บอกว่ากำลังกรองอยู่ และกดล้างได้', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleList {...listProps} initialApproval="pending" />);
+    const chip = screen.getByText(/กำลังกรอง: รอผู้บริหารอนุมัติ/);
+    expect(chip).toBeInTheDocument();
+
+    // A list that silently shows 2 of 4 because of something the previous
+    // screen decided is a list the reader cannot trust.
+    await user.click(chip);
+    expect(screen.getAllByText(/WS-CM-0001/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/กำลังกรอง: รอผู้บริหารอนุมัติ/)).not.toBeInTheDocument();
+  });
+
+  it('ไม่ได้กดมาจากแดชบอร์ด ก็แสดงทั้งหมดเหมือนเดิม', () => {
+    render(<WholesaleList {...listProps} />);
+    for (const id of ['WS-CM-0001', 'WS-CM-0002', 'WS-CM-0003', 'WS-CM-0004']) {
+      expect(screen.getAllByText(new RegExp(id)).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+/**
+ * จ่าหน้ากล่องส่งของ — A5 แนวนอน.
+ *
+ * Not one of the four documents: it is taped to a carton, carries no amounts,
+ * and the only thing on it that has to be legible from a trolley is who it is
+ * going to.
+ */
+describe('WholesaleDetail — จ่าหน้ากล่อง', () => {
+  const shopInfo = { north: { companyName: '', address: '99 ถ.ทดสอบ', phone: '053-000-000' } };
+  const shipOrder = {
+    ...order,
+    id: 'WS-NT-0201',
+    shop: 'north',
+    salesBy: 'โหน่ง',
+    customerId: 7,
+  } as unknown as WsOrder;
+  const customers = [
+    { id: 7, name: 'ร้านออโต้สไตล์', phone: '081-234-5678', address: '12/3 เชียงใหม่ 50100' },
+  ];
+  const reps = [{ id: 1, shop: 'north', name: 'โหน่ง', phone: '081-111-2222' }];
+  const printed = () => document.querySelector('.print-area')!;
+
+  it('ผู้รับคือลูกค้า ผู้ส่งคือร้านกับเซล และเป็นกระดาษคนละขนาด', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={shipOrder}
+        canDo={() => true}
+        customers={customers}
+        salesPeople={reps}
+        shopInfo={shopInfo}
+        shops={[{ id: 'north', name: 'Finnix North' }]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /จ่าหน้ากล่อง/ }));
+    const sheet = printed();
+    // Its own @page size — a label is the paper, not a page of a document.
+    expect(sheet.className).toContain('ship-label');
+    expect(sheet.textContent).toContain('ผู้ส่ง');
+    expect(sheet.textContent).toContain('Finnix North');
+    expect(sheet.textContent).toContain('โหน่ง โทร 081-111-2222');
+    expect(sheet.textContent).toContain('ผู้รับ');
+    expect(sheet.textContent).toContain('ร้านออโต้สไตล์');
+    expect(sheet.textContent).toContain('12/3 เชียงใหม่ 50100');
+    // Which carton belongs to which paperwork, at both ends.
+    expect(sheet.textContent).toContain('WS-NT-0201');
+    // No money on a box.
+    expect(sheet.textContent).not.toContain('ยอดรวมสุทธิ');
+  });
+
+  it('ยังไม่ได้เลือกลูกค้า ก็พิมพ์จ่าหน้าไม่ได้', () => {
+    render(
+      <WholesaleDetail
+        order={{ ...shipOrder, customerId: null } as unknown as WsOrder}
+        canDo={() => true}
+        customers={customers}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /จ่าหน้ากล่อง/ })).toBeDisabled();
+    expect(screen.getByText(/ต้องเลือกลูกค้าก่อน/)).toBeInTheDocument();
+  });
+});

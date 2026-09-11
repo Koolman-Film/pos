@@ -185,12 +185,20 @@ describe('Dashboard upcoming bookings', () => {
 });
 
 describe('Dashboard pending approvals', () => {
-  it('shows both counters and links them to wholesale', () => {
+  it('shows both counters and opens the list filtered to what each one counted', () => {
     render(<Dashboard {...base} pendingApprovals={{ discount: 2, badDebt: 1 }} />);
-    const discount = screen.getByText('ส่วนลด PO รออนุมัติ').closest('a');
-    expect(discount).toHaveAttribute('href', '/wholesale');
+    const discount = screen.getByText('ส่วนลด/ปรับราคา PO รออนุมัติ').closest('a');
+    // A number that says 2 opening a list of 40 makes the reader find those
+    // two by eye — which is the job the number was supposed to have done.
+    expect(discount).toHaveAttribute('href', '/wholesale?approval=pending');
     expect(discount).toHaveTextContent('2');
-    expect(screen.getByText('ขอตัดหนี้สูญ').closest('a')).toHaveTextContent('1');
+
+    const badDebt = screen.getByText('ขอตัดหนี้สูญ').closest('a');
+    expect(badDebt).toHaveTextContent('1');
+    expect(badDebt?.getAttribute('href')).toContain('/wholesale?status=');
+    expect(decodeURIComponent(badDebt?.getAttribute('href') ?? '')).toBe(
+      '/wholesale?status=ค้างชำระ',
+    );
   });
 
   it('is hidden when the pendingApprovals widget permission is off', () => {

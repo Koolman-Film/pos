@@ -73,6 +73,9 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         shop_id: input.shop,
         customer_id: input.customerId,
         status: input.status,
+        // null, not the empty string: the column is a date, and "no date
+        // agreed" is exactly what null means.
+        due_at: input.dueAt || null,
         sales_by: input.salesBy ?? '',
       })
       .select('id')
@@ -86,6 +89,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         shop_id: input.shop,
         customer_id: input.customerId,
         status: input.status,
+        due_at: input.dueAt || null,
         sales_by: input.salesBy ?? '',
       })
       .eq('id', orderId);
@@ -394,18 +398,83 @@ function revalidateOrder(orderId: string) {
   revalidatePath('/money');
 }
 
-/** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
-export async function approveOrderPrice(orderId: string) {
+/**
+ * อนุมัติการปรับราคา — the same decision, about the same money, as approving a
+ * below-standard price, so it is the same capability.
+ *
+ * Checked here and again inside `approve_order_adjustment`, which is the check
+ * that actually holds: this action is a plain POST anyone can send.
+ */
+export async function approveOrderAdjustment(
+  orderId: string,
+  uid: string,
+  approvedOn: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.priceApproval')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์อนุมัติการปรับราคา' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('approve_order_adjustment', {
+    p_order_id: orderId,
+    p_uid: uid,
+    p_on: approvedOn,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateOrder(orderId);
+  return { ok: true };
+}
+
+/** ปฏิเสธการปรับราคา. The row stays: somebody asked, somebody said no. */
+export async function rejectOrderAdjustment(
+  orderId: string,
+  uid: string,
+  note: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.priceApproval')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์อนุมัติการปรับราคา' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('reject_order_adjustment', {
+    p_order_id: orderId,
+    p_uid: uid,
+    p_note: note,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateOrder(orderId);
+  return { ok: true };
+}
+
+/**
+ * อนุมัติ/ปฏิเสธราคา — ทิ้งร่องรอยว่าใครตัดสินใจและเมื่อไหร่ (migration 0051).
+ *
+ * Used to be a bare status change, which meant a discount could go through
+ * and nobody could say afterwards who had agreed to it: the only evidence was
+ * a status anyone could have set. The decision now goes through
+ * `decide_order_price`, which records the person and the day — and checks the
+ * capability in the database, where the check actually holds.
+ */
+async function decidePrice(orderId: string, approve: boolean) {
   const session = await getSessionContext();
   if (!session.canDo('wholesale.priceApproval')) throw new Error('ไม่มีสิทธิ์อนุมัติราคา');
-  await setOrderStatusInternal(orderId, 'รอจัดส่ง');
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('decide_order_price', {
+    p_order_id: orderId,
+    p_approve: approve,
+  });
+  if (error) throw new Error(error.message);
+  revalidateOrder(orderId);
+}
+
+/** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
+export async function approveOrderPrice(orderId: string) {
+  await decidePrice(orderId, true);
 }
 
 /** Reject the discount → back to `รออนุมัติราคา`. Gated by `wholesale.priceApproval`. */
 export async function rejectOrderPrice(orderId: string) {
-  const session = await getSessionContext();
-  if (!session.canDo('wholesale.priceApproval')) throw new Error('ไม่มีสิทธิ์อนุมัติราคา');
-  await setOrderStatusInternal(orderId, 'รออนุมัติราคา');
+  await decidePrice(orderId, false);
 }
 
 /**

@@ -1,5 +1,6 @@
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import { fmtThaiDate } from '@/lib/domain/format';
 import {
   StockModule,
@@ -61,17 +62,36 @@ export default async function StockPage() {
   // `seeStockPrices` widget. A price-blind client never receives those values.
   // Two static `select` literals (not a computed string) so the generated types
   // resolve; the branch that omits the columns is what enforces the data gate.
-  const { data: stockRows } = canSeeStockPrices
-    ? await supabase
-        .from('stock')
-        .select('id, sku, name, short_name, category, shop_id, qty, min_qty, cost, sell_price')
-        .order('category', { ascending: true })
-        .order('name', { ascending: true })
-    : await supabase
-        .from('stock')
-        .select('id, sku, name, short_name, category, shop_id, qty, min_qty')
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
+  /*
+    ทะเบียนสินค้าทั้งหมด ไม่ใช่แค่พันรายการแรก.
+
+    PostgREST stops at `max_rows` (1000) without saying so, so past that size
+    this screen simply stopped listing the tail of the alphabet — and the shop
+    would have read that as "the product is not in the system".
+  */
+  const stockRows = canSeeStockPrices
+    ? await fetchAllRows(
+        (from, to) =>
+          supabase
+            .from('stock')
+            .select('id, sku, name, short_name, category, shop_id, qty, min_qty, cost, sell_price')
+            .order('category', { ascending: true })
+            .order('name', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to),
+        'stock',
+      )
+    : await fetchAllRows(
+        (from, to) =>
+          supabase
+            .from('stock')
+            .select('id, sku, name, short_name, category, shop_id, qty, min_qty')
+            .order('category', { ascending: true })
+            .order('name', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to),
+        'stock',
+      );
 
   type StockRow = {
     id: number;
@@ -85,7 +105,7 @@ export default async function StockPage() {
     cost?: number;
     sell_price?: number;
   };
-  const stock: StockItem[] = ((stockRows ?? []) as unknown as StockRow[]).map((row) => {
+  const stock: StockItem[] = (stockRows as unknown as StockRow[]).map((row) => {
     const item: StockItem = {
       id: row.id,
       sku: row.sku,

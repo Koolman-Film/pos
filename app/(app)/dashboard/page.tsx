@@ -4,7 +4,9 @@ import { daysAgoValue } from '@/lib/domain/now';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import { itemNetPrice, ticketTotal } from '@/lib/domain/tickets';
+import { needsPriceApproval } from '@/lib/domain/orders';
 import { wholesaleRevenueLines } from '@/lib/domain/wholesaleRevenue';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
@@ -76,7 +78,7 @@ export default async function DashboardPage({
     { data: accountRows },
     { data: transferRows },
     { data: visitRows },
-    { data: stockRows },
+    stockRows,
     { data: shopRows },
     { data: statusRows },
     { data: policyRows },
@@ -94,7 +96,7 @@ export default async function DashboardPage({
     supabase
       .from('orders')
       .select(
-        'id, shop_id, customer_id, status, delivered_at, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at), order_payments(amount, method, paid_at, status, cleared_at)',
+        'id, shop_id, customer_id, status, delivered_at, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, paid_at, status, cleared_at)',
       )
       // Deleted POs (migration 0040) are out of the wholesale figures here for
       // the same reason deleted tickets are out of the ticket ones above.
@@ -130,9 +132,22 @@ export default async function DashboardPage({
       // calendar month nobody is looking at.
       .gte('received_at', daysAgoValue(365))
       .order('visit_no', { ascending: false }),
-    //  is here for the ขายส่ง breakdown: a PO stores the product NAME,
-    // and the stock register is where that name has a ชนิดสินค้า.
-    supabase.from('stock').select('name, category, shop_id, qty'),
+    // `name` is here for the ขายส่ง breakdown: a PO stores the product
+    // NAME, and the stock register is where that name has a ชนิดสินค้า.
+    //
+    // Paged: PostgREST answers at most `max_rows` (1000) and says nothing when
+    // it truncates, so a shop past that size silently loses whole ชนิดสินค้า out
+    // of the stock summary and mis-files wholesale lines as ไม่ระบุชนิด.
+    fetchAllRows<{ name: string; category: string; shop_id: string; qty: number }>(
+      (from, to) =>
+        supabase
+          .from('stock')
+          .select('name, category, shop_id, qty')
+          .order('shop_id')
+          .order('name')
+          .range(from, to),
+      'stock',
+    ),
     supabase.from('shops').select('id, name, sort_order').order('sort_order'),
     supabase
       .from('statuses')
@@ -250,6 +265,8 @@ export default async function DashboardPage({
       amount: num(a.amount),
       reason: a.reason ?? '',
       date: a.adjusted_at,
+      // เฉพาะที่อนุมัติแล้วที่ลดยอด (0050) — `orderTotal` reads this.
+      status: a.status ?? '',
     })),
     payments: (o.order_payments ?? []).map((p) => ({
       amount: num(p.amount),
@@ -466,7 +483,7 @@ export default async function DashboardPage({
     place the ขายส่ง picker takes the product from.
   */
   const stockCategoryByName = new Map<string, string>();
-  for (const st of stockRows ?? []) {
+  for (const st of stockRows) {
     if (st.name && st.category && !stockCategoryByName.has(st.name)) {
       stockCategoryByName.set(st.name, st.category);
     }
@@ -550,7 +567,7 @@ export default async function DashboardPage({
     amount: paidExpenses.filter((e) => e.category === cat).reduce((s, e) => s + e.amount, 0),
   }));
 
-  const visibleStock = (stockRows ?? []).filter((s) => inShop(s.shop_id));
+  const visibleStock = stockRows.filter((s) => inShop(s.shop_id));
   const stockCats = [...new Set(visibleStock.map((s) => s.category))];
   const stockByCategory = stockCats.map((cat) => ({
     name: cat,
@@ -662,9 +679,16 @@ export default async function DashboardPage({
   // shop-filtered subset — matching the prototype, which reads `orders` directly
   // rather than `wsVisible` here (:896-897).
   const pendingApprovals: PendingApprovals = {
-    discount: orders.filter(
-      (o) => o.status === 'รออนุมัติราคา' && o.items.some((i) => i.requestedPrice < i.listPrice),
-    ).length,
+    /*
+      Two ways the same decision reaches ผู้บริหาร: a price offered below the
+      standard one, and a reduction written after the goods have gone out
+      (migration 0050). Counting only the first would leave the second waiting
+      on a screen nobody is told to open — and the second is the looser of the
+      two, because by then the invoice has already been raised.
+    */
+    // The same predicate the ขายส่ง list filters by, so the number and the
+    // list it opens can never disagree.
+    discount: orders.filter(needsPriceApproval).length,
     badDebt: orders.filter((o) => o.status === 'ค้างชำระ').length,
   };
 
