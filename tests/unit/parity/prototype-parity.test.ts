@@ -117,6 +117,8 @@ const ACCEPTED_ABSENCES: Record<string, string> = {
     'divergence: the panel listed only what was spent, which is half a cash book — the เงินสดย่อยคงเหลือ figure above it moves on top-ups too, so the two could not be reconciled from what was on screen. It now lists both directions and is titled รายการที่รับ-จ่ายจากเงินสดย่อย.',
   ไม่มีรายการที่จ่ายจากเงินสดย่อยในช่วงเวลานี้:
     'divergence: empty state of the same panel, reworded to รายการรับ-จ่าย to match.',
+  'ประวัติการตัดสต็อก (เบิก / ใบงาน / ขายส่ง)':
+    'divergence: the heading promised three sources and the panel under it listed one — it is fed by `withdrawals`, which only ever holds internal withdrawals. ใบงาน and ขายส่ง movements live in `stock_movements` and have their own ledger panel on the same page, so the shop read an empty box here and concluded wholesale had never deducted anything. Renamed to ประวัติการเบิกใช้ภายใน, which is what it shows.',
   'ที่อยู่ (นิติบุคคล)':
     "divergence: this was a row label in the financial document's old key/value table. The redesigned document prints the corporate address inside the ข้อมูลลูกค้า column without a row label, the way the shop's own invoice sample does. The address itself is still printed on a ใบกำกับภาษี.",
 };

@@ -2178,7 +2178,7 @@ export function StockModule({
           </>
         )}
 
-        <p className="text-sm font-semibold mb-3">ประวัติการตัดสต็อก (เบิก / ใบงาน / ขายส่ง)</p>
+        <p className="text-sm font-semibold mb-3">ประวัติการเบิกใช้ภายใน</p>
         <div className="card p-5 sm:p-6">
           <div className="flex flex-col gap-2.5">
             {visibleWithdrawals.length === 0 && (

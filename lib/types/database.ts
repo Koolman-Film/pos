@@ -785,6 +785,10 @@ export type Database = {
       order_returns: {
         Row: {
           returned_at: string
+          received_at: string | null
+          received_by: string | null
+          stock_returned_at: string | null
+          uid: string
           id: number
           item_name: string
           order_id: string
@@ -793,6 +797,10 @@ export type Database = {
         }
         Insert: {
           returned_at?: string
+          received_at?: string | null
+          received_by?: string | null
+          stock_returned_at?: string | null
+          uid?: string
           id?: never
           item_name: string
           order_id: string
@@ -801,6 +809,10 @@ export type Database = {
         }
         Update: {
           returned_at?: string
+          received_at?: string | null
+          received_by?: string | null
+          stock_returned_at?: string | null
+          uid?: string
           id?: never
           item_name?: string
           order_id?: string
@@ -820,6 +832,8 @@ export type Database = {
       orders: {
         Row: {
           sales_by: string
+          note: string
+          stock_deducted_at: string | null
           price_decided_at: string | null
           price_decided_by: string | null
           price_decision: string
@@ -835,6 +849,8 @@ export type Database = {
         }
         Insert: {
           sales_by?: string
+          note?: string
+          stock_deducted_at?: string | null
           price_decided_at?: string | null
           price_decided_by?: string | null
           price_decision?: string
@@ -850,6 +866,8 @@ export type Database = {
         }
         Update: {
           sales_by?: string
+          note?: string
+          stock_deducted_at?: string | null
           price_decided_at?: string | null
           price_decided_by?: string | null
           price_decision?: string
@@ -1916,6 +1934,10 @@ export type Database = {
       }
       decide_order_price: {
         Args: { p_approve: boolean; p_order_id: string }
+        Returns: undefined
+      }
+      confirm_order_return: {
+        Args: { p_on?: string; p_order_id: string; p_uid: string }
         Returns: undefined
       }
       confirm_order_payment: {
