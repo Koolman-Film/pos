@@ -302,6 +302,20 @@ body {
   .print-area.offsite-form {
     page: offsite-page;
   }
+  /*
+    จ่าหน้ากล่องส่งของ — A5 แนวนอน.
+
+    Its own page size because it is not a document, it is a label that gets
+    taped to a box: the paper is the deliverable, and A4 portrait would waste
+    half of it and put the address in the wrong place on the carton.
+  */
+  @page ship-label {
+    size: A5 landscape;
+    margin: 8mm;
+  }
+  .print-area.ship-label {
+    page: ship-label;
+  }
   body,
   html {
     background: #fff !important;

@@ -104,7 +104,7 @@ function newPaymentUid(): string {
  */
 /** ขายส่งออกสี่ใบนี้ ไม่มีใบกำกับภาษี — ยืนยันกับร้านแล้ว. */
 const DOCS: {
-  key: Exclude<WsPrintMode, null>;
+  key: Exclude<WsPrintMode, null | 'label'>;
   label: string;
   icon: string;
   /** Why the button is off, shown only while it is. */
@@ -688,7 +688,7 @@ export function WholesaleDetail({
   const canDeliver = !isNew && o.items.some((it) => Number(it.qty) > 0);
   const canReturn = !isNew && o.returns.length > 0;
 
-  const docAllowed: Record<Exclude<WsPrintMode, null>, boolean> = {
+  const docAllowed: Record<(typeof DOCS)[number]['key'], boolean> = {
     invoice: canInvoice,
     delivery: canDeliver,
     ret: canReturn,
@@ -793,6 +793,17 @@ export function WholesaleDetail({
     }
     doPrint(mode);
   }
+  /*
+    ข้อมูลบนจ่าหน้ากล่อง.
+
+    Read off the customer record rather than the document letterhead: a label
+    is addressed to a place, and the place is what the ทะเบียนลูกค้า holds.
+  */
+  const shippingCustomer = customers.find((c) => c.id === o.customerId) ?? null;
+  const customerAddress = shippingCustomer?.address ?? '';
+  const customerPhone = shippingCustomer?.phone ?? '';
+  const senderShopName = shopInfo?.[o.shop]?.companyName || shopName(o.shop, shops);
+
   const hasDiscount = o.items.some((i) => i.requestedPrice < i.listPrice);
   const st = wsStatuses[o.status] || {};
 
@@ -1352,6 +1363,27 @@ export function WholesaleDetail({
                 );
               })}
             </div>
+            {/*
+              จ่าหน้ากล่องส่งของ.
+
+              Outside the grid on purpose: the shop issues exactly four
+              documents and this is not one of them — it is a label for the
+              outside of a box, with no amounts on it. Grouping it with the
+              invoice would suggest it is paperwork the customer keeps.
+            */}
+            <button
+              onClick={() => doPrint('label')}
+              disabled={!o.customerId}
+              className="w-full mt-2 rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2 btn-outline"
+              style={{ cursor: o.customerId ? 'pointer' : 'not-allowed' }}
+            >
+              <i className="fa-solid fa-box"></i>พิมพ์จ่าหน้ากล่อง (A5 แนวนอน)
+            </button>
+            {!o.customerId && (
+              <p className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                ต้องเลือกลูกค้าก่อน จึงจะพิมพ์จ่าหน้ากล่องได้
+              </p>
+            )}
             {DOCS.filter((d) => !docAllowed[d.key]).map((d) => (
               <p key={d.key} className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
                 {d.blocked}
@@ -1410,7 +1442,69 @@ export function WholesaleDetail({
           </div>
         </div>
         {mounted &&
+          printMode === 'label' &&
+          createPortal(
+            /*
+              จ่าหน้ากล่อง — ผู้รับตัวใหญ่กลางกระดาษ ผู้ส่งตัวเล็กมุมซ้ายบน.
+
+              Sized for reading at arm’s length off a carton on a trolley, not
+              for reading on a desk: the recipient is the only thing that has
+              to be legible from a distance, so it gets the middle of the sheet
+              and everything else stays out of its way.
+            */
+            <div
+              className="print-area ship-label"
+              style={{ display: 'flex', flexDirection: 'column', minHeight: '120mm' }}
+            >
+              <div style={{ fontSize: 11, lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 700 }}>ผู้ส่ง</span> {senderShopName}
+                {sellerName && (
+                  <>
+                    <br />
+                    {sellerName}
+                    {seller?.phone ? ` โทร ${seller.phone}` : ''}
+                  </>
+                )}
+                {!sellerName && shopInfo?.[o.shop]?.phone && (
+                  <>
+                    <br />
+                    โทร {shopInfo[o.shop].phone}
+                  </>
+                )}
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  padding: '0 6mm',
+                }}
+              >
+                <p style={{ fontSize: 13, margin: '0 0 4mm', letterSpacing: 2 }}>ผู้รับ</p>
+                <p style={{ fontSize: 30, fontWeight: 700, margin: 0, lineHeight: 1.25 }}>
+                  {customerName(o.customerId, customers)}
+                </p>
+                {customerAddress && (
+                  <p style={{ fontSize: 18, margin: '4mm 0 0', lineHeight: 1.45 }}>
+                    {customerAddress}
+                  </p>
+                )}
+                {customerPhone && (
+                  <p style={{ fontSize: 18, margin: '3mm 0 0' }}>โทร {customerPhone}</p>
+                )}
+              </div>
+              {/* Small, at the foot: which PO this box belongs to, for the
+                  person matching cartons against paperwork at either end. */}
+              <p style={{ fontSize: 10, textAlign: 'right', margin: 0 }}>{o.id}</p>
+            </div>,
+            document.body,
+          )}
+        {mounted &&
           printMode &&
+          printMode !== 'label' &&
           createPortal(
             <div className="print-area">
               <div

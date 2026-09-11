@@ -138,7 +138,12 @@ export type WsDeletedOrder = WsOrder & {
  * `delivery` and `ret` are not only paperwork: issuing them records the two
  * dates the money figures are built on (migration 0045).
  */
-export type WsPrintMode = 'invoice' | 'delivery' | 'ret' | 'receipt' | null;
+/**
+ * `label` คือจ่าหน้ากล่อง ไม่ใช่เอกสาร — it is taped to a carton, printed A5
+ * landscape, and carries no amounts at all. Listed here because it shares the
+ * same print portal as the four documents.
+ */
+export type WsPrintMode = 'invoice' | 'delivery' | 'ret' | 'receipt' | 'label' | null;
 
 /**
  * พนักงานขายของสาขาหนึ่ง (migration 0047).

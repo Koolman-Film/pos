@@ -900,3 +900,68 @@ describe('WholesaleList — กรองตามที่กดมาจาก�
     }
   });
 });
+
+/**
+ * จ่าหน้ากล่องส่งของ — A5 แนวนอน.
+ *
+ * Not one of the four documents: it is taped to a carton, carries no amounts,
+ * and the only thing on it that has to be legible from a trolley is who it is
+ * going to.
+ */
+describe('WholesaleDetail — จ่าหน้ากล่อง', () => {
+  const shopInfo = { north: { companyName: '', address: '99 ถ.ทดสอบ', phone: '053-000-000' } };
+  const shipOrder = {
+    ...order,
+    id: 'WS-NT-0201',
+    shop: 'north',
+    salesBy: 'โหน่ง',
+    customerId: 7,
+  } as unknown as WsOrder;
+  const customers = [
+    { id: 7, name: 'ร้านออโต้สไตล์', phone: '081-234-5678', address: '12/3 เชียงใหม่ 50100' },
+  ];
+  const reps = [{ id: 1, shop: 'north', name: 'โหน่ง', phone: '081-111-2222' }];
+  const printed = () => document.querySelector('.print-area')!;
+
+  it('ผู้รับคือลูกค้า ผู้ส่งคือร้านกับเซล และเป็นกระดาษคนละขนาด', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={shipOrder}
+        canDo={() => true}
+        customers={customers}
+        salesPeople={reps}
+        shopInfo={shopInfo}
+        shops={[{ id: 'north', name: 'Finnix North' }]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /จ่าหน้ากล่อง/ }));
+    const sheet = printed();
+    // Its own @page size — a label is the paper, not a page of a document.
+    expect(sheet.className).toContain('ship-label');
+    expect(sheet.textContent).toContain('ผู้ส่ง');
+    expect(sheet.textContent).toContain('Finnix North');
+    expect(sheet.textContent).toContain('โหน่ง โทร 081-111-2222');
+    expect(sheet.textContent).toContain('ผู้รับ');
+    expect(sheet.textContent).toContain('ร้านออโต้สไตล์');
+    expect(sheet.textContent).toContain('12/3 เชียงใหม่ 50100');
+    // Which carton belongs to which paperwork, at both ends.
+    expect(sheet.textContent).toContain('WS-NT-0201');
+    // No money on a box.
+    expect(sheet.textContent).not.toContain('ยอดรวมสุทธิ');
+  });
+
+  it('ยังไม่ได้เลือกลูกค้า ก็พิมพ์จ่าหน้าไม่ได้', () => {
+    render(
+      <WholesaleDetail
+        order={{ ...shipOrder, customerId: null } as unknown as WsOrder}
+        canDo={() => true}
+        customers={customers}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /จ่าหน้ากล่อง/ })).toBeDisabled();
+    expect(screen.getByText(/ต้องเลือกลูกค้าก่อน/)).toBeInTheDocument();
+  });
+});
