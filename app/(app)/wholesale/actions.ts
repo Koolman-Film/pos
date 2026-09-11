@@ -447,6 +447,66 @@ export async function rejectOrderAdjustment(
 }
 
 /**
+ * เพิ่ม/แก้ไขพนักงานขาย (migration 0053).
+ *
+ * 0047 seeded โหน่ง and เคน with empty phones and gave the shop no screen to
+ * fill them in — so the one field the wholesale documents are built around
+ * could only be set by editing the database by hand.
+ *
+ * Gated by `options.manage`, the key that already covers editing the shop’s
+ * own reference lists: picking your name off a list is not the same act as
+ * editing the list. Checked here and again by the RLS policy, which is where
+ * it holds.
+ */
+export async function saveSalesPerson(input: {
+  id?: number;
+  shop: string;
+  name: string;
+  phone: string;
+}): Promise<{ ok: boolean; error?: string; name?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('options.manage')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขรายชื่อพนักงานขาย' };
+  }
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: 'ต้องใส่ชื่อพนักงานขาย' };
+
+  const supabase = await createClient();
+  if (input.id) {
+    /*
+      A rename carries the POs with it. `orders.sales_by` stores the NAME
+      (0047), so renaming the row alone would orphan every PO that person
+      sold — they would read as ไม่ระบุ and drop out of their own totals.
+    */
+    const { data: before } = await supabase
+      .from('sales_people')
+      .select('name')
+      .eq('id', input.id)
+      .maybeSingle();
+    const { error } = await supabase
+      .from('sales_people')
+      .update({ name, phone: input.phone })
+      .eq('id', input.id);
+    if (error) return { ok: false, error: error.message };
+    if (before?.name && before.name !== name) {
+      await supabase
+        .from('orders')
+        .update({ sales_by: name })
+        .eq('shop_id', input.shop)
+        .eq('sales_by', before.name);
+    }
+  } else {
+    const { error } = await supabase
+      .from('sales_people')
+      .insert({ shop_id: input.shop, name, phone: input.phone });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidatePath('/wholesale');
+  return { ok: true, name };
+}
+
+/**
  * อนุมัติ/ปฏิเสธราคา — ทิ้งร่องรอยว่าใครตัดสินใจและเมื่อไหร่ (migration 0051).
  *
  * Used to be a bare status change, which meant a discount could go through

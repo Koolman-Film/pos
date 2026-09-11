@@ -16,6 +16,7 @@ import {
   rejectOrderPrice,
   saveCustomer,
   saveOrder,
+  saveSalesPerson,
 } from '../actions';
 import { loadOrderDetailData } from '../data';
 
@@ -73,6 +74,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       onRejectAdjustment={rejectOrderAdjustment}
       onBouncePayment={bounceOrderPayment}
       onSaveCustomer={saveCustomer}
+      onSaveSalesPerson={saveSalesPerson}
       updateOptionListAction={updateOptionListAction}
     />
   );

@@ -26,6 +26,7 @@ import {
 import { dateInputValue } from '@/lib/domain/now';
 
 import { CustomerPicker } from './CustomerPicker';
+import { SalesPersonPicker } from './SalesPersonPicker';
 import {
   customerName,
   customerPurchasedProducts,
@@ -161,6 +162,7 @@ export function WholesaleDetail({
   onApproveAdjustment,
   onRejectAdjustment,
   onSaveCustomer,
+  onSaveSalesPerson,
   onBack,
   updateOptionListAction,
 }: {
@@ -247,6 +249,19 @@ export function WholesaleDetail({
     phone: string;
     address: string;
   }) => Promise<number> | number;
+  /**
+   * เพิ่ม/แก้ไขพนักงานขาย — gated by `options.manage` (migration 0053).
+   *
+   * On the PO form rather than a settings page: the moment somebody notices
+   * the phone is missing is the moment they are filling in a PO, and sending
+   * them elsewhere to fix it means the PO gets saved without it.
+   */
+  onSaveSalesPerson?: (input: {
+    id?: number;
+    shop: string;
+    name: string;
+    phone: string;
+  }) => Promise<{ ok: boolean; error?: string; name?: string }>;
   /**
    * Persists วิธีชำระเงิน. Without it the picker only edits React state, so a
    * method added here was gone on the next load.
@@ -409,6 +424,24 @@ export function WholesaleDetail({
     };
     setO({ ...o, items });
   }
+  /*
+    ชื่อย่อของสินค้าที่รับคืน.
+
+    The return row is five fields wide, so its product box shows perhaps
+    twenty characters of a name like "(ม้วน) ฟิล์มกรองแสง FINNIX Ceramic 40%
+    (500)" — every option in the list reads identically and the person picking
+    one is choosing blind. The short name is what tells them apart, so it goes
+    first, exactly as it does in the item picker above.
+  */
+  const shortNameOf = (name: string) =>
+    stock.find((st) => st.shop === o.shop && st.name === name)?.shortName ??
+    stock.find((st) => st.name === name)?.shortName ??
+    '';
+  const returnLabel = (name: string) => {
+    const short = shortNameOf(name);
+    return short ? `${short} · ${name}` : name;
+  };
+
   const purchasedProducts = [
     ...new Set([
       ...o.items.map((it) => it.name).filter(Boolean),
@@ -888,26 +921,19 @@ export function WholesaleDetail({
             {/* Only where the branch has a sales team. Most branches sell
                 wholesale through whoever is on the counter, and an empty picker
                 asking for a name nobody has is a field that gets ignored. */}
-            {branchSales.length > 0 && (
-              <div className="mt-2">
-                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                  พนักงานขาย
-                </label>
-                <select
-                  aria-label="พนักงานขายของ PO นี้"
-                  value={o.salesBy ?? ''}
-                  onChange={(e) => field('salesBy', e.target.value)}
-                  className="field w-full text-sm px-3 py-2"
-                >
-                  <option value="">ยังไม่ระบุ</option>
-                  {branchSales.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                      {p.phone ? ` · ${p.phone}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* Also shown to a manager when the branch has NO reps yet —
+                otherwise a new wholesale branch could never get its first one,
+                which is how Finnix North ended up with two names and no
+                phone numbers that anyone could reach. */}
+            {(branchSales.length > 0 || can('options.manage')) && (
+              <SalesPersonPicker
+                value={o.salesBy ?? ''}
+                shop={o.shop}
+                people={branchSales}
+                canManage={can('options.manage')}
+                onSelect={(name) => field('salesBy', name)}
+                onSavePerson={onSaveSalesPerson}
+              />
             )}
           </div>
           <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.items)}>
@@ -1101,7 +1127,7 @@ export function WholesaleDetail({
                   </option>
                   {purchasedProducts.map((name) => (
                     <option key={name} value={name}>
-                      {name}
+                      {returnLabel(name)}
                     </option>
                   ))}
                 </select>
