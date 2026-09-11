@@ -51,29 +51,60 @@ where not exists (
 --
 -- SKU: SRV-<รหัสสาขา>-<ลำดับ> เช่น SRV-CM-01
 
+/*
+  แก้ 2026-09-11 ตอนขึ้นระบบจริง — รุ่นก่อนหน้าพังสองทาง
+
+  1) SKU ชนกัน. เลขลำดับมาจาก row_number() ซึ่งเริ่มนับหนึ่งใหม่ทุกครั้ง ไม่ได้ดู
+     ว่าสาขานั้นใช้เลขไหนไปแล้ว พอรันรอบสองจึงชน:
+       ERROR: duplicate key value violates unique constraint "stock_sku_key"
+       DETAIL: Key (sku)=(SRV-CA-07) already exists.
+     ตอนนี้เริ่มนับต่อจากเลขสูงสุดที่สาขานั้นใช้ไปแล้ว
+
+  2) กันซ้ำผิดคีย์. ของเดิมเช็ค name + category = 'งานบริการ' แต่ดัชนีที่บังคับ
+     ความไม่ซ้ำคือ stock_shop_name_key บน (shop_id, name) ซึ่งไม่สนใจ category
+     ที่ Central Audio มีสองแถวที่ทีมงานย้ายไปหมวด 'จอ' แล้ว (SRV-CA-07, 09)
+     ของเดิมจึงมองไม่เห็น และจะแทรกชื่อเดิมซ้ำเข้าไปอีก ทำให้ล้มที่ชื่อแทน
+     ตอนนี้เช็คแค่ (สาขา, ชื่อ) — ใครย้ายหมวดไว้แล้วก็ปล่อยไว้อย่างนั้น ช่องเลือก
+     สินค้าในใบงานอ่านจากสต็อกด้วยชื่อ ของที่ย้ายหมวดแล้วจึงยังเลือกได้ตามปกติ
+
+  3) รวมค่าซ้ำใน option_lists ก่อน. ของเดิมไม่ได้กรอง shop_id ของ option_lists
+     ถ้ามีรายการชื่อเดียวกันทั้งแบบรวมและแบบเฉพาะสาขา cross join จะได้ชื่อซ้ำ
+     แล้วชนกับ stock_shop_name_key เอง
+*/
+with service_items as (
+  select btrim(o.value) as value, min(o.sort_order) as sort_order
+  from option_lists o
+  where o.list_key = 'service_items'
+    and btrim(coalesce(o.value, '')) <> ''
+  group by btrim(o.value)
+)
 insert into stock (sku, name, short_name, category, shop_id, qty, min_qty, cost, sell_price)
 select
-  'SRV-' || upper(sh.id) || '-' || lpad(row_number() over (partition by sh.id order by o.sort_order)::text, 2, '0'),
-  o.value,
-  o.value,
+  'SRV-' || upper(sh.id) || '-' || lpad(
+    (taken.n + row_number() over (partition by sh.id order by i.sort_order))::text, 2, '0'),
+  i.value,
+  i.value,
   'งานบริการ',
   sh.id,
   0,
   0,
   0,
   0
-from option_lists o
+from service_items i
 cross join shops sh
-where o.list_key = 'service_items'
-  and btrim(coalesce(o.value, '')) <> ''
-  and not exists (
-    select 1 from stock st
-    where st.shop_id = sh.id
-      and st.name = o.value
-      and st.category = 'งานบริการ'
-  );
-
--- ===========================================================================
+-- เลขสูงสุดที่สาขานี้ใช้ไปแล้ว อ่านครั้งเดียวต่อสาขา แถวที่กำลังแทรกยังมองไม่เห็น
+-- ตัวเอง เลขจึงเดินต่อจากของเดิมโดยไม่ชนกัน
+cross join lateral (
+  select coalesce(max(split_part(st.sku, '-', 3)::int), 0) as n
+  from stock st
+  where st.shop_id = sh.id
+    and st.sku ~ ('^SRV-' || upper(sh.id) || '-[0-9]+$')
+) as taken
+where not exists (
+  select 1 from stock st
+  where st.shop_id = sh.id
+    and btrim(st.name) = i.value
+);-- ===========================================================================
 -- ตรวจผล
 -- ===========================================================================
 
