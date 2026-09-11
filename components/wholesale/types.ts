@@ -80,6 +80,13 @@ export type WsOrder = {
    */
   deliveredAt?: string;
   /**
+   * กำหนดชำระเงิน (migration 0049) — printed on ใบแจ้งหนี้ and ใบส่งของ.
+   *
+   * Empty means nobody agreed a date, and the documents then say nothing
+   * rather than inventing one from the delivery date.
+   */
+  dueAt?: string;
+  /**
    * พนักงานขายที่ขาย PO ใบนี้ — a NAME (migration 0047), not an id.
    *
    * Their phone heads the documents this PO produces, and their name signs

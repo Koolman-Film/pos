@@ -806,6 +806,7 @@ export type Database = {
         Row: {
           sales_by: string
           delivered_at: string | null
+          due_at: string | null
           created_at: string
           customer_id: number | null
           deleted_at: string | null
@@ -817,6 +818,7 @@ export type Database = {
         Insert: {
           sales_by?: string
           delivered_at?: string | null
+          due_at?: string | null
           created_at?: string
           customer_id?: number | null
           deleted_at?: string | null
@@ -828,6 +830,7 @@ export type Database = {
         Update: {
           sales_by?: string
           delivered_at?: string | null
+          due_at?: string | null
           created_at?: string
           customer_id?: number | null
           deleted_at?: string | null

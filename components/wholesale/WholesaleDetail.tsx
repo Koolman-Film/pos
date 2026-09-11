@@ -926,6 +926,29 @@ export function WholesaleDetail({
               </p>
             </div>
           )}
+          {/*
+            กำหนดชำระเงิน.
+
+            Wholesale ships first and collects later, so every PO carries a
+            credit term — and the system held no record of it, which left the
+            invoice saying what was owed and nothing about when. Sits beside the
+            goods because it is agreed when the order is taken, not when the
+            money is chased.
+          */}
+          <div className="mb-5">
+            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+              <i className="fa-solid fa-calendar-check mr-1.5"></i>กำหนดชำระเงิน
+            </label>
+            <ThaiDateInput
+              value={o.dueAt || ''}
+              onChange={(v) => field('dueAt', v)}
+              ariaLabel="กำหนดชำระเงิน"
+              className="field text-sm px-3 py-2 w-full"
+            />
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+              พิมพ์ลงในใบแจ้งหนี้และใบส่งของ เว้นว่างได้ถ้ายังไม่ได้ตกลงวันกัน
+            </p>
+          </div>
           <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.returns)}>
             <p className="text-xs font-semibold mb-3" style={{ color: PANEL.returns.spine }}>
               <i className="fa-solid fa-rotate-left mr-1.5"></i>การคืนสินค้า
@@ -1266,6 +1289,25 @@ export function WholesaleDetail({
                       {sheet.referenceDate
                         ? ` · เปิด PO ${fmtThaiDayString(sheet.referenceDate.slice(0, 10))}`
                         : ''}
+                    </p>
+                  )}
+                  {/*
+                    กำหนดชำระเงิน — on the two documents that ask for money.
+
+                    Not on the ใบรับคืน (nothing is being asked for) and not on
+                    the ใบเสร็จ (it has already been paid). Printed in the
+                    document’s own corner, next to its date, because "ลงวันที่
+                    วันนี้ ครบกำหนดวันนั้น" is one thought.
+                  */}
+                  {o.dueAt && (printMode === 'invoice' || printMode === 'delivery') && (
+                    <p
+                      style={{
+                        fontSize: 12,
+                        margin: '4px 0 0',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      กำหนดชำระเงิน {fmtThaiDayString(o.dueAt)}
                     </p>
                   )}
                 </div>

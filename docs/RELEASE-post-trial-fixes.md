@@ -84,10 +84,11 @@ it twice changes nothing, and each records its versions in
 | 27    | `supabase/release-0046.sql`                   | a normal connection                                 |
 | 28    | `supabase/release-0047.sql`                   | a normal connection                                 |
 | 29    | `supabase/release-0048.sql`                   | a normal connection                                 |
-| 30    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 30    | `supabase/release-0049.sql`                   | a normal connection                                 |
+| 31    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
-already been handed over. If nothing has been run yet, running all thirty-one in order
+already been handed over. If nothing has been run yet, running all thirty-two in order
 is still correct.
 
 `release-0030.sql` is numbered 0 because it is the one file that is urgent and
@@ -150,6 +151,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0046_backfill_delivered_at`          | เติม `orders.delivered_at` ย้อนหลังด้วยวันที่สร้าง PO เฉพาะใบที่สถานะเป็น จัดส่งแล้ว / ค้างชำระ / ปิดงานแล้ว และยังไม่มีวันส่งของ ใบที่ยังอยู่ที่ รออนุมัติราคา หรือ รอจัดส่ง ไม่ถูกแตะ                                                                                                                                                                                                                                                                        | **ปานกลาง — อ่านหมายเหตุ.** วันที่สร้าง PO ไม่ใช่วันส่งของจริง เป็นวันที่ใกล้เคียงที่สุดที่แถวเหล่านั้นมี ถ้าไม่เติม ใบเหล่านั้นจะไม่ถูกนับเป็นยอดขายเลย                                                       |
 | `0047_sales_people`                   | ตาราง `sales_people` (พนักงานขายรายสาขา พร้อมเบอร์โทร) และ `orders.sales_by` เก็บชื่อคนขายของแต่ละ PO เอกสารขายส่งของสาขาที่มีทีมขายจะขึ้นหัวเป็นชื่อร้าน + เบอร์ของ sale คนที่ออกเอกสาร และเซ็นชื่อให้อัตโนมัติ สาขาที่ไม่มีทีมขายยังใช้หัวเอกสารแบบเดิม                                                                                                                                                                                                      | ต่ำ. เพิ่มตารางและคอลัมน์ที่มีค่าตั้งต้น PO เดิมขึ้นว่า ไม่ระบุ ไม่เดาให้                                                                                                                                      |
 | `0048_wholesale_cheque_payments`      | การรับเงินขายส่งแยกเป็นสามเหตุการณ์: แจ้งแล้ว → รับเงินแล้ว → เด้ง พร้อมเลขที่เช็ค ธนาคาร และวันที่หน้าเช็ค **หนี้จะถูกตัดเมื่อยืนยันว่าเงินเข้าจริงเท่านั้น** และการ์ดเงินอยู่ที่ไหนบ้างนับตามวันที่เงินเข้า ไม่ใช่วันที่รับเช็ค เพิ่มสิทธิ์ `ขายส่ง: ยืนยันเงินเข้า` ให้แอดมินกับผู้บริหาร sale บันทึกและแจ้งได้แต่ยืนยันไม่ได้                                                                                                                              | ปานกลาง. รายการรับเงินที่มีอยู่เดิมถูกเติมเป็น รับเงินแล้ว ทั้งหมด ตัวเลขจึงไม่ขยับ แต่ **รายการที่บันทึกหลังจากนี้จะไม่ถูกนับเป็นเงินจนกว่าจะกดยืนยัน** ต้องบอกแอดมินก่อนขึ้นระบบ ไม่งั้นจะดูเหมือนยอดชำระหาย |
+| `0049_order_due_date`                 | เพิ่ม `orders.due_at` — กำหนดชำระเงินของ PO พิมพ์ลงในใบแจ้งหนี้และใบส่งของ เว้นว่างได้ถ้ายังไม่ได้ตกลงวันกัน เอกสารก็จะไม่พิมพ์บรรทัดนี้                                                                                                                                                                                                                                                                                                                       | ต่ำ. เพิ่มคอลัมน์ที่เป็น null ได้ PO เดิมไม่มีวันกำหนดชำระ และไม่มีตัวเลขไหนขยับ                                                                                                                               |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

@@ -760,3 +760,64 @@ describe('WholesaleDetail — ลบรายการ', () => {
     expect(screen.queryByLabelText('ลบรายการคืนสินค้าที่ 1')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * กำหนดชำระเงิน (migration 0049).
+ *
+ * ขายส่งส่งของก่อนแล้วเก็บเงินทีหลัง so every PO carries a credit term, and the
+ * system recorded it nowhere — the invoice went out saying what was owed and
+ * nothing about when, which left the shop chasing on memory.
+ */
+describe('WholesaleDetail — กำหนดชำระเงิน', () => {
+  const dueOrder = {
+    ...order,
+    id: 'WS-CM-0120',
+    dueAt: '2026-10-31',
+    deliveredAt: '2026-09-30',
+  } as unknown as WsOrder;
+  const printed = () => document.querySelector('.print-area')!;
+
+  it('พิมพ์ลงในใบแจ้งหนี้และใบส่งของ', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(<WholesaleDetail order={dueOrder} canDo={() => true} />);
+
+    for (const doc of [/ใบแจ้งหนี้/, /ใบส่งของ/]) {
+      await user.click(screen.getByRole('button', { name: doc }));
+      expect(printed().textContent).toContain('กำหนดชำระเงิน 31 ต.ค. 2569');
+    }
+  });
+
+  it('ไม่พิมพ์บนใบเสร็จ เพราะจ่ายไปแล้ว', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...dueOrder,
+            payments: [{ amount: 10000, method: 'เงินสด', date: '2026-10-02', attachments: [] }],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบเสร็จรับเงิน/ }));
+    expect(printed().textContent).not.toContain('กำหนดชำระเงิน');
+  });
+
+  it('ไม่มีวันที่ตกลงกันไว้ ก็ไม่พิมพ์อะไรเลย', async () => {
+    // Inventing one from the delivery date would put a demand on the customer's
+    // paperwork that nobody agreed to.
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={{ ...dueOrder, dueAt: '' } as unknown as WsOrder}
+        canDo={() => true}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบแจ้งหนี้/ }));
+    expect(printed().textContent).not.toContain('กำหนดชำระเงิน');
+  });
+});

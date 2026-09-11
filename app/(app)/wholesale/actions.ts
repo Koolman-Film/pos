@@ -73,6 +73,9 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         shop_id: input.shop,
         customer_id: input.customerId,
         status: input.status,
+        // null, not the empty string: the column is a date, and "no date
+        // agreed" is exactly what null means.
+        due_at: input.dueAt || null,
         sales_by: input.salesBy ?? '',
       })
       .select('id')
@@ -86,6 +89,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         shop_id: input.shop,
         customer_id: input.customerId,
         status: input.status,
+        due_at: input.dueAt || null,
         sales_by: input.salesBy ?? '',
       })
       .eq('id', orderId);
