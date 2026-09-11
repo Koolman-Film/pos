@@ -158,6 +158,7 @@ export function WholesaleDetail({
   onDeleteOrder,
   onRecordDelivery,
   onConfirmPayment,
+  onConfirmReturn,
   onBouncePayment,
   onApproveAdjustment,
   onRejectAdjustment,
@@ -217,6 +218,18 @@ export function WholesaleDetail({
     orderId: string,
     uid: string,
     clearedOn: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * ยืนยันว่าได้รับสินค้าคืนแล้ว — และคืนของเข้าชั้น (migration 0054).
+   *
+   * Recording that a customer WILL return something and having it back on the
+   * rack are two different facts, days apart, and only the second may move the
+   * count. Gated by `wholesale.updateStatus` in the database.
+   */
+  onConfirmReturn?: (
+    orderId: string,
+    uid: string,
+    receivedOn: string,
   ) => Promise<{ ok: boolean; error?: string }>;
   /** บันทึกเช็คเด้ง — same capability; the debt returns on its own. */
   onBouncePayment?: (
@@ -456,7 +469,13 @@ export function WholesaleDetail({
         // Dated today by default. A return typed with no date at all used to
         // be stamped with whenever the PO was next saved, which could be weeks
         // later and in the wrong month.
-        { item: purchasedProducts[0] || '', qty: 1, reason: '', date: dateInputValue(new Date()) },
+        {
+          item: purchasedProducts[0] || '',
+          qty: 1,
+          reason: '',
+          date: dateInputValue(new Date()),
+          uid: newPaymentUid(),
+        },
       ],
     });
   }
@@ -615,6 +634,32 @@ export function WholesaleDetail({
     uid so it survives a save, refused for a row the server has never seen, and
     checked again in the database because the button is not the gate.
   */
+  /*
+    ยืนยันรับของคืน.
+
+    Only for a return the server has already seen — the confirmation is keyed
+    on the uid, and a row typed a moment ago exists only in this browser.
+  */
+  const savedReturnUids = new Set(order.returns.map((r) => r.uid).filter((u): u is string => !!u));
+  const [returnError, setReturnError] = useState('');
+
+  async function confirmReturn(idx: number) {
+    setReturnError('');
+    const r = o.returns[idx];
+    const on = dateInputValue(new Date());
+    const res = await onConfirmReturn?.(o.id, r?.uid ?? '', on);
+    if (res && !res.ok) {
+      setReturnError(res.error ?? 'บันทึกไม่สำเร็จ');
+      return;
+    }
+    const returns = [...o.returns];
+    returns[idx] = { ...r, receivedAt: on };
+    setO({ ...o, returns });
+    // A non-blocking warning can still come back with ok: true — the goods
+    // are confirmed but the shelf did not move, and the shop has to be told.
+    if (res?.error) setReturnError(res.error);
+  }
+
   const savedAdjustmentUids = new Set(
     order.adjustments.map((a) => a.uid).filter((u): u is string => !!u),
   );
@@ -1093,6 +1138,22 @@ export function WholesaleDetail({
             goods because it is agreed when the order is taken, not when the
             money is chased.
           */}
+          {/* หมายเหตุ — whatever this PO needs to carry that no other field
+              has a place for. Kept next to the money fields because that is
+              where the exceptions worth writing down tend to come up. */}
+          <div className="mb-5">
+            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+              <i className="fa-solid fa-note-sticky mr-1.5"></i>หมายเหตุ
+            </label>
+            <textarea
+              aria-label="หมายเหตุของ PO"
+              rows={2}
+              value={o.note ?? ''}
+              onChange={(e) => field('note', e.target.value)}
+              placeholder="เช่น ส่งของช่วงบ่าย ติดต่อหน้าร้านก่อน"
+              className="field text-sm px-3 py-2 w-full"
+            />
+          </div>
           <div className="mb-5">
             <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
               <i className="fa-solid fa-calendar-check mr-1.5"></i>กำหนดชำระเงิน
@@ -1159,8 +1220,46 @@ export function WholesaleDetail({
                 >
                   <i className="fa-solid fa-trash"></i>
                 </button>
+                {/*
+                  ของกลับเข้าชั้นเมื่อยืนยันแล้วเท่านั้น (migration 0054).
+
+                  Writing down that a customer will return something and having
+                  it back on the rack are days apart. Until somebody ticks this,
+                  the goods are on a lorry and the count must not say otherwise.
+                */}
+                <div className="w-full">
+                  {r.receivedAt ? (
+                    <span className="text-xs" style={{ color: '#3F6B33' }}>
+                      <i className="fa-solid fa-circle-check mr-1"></i>
+                      รับของคืนแล้ว {fmtThaiDayString(r.receivedAt)} · คืนสต็อกแล้ว
+                    </span>
+                  ) : !savedReturnUids.has(r.uid ?? '') ? (
+                    <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                      บันทึก PO ก่อน จึงจะยืนยันรับของคืนได้
+                    </span>
+                  ) : can('wholesale.updateStatus') ? (
+                    <button
+                      onClick={() => confirmReturn(idx)}
+                      aria-label={`ยืนยันรับคืนรายการที่ ${idx + 1}`}
+                      className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                      style={{ color: '#3F6B33' }}
+                    >
+                      <i className="fa-solid fa-box-open mr-1.5"></i>ยืนยันว่าได้รับของคืนแล้ว
+                    </button>
+                  ) : (
+                    <span className="text-xs" style={{ color: '#8A5A12' }}>
+                      <i className="fa-regular fa-clock mr-1"></i>รอยืนยันว่าได้รับของคืน —
+                      ยังไม่คืนสต็อก
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
+            {returnError && (
+              <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
+                {returnError}
+              </p>
+            )}
             <button
               onClick={addReturn}
               className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"

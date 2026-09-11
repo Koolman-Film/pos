@@ -9,6 +9,7 @@ import {
   approveOrderPrice,
   bounceOrderPayment,
   confirmOrderPayment,
+  confirmOrderReturn,
   deleteOrder,
   recordOrderDelivery,
   markOrderBadDebt,
@@ -44,6 +45,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
     'wholesale.priceApproval': session.canDo('wholesale.priceApproval'),
     'wholesale.badDebt': session.canDo('wholesale.badDebt'),
     'wholesale.confirmPayment': session.canDo('wholesale.confirmPayment'),
+    'wholesale.updateStatus': session.canDo('wholesale.updateStatus'),
     'wholesale.delete': session.canDo('wholesale.delete'),
     'wholesale.export': session.canDo('wholesale.export'),
     'options.manage': session.canDo('options.manage'),
@@ -70,6 +72,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       onDeleteOrder={deleteOrder}
       onRecordDelivery={recordOrderDelivery}
       onConfirmPayment={confirmOrderPayment}
+      onConfirmReturn={confirmOrderReturn}
       onApproveAdjustment={approveOrderAdjustment}
       onRejectAdjustment={rejectOrderAdjustment}
       onBouncePayment={bounceOrderPayment}

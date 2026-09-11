@@ -27,7 +27,25 @@ export type WsItem = {
  * return could only ever be netted off the PO as a whole, so a March sale
  * returned in May took March’s figure down two months after it was reported.
  */
-export type WsReturn = { item: string; qty: number; reason: string; date: string };
+/**
+ * การคืนสินค้าหนึ่งรายการ.
+ *
+ * `date` is what the return reduces revenue ON (migration 0045) — a business
+ * date, routinely backdated by agreement. `receivedAt` is a different fact:
+ * the day the boxes actually came back through the door, which is the only
+ * thing that may put stock on the shelf (migration 0054). A return that is
+ * agreed but not yet received must not move the count.
+ */
+export type WsReturn = {
+  item: string;
+  qty: number;
+  reason: string;
+  date: string;
+  /** Client-generated key that survives a save — the confirmation hangs off it. */
+  uid?: string;
+  /** ยืนยันแล้วว่าได้ของคืนจริง. Empty = still owed back to us. */
+  receivedAt?: string;
+};
 
 /**
  * การปรับราคาหนึ่งรายการ (migration 0050).
@@ -96,6 +114,8 @@ export type WsOrder = {
    * credit, so this and not the payment date is when the revenue belongs.
    */
   deliveredAt?: string;
+  /** หมายเหตุของ PO — free text the sale needs to pass on (migration 0054). */
+  note?: string;
   /**
    * ผลการตัดสินใจเรื่องราคา และใครตัดสิน (migration 0051).
    *

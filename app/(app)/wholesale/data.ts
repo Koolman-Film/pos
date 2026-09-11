@@ -25,9 +25,9 @@ import {
 
 const ORDER_SELECT = `
   id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by,
-  price_decision, price_decided_at, price_decided_by,
+  price_decision, price_decided_at, price_decided_by, note,
   order_items(name, qty, list_price, requested_price, reason),
-  order_returns(item_name, qty, reason, returned_at),
+  order_returns(item_name, qty, reason, returned_at, uid, received_at),
   order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
   order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, cleared_at, bounced_at, bounce_note)
 `;
@@ -44,6 +44,7 @@ type OrderRow = {
   price_decision: string | null;
   price_decided_at: string | null;
   price_decided_by: string | null;
+  note: string | null;
   order_items:
     | {
         name: string;
@@ -53,7 +54,16 @@ type OrderRow = {
         reason: string;
       }[]
     | null;
-  order_returns: { item_name: string; qty: number; reason: string; returned_at: string }[] | null;
+  order_returns:
+    | {
+        item_name: string;
+        qty: number;
+        reason: string;
+        returned_at: string;
+        uid: string;
+        received_at: string | null;
+      }[]
+    | null;
   order_adjustments:
     | {
         amount: number;
@@ -95,6 +105,7 @@ function mapOrder(row: OrderRow): WsOrder {
     priceDecision: row.price_decision ?? '',
     priceDecidedAt: row.price_decided_at ?? '',
     priceDecidedBy: row.price_decided_by ?? '',
+    note: row.note ?? '',
     items: (row.order_items ?? []).map((it) => ({
       name: it.name,
       qty: it.qty,
@@ -107,6 +118,8 @@ function mapOrder(row: OrderRow): WsOrder {
       qty: r.qty,
       reason: r.reason ?? '',
       date: r.returned_at ?? '',
+      uid: r.uid ?? '',
+      receivedAt: r.received_at ?? '',
     })),
     // The dates were being dropped on the way OUT, so saving an untouched PO
     // re-stamped every adjustment and payment with the day somebody last

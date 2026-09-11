@@ -47,13 +47,6 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
 
   const supabase = await createClient();
 
-  // Net quantity per product currently STORED for this PO — sold minus returned,
-  // exactly the prototype's origSold/origReturned pair (:2694-2701). Must be read
-  // before the delete-then-insert below wipes the rows, because it is the "before"
-  // side of the stock delta.
-  // Nothing is stored yet for a new PO, and its id is about to change.
-  const before = isNew ? {} : await storedOrderNetQty(supabase, input.id);
-
   /*
     The PO number comes from the database (migration 0036), not the browser.
 
@@ -76,6 +69,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         // null, not the empty string: the column is a date, and "no date
         // agreed" is exactly what null means.
         due_at: input.dueAt || null,
+        note: input.note ?? '',
         sales_by: input.salesBy ?? '',
       })
       .select('id')
@@ -90,6 +84,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         customer_id: input.customerId,
         status: input.status,
         due_at: input.dueAt || null,
+        note: input.note ?? '',
         sales_by: input.salesBy ?? '',
       })
       .eq('id', orderId);
@@ -115,42 +110,20 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
   });
   if (childErr) throw new Error(childErr.message);
 
-  // Move stock to match the new net quantities and log it (prototype :2702-2712).
-  // Sold goes out of stock, returned comes back, so the net is what matters.
-  // Non-fatal: the PO is already saved, and losing the sale over a stock lookup
-  // would be the worse failure.
-  const after = orderNetQty(
-    input.items.map((it) => ({ name: it.name, qty: Number(it.qty) || 0 })),
-    input.returns.map((r) => ({ name: r.item, qty: Number(r.qty) || 0 })),
-  );
-  const delta = diffQtyMaps(before, after);
-  let unmatched: string[] = [];
-  if (Object.keys(delta).length > 0) {
-    try {
-      const result = await applyStockMovements(supabase, delta, {
-        kind: 'ขายส่ง',
-        documentId: orderId,
-        // The prototype always credited the system here, never the user (:2709).
-        by: 'ระบบ (ขายส่ง)',
-        shopId: input.shop,
-      });
-      unmatched = result.unmatched;
-    } catch {
-      // Saving the PO must not fail over a stock lookup — but the shop has to
-      // be TOLD, which is what the message below is for. Silently swallowing
-      // it left goods leaving the shelf with the count unchanged and nobody
-      // any the wiser until a stocktake months later.
-      unmatched = Object.keys(delta);
-    }
-  }
+  /*
+    บันทึก PO ไม่แตะสต๊อกอีกต่อไป (migration 0054).
 
+    It used to: every save recomputed the net quantities and moved the shelf.
+    But a PO is typed, priced, argued over and re-saved several times before
+    anything leaves the building, and each of those saves took the goods off
+    the rack — including for POs that were never delivered at all.
+
+    The shelf moves on the two physical events instead: `recordOrderDelivery`
+    takes the goods out, and confirming a return puts them back.
+  */
   revalidatePath('/wholesale');
   revalidatePath('/stock');
-  redirect(
-    unmatched.length > 0
-      ? `/wholesale?stock=${encodeURIComponent(unmatched.join(', '))}`
-      : '/wholesale',
-  );
+  redirect('/wholesale');
 }
 
 /** Net = sold - returned, per product. */
@@ -207,14 +180,21 @@ export async function deleteOrder(orderId: string): Promise<{ ok: boolean; error
 
   const { data: order } = await supabase
     .from('orders')
-    .select('shop_id')
+    .select('shop_id, stock_deducted_at')
     .eq('id', orderId)
     .is('deleted_at', null)
     .maybeSingle();
   if (!order) return { ok: false, error: 'ไม่พบ PO นี้' };
 
-  // Read the net BEFORE flagging the row: the reversal is its exact negation.
-  const net = await storedOrderNetQty(supabase, orderId);
+  /*
+    คืนของเข้าชั้นเฉพาะ PO ที่เคยตัดสต๊อกไปจริง (migration 0054).
+
+    Stock now leaves on delivery, not on save, so a PO deleted before it
+    shipped never took anything — and putting its quantities back would
+    invent goods the branch does not have. `stock_deducted_at` is the record
+    of whether the shelf ever moved for this PO.
+  */
+  const net = order.stock_deducted_at ? await storedOrderNetQty(supabase, orderId) : {};
 
   const { error } = await supabase
     .from('orders')
@@ -239,13 +219,15 @@ export async function restoreOrder(orderId: string): Promise<{ ok: boolean; erro
 
   const { data: order } = await supabase
     .from('orders')
-    .select('shop_id')
+    .select('shop_id, stock_deducted_at')
     .eq('id', orderId)
     .not('deleted_at', 'is', null)
     .maybeSingle();
   if (!order) return { ok: false, error: 'ไม่พบ PO นี้ในถังขยะ' };
 
-  const net = await storedOrderNetQty(supabase, orderId);
+  // Mirrors the delete: only a PO whose goods had actually left takes them
+  // off the shelf again when it comes back out of the bin.
+  const net = order.stock_deducted_at ? await storedOrderNetQty(supabase, orderId) : {};
 
   const { error } = await supabase
     .from('orders')
@@ -254,7 +236,7 @@ export async function restoreOrder(orderId: string): Promise<{ ok: boolean; erro
     .not('deleted_at', 'is', null);
   if (error) return { ok: false, error: error.message };
 
-  // Back on: the goods leave the shelf again, exactly as they did on save.
+  // Back on: the goods leave the shelf again, exactly as they did on delivery.
   await moveOrderStock(supabase, orderId, order.shop_id, net, 1);
 
   revalidatePath('/wholesale');
@@ -323,16 +305,68 @@ export async function recordOrderDelivery(
     .update({ delivered_at: deliveredAt, status: 'จัดส่งแล้ว' })
     .eq('id', orderId)
     .is('delivered_at', null)
-    .select('id');
+    .select('id, shop_id');
   if (error) return { ok: false, error: error.message };
+
+  /*
+    ของออกจากคลังตรงนี้ ไม่ใช่ตอนบันทึก PO (migration 0054).
+
+    Claimed through `stock_deducted_at` before anything moves: re-issuing a
+    ใบส่งของ is a reprint, and a reprint must not take the goods off the shelf
+    a second time. The update is the claim — only the call that flips it from
+    null goes on to move stock.
+
+    Non-fatal on failure, as it was on save (losing the delivery record over a
+    stock lookup is the worse outcome) but the shop is TOLD which products did
+    not move: silently skipping is how a renamed product stops being deducted
+    with nobody the wiser until a stocktake.
+  */
+  let unmatched: string[] = [];
+  const delivered = data ?? [];
+  if (delivered.length > 0) {
+    const shopId = delivered[0].shop_id;
+    const { data: claimed } = await supabase
+      .from('orders')
+      .update({ stock_deducted_at: new Date().toISOString() })
+      .eq('id', orderId)
+      .is('stock_deducted_at', null)
+      .select('id');
+    if ((claimed ?? []).length > 0) {
+      const { data: items } = await supabase
+        .from('order_items')
+        .select('name, qty')
+        .eq('order_id', orderId);
+      const delta = toQtyMap((items ?? []).map((i) => ({ name: i.name, qty: Number(i.qty) || 0 })));
+      if (Object.keys(delta).length > 0) {
+        try {
+          const result = await applyStockMovements(supabase, delta, {
+            kind: 'ขายส่ง',
+            documentId: orderId,
+            by: 'ระบบ (ส่งของ)',
+            shopId,
+          });
+          unmatched = result.unmatched;
+        } catch {
+          unmatched = Object.keys(delta);
+        }
+      }
+    }
+  }
   // No row updated means it already had a delivery date. Not an error: the
   // document prints either way, and the first date stands.
-  if ((data ?? []).length > 0) {
+  if (delivered.length > 0) {
     revalidatePath('/wholesale');
     revalidatePath(`/wholesale/${orderId}`);
     revalidatePath('/dashboard');
+    revalidatePath('/stock');
   }
-  return { ok: true };
+  return {
+    ok: true,
+    error:
+      unmatched.length > 0
+        ? `ส่งของแล้ว แต่ตัดสต็อกไม่สำเร็จ: ${unmatched.join(', ')} — ตรวจว่าสินค้ายังอยู่ในทะเบียนของสาขานี้ แล้วปรับสต็อกเอง`
+        : undefined,
+  };
 }
 
 /**
@@ -525,6 +559,85 @@ async function decidePrice(orderId: string, approve: boolean) {
   });
   if (error) throw new Error(error.message);
   revalidateOrder(orderId);
+}
+
+/**
+ * ยืนยันว่าได้รับสินค้าคืนแล้ว — และคืนของเข้าชั้นตรงนี้ (migration 0054).
+ *
+ * Recording that a customer WILL return something and having it back on the
+ * rack are two different facts, days apart. Only the second one may move the
+ * shelf, or the count says the goods are here while they are still on a lorry.
+ *
+ * The stock movement is dated now — the day somebody confirmed it — not
+ * `returned_at`, which is the business date the sale is reduced on and is
+ * routinely backdated by agreement with the customer.
+ */
+export async function confirmOrderReturn(
+  orderId: string,
+  uid: string,
+  receivedOn: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.updateStatus')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์ยืนยันการรับคืนสินค้า' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('confirm_order_return', {
+    p_order_id: orderId,
+    p_uid: uid,
+    p_on: receivedOn,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  /*
+    Claimed the same way the delivery is: the row that flips
+    `stock_returned_at` from null is the one that moves stock, so a second
+    confirmation — or a re-save in between — cannot put the goods back twice.
+  */
+  const { data: claimed } = await supabase
+    .from('order_returns')
+    .update({ stock_returned_at: new Date().toISOString() })
+    .eq('order_id', orderId)
+    .eq('uid', uid)
+    .is('stock_returned_at', null)
+    .select('item_name, qty');
+
+  let unmatched: string[] = [];
+  const rows = claimed ?? [];
+  if (rows.length > 0) {
+    const { data: order } = await supabase
+      .from('orders')
+      .select('shop_id')
+      .eq('id', orderId)
+      .maybeSingle();
+    if (order) {
+      // Negative: the goods come BACK, so the shelf goes up.
+      const delta = toQtyMap(rows.map((r) => ({ name: r.item_name, qty: -(Number(r.qty) || 0) })));
+      if (Object.keys(delta).length > 0) {
+        try {
+          const result = await applyStockMovements(supabase, delta, {
+            kind: 'รับคืนขายส่ง',
+            documentId: orderId,
+            by: 'ระบบ (รับคืน)',
+            shopId: order.shop_id,
+          });
+          unmatched = result.unmatched;
+        } catch {
+          unmatched = Object.keys(delta);
+        }
+      }
+    }
+  }
+
+  revalidateOrder(orderId);
+  revalidatePath('/stock');
+  return {
+    ok: true,
+    error:
+      unmatched.length > 0
+        ? `ยืนยันรับคืนแล้ว แต่คืนสต็อกไม่สำเร็จ: ${unmatched.join(', ')} — ปรับสต็อกเอง`
+        : undefined,
+  };
 }
 
 /** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
