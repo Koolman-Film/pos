@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import type { SessionContext } from '@/lib/auth/session';
 import {
   DEFAULT_PAYMENT_METHODS,
@@ -252,11 +253,22 @@ export async function loadOrderDetailData(
     await Promise.all([
       loadCustomers(),
       loadWsStatuses(),
-      supabase
-        .from('orders')
-        .select(ORDER_SELECT)
-        .in('shop_id', session.accessibleShopIds)
-        .is('deleted_at', null),
+      // Same cap, same consequence: สินค้าที่ลูกค้าเคยซื้อ is built from every
+      // PO, so a truncated read offers the wrong return list.
+      fetchAllRows<OrderRow>(
+        (from, to) =>
+          supabase
+            .from('orders')
+            .select(ORDER_SELECT)
+            .in('shop_id', session.accessibleShopIds)
+            .is('deleted_at', null)
+            .order('id')
+            .range(from, to) as unknown as PromiseLike<{
+            data: OrderRow[] | null;
+            error: { message: string } | null;
+          }>,
+        'orders',
+      ),
       /*
         Stock for EVERY branch the caller can reach, not just the one the PO
         opens on.
@@ -269,10 +281,35 @@ export async function loadOrderDetailData(
         not sell them. Finnix North, whose whole purpose is wholesale, could
         not raise a single line.
       */
-      supabase
-        .from('stock')
-        .select('id, name, short_name, shop_id, qty, sell_price')
-        .in('shop_id', session.accessibleShopIds),
+      /*
+        อ่านให้ครบทุกแถว.
+
+        This query had no limit and no order by, so PostgREST answered with an
+        arbitrary 1000 rows once the stock table passed that size — a different
+        arbitrary thousand from the one สต็อกสินค้า shows, which orders by
+        category and name. The shop opened a PO on Finnix North and was offered
+        products that branch does not carry, while the ones it does carry were
+        missing. Both screens were showing a truthful answer to their own query.
+      */
+      fetchAllRows<{
+        id: number;
+        name: string;
+        short_name: string | null;
+        shop_id: string;
+        qty: number;
+        sell_price: number;
+      }>(
+        (from, to) =>
+          supabase
+            .from('stock')
+            .select('id, name, short_name, shop_id, qty, sell_price')
+            .in('shop_id', session.accessibleShopIds)
+            .order('shop_id')
+            .order('name')
+            .order('id')
+            .range(from, to),
+        'stock',
+      ),
       supabase.from('shop_info').select('shop_id, company_name, address, phone, payment_channels'),
       // Every branch the caller can reach, so switching a new PO’s branch
       // switches the พนักงานขาย list with it.
@@ -289,9 +326,9 @@ export async function loadOrderDetailData(
         .order('sort_order'),
     ]);
 
-  const orders = ((allOrdersRes.data as OrderRow[] | null) ?? []).map(mapOrder);
+  const orders = allOrdersRes.map(mapOrder);
 
-  const stock: WsStockItem[] = (stockRes.data ?? []).map((s) => ({
+  const stock: WsStockItem[] = stockRes.map((s) => ({
     id: s.id,
     name: s.name,
     shortName: s.short_name ?? '',

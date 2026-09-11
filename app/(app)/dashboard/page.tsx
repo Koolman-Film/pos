@@ -4,6 +4,7 @@ import { daysAgoValue } from '@/lib/domain/now';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import { itemNetPrice, ticketTotal } from '@/lib/domain/tickets';
 import { wholesaleRevenueLines } from '@/lib/domain/wholesaleRevenue';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
@@ -76,7 +77,7 @@ export default async function DashboardPage({
     { data: accountRows },
     { data: transferRows },
     { data: visitRows },
-    { data: stockRows },
+    stockRows,
     { data: shopRows },
     { data: statusRows },
     { data: policyRows },
@@ -130,9 +131,22 @@ export default async function DashboardPage({
       // calendar month nobody is looking at.
       .gte('received_at', daysAgoValue(365))
       .order('visit_no', { ascending: false }),
-    //  is here for the ขายส่ง breakdown: a PO stores the product NAME,
-    // and the stock register is where that name has a ชนิดสินค้า.
-    supabase.from('stock').select('name, category, shop_id, qty'),
+    // `name` is here for the ขายส่ง breakdown: a PO stores the product
+    // NAME, and the stock register is where that name has a ชนิดสินค้า.
+    //
+    // Paged: PostgREST answers at most `max_rows` (1000) and says nothing when
+    // it truncates, so a shop past that size silently loses whole ชนิดสินค้า out
+    // of the stock summary and mis-files wholesale lines as ไม่ระบุชนิด.
+    fetchAllRows<{ name: string; category: string; shop_id: string; qty: number }>(
+      (from, to) =>
+        supabase
+          .from('stock')
+          .select('name, category, shop_id, qty')
+          .order('shop_id')
+          .order('name')
+          .range(from, to),
+      'stock',
+    ),
     supabase.from('shops').select('id, name, sort_order').order('sort_order'),
     supabase
       .from('statuses')
@@ -466,7 +480,7 @@ export default async function DashboardPage({
     place the ขายส่ง picker takes the product from.
   */
   const stockCategoryByName = new Map<string, string>();
-  for (const st of stockRows ?? []) {
+  for (const st of stockRows) {
     if (st.name && st.category && !stockCategoryByName.has(st.name)) {
       stockCategoryByName.set(st.name, st.category);
     }
@@ -550,7 +564,7 @@ export default async function DashboardPage({
     amount: paidExpenses.filter((e) => e.category === cat).reduce((s, e) => s + e.amount, 0),
   }));
 
-  const visibleStock = (stockRows ?? []).filter((s) => inShop(s.shop_id));
+  const visibleStock = stockRows.filter((s) => inShop(s.shop_id));
   const stockCats = [...new Set(visibleStock.map((s) => s.category))];
   const stockByCategory = stockCats.map((cat) => ({
     name: cat,

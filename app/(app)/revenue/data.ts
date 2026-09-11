@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { wholesaleRevenueLines, type WholesaleRevenueOrder } from '@/lib/domain/wholesaleRevenue';
 
@@ -210,7 +211,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
 async function wholesaleLines(): Promise<SaleLine[]> {
   const supabase = await createClient();
 
-  const [{ data: orderRows }, { data: customerRows }, { data: stockRows }, { data: costRows }] =
+  const [{ data: orderRows }, { data: customerRows }, stockRows, { data: costRows }] =
     await Promise.all([
       supabase
         .from('orders')
@@ -222,7 +223,13 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       supabase.from('wholesale_customers').select('id, name'),
       // ชนิดสินค้าของขายส่ง มาจากทะเบียนสินค้า so a roll of film reads under the
       // same ชนิดสินค้า whether it was sold over the counter or by the case.
-      supabase.from('stock').select('name, category'),
+      //
+      // Paged, because a truncated read here does not fail — it quietly files
+      // real sales under ไม่ระบุชนิด.
+      fetchAllRows<{ name: string; category: string }>(
+        (from, to) => supabase.from('stock').select('name, category').order('name').range(from, to),
+        'stock',
+      ),
       supabase
         .from('stock_movements')
         .select('document_id, cost_total')
@@ -231,7 +238,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
 
   const customerName = new Map((customerRows ?? []).map((c) => [c.id, c.name]));
   const categoryOf = new Map<string, string>();
-  for (const st of stockRows ?? []) {
+  for (const st of stockRows) {
     if (st.name && st.category && !categoryOf.has(st.name)) categoryOf.set(st.name, st.category);
   }
 
