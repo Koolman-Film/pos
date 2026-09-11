@@ -6,6 +6,7 @@ import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import { itemNetPrice, ticketTotal } from '@/lib/domain/tickets';
+import { needsPriceApproval } from '@/lib/domain/orders';
 import { wholesaleRevenueLines } from '@/lib/domain/wholesaleRevenue';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
@@ -685,11 +686,9 @@ export default async function DashboardPage({
       on a screen nobody is told to open — and the second is the looser of the
       two, because by then the invoice has already been raised.
     */
-    discount: orders.filter(
-      (o) =>
-        (o.status === 'รออนุมัติราคา' && o.items.some((i) => i.requestedPrice < i.listPrice)) ||
-        o.adjustments.some((a) => a.status === 'รออนุมัติ'),
-    ).length,
+    // The same predicate the ขายส่ง list filters by, so the number and the
+    // list it opens can never disagree.
+    discount: orders.filter(needsPriceApproval).length,
     badDebt: orders.filter((o) => o.status === 'ค้างชำระ').length,
   };
 

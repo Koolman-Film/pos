@@ -18,6 +18,7 @@ export function TicketListClient({
   shops,
   canSeeAllShops,
   capabilities,
+  initialStatus,
 }: {
   tickets: TicketListRow[];
   statuses: StatusConfig[];
@@ -25,6 +26,8 @@ export function TicketListClient({
   shops: Shop[];
   canSeeAllShops: boolean;
   capabilities: Record<string, boolean>;
+  /** สถานะที่เปิดมาจากลิงก์บนแดชบอร์ด — seeds the filter, does not lock it. */
+  initialStatus?: string;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -35,6 +38,7 @@ export function TicketListClient({
       accessibleShops={accessibleShops}
       shops={shops}
       canSeeAllShops={canSeeAllShops}
+      initialStatus={initialStatus}
     />
   );
 }

@@ -821,3 +821,82 @@ describe('WholesaleDetail — กำหนดชำระเงิน', () => {
     expect(printed().textContent).not.toContain('กำหนดชำระเงิน');
   });
 });
+
+/**
+ * เปิดจากแดชบอร์ดแล้วเห็นเฉพาะรายการที่กดมา.
+ *
+ * Clicking a counter that says 3 and landing on a list of 40 leaves the reader
+ * to find those three by eye — which is the job the counter was supposed to
+ * have done for them.
+ */
+describe('WholesaleList — กรองตามที่กดมาจากแดชบอร์ด', () => {
+  const today = todayValue();
+  const po = (id: string, status: string, over: Record<string, unknown> = {}) =>
+    ({
+      id,
+      shop: 'cm',
+      customerId: 1,
+      status,
+      createdAt: today,
+      items: [{ name: 'ฟิล์ม A', qty: 1, listPrice: 1000, requestedPrice: 1000 }],
+      returns: [],
+      adjustments: [],
+      payments: [],
+      ...over,
+    }) as unknown as WsOrder;
+
+  const orders = [
+    po('WS-CM-0001', 'ค้างชำระ'),
+    po('WS-CM-0002', 'ปิดงานแล้ว'),
+    // A discount waiting on ผู้บริหาร.
+    po('WS-CM-0003', 'รออนุมัติราคา', {
+      items: [{ name: 'ฟิล์ม A', qty: 1, listPrice: 1000, requestedPrice: 800 }],
+    }),
+    // A reduction written after delivery, also waiting.
+    po('WS-CM-0004', 'จัดส่งแล้ว', {
+      adjustments: [{ amount: 200, reason: 'ต่อรอง', date: today, status: 'รออนุมัติ' }],
+    }),
+  ];
+
+  const listProps = {
+    orders,
+    customers: [{ id: 1, name: 'ร้านทดสอบ', phone: '', address: '' }],
+    wsStatuses: {},
+    accessibleShops: [{ id: 'cm', name: 'FINNIX FILM เชียงใหม่' }],
+    canDo: () => true,
+  };
+
+  it('เปิดด้วยสถานะ แสดงเฉพาะสถานะนั้น', () => {
+    render(<WholesaleList {...listProps} initialStatus="ค้างชำระ" />);
+    expect(screen.getAllByText(/WS-CM-0001/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/WS-CM-0002/)).toHaveLength(0);
+  });
+
+  it('เปิดด้วย approval=pending แสดงทั้งส่วนลดและปรับราคาที่รออนุมัติ', () => {
+    render(<WholesaleList {...listProps} initialApproval="pending" />);
+    // Both kinds reach the same person, so both belong in the same list.
+    expect(screen.getAllByText(/WS-CM-0003/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/WS-CM-0004/).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/WS-CM-0001/)).toHaveLength(0);
+  });
+
+  it('บอกว่ากำลังกรองอยู่ และกดล้างได้', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleList {...listProps} initialApproval="pending" />);
+    const chip = screen.getByText(/กำลังกรอง: รอผู้บริหารอนุมัติ/);
+    expect(chip).toBeInTheDocument();
+
+    // A list that silently shows 2 of 4 because of something the previous
+    // screen decided is a list the reader cannot trust.
+    await user.click(chip);
+    expect(screen.getAllByText(/WS-CM-0001/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/กำลังกรอง: รอผู้บริหารอนุมัติ/)).not.toBeInTheDocument();
+  });
+
+  it('ไม่ได้กดมาจากแดชบอร์ด ก็แสดงทั้งหมดเหมือนเดิม', () => {
+    render(<WholesaleList {...listProps} />);
+    for (const id of ['WS-CM-0001', 'WS-CM-0002', 'WS-CM-0003', 'WS-CM-0004']) {
+      expect(screen.getAllByText(new RegExp(id)).length).toBeGreaterThan(0);
+    }
+  });
+});

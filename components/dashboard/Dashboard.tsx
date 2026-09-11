@@ -570,7 +570,15 @@ export function Dashboard({
             {statusTotals.map((s) => {
               const conf = getStatus(statuses, s.key);
               return (
-                <div key={s.key}>
+                /* Each bar opens Book งาน filtered to that status. The number is
+                   the answer to "how many", and the click is the answer to
+                   "which ones" — landing on every job in the month made the
+                   reader do that part again by hand. */
+                <Link
+                  key={s.key}
+                  href={`/tickets?status=${encodeURIComponent(s.key)}`}
+                  className="block"
+                >
                   <div className="flex justify-between text-xs mb-1">
                     <span style={{ color: 'var(--ink-soft)' }}>{conf.short}</span>
                     <span className="font-medium">{s.count}</span>
@@ -581,7 +589,7 @@ export function Dashboard({
                       style={{ width: `${s.pct}%`, background: conf.dot }}
                     ></div>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
@@ -655,7 +663,10 @@ export function Dashboard({
             </div>
             <div className="flex flex-col gap-3 text-sm">
               <Link
-                href="/wholesale"
+                // Opens the list already filtered to the POs this number
+                // counted. Landing on all of them and being told 2 need
+                // approval leaves the reader to find those two by eye.
+                href="/wholesale?approval=pending"
                 className="flex items-center justify-between hover:opacity-80"
               >
                 <span className="flex items-center gap-2">
@@ -670,7 +681,7 @@ export function Dashboard({
                 </span>
               </Link>
               <Link
-                href="/wholesale"
+                href="/wholesale?status=%E0%B8%84%E0%B9%89%E0%B8%B2%E0%B8%87%E0%B8%8A%E0%B8%B3%E0%B8%A3%E0%B8%B0"
                 className="flex items-center justify-between hover:opacity-80"
               >
                 <span className="flex items-center gap-2">

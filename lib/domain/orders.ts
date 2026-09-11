@@ -74,6 +74,29 @@ export function orderTotal(o: OrderForTotals): number {
   return itemsTotal - returnsTotal - adjustmentsTotal;
 }
 
+/**
+ * PO ใบนี้มีอะไรรอผู้บริหารอนุมัติอยู่ไหม.
+ *
+ * Two different things reach the same person: a price offered below the
+ * standard one (which holds the PO in `รออนุมัติราคา`), and a reduction
+ * written after the goods went out (which does not, because by then the PO is
+ * จัดส่งแล้ว and saying otherwise would be a lie about shipped goods).
+ *
+ * Lives here because the dashboard COUNTS these and the ขายส่ง list FILTERS to
+ * them. A counter that said 3 next to a list that showed 5 would be worse than
+ * having neither.
+ */
+export function needsPriceApproval(o: {
+  status: string;
+  items: { listPrice: number; requestedPrice: number }[];
+  adjustments?: { status?: string }[];
+}): boolean {
+  const discountWaiting =
+    o.status === 'รออนุมัติราคา' && o.items.some((i) => i.requestedPrice < i.listPrice);
+  const adjustmentWaiting = (o.adjustments ?? []).some((a) => a.status === ADJUSTMENT_PENDING);
+  return discountWaiting || adjustmentWaiting;
+}
+
 /** ยอดปรับราคาที่ยังรอผู้บริหารอนุมัติ — shown beside the bill, never inside it. */
 export function orderPendingAdjustments(o: { adjustments?: OrderAdjustment[] }): number {
   return (o.adjustments || []).reduce(

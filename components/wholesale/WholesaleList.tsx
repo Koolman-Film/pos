@@ -10,7 +10,7 @@ import { fmt, fmtThaiDate, fmtThaiDayString } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
-import { orderTotal, orderPaid } from '@/lib/domain/orders';
+import { orderTotal, orderPaid, needsPriceApproval } from '@/lib/domain/orders';
 
 import { pendingCheques } from './cheques';
 
@@ -45,6 +45,8 @@ export function WholesaleList({
   canSeeAllShops = true,
   onUpdateStatus,
   stockWarning,
+  initialStatus,
+  initialApproval,
 }: {
   orders: WsOrder[];
   customers: WsCustomer[];
@@ -63,6 +65,17 @@ export function WholesaleList({
    * worse failure — so this is the only place the shop finds out.
    */
   stockWarning?: string;
+  /**
+   * สถานะที่เปิดมาจากลิงก์ — e.g. the dashboard’s ขอตัดหนี้สูญ counter.
+   *
+   * Clicking a number that says 3 and landing on a list of 40 leaves the
+   * reader to find those three by eye, which is the job the number was
+   * supposed to have done. It seeds the filter rather than locking it, so the
+   * control still says what is being filtered and can still be cleared.
+   */
+  initialStatus?: string;
+  /** `pending` opens filtered to POs waiting on ผู้บริหาร (ส่วนลด or ปรับราคา). */
+  initialApproval?: string;
 }) {
   const can = canDo ?? ((k: string) => !!caps?.[k]);
   const router = useRouter();
@@ -76,7 +89,28 @@ export function WholesaleList({
   // Gates the body-level print portal below; document does not exist during SSR.
   const mounted = useIsMounted();
 
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(initialStatus || 'all');
+  /*
+    เปิดมาจากตัวเลขบนแดชบอร์ด.
+
+    Those counters are "as of now" — they count every PO the caller can see,
+    not only the ones inside the period this list happens to be showing. So
+    while a drill-down is active the period filter stands aside, or the two
+    disagree the moment a PO is older than this month: the dashboard says 2 and
+    the list it opens shows 1, which is worse than not linking at all.
+
+    The chip below says the list is in this mode, and clicking it puts the
+    period filter back.
+  */
+  const [drillDown, setDrillDown] = useState<'approval' | 'status' | null>(
+    initialApproval === 'pending' ? 'approval' : initialStatus ? 'status' : null,
+  );
+  const approvalFilter = drillDown === 'approval';
+
+  function clearDrillDown() {
+    setDrillDown(null);
+    setFilter('all');
+  }
   const [custFilter, setCustFilter] = useState('all');
   const [shopFilter, setShopFilter] = useState(
     canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
@@ -89,6 +123,10 @@ export function WholesaleList({
   const [saleFilter, setSaleFilter] = useState('all');
 
   let visible = filter === 'all' ? list : list.filter((o) => o.status === filter);
+  // `needsPriceApproval` is the dashboard counter’s own predicate, imported
+  // rather than restated: a count of 2 opening a list of 5 is worse than
+  // having had no link at all.
+  if (approvalFilter) visible = visible.filter(needsPriceApproval);
   if (custFilter !== 'all') visible = visible.filter((o) => o.customerId === Number(custFilter));
   if (shopFilter !== 'all') visible = visible.filter((o) => o.shop === shopFilter);
   if (productFilter !== 'all')
@@ -100,9 +138,11 @@ export function WholesaleList({
   else if (saleFilter !== 'all') visible = visible.filter((o) => o.salesBy === saleFilter);
   // The period bar was rendered but never consulted, so every PO showed
   // regardless of the selected window. POs are dated by `orders.created_at`.
-  visible = visible.filter((o) =>
-    isInPeriod(o.createdAt, period, periodValue, rangeStart, rangeEnd),
-  );
+  if (!drillDown) {
+    visible = visible.filter((o) =>
+      isInPeriod(o.createdAt, period, periodValue, rangeStart, rangeEnd),
+    );
+  }
 
   const productScoped = list.filter(
     (o) =>
@@ -328,6 +368,24 @@ export function WholesaleList({
             </button>
           ))}
         </div>
+        {/*
+          บอกว่ากำลังกรองอะไรอยู่ และกดออกได้.
+
+          A list that silently shows 2 of 40 rows because of something the
+          previous screen decided is a list the reader cannot trust. The chip
+          is the whole explanation, and clicking it is the way out.
+        */}
+        {drillDown && (
+          <button
+            onClick={clearDrillDown}
+            className="text-xs px-3.5 py-1.5 rounded-full font-semibold mb-5 flex items-center gap-2"
+            style={{ background: '#FBF1DA', color: '#8A5A12' }}
+          >
+            <i className="fa-solid fa-filter"></i>
+            กำลังกรอง: {approvalFilter ? 'รอผู้บริหารอนุมัติ' : filter} ({visible.length}) ·
+            ทุกช่วงเวลา<i className="fa-solid fa-xmark"></i>
+          </button>
+        )}
         {cheques.rows.length > 0 && (
           <div className="card p-4 mb-4">
             <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
