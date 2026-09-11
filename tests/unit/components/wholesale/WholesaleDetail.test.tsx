@@ -718,3 +718,45 @@ describe('WholesaleDetail — การรับเงินแบบเช็�
     expect(sheet.textContent).toContain('หนี้จะถูกตัดเมื่อเช็คขึ้นเงิน');
   });
 });
+
+/**
+ * ลบรายการสินค้า และลบรายการคืน.
+ *
+ * Neither row could be removed at all: a line typed by mistake stayed on the PO
+ * and on every document it printed. The adjustment rows had a bin from the
+ * start, so this is filling a gap rather than adding a feature.
+ */
+describe('WholesaleDetail — ลบรายการ', () => {
+  const twoLines = {
+    ...order,
+    id: 'WS-CM-0101',
+    items: [
+      { name: 'ฟิล์ม A', qty: 2, listPrice: 1000, requestedPrice: 1000, reason: '' },
+      { name: 'ฟิล์ม B', qty: 3, listPrice: 500, requestedPrice: 500, reason: '' },
+    ],
+    returns: [{ item: 'ฟิล์ม A', qty: 1, reason: 'ของชำรุด', date: '2026-09-10' }],
+  } as unknown as WsOrder;
+
+  it('ลบรายการสินค้าออกได้ และยอดรวมลดตาม', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={twoLines} canDo={() => true} />);
+
+    // 2*1,000 + 3*500 = 3,500, less the 1,000 return = 2,500.
+    expect(screen.getAllByText(/2,500.00/).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByLabelText('ลบรายการสินค้าที่ 1'));
+    // ฟิล์ม A is gone, so its return prices at nothing: 1,500 left.
+    expect(screen.getAllByText(/1,500.00/).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('ลบรายการสินค้าที่ 2')).not.toBeInTheDocument();
+  });
+
+  it('ลบรายการคืนสินค้าออกได้', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={twoLines} canDo={() => true} />);
+
+    await user.click(screen.getByLabelText('ลบรายการคืนสินค้าที่ 1'));
+    // The return no longer reduces the total: back to the full 3,500.
+    expect(screen.getAllByText(/3,500.00/).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('ลบรายการคืนสินค้าที่ 1')).not.toBeInTheDocument();
+  });
+});

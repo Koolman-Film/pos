@@ -404,6 +404,25 @@ export function WholesaleDetail({
     returns[idx] = { ...returns[idx], [k]: v };
     setO({ ...o, returns });
   }
+  /*
+    ลบรายการสินค้า และลบรายการคืน.
+
+    No confirmation, deliberately: this whole form is a draft until บันทึก PO,
+    so a mis-click is undone by leaving without saving — and the unsaved-changes
+    guard already stops that being silent. A confirm on every row would tax the
+    common case (a line typed by mistake, deleted immediately) to protect one
+    that is already protected.
+
+    Stock follows on save: `saveOrder` compares the stored quantities with the
+    saved ones, so removing a line that was already sold puts those rolls back
+    on the shelf. Nothing extra is needed here.
+  */
+  function removeItem(idx: number) {
+    setO({ ...o, items: o.items.filter((_, i) => i !== idx) });
+  }
+  function removeReturn(idx: number) {
+    setO({ ...o, returns: o.returns.filter((_, i) => i !== idx) });
+  }
   function addAdjustment() {
     setO({ ...o, adjustments: [...o.adjustments, { amount: 0, reason: '', date: 'วันนี้' }] });
   }
@@ -798,22 +817,33 @@ export function WholesaleDetail({
                       : '1px solid var(--line)',
                 }}
               >
-                <div className="mb-2">
-                  <ProductPicker
-                    value={it.name}
-                    label="สินค้าในรายการ"
-                    placeholder="เลือกสินค้า... หรือพิมพ์ชื่อ/ชื่อย่อเพื่อค้นหา"
-                    options={
-                      // A product the branch no longer stocks still has to show
-                      // on the PO that sold it, or editing an old PO would
-                      // silently blank the line.
-                      it.name && !productOptions.some((p) => p.name === it.name)
-                        ? [...productOptions, { id: `kept-${idx}`, name: it.name, muted: true }]
-                        : productOptions
-                    }
-                    className="field text-sm px-3 py-2 w-full font-medium"
-                    onChange={(name) => selectProduct(idx, name)}
-                  />
+                <div className="mb-2 flex gap-2 items-start">
+                  <div className="flex-1 min-w-0">
+                    <ProductPicker
+                      value={it.name}
+                      label="สินค้าในรายการ"
+                      placeholder="เลือกสินค้า... หรือพิมพ์ชื่อ/ชื่อย่อเพื่อค้นหา"
+                      options={
+                        // A product the branch no longer stocks still has to show
+                        // on the PO that sold it, or editing an old PO would
+                        // silently blank the line.
+                        it.name && !productOptions.some((p) => p.name === it.name)
+                          ? [...productOptions, { id: `kept-${idx}`, name: it.name, muted: true }]
+                          : productOptions
+                      }
+                      className="field text-sm px-3 py-2 w-full font-medium"
+                      onChange={(name) => selectProduct(idx, name)}
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeItem(idx)}
+                    aria-label={`ลบรายการสินค้าที่ ${idx + 1}`}
+                    title="ลบรายการนี้"
+                    className="text-sm px-2 py-2 rounded-lg flex-shrink-0"
+                    style={{ color: '#B23A48' }}
+                  >
+                    <i className="fa-solid fa-trash"></i>
+                  </button>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
@@ -901,12 +931,15 @@ export function WholesaleDetail({
               <i className="fa-solid fa-rotate-left mr-1.5"></i>การคืนสินค้า
             </p>
             {o.returns.map((r, idx) => (
-              <div key={idx} className="flex gap-2 mb-2">
+              // flex-wrap เพราะแถวนี้มีห้าช่องแล้ว. On a narrow card the date and
+              // the bin drop to a second line instead of the bin being pushed off
+              // the right edge of the panel, where it was unreachable.
+              <div key={idx} className="flex flex-wrap gap-2 mb-2 items-start">
                 <select
                   value={r.item}
                   aria-label="สินค้าที่รับคืน"
                   onChange={(e) => updateReturn(idx, 'item', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 flex-1"
+                  className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
                 >
                   <option value="" disabled>
                     เลือกสินค้าที่เคยซื้อ...
@@ -927,7 +960,7 @@ export function WholesaleDetail({
                   placeholder="เหตุผล"
                   value={r.reason}
                   onChange={(e) => updateReturn(idx, 'reason', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 flex-1"
+                  className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
                 />
                 {/* The date the return reduces revenue on — see migration 0045. */}
                 <ThaiDateInput
@@ -936,6 +969,15 @@ export function WholesaleDetail({
                   ariaLabel={`วันที่รับคืนรายการที่ ${idx + 1}`}
                   className="field text-xs px-2.5 py-1.5"
                 />
+                <button
+                  onClick={() => removeReturn(idx)}
+                  aria-label={`ลบรายการคืนสินค้าที่ ${idx + 1}`}
+                  title="ลบรายการนี้"
+                  className="text-xs px-2 rounded-lg flex-shrink-0"
+                  style={{ color: '#B23A48' }}
+                >
+                  <i className="fa-solid fa-trash"></i>
+                </button>
               </div>
             ))}
             <button
@@ -967,6 +1009,8 @@ export function WholesaleDetail({
                 />
                 <button
                   onClick={() => removeAdjustment(idx)}
+                  aria-label={`ลบรายการปรับราคาที่ ${idx + 1}`}
+                  title="ลบรายการนี้"
                   className="text-xs px-2 rounded-lg"
                   style={{ color: '#B23A48' }}
                 >
