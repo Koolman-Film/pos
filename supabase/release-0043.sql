@@ -160,6 +160,16 @@ select
   case when coalesce(p.note, '') = '' then 'เติมเงินสดย่อย' else p.note end
 from petty_cash p
 where p.type = 'เติมเงิน'
+  -- ข้ามแถวที่ยอดเป็นศูนย์ (หรือติดลบ).
+  --
+  -- money_transfers บังคับ amount > 0 ด้วยเหตุผลที่เขียนไว้ข้างบน — รายการที่ไม่ได้
+  -- ย้ายเงินคือพิมพ์ผิด ไม่ใช่บันทึก แต่ petty_cash ของจริงมีแถว "เติมเงิน" ยอด 0.00
+  -- อยู่ (เจอตอนรันขึ้นระบบจริง 2026-09-11 ที่สาขา cm) การคัดลอกมาทั้งดุ้นจึงทำให้
+  -- ทั้งไฟล์ล้มและ rollback หมด ทั้งที่แถวนั้นไม่ได้แทนเงินสักบาท
+  --
+  -- ไม่แตะ petty_cash เลย แถวเดิมยังอยู่ในบัญชี/ค่าใช้จ่ายตามเดิม ที่ไม่คัดลอกมา
+  -- เพราะเลขศูนย์ไม่มีผลกับยอดคงเหลืออยู่แล้ว
+  and p.amount > 0
   and exists (select 1 from money_accounts a where a.shop_id = p.shop_id and a.name = 'เงินสดย่อย')
   -- Guarded so a re-run cannot double the shop’s petty cash. The release copy
   -- of this file is run by hand from the SQL editor, where "did that go
