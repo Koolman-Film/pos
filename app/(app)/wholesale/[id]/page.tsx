@@ -61,6 +61,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       wsStatuses={data.wsStatuses}
       shops={data.shops}
       salesPeople={data.salesPeople}
+      staffNames={data.staffNames}
       onSaveOrder={saveOrder}
       onApprovePrice={approveOrderPrice}
       onRejectPrice={rejectOrderPrice}

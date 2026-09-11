@@ -820,6 +820,9 @@ export type Database = {
       orders: {
         Row: {
           sales_by: string
+          price_decided_at: string | null
+          price_decided_by: string | null
+          price_decision: string
           delivered_at: string | null
           due_at: string | null
           created_at: string
@@ -832,6 +835,9 @@ export type Database = {
         }
         Insert: {
           sales_by?: string
+          price_decided_at?: string | null
+          price_decided_by?: string | null
+          price_decision?: string
           delivered_at?: string | null
           due_at?: string | null
           created_at?: string
@@ -844,6 +850,9 @@ export type Database = {
         }
         Update: {
           sales_by?: string
+          price_decided_at?: string | null
+          price_decided_by?: string | null
+          price_decision?: string
           delivered_at?: string | null
           due_at?: string | null
           created_at?: string
@@ -1903,6 +1912,10 @@ export type Database = {
       }
       bounce_order_payment: {
         Args: { p_note?: string; p_on?: string; p_order_id: string; p_uid: string }
+        Returns: undefined
+      }
+      decide_order_price: {
+        Args: { p_approve: boolean; p_order_id: string }
         Returns: undefined
       }
       confirm_order_payment: {

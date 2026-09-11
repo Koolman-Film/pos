@@ -97,6 +97,16 @@ export type WsOrder = {
    */
   deliveredAt?: string;
   /**
+   * ผลการตัดสินใจเรื่องราคา และใครตัดสิน (migration 0051).
+   *
+   * A discount that went through used to leave only a status behind, which
+   * anybody could have set. `priceDecidedBy` is the auth user id; the screen
+   * resolves it to a name where it has one.
+   */
+  priceDecision?: string;
+  priceDecidedAt?: string;
+  priceDecidedBy?: string;
+  /**
    * กำหนดชำระเงิน (migration 0049) — printed on ใบแจ้งหนี้ and ใบส่งของ.
    *
    * Empty means nobody agreed a date, and the documents then say nothing

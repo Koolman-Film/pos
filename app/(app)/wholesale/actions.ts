@@ -446,18 +446,35 @@ export async function rejectOrderAdjustment(
   return { ok: true };
 }
 
-/** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
-export async function approveOrderPrice(orderId: string) {
+/**
+ * อนุมัติ/ปฏิเสธราคา — ทิ้งร่องรอยว่าใครตัดสินใจและเมื่อไหร่ (migration 0051).
+ *
+ * Used to be a bare status change, which meant a discount could go through
+ * and nobody could say afterwards who had agreed to it: the only evidence was
+ * a status anyone could have set. The decision now goes through
+ * `decide_order_price`, which records the person and the day — and checks the
+ * capability in the database, where the check actually holds.
+ */
+async function decidePrice(orderId: string, approve: boolean) {
   const session = await getSessionContext();
   if (!session.canDo('wholesale.priceApproval')) throw new Error('ไม่มีสิทธิ์อนุมัติราคา');
-  await setOrderStatusInternal(orderId, 'รอจัดส่ง');
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('decide_order_price', {
+    p_order_id: orderId,
+    p_approve: approve,
+  });
+  if (error) throw new Error(error.message);
+  revalidateOrder(orderId);
+}
+
+/** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
+export async function approveOrderPrice(orderId: string) {
+  await decidePrice(orderId, true);
 }
 
 /** Reject the discount → back to `รออนุมัติราคา`. Gated by `wholesale.priceApproval`. */
 export async function rejectOrderPrice(orderId: string) {
-  const session = await getSessionContext();
-  if (!session.canDo('wholesale.priceApproval')) throw new Error('ไม่มีสิทธิ์อนุมัติราคา');
-  await setOrderStatusInternal(orderId, 'รออนุมัติราคา');
+  await decidePrice(orderId, false);
 }
 
 /**

@@ -25,6 +25,7 @@ import {
 
 const ORDER_SELECT = `
   id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by,
+  price_decision, price_decided_at, price_decided_by,
   order_items(name, qty, list_price, requested_price, reason),
   order_returns(item_name, qty, reason, returned_at),
   order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
@@ -40,6 +41,9 @@ type OrderRow = {
   delivered_at: string | null;
   due_at: string | null;
   sales_by: string | null;
+  price_decision: string | null;
+  price_decided_at: string | null;
+  price_decided_by: string | null;
   order_items:
     | {
         name: string;
@@ -88,6 +92,9 @@ function mapOrder(row: OrderRow): WsOrder {
     deliveredAt: row.delivered_at ?? undefined,
     dueAt: row.due_at ?? '',
     salesBy: row.sales_by ?? '',
+    priceDecision: row.price_decision ?? '',
+    priceDecidedAt: row.price_decided_at ?? '',
+    priceDecidedBy: row.price_decided_by ?? '',
     items: (row.order_items ?? []).map((it) => ({
       name: it.name,
       qty: it.qty,
@@ -244,6 +251,8 @@ export async function loadOrderDetailData(
   shops: Shop[];
   shopInfo: Record<string, WsShopInfo>;
   paymentMethods: string[];
+  /** auth id → ชื่อพนักงาน, for turning `price_decided_by` into something readable. */
+  staffNames: Record<string, string>;
 } | null> {
   const supabase = await createClient();
   const shops = await loadShops(session);
@@ -372,6 +381,10 @@ export async function loadOrderDetailData(
     phone: p.phone ?? '',
   }));
 
+  const { data: staffRows } = await supabase.from('app_users').select('id, name');
+  const staffNames: Record<string, string> = {};
+  for (const u of staffRows ?? []) staffNames[u.id] = u.name;
+
   return {
     order,
     isNew,
@@ -383,5 +396,6 @@ export async function loadOrderDetailData(
     shops,
     shopInfo,
     paymentMethods: paymentMethods.length ? paymentMethods : DEFAULT_PAYMENT_METHODS,
+    staffNames,
   };
 }

@@ -148,6 +148,7 @@ export function WholesaleDetail({
   wsStatuses = DEFAULT_WS_STATUS,
   shops = [],
   salesPeople = [],
+  staffNames,
   isNew = false,
   onSaveOrder,
   onApprovePrice,
@@ -179,6 +180,8 @@ export function WholesaleDetail({
   shopInfo?: Record<string, WsShopInfo>;
   wsStatuses?: WsStatusMap;
   shops?: Shop[];
+  /** ชื่อพนักงานตาม auth id — ใช้แปลง `price_decided_by` ให้อ่านออก. */
+  staffNames?: Record<string, string>;
   /** พนักงานขายของทุกสาขาที่ผู้ใช้เข้าถึงได้ — filtered to `o.shop` in the picker. */
   salesPeople?: SalesPerson[];
   isNew?: boolean;
@@ -804,6 +807,16 @@ export function WholesaleDetail({
   const customerPhone = shippingCustomer?.phone ?? '';
   const senderShopName = shopInfo?.[o.shop]?.companyName || shopName(o.shop, shops);
 
+  /*
+    ชื่อคนที่ตัดสินใจเรื่องราคา.
+
+    `price_decided_by` is an auth user id, which is meaningless on screen. The
+    PO screen is not given the staff list, so it resolves what it can and falls
+    back to showing the date alone — a date with no name still says more than
+    the status did.
+  */
+  const priceDecidedByName = staffNames?.[o.priceDecidedBy ?? ''] ?? '';
+
   const hasDiscount = o.items.some((i) => i.requestedPrice < i.listPrice);
   const st = wsStatuses[o.status] || {};
 
@@ -1013,6 +1026,30 @@ export function WholesaleDetail({
                 </button>
               </div>
             </div>
+          )}
+          {/*
+            ใครตัดสินใจเรื่องราคา และเมื่อไหร่ (migration 0051).
+
+            Before this the only evidence a discount had been agreed was a
+            status, which anybody could have set — so "ส่วนลดผ่านไปแล้ว สาวกลับ
+            ไม่ได้ว่าใครอนุมัติ" was literally true. Shown whether it was
+            approved or rejected: a rejection somebody has to explain later is
+            worth just as much as an approval.
+          */}
+          {o.priceDecision && (
+            <p
+              className="text-xs mb-4"
+              style={{ color: o.priceDecision === 'อนุมัติ' ? '#3F6B33' : '#B23A48' }}
+            >
+              <i
+                className={`fa-solid ${
+                  o.priceDecision === 'อนุมัติ' ? 'fa-circle-check' : 'fa-circle-xmark'
+                } mr-1.5`}
+              ></i>
+              ราคานี้{o.priceDecision}แล้ว
+              {o.priceDecidedAt ? ` เมื่อ ${fmtThaiDayString(o.priceDecidedAt)}` : ''}
+              {priceDecidedByName ? ` โดย ${priceDecidedByName}` : ''}
+            </p>
           )}
           {hasDiscount && o.status === 'รออนุมัติราคา' && !can('wholesale.priceApproval') && (
             <div className="rounded-2xl p-4 mb-5" style={{ background: '#FBF1DA' }}>
