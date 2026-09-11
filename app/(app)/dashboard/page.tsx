@@ -95,7 +95,7 @@ export default async function DashboardPage({
     supabase
       .from('orders')
       .select(
-        'id, shop_id, customer_id, status, delivered_at, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at), order_payments(amount, method, paid_at, status, cleared_at)',
+        'id, shop_id, customer_id, status, delivered_at, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, paid_at, status, cleared_at)',
       )
       // Deleted POs (migration 0040) are out of the wholesale figures here for
       // the same reason deleted tickets are out of the ticket ones above.
@@ -264,6 +264,8 @@ export default async function DashboardPage({
       amount: num(a.amount),
       reason: a.reason ?? '',
       date: a.adjusted_at,
+      // เฉพาะที่อนุมัติแล้วที่ลดยอด (0050) — `orderTotal` reads this.
+      status: a.status ?? '',
     })),
     payments: (o.order_payments ?? []).map((p) => ({
       amount: num(p.amount),
@@ -676,8 +678,17 @@ export default async function DashboardPage({
   // shop-filtered subset — matching the prototype, which reads `orders` directly
   // rather than `wsVisible` here (:896-897).
   const pendingApprovals: PendingApprovals = {
+    /*
+      Two ways the same decision reaches ผู้บริหาร: a price offered below the
+      standard one, and a reduction written after the goods have gone out
+      (migration 0050). Counting only the first would leave the second waiting
+      on a screen nobody is told to open — and the second is the looser of the
+      two, because by then the invoice has already been raised.
+    */
     discount: orders.filter(
-      (o) => o.status === 'รออนุมัติราคา' && o.items.some((i) => i.requestedPrice < i.listPrice),
+      (o) =>
+        (o.status === 'รออนุมัติราคา' && o.items.some((i) => i.requestedPrice < i.listPrice)) ||
+        o.adjustments.some((a) => a.status === 'รออนุมัติ'),
     ).length,
     badDebt: orders.filter((o) => o.status === 'ค้างชำระ').length,
   };

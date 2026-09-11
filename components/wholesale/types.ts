@@ -29,7 +29,24 @@ export type WsItem = {
  */
 export type WsReturn = { item: string; qty: number; reason: string; date: string };
 
-export type WsAdjustment = { amount: number; reason: string; date: string };
+/**
+ * การปรับราคาหนึ่งรายการ (migration 0050).
+ *
+ * ต้องให้ผู้บริหารอนุมัติเหมือนการเสนอราคาต่ำกว่ามาตรฐาน — it gives away the
+ * same money, and it is written after the goods have already gone out.
+ * `uid` is what the approval is keyed on across a save, exactly as on a
+ * payment: the rows are deleted and re-inserted every time the PO is saved.
+ */
+export type WsAdjustment = {
+  amount: number;
+  reason: string;
+  date: string;
+  uid?: string;
+  /** รออนุมัติ / อนุมัติแล้ว / ปฏิเสธ. Empty from a pre-0050 client — read as อนุมัติแล้ว. */
+  status?: string;
+  approvedAt?: string;
+  rejectNote?: string;
+};
 
 /**
  * การรับชำระหนึ่งรายการ (migration 0048).

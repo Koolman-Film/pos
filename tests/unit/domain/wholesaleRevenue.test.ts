@@ -83,3 +83,20 @@ describe('wholesaleRevenueLines', () => {
     expect(lines).toEqual([]);
   });
 });
+
+describe('wholesaleRevenueLines — ปรับราคาที่รออนุมัติ', () => {
+  it('ไม่ลดยอดขาย จนกว่าจะอนุมัติ', () => {
+    // The bill and the takings have to move together: if an unapproved
+    // reduction came off the revenue but not off the invoice, the two screens
+    // would disagree about the same PO.
+    const lines = wholesaleRevenueLines([
+      order({
+        adjustments: [
+          { amount: 200, reason: 'ต่อรองหลังส่งของ', date: '2026-04-02', status: 'รออนุมัติ' },
+        ],
+      }),
+    ]);
+    expect(lines.find((l) => l.kind === 'ปรับราคา')).toBeUndefined();
+    expect(lines.reduce((n, l) => n + l.amount, 0)).toBe(12000);
+  });
+});

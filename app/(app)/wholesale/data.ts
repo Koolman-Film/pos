@@ -27,7 +27,7 @@ const ORDER_SELECT = `
   id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by,
   order_items(name, qty, list_price, requested_price, reason),
   order_returns(item_name, qty, reason, returned_at),
-  order_adjustments(amount, reason, adjusted_at),
+  order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
   order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, cleared_at, bounced_at, bounce_note)
 `;
 
@@ -50,7 +50,17 @@ type OrderRow = {
       }[]
     | null;
   order_returns: { item_name: string; qty: number; reason: string; returned_at: string }[] | null;
-  order_adjustments: { amount: number; reason: string; adjusted_at: string }[] | null;
+  order_adjustments:
+    | {
+        amount: number;
+        reason: string;
+        adjusted_at: string;
+        uid: string;
+        status: string;
+        approved_at: string | null;
+        reject_note: string;
+      }[]
+    | null;
   order_payments:
     | {
         amount: number;
@@ -98,6 +108,10 @@ function mapOrder(row: OrderRow): WsOrder {
       amount: a.amount,
       reason: a.reason ?? '',
       date: a.adjusted_at ?? '',
+      uid: a.uid ?? '',
+      status: a.status ?? '',
+      approvedAt: a.approved_at ?? '',
+      rejectNote: a.reject_note ?? '',
     })),
     payments: (row.order_payments ?? []).map((p) => ({
       amount: p.amount,

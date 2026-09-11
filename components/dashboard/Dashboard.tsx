@@ -660,7 +660,7 @@ export function Dashboard({
               >
                 <span className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full" style={{ background: '#E8B23D' }}></span>
-                  ส่วนลด PO รออนุมัติ
+                  ส่วนลด/ปรับราคา PO รออนุมัติ
                 </span>
                 <span
                   className="text-xs font-semibold px-2 py-0.5 rounded-full"

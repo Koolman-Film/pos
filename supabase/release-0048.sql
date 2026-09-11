@@ -90,10 +90,14 @@ comment on column order_payments.cleared_at is
 -- Every payment recorded before today was treated as received the moment it was
 -- typed, and every downstream figure was built on that. Backfilling to
 -- รับเงินแล้ว keeps all of them exactly where they are.
+-- รันครั้งแรกเท่านั้น. เงื่อนไขนี้ตั้งใจจับ "ทุกแถวที่มีอยู่ก่อนไมเกรชันนี้" ซึ่งรอบแรก
+-- ถูกต้อง แต่รอบสองแถวที่เข้าเงื่อนไขคือเช็คที่รอยืนยันอยู่จริงๆ การรันซ้ำจะกลายเป็น
+-- การยืนยันเงินเข้าให้ทุกใบโดยไม่มีใครกด จึงล็อกไว้กับบันทึกเวอร์ชันของไฟล์นี้เอง
 update order_payments
 set status = 'รับเงินแล้ว',
     cleared_at = coalesce(cleared_at, paid_at)
-where status = 'แจ้งแล้ว' and cleared_at is null;
+where status = 'แจ้งแล้ว' and cleared_at is null
+  and not exists (select 1 from supabase_migrations.schema_migrations where version = '0048');
 
 -- Two questions this index exists for: what is still unconfirmed, and which
 -- cheques come due when.

@@ -187,7 +187,7 @@ describe('Dashboard upcoming bookings', () => {
 describe('Dashboard pending approvals', () => {
   it('shows both counters and links them to wholesale', () => {
     render(<Dashboard {...base} pendingApprovals={{ discount: 2, badDebt: 1 }} />);
-    const discount = screen.getByText('ส่วนลด PO รออนุมัติ').closest('a');
+    const discount = screen.getByText('ส่วนลด/ปรับราคา PO รออนุมัติ').closest('a');
     expect(discount).toHaveAttribute('href', '/wholesale');
     expect(discount).toHaveTextContent('2');
     expect(screen.getByText('ขอตัดหนี้สูญ').closest('a')).toHaveTextContent('1');

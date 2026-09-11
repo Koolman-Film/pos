@@ -635,6 +635,11 @@ export type Database = {
       order_adjustments: {
         Row: {
           adjusted_at: string
+          approved_at: string | null
+          approved_by: string | null
+          reject_note: string
+          status: string
+          uid: string
           amount: number
           id: number
           order_id: string
@@ -642,6 +647,11 @@ export type Database = {
         }
         Insert: {
           adjusted_at: string
+          approved_at?: string | null
+          approved_by?: string | null
+          reject_note?: string
+          status?: string
+          uid?: string
           amount: number
           id?: never
           order_id: string
@@ -649,6 +659,11 @@ export type Database = {
         }
         Update: {
           adjusted_at?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          reject_note?: string
+          status?: string
+          uid?: string
           amount?: number
           id?: never
           order_id?: string
@@ -1876,6 +1891,14 @@ export type Database = {
       }
       refresh_stock_cost: {
         Args: { p_stock_id: number }
+        Returns: undefined
+      }
+      approve_order_adjustment: {
+        Args: { p_on?: string; p_order_id: string; p_uid: string }
+        Returns: undefined
+      }
+      reject_order_adjustment: {
+        Args: { p_note?: string; p_order_id: string; p_uid: string }
         Returns: undefined
       }
       bounce_order_payment: {

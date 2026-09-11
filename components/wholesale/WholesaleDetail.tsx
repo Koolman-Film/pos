@@ -17,6 +17,11 @@ import {
   PAYMENT_BOUNCED,
   PAYMENT_RECEIVED,
   PAYMENT_REPORTED,
+  ADJUSTMENT_APPROVED,
+  ADJUSTMENT_PENDING,
+  ADJUSTMENT_REJECTED,
+  isApprovedAdjustment,
+  orderPendingAdjustments,
 } from '@/lib/domain/orders';
 import { dateInputValue } from '@/lib/domain/now';
 
@@ -152,6 +157,8 @@ export function WholesaleDetail({
   onRecordDelivery,
   onConfirmPayment,
   onBouncePayment,
+  onApproveAdjustment,
+  onRejectAdjustment,
   onSaveCustomer,
   onBack,
   updateOptionListAction,
@@ -211,6 +218,24 @@ export function WholesaleDetail({
     orderId: string,
     uid: string,
     bouncedOn: string,
+    note: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * อนุมัติ/ปฏิเสธการปรับราคา — gated by `wholesale.priceApproval` (0050).
+   *
+   * The same key that approves a below-standard price, because it is the same
+   * decision about the same money. Not part of `onSaveOrder`: saving the PO
+   * records the request, and the database refuses to let a save carry an
+   * approval with it.
+   */
+  onApproveAdjustment?: (
+    orderId: string,
+    uid: string,
+    approvedOn: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  onRejectAdjustment?: (
+    orderId: string,
+    uid: string,
     note: string,
   ) => Promise<{ ok: boolean; error?: string }>;
   onSaveCustomer?: (input: {
@@ -424,7 +449,19 @@ export function WholesaleDetail({
     setO({ ...o, returns: o.returns.filter((_, i) => i !== idx) });
   }
   function addAdjustment() {
-    setO({ ...o, adjustments: [...o.adjustments, { amount: 0, reason: '', date: 'วันนี้' }] });
+    setO({
+      ...o,
+      adjustments: [
+        ...o.adjustments,
+        {
+          amount: 0,
+          reason: '',
+          date: dateInputValue(new Date()),
+          uid: newPaymentUid(),
+          status: ADJUSTMENT_PENDING,
+        },
+      ],
+    });
   }
   function updateAdjustment(
     idx: number,
@@ -535,8 +572,43 @@ export function WholesaleDetail({
     setPayPanel(null);
   }
 
+  /*
+    การอนุมัติปรับราคา.
+
+    Same shape as confirming a payment, and for the same reasons: keyed on the
+    uid so it survives a save, refused for a row the server has never seen, and
+    checked again in the database because the button is not the gate.
+  */
+  const savedAdjustmentUids = new Set(
+    order.adjustments.map((a) => a.uid).filter((u): u is string => !!u),
+  );
+  const canApprovePrice = can('wholesale.priceApproval');
+  const [adjError, setAdjError] = useState('');
+
+  async function decideAdjustment(idx: number, decision: 'approve' | 'reject') {
+    setAdjError('');
+    const a = o.adjustments[idx];
+    const uid = a?.uid ?? '';
+    const res =
+      decision === 'approve'
+        ? await onApproveAdjustment?.(o.id, uid, dateInputValue(new Date()))
+        : await onRejectAdjustment?.(o.id, uid, '');
+    if (res && !res.ok) {
+      setAdjError(res.error ?? 'บันทึกไม่สำเร็จ');
+      return;
+    }
+    const adjustments = [...o.adjustments];
+    adjustments[idx] = {
+      ...a,
+      status: decision === 'approve' ? ADJUSTMENT_APPROVED : ADJUSTMENT_REJECTED,
+    };
+    setO({ ...o, adjustments });
+  }
+
   const total = orderTotal(o);
   const paid = orderPaid(o);
+  /** ยอดปรับราคาที่ยังรออนุมัติ — beside the bill, never inside it. */
+  const pendingAdjustments = orderPendingAdjustments(o);
   /** แจ้งแล้วแต่ยังไม่ยืนยัน — sits beside the balance, never inside it. */
   const reported = orderReported(o);
   /*
@@ -557,8 +629,20 @@ export function WholesaleDetail({
     const it = o.items.find((i) => i.name === r.item);
     return s + (it ? r.qty * it.requestedPrice : 0);
   }, 0);
-  const adjustmentsTotal = o.adjustments.reduce((s, a) => s + Number(a.amount || 0), 0);
-  const hasBreakdown = o.returns.length > 0 || o.adjustments.length > 0;
+  /*
+    เฉพาะที่อนุมัติแล้ว — เหมือน `orderTotal`.
+
+    This line sits directly above ยอดสุทธิ and is read as its arithmetic. Let it
+    count an adjustment the boss has not approved and the block stops adding up:
+    5,400 − 200 printed above a ยอดสุทธิ of 5,400. The pending amount has its own
+    line below, outside the sum, which is where it belongs.
+  */
+  const adjustmentsTotal = o.adjustments.reduce(
+    (s, a) => s + (isApprovedAdjustment(a) ? Number(a.amount || 0) : 0),
+    0,
+  );
+  const approvedAdjustmentCount = o.adjustments.filter(isApprovedAdjustment).length;
+  const hasBreakdown = o.returns.length > 0 || approvedAdjustmentCount > 0;
   /*
     พนักงานขายของ PO ใบนี้.
 
@@ -1015,32 +1099,114 @@ export function WholesaleDetail({
               <i className="fa-solid fa-money-bill-transfer mr-1.5"></i>ปรับราคา
               (กรณีเก็บเงินไม่ตรงยอดเรียกเก็บ แม้ส่งของแล้ว)
             </p>
-            {o.adjustments.map((a, idx) => (
-              <div key={idx} className="flex gap-2 mb-2">
-                <input
-                  type="number"
-                  placeholder="จำนวนที่ปรับลด"
-                  value={a.amount}
-                  onChange={(e) => updateAdjustment(idx, 'amount', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 w-32"
-                />
-                <input
-                  placeholder="เหตุผล เช่น ลูกค้าต่อรองราคาหลังส่งของ"
-                  value={a.reason}
-                  onChange={(e) => updateAdjustment(idx, 'reason', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 flex-1"
-                />
-                <button
-                  onClick={() => removeAdjustment(idx)}
-                  aria-label={`ลบรายการปรับราคาที่ ${idx + 1}`}
-                  title="ลบรายการนี้"
-                  className="text-xs px-2 rounded-lg"
-                  style={{ color: '#B23A48' }}
+            {o.adjustments.map((a, idx) => {
+              const st = a.status || ADJUSTMENT_APPROVED;
+              const approved = st === ADJUSTMENT_APPROVED;
+              const rejected = st === ADJUSTMENT_REJECTED;
+              const savedAdj = savedAdjustmentUids.has(a.uid ?? '');
+              return (
+                <div
+                  key={idx}
+                  className="rounded-xl p-2.5 mb-2"
+                  style={{
+                    border: '1px solid var(--line)',
+                    background: approved ? 'transparent' : 'var(--paper)',
+                  }}
                 >
-                  <i className="fa-solid fa-trash"></i>
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <span
+                      className="text-xs font-medium px-2 py-0.5 rounded-full"
+                      style={{
+                        background: approved ? '#E7F0E3' : rejected ? '#F7E2E4' : '#FBF0D9',
+                        color: approved ? '#4C7A3E' : rejected ? '#B23A48' : '#8A6A1F',
+                      }}
+                    >
+                      <i
+                        className={`fa-solid ${
+                          approved ? 'fa-circle-check' : rejected ? 'fa-circle-xmark' : 'fa-clock'
+                        } mr-1`}
+                      ></i>
+                      {st}
+                    </span>
+                    {rejected && a.rejectNote && (
+                      <span className="text-xs" style={{ color: '#B23A48' }}>
+                        {a.rejectNote}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <input
+                      type="number"
+                      placeholder="จำนวนที่ปรับลด"
+                      aria-label={`จำนวนที่ปรับลดรายการที่ ${idx + 1}`}
+                      value={a.amount}
+                      onChange={(e) => updateAdjustment(idx, 'amount', e.target.value)}
+                      className="field text-xs px-2.5 py-1.5 w-32"
+                    />
+                    <input
+                      placeholder="เหตุผล เช่น ลูกค้าต่อรองราคาหลังส่งของ"
+                      value={a.reason}
+                      onChange={(e) => updateAdjustment(idx, 'reason', e.target.value)}
+                      className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
+                    />
+                    <button
+                      onClick={() => removeAdjustment(idx)}
+                      aria-label={`ลบรายการปรับราคาที่ ${idx + 1}`}
+                      title="ลบรายการนี้"
+                      className="text-xs px-2 rounded-lg flex-shrink-0"
+                      style={{ color: '#B23A48' }}
+                    >
+                      <i className="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                  {/* The decision, for whoever holds the same key that approves a
+                      below-standard price. A row the server has not seen yet can
+                      only be saved first — the alternative is an error nobody
+                      could act on. */}
+                  {canApprovePrice && !approved && (
+                    <div className="flex gap-2 mt-2 items-center flex-wrap">
+                      {!savedAdj ? (
+                        <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                          บันทึก PO ก่อน จึงจะอนุมัติได้
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => decideAdjustment(idx, 'approve')}
+                            aria-label={`อนุมัติการปรับราคารายการที่ ${idx + 1}`}
+                            className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                            style={{ color: '#4C7A3E' }}
+                          >
+                            <i className="fa-solid fa-circle-check mr-1.5"></i>อนุมัติการปรับราคา
+                          </button>
+                          {!rejected && (
+                            <button
+                              onClick={() => decideAdjustment(idx, 'reject')}
+                              aria-label={`ปฏิเสธการปรับราคารายการที่ ${idx + 1}`}
+                              className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                              style={{ color: '#B23A48' }}
+                            >
+                              ปฏิเสธ
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {!canApprovePrice && st === ADJUSTMENT_PENDING && (
+                    <p className="text-xs mt-2" style={{ color: '#8A5A12' }}>
+                      <i className="fa-regular fa-clock mr-1.5"></i>รอผู้บริหาร/แอดมินอนุมัติ
+                      ยังไม่ลดยอดเรียกเก็บ
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {adjError && (
+              <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
+                {adjError}
+              </p>
+            )}
             <button
               onClick={addAdjustment}
               className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
@@ -1068,10 +1234,10 @@ export function WholesaleDetail({
                 </span>
               </div>
             )}
-            {o.adjustments.length > 0 && (
+            {approvedAdjustmentCount > 0 && (
               <div className="flex justify-between text-sm mb-1">
                 <span style={{ color: 'var(--ink-soft)' }}>
-                  ปรับราคา ({o.adjustments.length} รายการ)
+                  ปรับราคา ({approvedAdjustmentCount} รายการ)
                 </span>
                 <span
                   className="font-medium"
@@ -1096,6 +1262,19 @@ export function WholesaleDetail({
             {/* A customer who has handed over a cheque is in a different
                 position from one who has sent nothing — but neither has paid,
                 so this figure sits outside the arithmetic. */}
+            {/* A reduction the customer has been promised but nobody has approved
+                is not off the bill yet. Saying so here is the difference between
+                a figure that looks wrong and one that explains itself. */}
+            {pendingAdjustments > 0 && (
+              <div className="flex justify-between text-sm mb-1">
+                <span style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-regular fa-clock mr-1"></i>ปรับราคารออนุมัติ
+                </span>
+                <span className="font-semibold" style={{ color: '#B8860B' }}>
+                  {fmt(pendingAdjustments)}
+                </span>
+              </div>
+            )}
             {reported > 0 && (
               <div className="flex justify-between text-sm mb-1">
                 <span style={{ color: 'var(--ink-soft)' }}>
@@ -1364,7 +1543,7 @@ export function WholesaleDetail({
                   <span>-{fmt(returnsTotal)}</span>
                 </div>
               )}
-              {sheet.showTotals && o.adjustments.length > 0 && (
+              {sheet.showTotals && approvedAdjustmentCount > 0 && (
                 <div
                   style={{
                     display: 'flex',

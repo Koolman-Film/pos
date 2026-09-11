@@ -398,6 +398,54 @@ function revalidateOrder(orderId: string) {
   revalidatePath('/money');
 }
 
+/**
+ * อนุมัติการปรับราคา — the same decision, about the same money, as approving a
+ * below-standard price, so it is the same capability.
+ *
+ * Checked here and again inside `approve_order_adjustment`, which is the check
+ * that actually holds: this action is a plain POST anyone can send.
+ */
+export async function approveOrderAdjustment(
+  orderId: string,
+  uid: string,
+  approvedOn: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.priceApproval')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์อนุมัติการปรับราคา' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('approve_order_adjustment', {
+    p_order_id: orderId,
+    p_uid: uid,
+    p_on: approvedOn,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateOrder(orderId);
+  return { ok: true };
+}
+
+/** ปฏิเสธการปรับราคา. The row stays: somebody asked, somebody said no. */
+export async function rejectOrderAdjustment(
+  orderId: string,
+  uid: string,
+  note: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.canDo('wholesale.priceApproval')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์อนุมัติการปรับราคา' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('reject_order_adjustment', {
+    p_order_id: orderId,
+    p_uid: uid,
+    p_note: note,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidateOrder(orderId);
+  return { ok: true };
+}
+
 /** Approve the discounted price → `รอจัดส่ง`. Gated by `wholesale.priceApproval`. */
 export async function approveOrderPrice(orderId: string) {
   const session = await getSessionContext();

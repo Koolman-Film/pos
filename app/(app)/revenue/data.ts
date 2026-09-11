@@ -216,7 +216,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       supabase
         .from('orders')
         .select(
-          'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at)',
+          'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status)',
         )
         .is('deleted_at', null)
         .not('delivered_at', 'is', null),
@@ -278,6 +278,8 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       amount: Number(a.amount || 0),
       reason: a.reason ?? '',
       date: a.adjusted_at,
+      // เฉพาะที่อนุมัติแล้วที่ลดยอดขาย (0050).
+      status: a.status ?? '',
     })),
   }));
 

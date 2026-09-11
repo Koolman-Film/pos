@@ -20,6 +20,8 @@
  * numbers for the same month.
  */
 
+import { isApprovedAdjustment } from './orders';
+
 export type WholesaleRevenueOrder = {
   id: string;
   shop: string;
@@ -27,7 +29,13 @@ export type WholesaleRevenueOrder = {
   deliveredAt: string | null;
   items: { name: string; qty: number; requestedPrice: number }[];
   returns: { item: string; qty: number; date: string | null }[];
-  adjustments: { amount: number; reason: string; date: string | null }[];
+  adjustments: {
+    amount: number;
+    reason: string;
+    date: string | null;
+    /** เฉพาะ `อนุมัติแล้ว` ที่ลดยอดขาย (migration 0050). */
+    status?: string;
+  }[];
 };
 
 /** ขาย = the goods going out; the other two reduce it, later and separately. */
@@ -79,6 +87,9 @@ export function wholesaleRevenueLines(orders: WholesaleRevenueOrder[]): Wholesal
     }
 
     for (const a of o.adjustments) {
+      // An adjustment still waiting on ผู้บริหาร has not reduced the bill, so
+      // it has not reduced the takings either — the two must not disagree.
+      if (!isApprovedAdjustment(a)) continue;
       const amount = Number(a.amount || 0);
       if (!amount) continue;
       lines.push({

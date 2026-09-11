@@ -3,7 +3,29 @@
 
 export type OrderItem = { name: string; qty: number; requestedPrice: number };
 export type OrderReturn = { item: string; qty: number };
-export type OrderAdjustment = { amount: number };
+/**
+ * สถานะการอนุมัติของรายการปรับราคา (migration 0050).
+ *
+ * A price adjustment gives away the same money a below-standard price does,
+ * and that one has always needed ผู้บริหาร. This one is arguably the looser of
+ * the two — it is written AFTER the goods have gone out and the invoice has
+ * been raised, which is when the shop has least leverage.
+ */
+export const ADJUSTMENT_APPROVED = 'อนุมัติแล้ว';
+export const ADJUSTMENT_PENDING = 'รออนุมัติ';
+export const ADJUSTMENT_REJECTED = 'ปฏิเสธ';
+
+export type OrderAdjustment = { amount: number; status?: string };
+
+/**
+ * A row with no status at all counts, for the same reason payments do: every
+ * adjustment written before 0050 had already been subtracted from figures the
+ * shop has read and reconciled, and the migration backfills them to
+ * `อนุมัติแล้ว`. Defaulting the other way would silently re-open settled bills.
+ */
+export function isApprovedAdjustment(a: { status?: string }): boolean {
+  return !a.status || a.status === ADJUSTMENT_APPROVED;
+}
 /**
  * สถานะการรับเงิน (migration 0048).
  *
@@ -42,8 +64,22 @@ export function orderTotal(o: OrderForTotals): number {
     const it = o.items.find((i) => i.name === r.item);
     return s + (it ? r.qty * it.requestedPrice : 0);
   }, 0);
-  const adjustmentsTotal = (o.adjustments || []).reduce((s, a) => s + Number(a.amount || 0), 0);
+  // เฉพาะที่อนุมัติแล้ว: an adjustment waiting on ผู้บริหาร must not have
+  // reduced the bill already, or the approval is decoration and the money is
+  // gone before anybody agreed to it.
+  const adjustmentsTotal = (o.adjustments || []).reduce(
+    (s, a) => s + (isApprovedAdjustment(a) ? Number(a.amount || 0) : 0),
+    0,
+  );
   return itemsTotal - returnsTotal - adjustmentsTotal;
+}
+
+/** ยอดปรับราคาที่ยังรอผู้บริหารอนุมัติ — shown beside the bill, never inside it. */
+export function orderPendingAdjustments(o: { adjustments?: OrderAdjustment[] }): number {
+  return (o.adjustments || []).reduce(
+    (s, a) => s + (a.status === ADJUSTMENT_PENDING ? Number(a.amount || 0) : 0),
+    0,
+  );
 }
 
 /** ยอดที่รับเงินแล้วจริง — what clears the debt. */
