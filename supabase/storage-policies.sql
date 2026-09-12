@@ -77,12 +77,29 @@ create policy ticket_attachments_object_delete on storage.objects for delete to 
   using (bucket_id = 'ticket-attachments' and pos.current_user_has_nav('list'));
 
 -- ---------------------------------------------------------------------------
+-- Bucket: wholesale-attachments   (หลักฐานการจัดส่ง, migration 0055)
+--
+-- Its own bucket rather than a shared one: a ticket photo is readable by any
+-- technician, and a wholesale delivery note signed by a customer is not their
+-- business. The wholesale nav is the gate on all three.
+-- ---------------------------------------------------------------------------
+
+create policy wholesale_attachments_object_read on storage.objects for select to authenticated
+  using (bucket_id = 'wholesale-attachments' and pos.current_user_has_nav('wholesale'));
+
+create policy wholesale_attachments_object_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'wholesale-attachments' and pos.current_user_has_nav('wholesale'));
+
+create policy wholesale_attachments_object_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'wholesale-attachments' and pos.current_user_has_nav('wholesale'));
+
+-- ---------------------------------------------------------------------------
 -- Verifying afterwards
 --
 --   select policyname, cmd from pg_policies
 --    where schemaname = 'storage' and tablename = 'objects'
 --    order by policyname;
 --
--- Expect all six. A count of six is necessary but not sufficient: open a file
+-- Expect all nine. A count of nine is necessary but not sufficient: open a file
 -- through the app as a non-admin to prove the expressions actually pass.
 -- ---------------------------------------------------------------------------

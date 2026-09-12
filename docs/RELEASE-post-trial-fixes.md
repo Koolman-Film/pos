@@ -34,7 +34,7 @@ npx supabase db push                     # applies 0012 … 0037 only
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
 `supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 30 ในตารางข้างล่าง
-(`release-0019` … `release-0054` และ `repair-categories-and-services.sql`)
+(`release-0019` … `release-0055` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -90,7 +90,8 @@ it twice changes nothing, and each records its versions in
 | 33    | `supabase/release-0052.sql`                   | a normal connection                                 |
 | 34    | `supabase/release-0053.sql`                   | a normal connection                                 |
 | 35    | `supabase/release-0054.sql`                   | a normal connection                                 |
-| 36    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 36    | `supabase/release-0055.sql`                   | a normal connection                                 |
+| 37    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -162,6 +163,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0052_price_decision_trail`           | อนุมัติ/ปฏิเสธราคาบันทึกว่าใครตัดสินใจและเมื่อไหร่ และ**ล็อกการเปลี่ยนสถานะ PO ที่ฐานข้อมูล** ไม่ใช่แค่ที่หน้าจอ คนที่ไม่มีสิทธิ์ยิงตรงเข้า API ก็เปลี่ยนไม่ได้                                                                                                                                                                                                                                                                                                | ต่ำ. เพิ่มคอลัมน์ที่มีค่าตั้งต้น และ trigger ที่ปล่อยผ่านทุกการแก้ไขที่ไม่ได้แตะสถานะ                                                                                                                                            |
 | `0053_sales_people_manage`            | รัดสิทธิ์การแก้ไขรายชื่อพนักงานขายให้ต้องมี `options.manage` และเปิดทางให้ใส่ชื่อ/เบอร์โทรจากหน้า PO ได้                                                                                                                                                                                                                                                                                                                                                       | ต่ำ. เปลี่ยนเฉพาะนโยบายการเขียน ข้อมูลเดิมไม่ขยับ                                                                                                                                                                                |
 | `0054_wholesale_stock_events`         | **สต๊อกขายส่งตัดตอนสถานะเป็นจัดส่งแล้ว ไม่ใช่ตอนบันทึก PO** และของกลับเข้าชั้นเมื่อยืนยันว่าได้รับคืนจริงเท่านั้น เพิ่มช่องหมายเหตุของ PO ด้วย                                                                                                                                                                                                                                                                                                                 | ปานกลาง. PO ที่ส่งของไปแล้วและรายการคืนที่มีอยู่เดิม ถูกประทับว่า "จัดการแล้ว" สต๊อกจึงไม่ขยับย้อนหลัง แต่ **ตั้งแต่นี้ไป การบันทึก PO จะไม่ตัดสต๊อกอีก** ต้องกดออกใบส่งของ และรายการคืนต้องกดยืนยันรับของ ไม่งั้นสต๊อกจะไม่เดิน |
+| `0055_delivery_evidence`              | **เปลี่ยนเป็น "จัดส่งแล้ว" ต้องกรอกข้อมูลการจัดส่ง และแนบไฟล์อย่างน้อยหนึ่งไฟล์** บังคับที่ฐานข้อมูล ไม่ใช่แค่ที่ฟอร์ม เพิ่ม bucket `wholesale-attachments` | ปานกลาง. PO ที่อยู่ในสถานะจัดส่งแล้วอยู่เดิม ไม่ถูกแตะและไม่ถูกถามหาหลักฐานย้อนหลัง แต่ **ตั้งแต่นี้ไป จะกดออกใบส่งของโดยไม่กรอกข้อมูลและแนบไฟล์ไม่ได้** และ **ต้องสร้าง policy ของ bucket ใหม่ตาม `supabase/storage-policies.sql` ด้วย** ไม่งั้นแนบไฟล์ไม่ได้เลย |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 
@@ -200,8 +202,9 @@ missing privilege to a warning. If you took the SQL Editor path and saw:
 WARNING:  SKIPPED a storage.objects policy …
 ```
 
-then create the six by hand from Dashboard → Storage → Policies on
-`expense-attachments` and `ticket-attachments`, which runs as the storage service
+then create the nine by hand from Dashboard → Storage → Policies on
+`expense-attachments`, `ticket-attachments` and `wholesale-attachments`, which runs
+as the storage service
 rather than `postgres`. The statements are in
 [`supabase/storage-policies.sql`](../supabase/storage-policies.sql) with the role
 and USING/WITH CHECK placement for each.
@@ -214,10 +217,13 @@ select policyname, cmd from pg_policies
  order by policyname;
 ```
 
-Expect six. Until they exist the buckets are unreadable: uploads still succeed,
+Expect nine. Until they exist the buckets are unreadable: uploads still succeed,
 but every receipt, slip and QC photo fails to open — the same "ไม่แสดงไฟล์แนบ"
-this release exists to fix. Six rows is necessary but not sufficient; open a file
-in the app to prove the expressions actually pass.
+this release exists to fix. `wholesale-attachments` (0055) is worse than
+unreadable: without its insert policy the upload itself fails, and since the PO
+cannot become จัดส่งแล้ว without an attachment, **ขายส่งจะส่งของไม่ได้เลย**. Nine rows
+is necessary but not sufficient; open a file in the app to prove the expressions
+actually pass.
 
 ### After the push
 

@@ -24,6 +24,7 @@ import {
   orderPendingAdjustments,
 } from '@/lib/domain/orders';
 import { dateInputValue } from '@/lib/domain/now';
+import { uploadAttachments, discardAttachments, fileNameFromPath } from '@/lib/storage/attachments';
 
 import { CustomerPicker } from './CustomerPicker';
 import { SalesPersonPicker } from './SalesPersonPicker';
@@ -196,15 +197,22 @@ export function WholesaleDetail({
   /** ลบ PO — gated by `wholesale.delete`. Absent in the bare unit test. */
   onDeleteOrder?: (orderId: string) => Promise<{ ok: boolean; error?: string }>;
   /**
-   * บันทึกวันส่งของ — called when ใบส่งของ is issued for the first time.
+   * บันทึกการจัดส่ง — called when ใบส่งของ is issued for the first time.
    *
    * Separate from `onSaveOrder` because it is not an edit the user typed: it
    * is the consequence of issuing the document, and it must land even if the
    * PO has no other unsaved changes.
+   *
+   * ข้อมูลการจัดส่งและหลักฐานเป็นของบังคับ (migration 0055): this transition is
+   * also the one that takes the stock off the shelf and starts the revenue
+   * clock, and a bare date settles nothing when a customer says the goods
+   * never came. `attachments` are storage paths, already uploaded.
    */
   onRecordDelivery?: (
     orderId: string,
     deliveredAt: string,
+    deliveryNote: string,
+    attachments: string[],
   ) => Promise<{ ok: boolean; error?: string }>;
   /**
    * ยืนยันว่าเงินเข้าจริง — gated by `wholesale.confirmPayment` (migration 0048).
@@ -867,12 +875,79 @@ export function WholesaleDetail({
   const sheet = sheetFor(printMode ?? 'invoice');
 
   async function issueDocument(mode: Exclude<WsPrintMode, null>) {
+    /*
+      ใบส่งของใบแรก ไม่ใช่แค่การพิมพ์.
+
+      Issuing it moves the PO to จัดส่งแล้ว, which takes the goods off the
+      shelf and counts the sale — so the evidence is collected first and the
+      document prints only once the server has accepted it. Re-printing a
+      delivery note for a PO already sent asks for nothing.
+    */
     if (mode === 'delivery' && !o.deliveredAt && onRecordDelivery) {
-      const on = dateInputValue(new Date());
-      const res = await onRecordDelivery(o.id, on);
-      if (res?.ok) setO({ ...o, deliveredAt: on });
+      setDeliveryError('');
+      setDeliveryPanel({ date: dateInputValue(new Date()), note: '', files: [] });
+      return;
     }
     doPrint(mode);
+  }
+
+  /*
+    หลักฐานการจัดส่ง (migration 0055).
+
+    The files go to storage straight from the browser — a Server Action body
+    is capped well below a phone photo — and only their paths travel on. If
+    the server then refuses the transition, those objects are swept up again
+    rather than left behind as litter nothing points at.
+  */
+  const [deliveryPanel, setDeliveryPanel] = useState<{
+    date: string;
+    note: string;
+    files: File[];
+  } | null>(null);
+  const [deliveryError, setDeliveryError] = useState('');
+  const [deliveryBusy, setDeliveryBusy] = useState(false);
+
+  async function submitDelivery() {
+    if (!deliveryPanel || !onRecordDelivery) return;
+    const note = deliveryPanel.note.trim();
+    if (!note) {
+      setDeliveryError('ต้องกรอกข้อมูลการจัดส่ง — ขนส่งเจ้าไหน เลขพัสดุ หรือใครเป็นคนรับ');
+      return;
+    }
+    if (deliveryPanel.files.length === 0) {
+      setDeliveryError('ต้องแนบหลักฐานการจัดส่งอย่างน้อยหนึ่งไฟล์ เช่น รูปใบส่งของที่เซ็นแล้ว');
+      return;
+    }
+    setDeliveryBusy(true);
+    setDeliveryError('');
+    let paths: string[] = [];
+    try {
+      const stored = await uploadAttachments(
+        'wholesale-attachments',
+        `${o.shop}/${o.id}`,
+        deliveryPanel.files,
+      );
+      paths = stored.map((sf) => sf.path);
+      const res = await onRecordDelivery(o.id, deliveryPanel.date, note, paths);
+      if (!res.ok) {
+        await discardAttachments('wholesale-attachments', paths);
+        setDeliveryError(res.error ?? 'บันทึกการจัดส่งไม่สำเร็จ');
+        return;
+      }
+      setO({
+        ...o,
+        deliveredAt: deliveryPanel.date,
+        deliveryNote: note,
+        deliveryAttachments: paths,
+      });
+      setDeliveryPanel(null);
+      doPrint('delivery');
+    } catch (err) {
+      await discardAttachments('wholesale-attachments', paths);
+      setDeliveryError(err instanceof Error ? err.message : 'อัปโหลดไฟล์ไม่สำเร็จ');
+    } finally {
+      setDeliveryBusy(false);
+    }
   }
   /*
     ข้อมูลบนจ่าหน้ากล่อง.
@@ -1526,6 +1601,94 @@ export function WholesaleDetail({
               })}
             </div>
             {/*
+              แผงกรอกข้อมูลการจัดส่ง.
+
+              Inline under the document buttons rather than a dialog: it is not
+              an interruption, it is the second half of pressing ใบส่งของ, and
+              the person filling it in wants the PO still in front of them.
+            */}
+            {deliveryPanel && (
+              <div
+                className="rounded-xl p-3 mt-2"
+                style={{ border: '1px solid var(--line)', background: 'var(--surface-2)' }}
+              >
+                <p className="text-xs font-semibold mb-2">
+                  <i className="fa-solid fa-truck-fast mr-1.5"></i>ข้อมูลการจัดส่ง
+                </p>
+                <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
+                  ออกใบส่งของแล้ว PO จะเป็น “จัดส่งแล้ว” — ตัดสต็อกและนับเป็นยอดขาย
+                  จึงต้องมีหลักฐานติดไว้ด้วย
+                </p>
+                <p className="text-xs font-medium">วันที่จัดส่ง</p>
+                <ThaiDateInput
+                  ariaLabel="วันที่จัดส่ง"
+                  value={deliveryPanel.date}
+                  onChange={(v) => setDeliveryPanel({ ...deliveryPanel, date: v })}
+                  className="field text-sm px-3 py-2 w-full mb-3"
+                />
+                <label className="text-xs font-medium" htmlFor="ws-delivery-note">
+                  ขนส่ง / เลขพัสดุ / ผู้รับ <span style={{ color: '#B23A48' }}>*</span>
+                </label>
+                <textarea
+                  id="ws-delivery-note"
+                  rows={2}
+                  value={deliveryPanel.note}
+                  onChange={(e) => setDeliveryPanel({ ...deliveryPanel, note: e.target.value })}
+                  placeholder="เช่น นิ่มซี่เส็ง เลขพัสดุ NMS123456 · คุณสมชายรับของ"
+                  className="field text-sm px-3 py-2 w-full mb-3"
+                />
+                <label className="text-xs font-medium" htmlFor="ws-delivery-files">
+                  แนบหลักฐาน (รูปใบส่งของที่เซ็นแล้ว / ใบรับของขนส่ง)
+                  <span style={{ color: '#B23A48' }}> *</span>
+                </label>
+                <input
+                  id="ws-delivery-files"
+                  type="file"
+                  multiple
+                  accept="image/*,application/pdf"
+                  onChange={(e) =>
+                    setDeliveryPanel({
+                      ...deliveryPanel,
+                      files: Array.from(e.target.files ?? []),
+                    })
+                  }
+                  className="field text-sm px-3 py-2 w-full"
+                />
+                {deliveryPanel.files.length > 0 && (
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                    <i className="fa-solid fa-paperclip mr-1"></i>
+                    {deliveryPanel.files.map((file) => file.name).join(', ')}
+                  </p>
+                )}
+                {deliveryError && (
+                  <p className="text-xs mt-2" style={{ color: '#B23A48' }} role="alert">
+                    {deliveryError}
+                  </p>
+                )}
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={submitDelivery}
+                    disabled={deliveryBusy}
+                    className="flex-1 rounded-xl py-2 text-sm font-semibold"
+                    style={{
+                      background: 'var(--primary)',
+                      color: '#fff',
+                      opacity: deliveryBusy ? 0.6 : 1,
+                    }}
+                  >
+                    {deliveryBusy ? 'กำลังบันทึก…' : 'บันทึกการจัดส่ง แล้วพิมพ์ใบส่งของ'}
+                  </button>
+                  <button
+                    onClick={() => setDeliveryPanel(null)}
+                    disabled={deliveryBusy}
+                    className="btn-outline rounded-xl py-2 px-4 text-sm"
+                  >
+                    ยกเลิก
+                  </button>
+                </div>
+              </div>
+            )}
+            {/*
               จ่าหน้ากล่องส่งของ.
 
               Outside the grid on purpose: the shop issues exactly four
@@ -1556,6 +1719,20 @@ export function WholesaleDetail({
               <p className="text-xs mt-2 font-medium" style={{ color: '#3F6B33' }}>
                 <i className="fa-solid fa-truck-fast mr-1.5"></i>
                 ส่งของแล้วเมื่อ {fmtThaiDayString(o.deliveredAt)} — นับเป็นยอดขายของวันนี้
+              </p>
+            )}
+            {/* หลักฐานที่บันทึกไว้ — the reason it was demanded is that somebody
+                would one day need to look at it. */}
+            {o.deliveryNote && (
+              <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                <i className="fa-solid fa-circle-info mr-1.5"></i>
+                {o.deliveryNote}
+              </p>
+            )}
+            {(o.deliveryAttachments ?? []).length > 0 && (
+              <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                <i className="fa-solid fa-paperclip mr-1.5"></i>
+                {(o.deliveryAttachments ?? []).map(fileNameFromPath).join(', ')}
               </p>
             )}
           </div>

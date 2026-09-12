@@ -114,6 +114,15 @@ export type WsOrder = {
    * credit, so this and not the payment date is when the revenue belongs.
    */
   deliveredAt?: string;
+  /**
+   * ข้อมูลการจัดส่ง และหลักฐาน (migration 0055).
+   *
+   * Both are required to move a PO to จัดส่งแล้ว, and the database refuses
+   * the transition without them. `deliveryAttachments` holds storage paths
+   * in the `wholesale-attachments` bucket, not file names.
+   */
+  deliveryNote?: string;
+  deliveryAttachments?: string[];
   /** หมายเหตุของ PO — free text the sale needs to pass on (migration 0054). */
   note?: string;
   /**

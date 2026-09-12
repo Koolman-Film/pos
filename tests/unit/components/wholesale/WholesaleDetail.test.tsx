@@ -8,6 +8,21 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
 }));
 
+// หลักฐานการจัดส่งอัปโหลดจากเบราว์เซอร์ตรงไปที่ storage — there is no Supabase
+// here, and what these tests are about is the rule, not the transport.
+vi.mock('@/lib/storage/attachments', () => ({
+  uploadAttachments: vi.fn(async (_bucket: string, folder: string, files: File[]) =>
+    files.map((file) => ({
+      path: `${folder}/${file.name}`,
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+    })),
+  ),
+  discardAttachments: vi.fn(async () => {}),
+  fileNameFromPath: (p: string) => p.split('/').pop() ?? p,
+}));
+
 import { WholesaleDetail } from '@/components/wholesale/WholesaleDetail';
 import { WholesaleList } from '@/components/wholesale/WholesaleList';
 import type { WsOrder } from '@/components/wholesale/types';
@@ -366,16 +381,73 @@ describe('WholesaleDetail — เอกสารขายส่ง', () => {
     expect(screen.getByText(/ต้องบันทึกการคืนสินค้าก่อน/)).toBeInTheDocument();
   });
 
-  it('records the delivery date when ใบส่งของ is issued', async () => {
+  /*
+    ใบส่งของใบแรก ต้องมีหลักฐานก่อน (migration 0055).
+
+    Pressing the button no longer records anything on its own: the same
+    transition takes the goods off the shelf and counts the sale, and a bare
+    date settles nothing when a customer says the delivery never came.
+  */
+  it('asks for การจัดส่ง before ใบส่งของ is issued the first time', async () => {
     const user = userEvent.setup();
     const onRecordDelivery = vi.fn(async () => ({ ok: true }));
     render(
       <WholesaleDetail order={saved} canDo={() => true} onRecordDelivery={onRecordDelivery} />,
     );
     await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+    expect(onRecordDelivery).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/ขนส่ง \/ เลขพัสดุ \/ ผู้รับ/)).toBeInTheDocument();
+  });
+
+  it('refuses to record a delivery with no ข้อมูลการจัดส่ง', async () => {
+    const user = userEvent.setup();
+    const onRecordDelivery = vi.fn(async () => ({ ok: true }));
+    render(
+      <WholesaleDetail order={saved} canDo={() => true} onRecordDelivery={onRecordDelivery} />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+    await user.click(screen.getByRole('button', { name: /บันทึกการจัดส่ง/ }));
+    expect(onRecordDelivery).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/ต้องกรอกข้อมูลการจัดส่ง/);
+  });
+
+  it('refuses to record a delivery with no หลักฐาน attached', async () => {
+    const user = userEvent.setup();
+    const onRecordDelivery = vi.fn(async () => ({ ok: true }));
+    render(
+      <WholesaleDetail order={saved} canDo={() => true} onRecordDelivery={onRecordDelivery} />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+    await user.type(screen.getByLabelText(/ขนส่ง \/ เลขพัสดุ \/ ผู้รับ/), 'นิ่มซี่เส็ง NMS123456');
+    await user.click(screen.getByRole('button', { name: /บันทึกการจัดส่ง/ }));
+    expect(onRecordDelivery).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/ต้องแนบหลักฐาน/);
+  });
+
+  it('records the delivery with its evidence once both are given', async () => {
+    const user = userEvent.setup();
+    const onRecordDelivery = vi.fn(async () => ({ ok: true }));
+    render(
+      <WholesaleDetail
+        order={{ ...saved, shop: 'cm' } as unknown as WsOrder}
+        canDo={() => true}
+        onRecordDelivery={onRecordDelivery}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+    await user.type(screen.getByLabelText(/ขนส่ง \/ เลขพัสดุ \/ ผู้รับ/), 'นิ่มซี่เส็ง NMS123456');
+    // แยกตามสาขาและตาม PO — one folder per order keeps the bucket navigable
+    // when somebody has to go and look for a slip from last quarter.
+    await user.upload(
+      screen.getByLabelText(/แนบหลักฐาน/),
+      new File(['x'], 'slip.jpg', { type: 'image/jpeg' }),
+    );
+    await user.click(screen.getByRole('button', { name: /บันทึกการจัดส่ง/ }));
     expect(onRecordDelivery).toHaveBeenCalledWith(
       saved.id,
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      'นิ่มซี่เส็ง NMS123456',
+      [`cm/${saved.id}/slip.jpg`],
     );
   });
 

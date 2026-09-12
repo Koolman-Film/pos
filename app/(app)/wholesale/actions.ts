@@ -295,14 +295,38 @@ async function moveOrderStock(
 export async function recordOrderDelivery(
   orderId: string,
   deliveredAt: string,
+  deliveryNote: string,
+  attachments: string[],
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await getSessionContext();
   if (!session.hasNav('wholesale')) return { ok: false, error: 'ไม่มีสิทธิ์ในโมดูลขายส่ง' };
+
+  /*
+    หลักฐานการจัดส่ง บังคับที่นี่และที่ฐานข้อมูล (migration 0055).
+
+    Checked here so the person gets a sentence they can act on, and again by
+    the trigger because this action is a plain POST — the form is not the
+    gate. Wholesale ships before it is paid, so the window between the goods
+    leaving and the money arriving is the riskiest stretch the shop has, and
+    a date alone settles nothing when a customer says it never came.
+  */
+  if (!deliveryNote.trim()) {
+    return { ok: false, error: 'ต้องกรอกข้อมูลการจัดส่ง (ขนส่ง/เลขพัสดุ/ผู้รับ)' };
+  }
+  if (attachments.length === 0) {
+    return { ok: false, error: 'ต้องแนบหลักฐานการจัดส่งอย่างน้อยหนึ่งไฟล์' };
+  }
+
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('orders')
-    .update({ delivered_at: deliveredAt, status: 'จัดส่งแล้ว' })
+    .update({
+      delivered_at: deliveredAt,
+      status: 'จัดส่งแล้ว',
+      delivery_note: deliveryNote.trim(),
+      delivery_attachments: attachments,
+    })
     .eq('id', orderId)
     .is('delivered_at', null)
     .select('id, shop_id');

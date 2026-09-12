@@ -833,6 +833,8 @@ export type Database = {
         Row: {
           sales_by: string
           note: string
+          delivery_note: string
+          delivery_attachments: string[]
           stock_deducted_at: string | null
           price_decided_at: string | null
           price_decided_by: string | null
@@ -850,6 +852,8 @@ export type Database = {
         Insert: {
           sales_by?: string
           note?: string
+          delivery_note?: string
+          delivery_attachments?: string[]
           stock_deducted_at?: string | null
           price_decided_at?: string | null
           price_decided_by?: string | null
@@ -867,6 +871,8 @@ export type Database = {
         Update: {
           sales_by?: string
           note?: string
+          delivery_note?: string
+          delivery_attachments?: string[]
           stock_deducted_at?: string | null
           price_decided_at?: string | null
           price_decided_by?: string | null
