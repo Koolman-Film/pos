@@ -203,7 +203,7 @@ export function Dashboard({
   retailRevenue = 0,
   wholesaleRevenue = 0,
   totalExpenses,
-  moneySources = { branches: [], total: 0 },
+  moneySources = { branches: [], total: 0, hasUnmatched: false },
   arItems,
   apItems,
   revenueByCategory,

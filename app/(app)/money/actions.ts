@@ -78,6 +78,55 @@ export async function saveMoneyAccount(
 }
 
 /**
+ * ผูกชื่อแหล่งเงินที่ยังไม่มีเจ้าของ เข้ากับบัญชี.
+ *
+ * A payment or an expense records the LABEL the person picked, and an account
+ * claims the labels that mean it. A label nobody claims contributes to no
+ * balance — the expense saves, the list shows it, and the money silently
+ * appears nowhere. That is what happens whenever somebody adds a new entry to
+ * the แหล่งเงิน dropdown, which is one text box away at all times.
+ *
+ * So the screen lists the orphans and this binds one, rather than asking the
+ * bookkeeper to find the account, open the editor and retype a label they
+ * would have to copy exactly — including whatever spacing the original had.
+ *
+ * ผูกได้อย่างเดียว ไม่ลบของเดิม. Read-modify-write on an array is a race, and
+ * the losing side of that race would take an existing binding down with it,
+ * which is the very failure this exists to fix.
+ */
+export async function bindMoneyLabel(
+  accountId: number,
+  label: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await authorize();
+  if (!session) return { ok: false, error: REFUSED };
+  const wanted = label.trim();
+  if (!wanted) return { ok: false, error: 'ไม่มีชื่อแหล่งเงินให้ผูก' };
+
+  const supabase = await createClient();
+  const { data: account, error: readError } = await supabase
+    .from('money_accounts')
+    .select('id, shop_id, match_names')
+    .eq('id', accountId)
+    .maybeSingle();
+  if (readError) return { ok: false, error: readError.message };
+  if (!account) return { ok: false, error: 'ไม่พบแหล่งเงินนี้' };
+  if (!session.accessibleShopIds.includes(account.shop_id)) {
+    return { ok: false, error: 'ไม่มีสิทธิ์ในสาขานี้' };
+  }
+
+  const names = account.match_names ?? [];
+  if (names.includes(wanted)) return done();
+
+  const { error } = await supabase
+    .from('money_accounts')
+    .update({ match_names: [...names, wanted] })
+    .eq('id', accountId);
+  if (error) return { ok: false, error: error.message };
+  return done();
+}
+
+/**
  * ปิดแหล่งเงิน — deactivate rather than delete.
  *
  * Transfers point at it and reconciliations hang off it; removing the row would

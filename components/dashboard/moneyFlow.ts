@@ -16,6 +16,14 @@
  * true ON, so adding older movements on top would count the same money twice —
  * once inside the figure the shop typed, once again as a transaction.
  *
+ * แหล่งเงินผูกกันด้วย "ชื่อ" ไม่ใช่ด้วย id. A payment or an expense records the
+ * label the person picked, and an account claims the labels that mean it. That
+ * is what lets the till keep saying "เงินสด" while the bookkeeper renames the
+ * account — but it also means a label nobody claims contributes to nothing. So
+ * every such label is collected as `unmatched` and reported: money that left
+ * the shop and shows up in no balance is the one thing this file must not do
+ * silently, and it is a one-line fix once somebody can SEE which label it is.
+ *
  * WHAT IS DELIBERATELY NOT IN HERE: ค้างรับ and ค้างจ่าย. A ticket invoiced and
  * not yet paid is revenue, and a bill accepted and not yet paid is a cost, but
  * neither has moved a single baht — and this is a count of where money IS. The
@@ -45,12 +53,35 @@ export type AccountBalance = {
   balance: number;
 };
 
+/**
+ * แหล่งเงินที่ยังไม่ได้ผูกกับบัญชีไหนเลย.
+ *
+ * A movement names its account by LABEL — the free text the till or the
+ * expense form recorded — and an account claims the labels that mean it in
+ * `match_names`. Anything nobody claims used to fall on the floor in silence:
+ * the expense saved, the list showed it, and the balance simply did not move.
+ * Money that left the shop and appears in no total is the one error this card
+ * must never make quietly, so orphans are counted and handed back to be shown.
+ */
+export type UnmatchedLabel = {
+  /** The label exactly as recorded — what has to go into `match_names`. */
+  label: string;
+  /** Money in under this label, since the earliest account opened. */
+  inflow: number;
+  /** Money out under this label. */
+  outflow: number;
+  /** How many movements are affected — "one typo" versus "every expense". */
+  count: number;
+};
+
 export type BranchMoney = {
   shop: string;
   name: string;
   accounts: AccountBalance[];
   /** Every account added up — a real figure now, so the card may show it. */
   total: number;
+  /** Labels in this branch that no account claims. Usually empty. */
+  unmatched: UnmatchedLabel[];
 };
 
 /** The branches on the card, and every baht across them. */
@@ -62,6 +93,12 @@ export type MoneyOverview = {
    * once in the drawer and again in the bank.
    */
   total: number;
+  /**
+   * Whether any branch has money recorded against a label no account claims.
+   * The card shows a warning on this rather than making the reader compare
+   * two screens to discover that a figure is short.
+   */
+  hasUnmatched: boolean;
 };
 
 export type MoneyAccount = {
@@ -98,6 +135,17 @@ export type MoneyTransfer = {
 
 type Shop = { id: string; name: string };
 
+/**
+ * ชื่อทั้งหมดที่หมายถึงบัญชีนี้ — รวมชื่อบัญชีเอง.
+ *
+ * `match_names` is a hand-kept list, and the name the account is DISPLAYED
+ * under is the one a person picking a แหล่งเงิน sees and reaches for. Treating
+ * it as a label costs nothing when it is already listed, and covers the case
+ * that produced this function: an account renamed in the register while its
+ * `match_names` stayed behind, so its own name stopped meaning it.
+ */
+const labelsOf = (a: MoneyAccount): string[] => [a.name, ...a.matchNames];
+
 export function buildMoneySources(
   shops: Shop[],
   accounts: MoneyAccount[],
@@ -118,7 +166,7 @@ export function buildMoneySources(
           the total right and leaves the mistake visible as an account that never
           moves.
         */
-        const owns = (label: string) => mine.find((x) => x.matchNames.includes(label))?.id === a.id;
+        const owns = (label: string) => mine.find((x) => labelsOf(x).includes(label))?.id === a.id;
 
         const rows = movements.filter(
           (m) => m.shop === s.id && m.on >= a.openedAt && owns(m.source),
@@ -148,14 +196,52 @@ export function buildMoneySources(
         };
       });
 
+      /*
+        อะไรที่ไม่เข้าบัญชีไหนเลย.
+
+        Same two conditions the loop above applies, negated: a movement counts
+        against an account only if some account claims its label AND it falls
+        on or after that account's `openedAt`. A label nobody claims fails the
+        first, so the earliest opening date in the branch is the fairest cutoff
+        — before it, the money is already inside somebody's opening balance and
+        reporting it as lost would be wrong.
+      */
+      const claimed = new Set(mine.flatMap(labelsOf));
+      const earliest = mine.map((a) => a.openedAt).sort()[0] ?? '';
+      const orphans = new Map<string, UnmatchedLabel>();
+      for (const m of movements) {
+        if (m.shop !== s.id) continue;
+        if (!m.source) continue;
+        if (claimed.has(m.source)) continue;
+        if (earliest && m.on < earliest) continue;
+        const row = orphans.get(m.source) ?? {
+          label: m.source,
+          inflow: 0,
+          outflow: 0,
+          count: 0,
+        };
+        if (m.amount > 0) row.inflow += m.amount;
+        else row.outflow -= m.amount;
+        row.count += 1;
+        orphans.set(m.source, row);
+      }
+
       return {
         shop: s.id,
         name: s.name,
         accounts: balances,
         total: balances.reduce((n, b) => n + b.balance, 0),
+        // Biggest first: the one worth chasing is the one with money on it.
+        unmatched: [...orphans.values()].sort(
+          (a, b) => b.inflow + b.outflow - (a.inflow + a.outflow),
+        ),
       };
     })
     .filter((b) => b.accounts.length > 0);
 
-  return { branches, total: branches.reduce((n, b) => n + b.total, 0) };
+  return {
+    branches,
+    total: branches.reduce((n, b) => n + b.total, 0),
+    hasUnmatched: branches.some((b) => b.unmatched.length > 0),
+  };
 }

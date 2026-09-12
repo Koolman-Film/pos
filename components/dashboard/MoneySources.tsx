@@ -50,6 +50,26 @@ export function MoneySources({ data }: { data: MoneyOverview }) {
         </span>
         <span className="text-lg font-extrabold">{fmt(data.total)}</span>
       </div>
+      {/*
+        ยอดนี้ยังไม่ครบ.
+
+        A movement whose แหล่งเงิน label no account claims lands in no balance
+        at all — the expense saves and the list shows it, but the money is
+        missing from every figure above. A total that is quietly short is the
+        worst thing this card can show, so it says so rather than being read
+        as correct. The fix lives on /money, which is why the line points
+        there instead of trying to explain itself here.
+      */}
+      {data.hasUnmatched && (
+        <p
+          className="text-xs px-2 py-1.5 rounded-lg"
+          style={{ color: '#8A5A12', background: 'rgba(255,255,255,.55)' }}
+        >
+          <i className="fa-solid fa-link-slash mr-1.5"></i>
+          มีรายการที่ยังไม่ได้ผูกกับแหล่งเงิน ยอดข้างบนจึงยังไม่ครบ — ดูและแก้ได้ที่
+          การจัดการเงิน/บัญชี
+        </p>
+      )}
       {branches.map((b, i) => (
         /*
           Each branch is a block with a rule above it and its own tinted

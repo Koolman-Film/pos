@@ -8,6 +8,7 @@ import { dateInputValue } from '@/lib/domain/now';
 import type { MoneyAccount, MoneyOverview } from '@/components/dashboard/moneyFlow';
 
 import {
+  bindMoneyLabel,
   closeMoneyAccount,
   saveMoneyAccount,
   saveMoneyReconciliation,
@@ -101,6 +102,26 @@ export function MoneyModule({
     } finally {
       setBusy(false);
     }
+  }
+
+  /*
+    ผูกชื่อแหล่งเงินที่ยังไม่มีเจ้าของ.
+
+    `bind[label]` holds which account the reader picked for that label. The
+    default is deliberately empty rather than the first account: guessing here
+    puts real money in the wrong place, and getting it wrong is not obvious
+    afterwards — the balance simply looks plausible.
+  */
+  const [bind, setBind] = useState<Record<string, string>>({});
+
+  async function submitBind(labelText: string) {
+    const id = Number(bind[labelText] ?? '');
+    if (!id) return;
+    const ok = await run(
+      () => bindMoneyLabel(id, labelText),
+      `ผูก “${labelText}” เข้ากับแหล่งเงินแล้ว`,
+    );
+    if (ok) setBind({ ...bind, [labelText]: '' });
   }
 
   // ---- โอน/ฝากเงิน -----------------------------------------------------
@@ -198,6 +219,88 @@ export function MoneyModule({
           <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
           {error}
         </p>
+      )}
+
+      {/*
+        เงินที่ยังไม่เข้าบัญชีไหนเลย.
+
+        Above the accounts on purpose, and only when there is something to say.
+        Every figure on this screen and on the dashboard card is short by
+        whatever is listed here, so reading the balances first and finding this
+        afterwards would be reading them in the wrong order.
+      */}
+      {branch && branch.unmatched.length > 0 && (
+        <div className="card p-5 mb-4" style={{ borderLeft: '4px solid #B8860B' }}>
+          <p className="font-semibold" style={{ color: '#8A5A12' }}>
+            <i className="fa-solid fa-link-slash mr-2"></i>
+            แหล่งเงินที่ยังไม่ได้ผูกกับบัญชี
+          </p>
+          <p className="text-sm mt-1 mb-3" style={{ color: 'var(--ink-soft)' }}>
+            มีรายการที่บันทึกแหล่งเงินเป็นชื่อข้างล่างนี้ แต่ยังไม่มีบัญชีไหนรับชื่อนี้ไว้
+            ยอดพวกนี้จึง <strong>ไม่ถูกนับในยอดคงเหลือและในแดชบอร์ด</strong>{' '}
+            เลือกบัญชีที่ใช่แล้วกดผูก ยอดจะเข้าที่ทันที และรายการใหม่ที่ใช้ชื่อนี้จะเข้าเองต่อไป
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table
+              style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 560 }}
+            >
+              <thead>
+                <tr style={{ borderBottom: '1.5px solid var(--line-strong)' }}>
+                  {['ชื่อที่บันทึกไว้', 'รับเข้า', 'จ่ายออก', 'รายการ', 'ผูกเข้ากับ'].map(
+                    (h, i) => (
+                      <th
+                        key={h}
+                        className="text-xs font-semibold"
+                        style={{
+                          padding: '0 10px 8px',
+                          textAlign: i === 0 || i === 4 ? 'left' : 'right',
+                          color: 'var(--ink-soft)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {branch.unmatched.map((u) => (
+                  <tr key={u.label} style={{ borderBottom: '1px solid var(--line)' }}>
+                    <td style={{ padding: '10px' }} className="font-medium">
+                      {u.label}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'right' }}>{fmt(u.inflow)}</td>
+                    <td style={{ padding: '10px', textAlign: 'right' }}>{fmt(u.outflow)}</td>
+                    <td style={{ padding: '10px', textAlign: 'right' }}>{u.count}</td>
+                    <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
+                      <select
+                        aria-label={`ผูก ${u.label} เข้ากับแหล่งเงิน`}
+                        value={bind[u.label] ?? ''}
+                        onChange={(e) => setBind({ ...bind, [u.label]: e.target.value })}
+                        className="field text-sm px-2 py-1.5 mr-2"
+                      >
+                        <option value="">— เลือกแหล่งเงิน —</option>
+                        {shopAccounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => submitBind(u.label)}
+                        disabled={busy || !bind[u.label]}
+                        className="btn-outline text-xs px-3 py-1.5 rounded-lg font-medium"
+                      >
+                        <i className="fa-solid fa-link mr-1.5"></i>ผูก
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* ---------------------------------------------------- แหล่งเงิน -- */}

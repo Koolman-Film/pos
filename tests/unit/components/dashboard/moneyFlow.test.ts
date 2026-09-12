@@ -169,4 +169,88 @@ describe('balances follow money that actually moved', () => {
     expect(b.accounts[0].balance).toBe(100_000);
     expect(b.total).toBe(100_000);
   });
+
+  /*
+    ชื่อบัญชีตัวมันเอง ก็คือชื่อที่ใช้จับคู่ได้.
+
+    `match_names` is kept by hand and the account gets renamed in the register
+    without it. Its own name meaning it costs nothing and covers that.
+  */
+  it('matches a movement against the account\u2019s own name', () => {
+    const b = only(
+      [account({ id: 9, name: 'K-bank คูลมาน เชียงใหม่', matchNames: [], openingBalance: 10_000 })],
+      [{ shop: 'cm', source: 'K-bank คูลมาน เชียงใหม่', amount: -2_500, on: '2026-09-05' }],
+    );
+    expect(b.accounts[0].outflow).toBe(2_500);
+    expect(b.accounts[0].balance).toBe(7_500);
+    expect(b.unmatched).toEqual([]);
+  });
+});
+
+/**
+ * แหล่งเงินที่ยังไม่ได้ผูกกับบัญชี.
+ *
+ * The failure this exists for: an expense is saved against a แหล่งเงิน label
+ * that no account claims — a new entry in the dropdown, or an account renamed
+ * out from under one. The expense saves, the list shows it, and it lands in no
+ * balance. Nothing errors; the money is just quietly absent from the figure the
+ * shop reconciles against its bank statement.
+ */
+describe('buildMoneySources — แหล่งเงินที่ยังไม่มีเจ้าของ', () => {
+  it('reports an expense label no account claims, with its amount', () => {
+    const b = only(
+      [account({ id: 1, name: 'K-bank คูลมาน เชียงใหม่', openingBalance: 10_000 })],
+      [
+        { shop: 'cm', source: 'K-bank เลขที่ 186-3-69345-0', amount: -2_500, on: '2026-09-10' },
+        { shop: 'cm', source: 'K-bank เลขที่ 186-3-69345-0', amount: -5_000, on: '2026-09-11' },
+      ],
+    );
+    // The balance is still wrong — nothing is invented — but the shortfall is
+    // now reported instead of being invisible.
+    expect(b.accounts[0].balance).toBe(10_000);
+    expect(b.unmatched).toEqual([
+      { label: 'K-bank เลขที่ 186-3-69345-0', inflow: 0, outflow: 7_500, count: 2 },
+    ]);
+  });
+
+  it('says nothing when every label has a home', () => {
+    const b = only(
+      [bank, cash],
+      [{ shop: 'cm', source: 'เงินสด', amount: 1_200, on: '2026-09-05' }],
+    );
+    expect(b.unmatched).toEqual([]);
+    expect(buildMoneySources(shops, [bank, cash], [], []).hasUnmatched).toBe(false);
+  });
+
+  it('does not report movements from before any account was opened', () => {
+    // That money is already inside somebody’s opening balance. Calling it lost
+    // would send the bookkeeper looking for a problem that is not there.
+    const b = only(
+      [account({ openedAt: '2026-09-01' })],
+      [{ shop: 'cm', source: 'บัญชีเก่าที่เลิกใช้', amount: -9_999, on: '2026-08-20' }],
+    );
+    expect(b.unmatched).toEqual([]);
+  });
+
+  it('flags the overview so the dashboard card can warn', () => {
+    const out = buildMoneySources(
+      shops,
+      [bank],
+      [{ shop: 'cm', source: 'ไม่มีใครรับ', amount: -100, on: '2026-09-05' }],
+      [],
+    );
+    expect(out.hasUnmatched).toBe(true);
+  });
+
+  it('puts the label with the most money on it first', () => {
+    // Two orphans is two jobs; the one worth doing first is the expensive one.
+    const b = only(
+      [bank],
+      [
+        { shop: 'cm', source: 'เล็ก', amount: -100, on: '2026-09-05' },
+        { shop: 'cm', source: 'ใหญ่', amount: -90_000, on: '2026-09-05' },
+      ],
+    );
+    expect(b.unmatched.map((u) => u.label)).toEqual(['ใหญ่', 'เล็ก']);
+  });
 });

@@ -51,23 +51,46 @@ export default async function AccountingPage() {
   const session = await getSessionContext();
   const supabase = await createClient();
 
-  const [{ data: shopRows }, { data: expenseRows }, { data: pettyRows }, { data: optionRows }] =
-    await Promise.all([
-      supabase.from('shops').select('id, name').order('sort_order'),
-      supabase
-        .from('expenses')
-        .select(
-          'id, doc_no, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at, ' +
-            'expense_attachments(id, file_name, storage_path, mime_type)',
-        )
-        .order('id', { ascending: false }),
-      supabase.from('petty_cash').select('id, shop_id, type, amount, note, entry_at'),
-      supabase
-        .from('option_lists')
-        .select('list_key, value, sort_order')
-        .in('list_key', ['expense_categories', 'payment_sources'])
-        .order('sort_order'),
-    ]);
+  const [
+    { data: shopRows },
+    { data: expenseRows },
+    { data: pettyRows },
+    { data: optionRows },
+    { data: accountRows },
+  ] = await Promise.all([
+    supabase.from('shops').select('id, name').order('sort_order'),
+    supabase
+      .from('expenses')
+      .select(
+        'id, doc_no, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at, ' +
+          'expense_attachments(id, file_name, storage_path, mime_type)',
+      )
+      .order('id', { ascending: false }),
+    supabase.from('petty_cash').select('id, shop_id, type, amount, note, entry_at'),
+    supabase
+      .from('option_lists')
+      .select('list_key, value, sort_order')
+      .in('list_key', ['expense_categories', 'payment_sources'])
+      .order('sort_order'),
+    /*
+      ทะเบียนแหล่งเงิน — เอาชื่อบัญชีมาเป็นตัวเลือกใน "จ่ายจาก" ด้วย.
+
+      An expense records the LABEL it was paid from, and the money register
+      matches that label back to an account to work out a balance. A label
+      no account answers to lands in no balance at all: the expense saves,
+      the list shows it, and the dashboard is quietly short by that amount.
+
+      Offering the real account names is what stops that happening in the
+      first place — the obvious pick is then one that reconciles. The option
+      list stays, because branches have labels that predate the register and
+      a saved expense must keep showing what it was actually paid from.
+    */
+    supabase
+      .from('money_accounts')
+      .select('name, shop_id, sort_order')
+      .eq('active', true)
+      .order('sort_order'),
+  ]);
 
   const accessibleShops = (shopRows ?? []).filter((s) => session.accessibleShopIds.includes(s.id));
 
@@ -106,9 +129,21 @@ export default async function AccountingPage() {
   const expenseCategories = (optionRows ?? [])
     .filter((o) => o.list_key === 'expense_categories')
     .map((o) => o.value);
-  const paymentSources = (optionRows ?? [])
-    .filter((o) => o.list_key === 'payment_sources')
-    .map((o) => o.value);
+  /*
+    ชื่อบัญชีมาก่อน แล้วค่อยตามด้วยรายการเดิม.
+
+    Accounts first because those are the picks that reconcile, and duplicates
+    are dropped so an account whose name is already in the option list does
+    not appear twice. Shop-wide rather than per-branch: the form chooses its
+    branch separately, and a name from the wrong branch is a mistake the
+    register will show as an unmatched label rather than hide.
+  */
+  const paymentSources = [
+    ...new Set([
+      ...(accountRows ?? []).map((a) => a.name),
+      ...(optionRows ?? []).filter((o) => o.list_key === 'payment_sources').map((o) => o.value),
+    ]),
+  ];
 
   return (
     <AccountingModule
