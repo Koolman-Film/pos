@@ -70,13 +70,13 @@ export default async function DashboardPage({
   const supabase = await createClient();
 
   const [
-    { data: ticketRows },
-    { data: orderRows },
+    ticketRows,
+    orderRows,
     { data: customerRows },
-    { data: expenseRows },
+    expenseRows,
 
     { data: accountRows },
-    { data: transferRows },
+    transferRows,
     { data: visitRows },
     stockRows,
     { data: shopRows },
@@ -84,29 +84,52 @@ export default async function DashboardPage({
     { data: policyRows },
     { data: claimRows },
   ] = await Promise.all([
-    supabase
-      .from('tickets')
-      .select(
-        'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
-      )
-      // Soft-deleted tickets (migration 0013) are out of every figure on this
-      // screen — revenue, job counts, the calendar and the bookings window.
-      .is('deleted_at', null)
-      .order('drop_off_date', { ascending: false }),
-    supabase
-      .from('orders')
-      .select(
-        'id, shop_id, customer_id, status, delivered_at, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, paid_at, status, cleared_at)',
-      )
-      // Deleted POs (migration 0040) are out of the wholesale figures here for
-      // the same reason deleted tickets are out of the ticket ones above.
-      .is('deleted_at', null),
+    /*
+      อ่านครบทุกแถว — the four reads below grow with the business, and every
+      figure on this screen is a sum over them. PostgREST stops at 1,000 rows
+      without saying so, so each is paged and ordered by something unique.
+    */
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('tickets')
+          .select(
+            'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
+          )
+          // Soft-deleted tickets (migration 0013) are out of every figure on this
+          // screen — revenue, job counts, the calendar and the bookings window.
+          .is('deleted_at', null)
+          .order('drop_off_date', { ascending: false })
+          .order('id')
+          .range(from, to),
+      'tickets',
+    ),
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('orders')
+          .select(
+            'id, shop_id, customer_id, status, delivered_at, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, paid_at, status, cleared_at)',
+          )
+          // Deleted POs (migration 0040) are out of the wholesale figures here for
+          // the same reason deleted tickets are out of the ticket ones above.
+          .is('deleted_at', null)
+          .order('id')
+          .range(from, to),
+      'orders',
+    ),
     supabase.from('wholesale_customers').select('id, name'),
-    supabase
-      .from('expenses')
-      .select(
-        'id, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at',
-      ),
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('expenses')
+          .select(
+            'id, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at',
+          )
+          .order('id')
+          .range(from, to),
+      'expenses',
+    ),
 
     // ทะเบียนแหล่งเงิน (migration 0043) — the opening balances and the
     // transfers between accounts that turn movement into a real balance.
@@ -117,9 +140,15 @@ export default async function DashboardPage({
       )
       .eq('active', true)
       .order('sort_order'),
-    supabase
-      .from('money_transfers')
-      .select('shop_id, from_account_id, to_account_id, amount, moved_at'),
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('money_transfers')
+          .select('shop_id, from_account_id, to_account_id, amount, moved_at')
+          .order('id')
+          .range(from, to),
+      'money_transfers',
+    ),
     // เซอร์วิสที่บันทึกไว้ — each recorded visit is its own appointment, with
     // its own dates, and belongs on the 7-day card beside the bookings.
     supabase

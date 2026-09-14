@@ -114,6 +114,27 @@ export type MoneyAccount = {
   sortOrder: number;
 };
 
+/**
+ * เอกสารต้นทางของเงินก้อนหนึ่ง — what the ledger prints beside the amount.
+ *
+ * Optional on a movement because the dashboard card only needs the sum;
+ * the ledger needs to say which ticket, PO or expense the money belongs to
+ * and let the reader go and look at it.
+ */
+export type MovementRef = {
+  kind: 'ticket' | 'order' | 'expense';
+  /** Route id — the ticket id, the PO id, or the expense id. */
+  id: string;
+  /** What a person reads: ใบงาน/PO id, or the expense's POS-… number. */
+  docNo: string;
+  /** Customer, wholesale buyer, or what the expense was for. */
+  title: string;
+  /** Plate and payment type, cheque details, or expense category. */
+  detail: string;
+  /** Receipts stored on an expense, openable from the ledger. */
+  attachments?: { fileName: string; path: string }[];
+};
+
 /** One recorded payment or expense, as it was stored. */
 export type MoneyMovement = {
   shop: string;
@@ -123,6 +144,7 @@ export type MoneyMovement = {
   amount: number;
   /** ISO date; movements before an account's `openedAt` are ignored. */
   on: string;
+  ref?: MovementRef;
 };
 
 export type MoneyTransfer = {
