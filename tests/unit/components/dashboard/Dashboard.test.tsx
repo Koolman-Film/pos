@@ -250,6 +250,16 @@ describe('Dashboard recent jobs', () => {
     render(<Dashboard {...base} recentJobs={[]} />);
     expect(screen.getByText('ยังไม่มีใบงาน')).toBeInTheDocument();
   });
+
+  it("shows the job's total beside its status, as the Book งาน list does", () => {
+    render(<Dashboard {...base} recentJobs={[job({ total: 9600 })]} />);
+    expect(screen.getByLabelText('ยอดรวม 9,600.00 บาท')).toBeInTheDocument();
+  });
+
+  it('leaves out the separator for a car that was not recorded', () => {
+    render(<Dashboard {...base} recentJobs={[job({ brand: '', model: '' })]} />);
+    expect(screen.getByText('คุณ เอ · 1กก')).toBeInTheDocument();
+  });
 });
 
 describe('Dashboard create-ticket button', () => {

@@ -135,6 +135,8 @@ export type RecentJob = {
   categories: string[];
   products: string[];
   status: string;
+  /** ยอดรวมของใบงาน — `ticketTotal`, the figure the ticket list and the ticket show. */
+  total?: number;
 };
 
 /** The two counters on the "รอการอนุมัติ" card. */
@@ -879,7 +881,12 @@ export function Dashboard({
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold truncate">
-                    {t.customer} &middot; {t.brand} {t.model} &middot; {t.plate}
+                    {t.customer}
+                    {/* No stray separator for a job whose car was not recorded. */}
+                    {(t.brand || t.model) && (
+                      <> &middot; {[t.brand, t.model].filter(Boolean).join(' ')}</>
+                    )}
+                    {t.plate && <> &middot; {t.plate}</>}
                   </p>
                   <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-faint)' }}>
                     {t.serviceType || 'ยังไม่ระบุการนัดหมาย'} &middot;{' '}
@@ -891,6 +898,21 @@ export function Dashboard({
                 </div>
               </Link>
               <div className="flex items-center gap-3 flex-shrink-0">
+                {/* Same net total as the Book งาน list, so the two screens agree. */}
+                {t.total != null && (
+                  <p
+                    className="text-sm font-bold whitespace-nowrap"
+                    aria-label={`ยอดรวม ${fmt(t.total)} บาท`}
+                  >
+                    {fmt(t.total)}
+                    <span
+                      className="text-xs font-medium ml-1"
+                      style={{ color: 'var(--ink-faint)' }}
+                    >
+                      บาท
+                    </span>
+                  </p>
+                )}
                 <TicketStatusSelect
                   ticketId={t.id}
                   status={t.status}

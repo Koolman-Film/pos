@@ -733,6 +733,7 @@ export default async function DashboardPage({
     categories: t.categories,
     products: t.products,
     status: t.status,
+    total: ticketTotal(t),
   }));
 
   /*
