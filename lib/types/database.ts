@@ -831,6 +831,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          created_by: string | null
           sales_by: string
           note: string
           delivery_note: string
@@ -850,6 +851,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          created_by?: string | null
           sales_by?: string
           note?: string
           delivery_note?: string
@@ -869,6 +871,7 @@ export type Database = {
           status: string
         }
         Update: {
+          created_by?: string | null
           sales_by?: string
           note?: string
           delivery_note?: string

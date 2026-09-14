@@ -24,6 +24,7 @@ export function SalesPersonPicker({
   canManage,
   onSelect,
   onSavePerson,
+  required = false,
 }: {
   /** The NAME stored on the PO (`orders.sales_by`), not an id. */
   value: string;
@@ -39,6 +40,11 @@ export function SalesPersonPicker({
     name: string;
     phone: string;
   }) => Promise<{ ok: boolean; error?: string; name?: string }>;
+  /**
+   * The branch has a sales team, so the PO must be credited to one of them
+   * (migration 0057). The database refuses it otherwise; this only says so first.
+   */
+  required?: boolean;
 }) {
   const [mode, setMode] = useState<'select' | 'new' | 'edit'>('select');
   const [list, setList] = useState<SalesPerson[]>(people);
@@ -91,7 +97,8 @@ export function SalesPersonPicker({
     return (
       <div className="mt-2">
         <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-          พนักงานขาย
+          พนักงานขาย (เจ้าของยอดขาย)
+          {required && <span style={{ color: '#B23A48' }}> *</span>}
         </label>
         <div className="flex gap-2 items-center">
           <select
@@ -100,7 +107,7 @@ export function SalesPersonPicker({
             onChange={(e) => onSelect(e.target.value)}
             className="field flex-1 text-sm px-3 py-2"
           >
-            <option value="">ยังไม่ระบุ</option>
+            <option value="">{required ? '— เลือกพนักงานขาย —' : 'ยังไม่ระบุ'}</option>
             {list.map((p) => (
               <option key={p.id} value={p.name}>
                 {p.name}

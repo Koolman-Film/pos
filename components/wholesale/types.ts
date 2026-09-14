@@ -151,6 +151,13 @@ export type WsOrder = {
    */
   salesBy?: string;
   /**
+   * ใครเปิด PO — the auth user id, set by the database on insert and never
+   * editable (migration 0057). Deliberately separate from `salesBy`: a rep on
+   * the road has someone in the office raise the PO, and the sale is still
+   * theirs. Empty on POs from before it was recorded.
+   */
+  createdBy?: string;
+  /**
    * `orders.created_at`, the date the period filter windows the list on. Absent
    * on an unsaved draft from `blankOrder`, which the filter then always shows.
    */

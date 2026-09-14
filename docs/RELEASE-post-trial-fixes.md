@@ -34,7 +34,7 @@ npx supabase db push                     # applies 0012 … 0037 only
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
 `supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 30 ในตารางข้างล่าง
-(`release-0019` … `release-0056` และ `repair-categories-and-services.sql`)
+(`release-0019` … `release-0057` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -92,7 +92,8 @@ it twice changes nothing, and each records its versions in
 | 35    | `supabase/release-0054.sql`                   | a normal connection                                 |
 | 36    | `supabase/release-0055.sql`                   | a normal connection                                 |
 | 37    | `supabase/release-0056.sql`                   | a normal connection                                 |
-| 38    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 38    | `supabase/release-0057.sql`                   | a normal connection                                 |
+| 39    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -166,6 +167,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0054_wholesale_stock_events`         | **สต๊อกขายส่งตัดตอนสถานะเป็นจัดส่งแล้ว ไม่ใช่ตอนบันทึก PO** และของกลับเข้าชั้นเมื่อยืนยันว่าได้รับคืนจริงเท่านั้น เพิ่มช่องหมายเหตุของ PO ด้วย                                                                                                                                                                                                                                                                                                                 | ปานกลาง. PO ที่ส่งของไปแล้วและรายการคืนที่มีอยู่เดิม ถูกประทับว่า "จัดการแล้ว" สต๊อกจึงไม่ขยับย้อนหลัง แต่ **ตั้งแต่นี้ไป การบันทึก PO จะไม่ตัดสต๊อกอีก** ต้องกดออกใบส่งของ และรายการคืนต้องกดยืนยันรับของ ไม่งั้นสต๊อกจะไม่เดิน                                  |
 | `0055_delivery_evidence`              | **เปลี่ยนเป็น "จัดส่งแล้ว" ต้องกรอกข้อมูลการจัดส่ง และแนบไฟล์อย่างน้อยหนึ่งไฟล์** บังคับที่ฐานข้อมูล ไม่ใช่แค่ที่ฟอร์ม เพิ่ม bucket `wholesale-attachments`                                                                                                                                                                                                                                                                                                    | ปานกลาง. PO ที่อยู่ในสถานะจัดส่งแล้วอยู่เดิม ไม่ถูกแตะและไม่ถูกถามหาหลักฐานย้อนหลัง แต่ **ตั้งแต่นี้ไป จะกดออกใบส่งของโดยไม่กรอกข้อมูลและแนบไฟล์ไม่ได้** และ **ต้องสร้าง policy ของ bucket ใหม่ตาม `supabase/storage-policies.sql` ด้วย** ไม่งั้นแนบไฟล์ไม่ได้เลย |
 | `0056_petty_cash_transfers`           | **ปุ่มเติมเงินสดย่อยในหน้าค่าใช้จ่าย บันทึกเป็นการโอนเข้าบัญชีเงินสดย่อยด้วย** และถามว่าเงินมาจากไหน ก่อนหน้านี้ปุ่มนี้ไม่ถึงยอดเงินเลยตั้งแต่ 0043                                                                                                                                                                                                                                                                                                            | ปานกลาง. ยอดเงินสดย่อยจะเริ่มถูกต้องสำหรับการเติมครั้งใหม่ ส่วน **การเติมที่ตกหล่นก่อนหน้านี้จะขึ้นเป็นรายการที่หน้าการจัดการเงิน/บัญชี ต้องเข้าไปกดนำเข้าหรือ "โอนไว้เองแล้ว" ทีละรายการ** — ไม่คัดลอกให้อัตโนมัติ เพราะบางก้อนอาจคีย์เป็นการโอนไว้เองแล้ว       |
+| `0057_order_sales_attribution`        | **ยอดขายของ PO เป็นของเซลล์ที่เลือก และบันทึกว่าใครเปิด PO** สาขาที่มีพนักงานขายต้องเลือกเซลล์ก่อนบันทึก PO ใหม่ เปิดแทนกันได้ ยอดยังเป็นของเซลล์                                                                                                                                                                                                                                                                                                              | ต่ำ. PO เก่าไม่ถูกแตะ ยังแก้ไขได้แม้ไม่มีเซลล์ ตั้งแต่นี้ไป PO ใหม่ของ Finnix North ต้องเลือกโหน่งหรือเคนก่อนบันทึก                                                                                                                                               |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

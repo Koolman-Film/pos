@@ -1037,3 +1037,100 @@ describe('WholesaleDetail — จ่าหน้ากล่อง', () => {
     expect(screen.getByText(/ต้องเลือกลูกค้าก่อน/)).toBeInTheDocument();
   });
 });
+
+/**
+ * ยอดขายเป็นของเซลล์ที่เลือก ไม่ใช่ของคนที่เปิด PO (migration 0057).
+ *
+ * A rep on the road has somebody in the office raise the PO. The form has to
+ * credit the rep, make the person keying it choose one, and still show who
+ * actually opened it.
+ */
+describe('WholesaleDetail — เซลล์เจ้าของยอดขาย', () => {
+  const REPS = [
+    { id: 1, shop: 'north', name: 'โหน่ง', phone: '089-431-2278' },
+    { id: 2, shop: 'north', name: 'เคน', phone: '086-514-9903' },
+  ];
+  const northDraft = {
+    ...order,
+    id: 'WS-NEW-1234',
+    shop: 'north',
+    status: 'รอจัดส่ง',
+    salesBy: '',
+    items: [{ name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 1, listPrice: 1000, requestedPrice: 1000 }],
+  } as unknown as WsOrder;
+
+  it('will not save a new PO until the rep who owns the sale is chosen', async () => {
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn(async () => {});
+    render(
+      <WholesaleDetail
+        order={northDraft}
+        isNew
+        canDo={() => true}
+        salesPeople={REPS}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /บันทึก PO/ }));
+    expect(onSaveOrder).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/เลือกพนักงานขายเจ้าของยอดขาย/);
+  });
+
+  it('saves once a rep is chosen, whoever is keying it', async () => {
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn(async () => {});
+    render(
+      <WholesaleDetail
+        order={northDraft}
+        isNew
+        canDo={() => true}
+        salesPeople={REPS}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText('พนักงานขายของ PO นี้'), 'เคน');
+    await user.click(screen.getByRole('button', { name: /บันทึก PO/ }));
+    expect(onSaveOrder).toHaveBeenCalledWith(expect.objectContaining({ salesBy: 'เคน' }), true);
+  });
+
+  it('says the sale follows the rep, not the login', () => {
+    render(<WholesaleDetail order={northDraft} isNew canDo={() => true} salesPeople={REPS} />);
+    expect(screen.getByText(/นับเป็นของพนักงานขายที่เลือก ไม่ใช่คนที่เปิด PO/)).toBeInTheDocument();
+  });
+
+  it('shows who opened a saved PO, apart from whose sale it is', () => {
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...northDraft,
+            id: 'WS-NT-0009',
+            salesBy: 'เคน',
+            createdBy: 'u-office',
+            createdAt: '2026-09-14T03:00:00Z',
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+        salesPeople={REPS}
+        staffNames={{ 'u-office': 'แอดมินระบบ' }}
+      />,
+    );
+    expect(screen.getByText(/เปิด PO โดย แอดมินระบบ/)).toBeInTheDocument();
+    expect(screen.getByLabelText('พนักงานขายของ PO นี้')).toHaveValue('เคน');
+  });
+
+  it('lets an old PO saved without a rep be saved as it is', async () => {
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn(async () => {});
+    render(
+      <WholesaleDetail
+        order={{ ...northDraft, id: 'WS-NT-0003' } as unknown as WsOrder}
+        canDo={() => true}
+        salesPeople={REPS}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /บันทึก PO/ }));
+    expect(onSaveOrder).toHaveBeenCalled();
+  });
+});

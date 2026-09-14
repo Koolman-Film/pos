@@ -24,7 +24,7 @@ import {
  */
 
 const ORDER_SELECT = `
-  id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by,
+  id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by, created_by,
   price_decision, price_decided_at, price_decided_by, note, delivery_note, delivery_attachments,
   order_items(name, qty, list_price, requested_price, reason),
   order_returns(item_name, qty, reason, returned_at, uid, received_at),
@@ -41,6 +41,7 @@ type OrderRow = {
   delivered_at: string | null;
   due_at: string | null;
   sales_by: string | null;
+  created_by: string | null;
   price_decision: string | null;
   price_decided_at: string | null;
   price_decided_by: string | null;
@@ -104,6 +105,7 @@ function mapOrder(row: OrderRow): WsOrder {
     deliveredAt: row.delivered_at ?? undefined,
     dueAt: row.due_at ?? '',
     salesBy: row.sales_by ?? '',
+    createdBy: row.created_by ?? '',
     priceDecision: row.price_decision ?? '',
     priceDecidedAt: row.price_decided_at ?? '',
     priceDecidedBy: row.price_decided_by ?? '',

@@ -320,6 +320,7 @@ export function WholesaleDetail({
   }
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   /**
    * ลบ PO — into ถังขยะ, not gone. The PO keeps its number so it cannot be
@@ -359,6 +360,23 @@ export function WholesaleDetail({
   }
 
   async function save() {
+    /*
+      เซลล์เจ้าของยอดขาย (migration 0057).
+
+      In a branch with a sales team a PO must be credited to someone — an
+      unassigned sale drops out of every rep's total and the documents print
+      nobody to call. The database refuses it; saying so here keeps the person
+      on the form with their PO intact instead of on an error page. A PO saved
+      before the rule, still unassigned, may be edited as it is.
+    */
+    const wasAssigned = !!(order.salesBy ?? '').trim();
+    if (branchSales.length > 0 && !(o.salesBy ?? '').trim() && (isNew || wasAssigned)) {
+      setSaveError(
+        'เลือกพนักงานขายเจ้าของยอดขายก่อนบันทึก PO — ถ้าเปิดแทนคนอื่น ให้เลือกชื่อเซลล์เจ้าของลูกค้า',
+      );
+      return;
+    }
+    setSaveError(null);
     // `onSaveOrder` (the `saveOrder` server action) persists then redirects back
     // to the list, so there is nothing to navigate here on success.
     if (onSaveOrder) await onSaveOrder(o, isNew);
@@ -754,6 +772,14 @@ export function WholesaleDetail({
   // The staff row is only the phone book. Matched within the PO’s own branch:
   // two branches may both have a "โหน่ง" and they are not the same person.
   const seller = branchSales.find((p) => p.name === sellerName) ?? null;
+  /*
+    ใครเปิด PO — shown beside, never instead of, whose sale it is. The id is
+    resolved through the staff list; a PO older than the column says so rather
+    than naming whoever happens to be looking at it.
+  */
+  const openerName = o.createdBy
+    ? (staffNames?.[o.createdBy] ?? 'ผู้ใช้ที่ไม่อยู่ในระบบแล้ว')
+    : 'ไม่มีข้อมูล (PO ก่อนระบบบันทึกคนเปิด)';
 
   const canInvoice = !isNew;
   /*
@@ -1053,7 +1079,29 @@ export function WholesaleDetail({
                 canManage={can('options.manage')}
                 onSelect={(name) => field('salesBy', name)}
                 onSavePerson={onSaveSalesPerson}
+                required={branchSales.length > 0}
               />
+            )}
+            {/*
+              เปิดแทนได้ ยอดยังเป็นของเซลล์.
+
+              The rep is often not the one at the keyboard. Saying plainly that the
+              sale follows the name picked here — not the login — is what stops
+              the office from crediting itself by accident.
+            */}
+            {branchSales.length > 0 && (
+              <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                <i className="fa-solid fa-circle-info mr-1"></i>
+                ยอดขายของ PO นี้นับเป็นของพนักงานขายที่เลือก ไม่ใช่คนที่เปิด PO — ถ้าเปิดแทนเซลล์
+                ให้เลือกชื่อเซลล์เจ้าของลูกค้า
+              </p>
+            )}
+            {!isNew && (
+              <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                <i className="fa-solid fa-user-pen mr-1"></i>
+                เปิด PO โดย {openerName}
+                {o.createdAt ? ` · ${fmtThaiDateLong(new Date(o.createdAt))}` : ''}
+              </p>
             )}
           </div>
           <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.items)}>
@@ -1765,6 +1813,11 @@ export function WholesaleDetail({
               {deleteError}
             </p>
           )}
+          {saveError && (
+            <p className="text-xs mb-3 text-center" style={{ color: '#B23A48' }} role="alert">
+              {saveError}
+            </p>
+          )}
           <div className="flex gap-3">
             <button
               onClick={goBack}
@@ -1795,7 +1848,12 @@ export function WholesaleDetail({
               className="print-area ship-label"
               style={{ display: 'flex', flexDirection: 'column', minHeight: '120mm' }}
             >
-              <div style={{ fontSize: 11, lineHeight: 1.5 }}>
+              {/*
+                ขนาดตัวอักษรเพิ่มเป็นสองเท่าทั้งหมด ตามที่ร้านขอ (14 ก.ย. 2569): the
+                label is read off a carton on a shelf or in a courier's van, not at
+                arm's length. The recipient still dominates — it doubled too.
+              */}
+              <div style={{ fontSize: 22, lineHeight: 1.5 }}>
                 <span style={{ fontWeight: 700 }}>ผู้ส่ง</span> {senderShopName}
                 {sellerName && (
                   <>
@@ -1822,22 +1880,22 @@ export function WholesaleDetail({
                   padding: '0 6mm',
                 }}
               >
-                <p style={{ fontSize: 13, margin: '0 0 4mm', letterSpacing: 2 }}>ผู้รับ</p>
-                <p style={{ fontSize: 30, fontWeight: 700, margin: 0, lineHeight: 1.25 }}>
+                <p style={{ fontSize: 26, margin: '0 0 4mm', letterSpacing: 2 }}>ผู้รับ</p>
+                <p style={{ fontSize: 60, fontWeight: 700, margin: 0, lineHeight: 1.2 }}>
                   {customerName(o.customerId, customers)}
                 </p>
                 {customerAddress && (
-                  <p style={{ fontSize: 18, margin: '4mm 0 0', lineHeight: 1.45 }}>
+                  <p style={{ fontSize: 36, margin: '4mm 0 0', lineHeight: 1.4 }}>
                     {customerAddress}
                   </p>
                 )}
                 {customerPhone && (
-                  <p style={{ fontSize: 18, margin: '3mm 0 0' }}>โทร {customerPhone}</p>
+                  <p style={{ fontSize: 36, margin: '3mm 0 0' }}>โทร {customerPhone}</p>
                 )}
               </div>
               {/* Small, at the foot: which PO this box belongs to, for the
                   person matching cartons against paperwork at either end. */}
-              <p style={{ fontSize: 10, textAlign: 'right', margin: 0 }}>{o.id}</p>
+              <p style={{ fontSize: 20, textAlign: 'right', margin: 0 }}>{o.id}</p>
             </div>,
             document.body,
           )}
