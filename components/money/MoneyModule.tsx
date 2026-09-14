@@ -5,11 +5,16 @@ import { useState } from 'react';
 import { SavedToast } from '@/components/ui/SavedToast';
 import { fmt, fmtThaiDayString, shortShopName } from '@/lib/domain/format';
 import { dateInputValue } from '@/lib/domain/now';
-import type { MoneyAccount, MoneyOverview } from '@/components/dashboard/moneyFlow';
+import {
+  byAccountOrder,
+  type MoneyAccount,
+  type MoneyOverview,
+} from '@/components/dashboard/moneyFlow';
 
 import {
   bindMoneyLabel,
   closeMoneyAccount,
+  reorderMoneyAccounts,
   saveMoneyAccount,
   saveMoneyReconciliation,
   saveMoneyTransfer,
@@ -84,7 +89,9 @@ export function MoneyModule({
   const [busy, setBusy] = useState(false);
 
   const branch = overview.branches.find((b) => b.shop === shop);
-  const shopAccounts = accounts.filter((a) => a.shop === shop);
+  // Same order as the table and the dashboard card, so every dropdown on the
+  // screen lists the accounts the way the shop arranged them.
+  const shopAccounts = accounts.filter((a) => a.shop === shop).sort(byAccountOrder);
   const accountName = (id: number | null) =>
     id ? (accounts.find((a) => a.id === id)?.name ?? '—') : 'นอกระบบ';
 
@@ -122,6 +129,22 @@ export function MoneyModule({
       `ผูก “${labelText}” เข้ากับแหล่งเงินแล้ว`,
     );
     if (ok) setBind({ ...bind, [labelText]: '' });
+  }
+
+  /*
+    เลื่อนแหล่งเงินขึ้น/ลง.
+
+    Arrows rather than drag-and-drop: this is used on a phone at the counter
+    as often as at a desk, and a drag on a scrolling table is the gesture
+    most likely to do something nobody meant.
+  */
+  async function moveAccount(id: number, step: -1 | 1) {
+    const ids = shopAccounts.map((a) => a.id);
+    const from = ids.indexOf(id);
+    const to = from + step;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    await run(() => reorderMoneyAccounts(shop, ids), 'จัดลำดับแหล่งเงินแล้ว');
   }
 
   // ---- โอน/ฝากเงิน -----------------------------------------------------
@@ -344,7 +367,7 @@ export function MoneyModule({
                 </tr>
               </thead>
               <tbody>
-                {branch.accounts.map((a) => {
+                {branch.accounts.map((a, idx) => {
                   const source = shopAccounts.find((x) => x.id === a.id);
                   return (
                     <tr key={a.id} style={{ borderBottom: '1px solid var(--line)' }}>
@@ -366,6 +389,26 @@ export function MoneyModule({
                         {fmt(a.balance)}
                       </td>
                       <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={() => moveAccount(a.id, -1)}
+                          disabled={busy || idx === 0}
+                          aria-label={`เลื่อน ${a.name} ขึ้น`}
+                          title="เลื่อนขึ้น"
+                          className="btn-outline text-xs px-2 py-1.5 rounded-lg mr-1"
+                          style={{ opacity: idx === 0 ? 0.35 : 1 }}
+                        >
+                          <i className="fa-solid fa-arrow-up"></i>
+                        </button>
+                        <button
+                          onClick={() => moveAccount(a.id, 1)}
+                          disabled={busy || idx === branch.accounts.length - 1}
+                          aria-label={`เลื่อน ${a.name} ลง`}
+                          title="เลื่อนลง"
+                          className="btn-outline text-xs px-2 py-1.5 rounded-lg mr-1"
+                          style={{ opacity: idx === branch.accounts.length - 1 ? 0.35 : 1 }}
+                        >
+                          <i className="fa-solid fa-arrow-down"></i>
+                        </button>
                         <button
                           onClick={() =>
                             source &&

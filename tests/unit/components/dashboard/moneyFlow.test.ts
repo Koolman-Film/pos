@@ -196,6 +196,29 @@ describe('balances follow money that actually moved', () => {
  * balance. Nothing errors; the money is just quietly absent from the figure the
  * shop reconciles against its bank statement.
  */
+describe('buildMoneySources — ลำดับแหล่งเงิน', () => {
+  it('lists accounts in the order the shop set', () => {
+    const b = only([
+      { ...petty, sortOrder: 3 },
+      { ...bank, sortOrder: 1 },
+      { ...cash, sortOrder: 2 },
+    ]);
+    expect(b.accounts.map((a) => a.name)).toEqual(['Kbank', 'เงินสดหน้าร้าน', 'เงินสดย่อย']);
+  });
+
+  it('keeps a stable order when sort_order ties', () => {
+    // Every account added before ordering existed was stored as 0. Without a
+    // tie-break they came back in whatever order the database returned —
+    // which is how เงินสดย่อย ended up first in every branch.
+    const b = only([
+      { ...petty, id: 3, sortOrder: 0 },
+      { ...bank, id: 1, sortOrder: 0 },
+      { ...cash, id: 2, sortOrder: 0 },
+    ]);
+    expect(b.accounts.map((a) => a.id)).toEqual([1, 2, 3]);
+  });
+});
+
 describe('buildMoneySources — แหล่งเงินที่ยังไม่มีเจ้าของ', () => {
   it('reports an expense label no account claims, with its amount', () => {
     const b = only(

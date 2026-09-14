@@ -70,10 +70,63 @@ export async function saveMoneyAccount(
     match_names: input.matchNames.map((m) => m.trim()).filter(Boolean),
   };
 
+  /*
+    บัญชีใหม่ต่อท้ายสาขา.
+
+    It used to be inserted with the column default of 0, so it tied with
+    every other account added this way and landed wherever the database put
+    it. Appending is what a person adding one expects; they can move it after.
+  */
+  let sortOrder: number | undefined;
+  if (!input.id) {
+    const { data: last } = await supabase
+      .from('money_accounts')
+      .select('sort_order')
+      .eq('shop_id', input.shop)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    sortOrder = (last?.sort_order ?? 0) + 1;
+  }
+
   const { error } = input.id
     ? await supabase.from('money_accounts').update(row).eq('id', input.id)
-    : await supabase.from('money_accounts').insert(row);
+    : await supabase.from('money_accounts').insert({ ...row, sort_order: sortOrder });
   if (error) return { ok: false, error: error.message };
+  return done();
+}
+
+/**
+ * จัดลำดับแหล่งเงินในสาขา.
+ *
+ * Takes the whole order for one branch rather than "move this one up": the
+ * stored numbers are mostly ties today, and swapping two equal numbers
+ * changes nothing. Renumbering the branch 1…n in the order the screen shows
+ * is the one write that always produces what the person just saw.
+ *
+ * The dashboard card reads the same column, so this sets both screens.
+ */
+export async function reorderMoneyAccounts(
+  shop: string,
+  orderedIds: number[],
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await authorize();
+  if (!session) return { ok: false, error: REFUSED };
+  if (!session.accessibleShopIds.includes(shop)) {
+    return { ok: false, error: 'ไม่มีสิทธิ์ในสาขานี้' };
+  }
+
+  const supabase = await createClient();
+  for (const [i, id] of orderedIds.entries()) {
+    // `shop_id` in the filter: an id from another branch simply matches
+    // nothing, rather than being renumbered from a screen it is not on.
+    const { error } = await supabase
+      .from('money_accounts')
+      .update({ sort_order: i + 1 })
+      .eq('id', id)
+      .eq('shop_id', shop);
+    if (error) return { ok: false, error: error.message };
+  }
   return done();
 }
 

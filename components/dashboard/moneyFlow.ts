@@ -136,6 +136,19 @@ export type MoneyTransfer = {
 type Shop = { id: string; name: string };
 
 /**
+ * ลำดับแหล่งเงินในสาขา — ที่ร้านจัดเอง แล้วตามลำดับที่สร้าง.
+ *
+ * `sort_order` alone is not an order: every account added through
+ * เพิ่มแหล่งเงิน used to get 0, and rows that tie come back in whatever order
+ * the database happens to return them — which is how เงินสดย่อย ended up at
+ * the top of every branch. The id breaks the tie so the order at least holds
+ * still, and the money screen now lets the shop set it. Exported so that
+ * screen and the dashboard card cannot disagree about which row is first.
+ */
+export const byAccountOrder = (a: MoneyAccount, b: MoneyAccount): number =>
+  a.sortOrder - b.sortOrder || a.id - b.id;
+
+/**
  * ชื่อทั้งหมดที่หมายถึงบัญชีนี้ — รวมชื่อบัญชีเอง.
  *
  * `match_names` is a hand-kept list, and the name the account is DISPLAYED
@@ -154,9 +167,7 @@ export function buildMoneySources(
 ): MoneyOverview {
   const branches = shops
     .map((s) => {
-      const mine = accounts
-        .filter((a) => a.shop === s.id)
-        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const mine = accounts.filter((a) => a.shop === s.id).sort(byAccountOrder);
 
       const balances: AccountBalance[] = mine.map((a) => {
         /*
