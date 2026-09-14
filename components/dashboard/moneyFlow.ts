@@ -278,3 +278,249 @@ export function buildMoneySources(
     hasUnmatched: branches.some((b) => b.unmatched.length > 0),
   };
 }
+
+/* ==========================================================================
+   สมุดบัญชีแหล่งเงิน
+
+   The register says how much is in an account. The ledger says why: every
+   baht in and out, in date order, with the balance after each line and the
+   document it came from — the shape of a bank statement, so it can be checked
+   against one line by line.
+
+   It is built from exactly the rules `buildMoneySources` uses (which account
+   owns a label, nothing before `openedAt`) over exactly the same movements, so
+   its closing balance with no period is the register figure. That equality is
+   pinned by a test; if the two ever differ, one of them is wrong.
+   ========================================================================== */
+
+/** A transfer as the ledger needs it — the id and note are shown on the line. */
+export type LedgerTransfer = MoneyTransfer & { id?: number; note?: string };
+
+export type LedgerReconciliation = {
+  id: number;
+  accountId: number;
+  countedAt: string;
+  countedBalance: number;
+  systemBalance: number;
+  note: string;
+};
+
+export type LedgerEntryKind = 'receipt' | 'expense' | 'transfer-in' | 'transfer-out';
+
+export type LedgerEntry = {
+  key: string;
+  on: string;
+  kind: LedgerEntryKind;
+  /** Signed: positive is เงินเพิ่ม, negative is เงินลด. */
+  amount: number;
+  /** The balance after this line. */
+  balance: number;
+  ref?: MovementRef;
+  /** A transfer's other end — an account id, or null for นอกระบบ. */
+  counterpartId?: number | null;
+  note?: string;
+};
+
+/**
+ * การกระทบยอดที่อยู่ในช่วง — a pin on the ledger, not a line that moves money.
+ *
+ * `systemNow` is recomputed from the ledger for the end of that day. When it no
+ * longer equals `systemAtRecord`, something dated on or before the count was
+ * entered or changed afterwards, and the reconciliation no longer says what it
+ * said — which the screen reports instead of quietly rewriting the record.
+ */
+export type LedgerCount = {
+  id: number;
+  on: string;
+  counted: number;
+  systemAtRecord: number;
+  systemNow: number;
+  note: string;
+};
+
+export type LedgerMonth = {
+  month: string;
+  carriedIn: number;
+  increase: number;
+  decrease: number;
+  carriedOut: number;
+};
+
+export type AccountLedger = {
+  accountId: number;
+  from: string;
+  to: string;
+  /** The whole period ends before the account was opened — nothing to show. */
+  beforeOpening: boolean;
+  /** ยอดยกมา — the balance at the start of `from`. */
+  carriedIn: number;
+  increase: number;
+  decrease: number;
+  /** ยอดยกไป — the balance at the end of `to`. */
+  carriedOut: number;
+  entries: LedgerEntry[];
+  counts: LedgerCount[];
+  /** The period month by month, for the รายปี view. */
+  months: LedgerMonth[];
+};
+
+/**
+ * เงินเข้าก่อนเงินออก ในวันเดียวกัน.
+ *
+ * The system keeps dates, not times, so the order inside a day is a choice. This
+ * one never shows a balance dipping below what the day really reached — paying
+ * an expense out of the cash that arrived that morning reads as it happened.
+ */
+const KIND_ORDER: Record<LedgerEntryKind, number> = {
+  receipt: 0,
+  'transfer-in': 1,
+  'transfer-out': 2,
+  expense: 3,
+};
+
+/** Money is summed in floating point; every figure shown is rounded to satang. */
+const satang = (n: number) => Math.round(n * 100) / 100;
+
+export function buildAccountLedger(
+  accountId: number,
+  accounts: MoneyAccount[],
+  movements: MoneyMovement[],
+  transfers: LedgerTransfer[],
+  reconciliations: LedgerReconciliation[],
+  from: string,
+  to: string,
+  /** Months after this one are left out of `months` — nothing has happened yet. */
+  today = '',
+): AccountLedger | null {
+  const account = accounts.find((a) => a.id === accountId);
+  if (!account) return null;
+
+  // The same ownership rule as the register: a label belongs to the first
+  // account of the branch, in the shop's order, that claims it.
+  const branch = accounts.filter((a) => a.shop === account.shop).sort(byAccountOrder);
+  const ownerOf = (label: string) => branch.find((x) => labelsOf(x).includes(label))?.id;
+
+  const all: Omit<LedgerEntry, 'balance'>[] = [];
+  movements.forEach((m, i) => {
+    if (m.shop !== account.shop || m.on < account.openedAt) return;
+    if (ownerOf(m.source) !== account.id) return;
+    all.push({
+      key: `m${i}`,
+      on: m.on,
+      kind: m.amount >= 0 ? 'receipt' : 'expense',
+      amount: m.amount,
+      ref: m.ref,
+    });
+  });
+  transfers.forEach((t, i) => {
+    if (t.shop !== account.shop || t.on < account.openedAt) return;
+    const key = `t${t.id ?? `x${i}`}`;
+    if (t.toAccountId === account.id) {
+      all.push({
+        key: `${key}-in`,
+        on: t.on,
+        kind: 'transfer-in',
+        amount: t.amount,
+        counterpartId: t.fromAccountId,
+        note: t.note ?? '',
+      });
+    }
+    if (t.fromAccountId === account.id) {
+      all.push({
+        key: `${key}-out`,
+        on: t.on,
+        kind: 'transfer-out',
+        amount: -t.amount,
+        counterpartId: t.toAccountId,
+        note: t.note ?? '',
+      });
+    }
+  });
+  all.sort((a, b) =>
+    a.on === b.on ? KIND_ORDER[a.kind] - KIND_ORDER[b.kind] : a.on < b.on ? -1 : 1,
+  );
+
+  let running = account.openingBalance;
+  let carriedIn = account.openingBalance;
+  let increase = 0;
+  let decrease = 0;
+  const entries: LedgerEntry[] = [];
+  for (const e of all) {
+    running = satang(running + e.amount);
+    if (from && e.on < from) {
+      carriedIn = running;
+      continue;
+    }
+    if (to && e.on > to) continue;
+    entries.push({ ...e, balance: running });
+    if (e.amount >= 0) increase = satang(increase + e.amount);
+    else decrease = satang(decrease - e.amount);
+  }
+
+  const balanceAt = (day: string) =>
+    satang(all.reduce((n, e) => (e.on <= day ? n + e.amount : n), account.openingBalance));
+
+  const counts: LedgerCount[] = reconciliations
+    .filter(
+      (r) =>
+        r.accountId === account.id && (!from || r.countedAt >= from) && (!to || r.countedAt <= to),
+    )
+    .sort((a, b) =>
+      a.countedAt === b.countedAt ? a.id - b.id : a.countedAt < b.countedAt ? -1 : 1,
+    )
+    .map((r) => ({
+      id: r.id,
+      on: r.countedAt,
+      counted: r.countedBalance,
+      systemAtRecord: r.systemBalance,
+      systemNow: balanceAt(r.countedAt),
+      note: r.note,
+    }));
+
+  /*
+    รายเดือนในช่วง — only from the month the account opened: before that its
+    money is inside the opening balance, and twelve rows of "ยกมา 50,000" for
+    months the account was not yet tracked would read as history it never had.
+  */
+  const months: LedgerMonth[] = [];
+  if (from && to) {
+    const first = [from.slice(0, 7), account.openedAt.slice(0, 7)].sort()[1];
+    const lastCandidates = [to.slice(0, 7)];
+    if (today) lastCandidates.push(today.slice(0, 7));
+    const last = lastCandidates.sort()[0];
+    let [y, m] = first.split('-').map(Number);
+    let carry = carriedIn;
+    // The carry into the first month is the balance at its first day, which
+    // differs from `carriedIn` when the account opened inside the period.
+    if (first > from.slice(0, 7)) carry = balanceAt(`${first}-00`);
+    for (;;) {
+      const key = `${y}-${String(m).padStart(2, '0')}`;
+      if (key > last) break;
+      const inMonth = entries.filter((e) => e.on.startsWith(key));
+      const inc = satang(inMonth.filter((e) => e.amount >= 0).reduce((n, e) => n + e.amount, 0));
+      const dec = satang(inMonth.filter((e) => e.amount < 0).reduce((n, e) => n - e.amount, 0));
+      const out = satang(carry + inc - dec);
+      months.push({ month: key, carriedIn: carry, increase: inc, decrease: dec, carriedOut: out });
+      carry = out;
+      m += 1;
+      if (m > 12) {
+        m = 1;
+        y += 1;
+      }
+    }
+  }
+
+  return {
+    accountId: account.id,
+    from,
+    to,
+    beforeOpening: !!to && to < account.openedAt,
+    carriedIn,
+    increase,
+    decrease,
+    carriedOut: satang(carriedIn + increase - decrease),
+    entries,
+    counts,
+    months,
+  };
+}

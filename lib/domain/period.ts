@@ -96,3 +96,45 @@ export function isInPeriod(
   }
   return true;
 }
+
+/**
+ * วันแรกและวันสุดท้ายของช่วงที่เลือก เป็น `YYYY-MM-DD` ของปฏิทินร้าน.
+ *
+ * `isInPeriod` answers "is this row inside?" one row at a time, which is all a
+ * filtered list needs. A ledger needs the edges themselves: the balance carried
+ * IN is everything before `from`, and a reconciliation is dated no later than
+ * `to`. An empty string means that side is open.
+ *
+ * `todayKey` is passed in for the same reason `periodCaption` takes `now`.
+ */
+export function periodBounds(
+  period: string,
+  periodValue: string,
+  rangeStart: string,
+  rangeEnd: string,
+  todayKey: string,
+): { from: string; to: string } {
+  if (period === 'today') return { from: todayKey, to: todayKey };
+  if (period === 'month') {
+    let [y, m] = (periodValue || '').split('-').map(Number);
+    if (!y || !m || m < 1 || m > 12) {
+      [y, m] = todayKey.split('-').map(Number);
+    }
+    // Day 0 of the next month is the last day of this one — leap years included.
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const mm = String(m).padStart(2, '0');
+    return { from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, '0')}` };
+  }
+  if (period === 'year') {
+    const rawY = Number(periodValue);
+    const y = rawY > 2400 ? rawY - 543 : rawY || Number(todayKey.slice(0, 4));
+    return { from: `${y}-01-01`, to: `${y}-12-31` };
+  }
+  if (period === 'range') {
+    const a = rangeStart || '';
+    const b = rangeEnd || '';
+    // Picked the wrong way round is still an obvious range, not an empty one.
+    return a && b && a > b ? { from: b, to: a } : { from: a, to: b };
+  }
+  return { from: '', to: '' };
+}

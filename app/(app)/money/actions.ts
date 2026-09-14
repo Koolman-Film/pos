@@ -4,6 +4,11 @@ import { revalidatePath } from 'next/cache';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { buildAccountLedger } from '@/components/dashboard/moneyFlow';
+import { ledgerEntryDetail, ledgerEntryTitle } from '@/components/money/ledgerText';
+import { fmtThaiDayString, shopDayKey } from '@/lib/domain/format';
+
+import { loadMoneyData } from './data';
 
 /**
  * การจัดการเงิน/บัญชี — server actions for the money register (migration 0043).
@@ -318,10 +323,13 @@ export async function deleteMoneyTransfer(id: number): Promise<{ ok: boolean; er
 
 export type SaveReconciliationInput = {
   accountId: number;
+  /**
+   * `YYYY-MM-DD` — the day the counted figure was TRUE, e.g. a statement's
+   * closing date. Statements arrive days after the month they close, so this
+   * is not the day the count was typed in.
+   */
   countedAt: string;
   countedBalance: number;
-  /** What the screen showed at the moment of counting. */
-  systemBalance: number;
   note: string;
 };
 
@@ -341,15 +349,123 @@ export async function saveMoneyReconciliation(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await authorize();
   if (!session) return { ok: false, error: REFUSED };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.countedAt)) {
+    return { ok: false, error: 'วันที่ของยอดที่นับไม่ถูกต้อง' };
+  }
+  if (input.countedAt > shopDayKey(new Date())) {
+    return { ok: false, error: 'วันที่ของยอดที่นับต้องไม่เกินวันนี้' };
+  }
+  if (!Number.isFinite(input.countedBalance)) {
+    return { ok: false, error: 'ยอดที่นับได้ไม่ถูกต้อง' };
+  }
+
   const supabase = await createClient();
+
+  /*
+    ยอดระบบ ณ สิ้นวันที่นับ — คำนวณที่เซิร์ฟเวอร์.
+
+    It used to be whatever balance the screen was showing, which was always
+    TODAY's — wrong for a statement closing on the 30th and counted on the 3rd,
+    and a number the browser could send as anything. The ledger for this
+    account up to the end of `countedAt` is the figure the count is compared
+    against, and it is the same arithmetic the register uses.
+  */
+  const money = await loadMoneyData(supabase);
+  const ledger = buildAccountLedger(
+    input.accountId,
+    money.accounts,
+    money.movements,
+    money.transfers,
+    [],
+    '',
+    input.countedAt,
+  );
+  if (!ledger) return { ok: false, error: 'ไม่พบแหล่งเงินนี้' };
+
   const { error } = await supabase.from('money_reconciliations').insert({
     account_id: input.accountId,
     counted_at: input.countedAt,
     counted_balance: input.countedBalance,
-    system_balance: input.systemBalance,
+    system_balance: ledger.carriedOut,
     note: input.note.trim(),
     created_by: session.userId,
   });
   if (error) return { ok: false, error: error.message };
+  revalidatePath(`/money/${input.accountId}`);
   return done();
+}
+
+/**
+ * ส่งออกสมุดบัญชีแหล่งเงินเป็น Excel.
+ *
+ * Recomputed here from the database rather than taken from the page, so the
+ * file is the ledger as it stands, not whatever the browser was holding — and
+ * so a spreadsheet handed to an accountant cannot carry figures nobody entered.
+ */
+export async function exportAccountLedger(input: {
+  accountId: number;
+  from: string;
+  to: string;
+}): Promise<{ ok: true; fileName: string; base64: string } | { ok: false; error: string }> {
+  const session = await authorize();
+  if (!session) return { ok: false, error: REFUSED };
+
+  const supabase = await createClient();
+  const money = await loadMoneyData(supabase);
+  const account = money.accounts.find((a) => a.id === input.accountId);
+  if (!account) return { ok: false, error: 'ไม่พบแหล่งเงินนี้' };
+  const ledger = buildAccountLedger(
+    account.id,
+    money.accounts,
+    money.movements,
+    money.transfers,
+    money.reconciliations,
+    input.from,
+    input.to,
+  );
+  if (!ledger) return { ok: false, error: 'ไม่พบแหล่งเงินนี้' };
+
+  const nameOf = (id: number | null | undefined) =>
+    id == null ? 'นอกระบบ' : (money.accounts.find((a) => a.id === id)?.name ?? '—');
+  const day = (d: string) => (d ? fmtThaiDayString(d) : '');
+
+  const rows = [
+    {
+      // Dated the day it is true — see LedgerModule's `carriedInDay`.
+      วันที่: day(ledger.from && ledger.from > account.openedAt ? ledger.from : account.openedAt),
+      รายการ: 'ยอดยกมา',
+      อ้างอิง: '',
+      รายละเอียด: '',
+      เงินเพิ่ม: '' as number | string,
+      เงินลด: '' as number | string,
+      คงเหลือ: ledger.carriedIn,
+    },
+    ...ledger.entries.map((e) => ({
+      วันที่: day(e.on),
+      รายการ: ledgerEntryTitle(e, nameOf),
+      อ้างอิง: e.ref?.docNo ?? '',
+      รายละเอียด: ledgerEntryDetail(e),
+      เงินเพิ่ม: e.amount >= 0 ? e.amount : '',
+      เงินลด: e.amount < 0 ? -e.amount : '',
+      คงเหลือ: e.balance,
+    })),
+    {
+      วันที่: day(ledger.to),
+      รายการ: 'ยอดยกไป',
+      อ้างอิง: '',
+      รายละเอียด: '',
+      เงินเพิ่ม: ledger.increase,
+      เงินลด: ledger.decrease,
+      คงเหลือ: ledger.carriedOut,
+    },
+  ];
+
+  const XLSX = await import('xlsx');
+  const wb = XLSX.utils.book_new();
+  // Excel forbids : \ / ? * [ ] in a sheet name and caps it at 31 characters.
+  const sheetName = account.name.replace(/[:\\/?*[\]]/g, '').slice(0, 31) || 'ledger';
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sheetName);
+  const base64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+  const span = `${input.from || 'start'}_${input.to || 'now'}`;
+  return { ok: true, fileName: `ledger-${account.id}-${span}.xlsx`, base64 };
 }

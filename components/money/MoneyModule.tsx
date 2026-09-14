@@ -1,10 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 
 import { SavedToast } from '@/components/ui/SavedToast';
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt, fmtThaiDayString, shortShopName } from '@/lib/domain/format';
-import { dateInputValue } from '@/lib/domain/now';
+import { dateInputValue, todayValue } from '@/lib/domain/now';
 import {
   byAccountOrder,
   type MoneyAccount,
@@ -210,23 +212,28 @@ export function MoneyModule({
   }
 
   // ---- กระทบยอด --------------------------------------------------------
-  const [count, setCount] = useState({ accountId: '', counted: '', note: '' });
+  const [count, setCount] = useState(() => ({
+    accountId: '',
+    counted: '',
+    note: '',
+    countedAt: todayValue(),
+  }));
 
   async function submitCount() {
-    const id = Number(count.accountId);
-    const system = branch?.accounts.find((a) => a.id === id)?.balance ?? 0;
+    // The system figure is no longer sent from here: the server works out the
+    // balance at the end of `countedAt` from the ledger, which is right for a
+    // statement dated last month and cannot be edited on the way in.
     const ok = await run(
       () =>
         saveMoneyReconciliation({
-          accountId: id,
-          countedAt: dateInputValue(new Date()),
+          accountId: Number(count.accountId),
+          countedAt: count.countedAt,
           countedBalance: Number(count.counted) || 0,
-          systemBalance: system,
           note: count.note,
         }),
       'บันทึกการกระทบยอดแล้ว',
     );
-    if (ok) setCount({ accountId: '', counted: '', note: '' });
+    if (ok) setCount({ accountId: '', counted: '', note: '', countedAt: todayValue() });
   }
 
   const field = 'field text-sm px-3 py-2 w-full';
@@ -490,7 +497,16 @@ export function MoneyModule({
                   return (
                     <tr key={a.id} style={{ borderBottom: '1px solid var(--line)' }}>
                       <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
-                        <span className="font-medium">{a.name}</span>
+                        {/* สมุดบัญชี — why this row holds what it holds. */}
+                        <Link
+                          href={`/money/${a.id}`}
+                          className="font-medium"
+                          style={{ color: 'var(--primary)' }}
+                          aria-label={`เปิดสมุดบัญชี ${a.name}`}
+                        >
+                          <i className="fa-solid fa-book-open mr-1.5 text-xs"></i>
+                          {a.name}
+                        </Link>
                         {a.accountNo && (
                           <span className="text-xs ml-1.5" style={{ color: 'var(--ink-faint)' }}>
                             {a.accountNo}
@@ -724,6 +740,17 @@ export function MoneyModule({
           </div>
           <div>
             <label className={label} style={labelStyle}>
+              ยอด ณ วันที่
+            </label>
+            <ThaiDateInput
+              value={count.countedAt}
+              onChange={(v) => setCount({ ...count, countedAt: v })}
+              ariaLabel="วันที่ของยอดที่นับได้"
+              className={field}
+            />
+          </div>
+          <div>
+            <label className={label} style={labelStyle}>
               ยอดที่นับได้จริง
             </label>
             <input
@@ -734,7 +761,7 @@ export function MoneyModule({
               className={field}
             />
           </div>
-          <div className="sm:col-span-2">
+          <div>
             <label className={label} style={labelStyle}>
               หมายเหตุ
             </label>
