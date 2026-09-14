@@ -247,6 +247,9 @@ export type TicketListRow = {
   shop: string;
   customer: string;
   plate: string;
+  /** ยี่ห้อ/รุ่น — shown beside the plate, because a plate alone is hard to picture. */
+  brand?: string;
+  model?: string;
   status: string;
   // discountType is narrowed to the two non-null variants so the row is
   // structurally assignable to lib/domain's `TicketForTotals`.

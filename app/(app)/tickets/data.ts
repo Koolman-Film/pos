@@ -60,6 +60,8 @@ type ListRow = {
   shop_id: string;
   customer_name: string;
   plate: string;
+  brand: string | null;
+  model: string | null;
   status: string;
   tech_by_category: Record<string, string[]> | null;
   drop_off_date: string | null;
@@ -76,7 +78,7 @@ type ListRow = {
 };
 
 const LIST_SELECT =
-  'id, shop_id, customer_name, plate, status, tech_by_category, drop_off_date, pickup_date, deleted_at, deleted_by, ' +
+  'id, shop_id, customer_name, plate, brand, model, status, tech_by_category, drop_off_date, pickup_date, deleted_at, deleted_by, ' +
   'ticket_items(category, sold_price, discount_type, discount_value), ticket_payments(amount)';
 
 export async function loadTicketList(): Promise<TicketListRow[]> {
@@ -95,6 +97,8 @@ export async function loadTicketList(): Promise<TicketListRow[]> {
     shop: t.shop_id,
     customer: t.customer_name,
     plate: t.plate,
+    brand: t.brand ?? '',
+    model: t.model ?? '',
     status: t.status,
     items: (t.ticket_items ?? []).map((i) => ({
       category: i.category,
@@ -132,6 +136,8 @@ export async function loadDeletedTicketList(): Promise<TicketListRow[]> {
     shop: t.shop_id,
     customer: t.customer_name,
     plate: t.plate,
+    brand: t.brand ?? '',
+    model: t.model ?? '',
     status: t.status,
     items: (t.ticket_items ?? []).map((i) => ({
       category: i.category,

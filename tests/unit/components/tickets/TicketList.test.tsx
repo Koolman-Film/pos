@@ -59,3 +59,53 @@ describe('TicketList', () => {
     expect(screen.getByText('สร้างใบงานใหม่')).toBeInTheDocument();
   });
 });
+
+describe('TicketList — ยอดรวม และ ยี่ห้อ/รุ่น ในแต่ละแถว', () => {
+  const row = {
+    ...tickets[0],
+    brand: 'Toyota',
+    model: 'Camry',
+    items: [
+      { soldPrice: 5100 },
+      { soldPrice: 1000, discountType: 'amount' as const, discountValue: 100 },
+    ],
+  };
+
+  it("shows the job's net total on the row", () => {
+    render(
+      <TicketList
+        tickets={[row]}
+        statuses={statuses}
+        canDo={() => true}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
+    );
+    // 5,100 + (1,000 − 100 discount): the same figure as the ticket and the export.
+    expect(screen.getByLabelText('ยอดรวม 6,000.00 บาท')).toBeInTheDocument();
+  });
+
+  it('shows the make and model beside the plate', () => {
+    render(
+      <TicketList
+        tickets={[row]}
+        statuses={statuses}
+        canDo={() => true}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
+    );
+    expect(screen.getAllByText(/Toyota Camry/).length).toBeGreaterThan(0);
+  });
+
+  it('leaves the car out rather than printing an empty separator', () => {
+    render(
+      <TicketList
+        tickets={tickets}
+        statuses={statuses}
+        canDo={() => true}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
+    );
+    // The row title, matched whole: no dangling " · " where a car would go.
+    expect(screen.getByText('คุณ เอ · 250 กก')).toBeInTheDocument();
+  });
+});

@@ -119,6 +119,7 @@ export function TicketList({
           เลขที่ใบงาน: t.id,
           ลูกค้า: t.customer,
           'ทะเบียนรถ/เลขถัง': t.plate,
+          'ยี่ห้อ/รุ่น': [t.brand, t.model].filter(Boolean).join(' '),
           สินค้า: t.items.map((i) => i.category).join(', '),
           สถานะ: t.status,
           ยอดสุทธิ: ticketTotal(t),
@@ -397,6 +398,14 @@ export function TicketList({
                         <div className="min-w-0">
                           <p className="text-sm font-semibold truncate">
                             {t.customer} &middot; {t.plate}
+                            {/* ยี่ห้อ/รุ่น — a plate says which car on paper; the make and
+                                model are what the person at the counter recognises. */}
+                            {(t.brand || t.model) && (
+                              <span className="font-medium" style={{ color: 'var(--ink-soft)' }}>
+                                {' '}
+                                &middot; {[t.brand, t.model].filter(Boolean).join(' ')}
+                              </span>
+                            )}
                           </p>
                           <p
                             className="text-xs mt-0.5 truncate"
@@ -408,6 +417,23 @@ export function TicketList({
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">
                           <div className="text-right">
+                            {/*
+                              ยอดรวม — the same net total the ticket, the Excel export and
+                              the printed list use (`ticketTotal`), so no screen disagrees
+                              about what a job is worth.
+                            */}
+                            <p
+                              className="text-sm font-bold mb-1"
+                              aria-label={`ยอดรวม ${fmt(ticketTotal(t))} บาท`}
+                            >
+                              {fmt(ticketTotal(t))}
+                              <span
+                                className="text-xs font-medium ml-1"
+                                style={{ color: 'var(--ink-faint)' }}
+                              >
+                                บาท
+                              </span>
+                            </p>
                             <Badge status={t.status} statuses={statuses} />
                             <p
                               className="text-xs mt-1.5 hidden sm:block"
