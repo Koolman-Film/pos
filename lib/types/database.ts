@@ -9,6 +9,27 @@ export type Json =
 export type Database = {
   pos: {
     Tables: {
+      alert_acknowledgements: {
+        Row: {
+          acked_at: string
+          acked_keys: string[]
+          acked_on: string
+          user_id: string
+        }
+        Insert: {
+          acked_at?: string
+          acked_keys?: string[]
+          acked_on: string
+          user_id?: string
+        }
+        Update: {
+          acked_at?: string
+          acked_keys?: string[]
+          acked_on?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_users: {
         Row: {
           active: boolean
@@ -1162,6 +1183,7 @@ export type Database = {
       }
       sales_people: {
         Row: {
+          user_id: string | null
           active: boolean
           created_at: string
           id: number
@@ -1171,6 +1193,7 @@ export type Database = {
           sort_order: number
         }
         Insert: {
+          user_id?: string | null
           active?: boolean
           created_at?: string
           id?: never
@@ -1180,6 +1203,7 @@ export type Database = {
           sort_order?: number
         }
         Update: {
+          user_id?: string | null
           active?: boolean
           created_at?: string
           id?: never

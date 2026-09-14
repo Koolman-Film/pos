@@ -23,7 +23,7 @@ import {
  * same scope in the database.
  */
 
-const ORDER_SELECT = `
+export const ORDER_SELECT = `
   id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by, created_by,
   price_decision, price_decided_at, price_decided_by, note, delivery_note, delivery_attachments,
   order_items(name, qty, list_price, requested_price, reason),
@@ -32,7 +32,7 @@ const ORDER_SELECT = `
   order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, cleared_at, bounced_at, bounce_note)
 `;
 
-type OrderRow = {
+export type OrderRow = {
   id: string;
   shop_id: string;
   customer_id: number | null;
@@ -95,7 +95,7 @@ type OrderRow = {
     | null;
 };
 
-function mapOrder(row: OrderRow): WsOrder {
+export function mapOrder(row: OrderRow): WsOrder {
   return {
     id: row.id,
     shop: row.shop_id,

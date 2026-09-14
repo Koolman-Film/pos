@@ -11,6 +11,7 @@ import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { orderTotal, orderPaid, needsPriceApproval } from '@/lib/domain/orders';
+import { isWsFlag, matchesWsFlag, WS_FLAG_LABELS, type WsFlag } from '@/lib/alerts/wholesale';
 
 import { pendingCheques } from './cheques';
 
@@ -47,6 +48,8 @@ export function WholesaleList({
   stockWarning,
   initialStatus,
   initialApproval,
+  initialFlag,
+  initialSale,
 }: {
   orders: WsOrder[];
   customers: WsCustomer[];
@@ -76,6 +79,13 @@ export function WholesaleList({
   initialStatus?: string;
   /** `pending` opens filtered to POs waiting on ผู้บริหาร (ส่วนลด or ปรับราคา). */
   initialApproval?: string;
+  /**
+   * `?flag=` from an alert — cheques, bounced, returns, overdue, dueSoon. The
+   * same predicates the alert counted with, so "3" opens three rows.
+   */
+  initialFlag?: string;
+  /** `?sale=` — a rep's own alert opens on their own POs. */
+  initialSale?: string;
 }) {
   const can = canDo ?? ((k: string) => !!caps?.[k]);
   const router = useRouter();
@@ -102,13 +112,23 @@ export function WholesaleList({
     The chip below says the list is in this mode, and clicking it puts the
     period filter back.
   */
-  const [drillDown, setDrillDown] = useState<'approval' | 'status' | null>(
-    initialApproval === 'pending' ? 'approval' : initialStatus ? 'status' : null,
+  const [flag, setFlag] = useState<WsFlag | null>(isWsFlag(initialFlag) ? initialFlag : null);
+  const [drillDown, setDrillDown] = useState<'approval' | 'status' | 'flag' | null>(
+    initialApproval === 'pending'
+      ? 'approval'
+      : isWsFlag(initialFlag)
+        ? 'flag'
+        : initialStatus
+          ? 'status'
+          : null,
   );
+  // The day the flags are judged against, read once rather than on every render.
+  const [flagToday] = useState(() => todayValue());
   const approvalFilter = drillDown === 'approval';
 
   function clearDrillDown() {
     setDrillDown(null);
+    setFlag(null);
     setFilter('all');
   }
   const [custFilter, setCustFilter] = useState('all');
@@ -120,13 +140,16 @@ export function WholesaleList({
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());
   const [productFilter, setProductFilter] = useState('all');
-  const [saleFilter, setSaleFilter] = useState('all');
+  const [saleFilter, setSaleFilter] = useState(initialSale || 'all');
 
   let visible = filter === 'all' ? list : list.filter((o) => o.status === filter);
   // `needsPriceApproval` is the dashboard counter’s own predicate, imported
   // rather than restated: a count of 2 opening a list of 5 is worse than
   // having had no link at all.
   if (approvalFilter) visible = visible.filter(needsPriceApproval);
+  if (drillDown === 'flag' && flag) {
+    visible = visible.filter((o) => matchesWsFlag(o, flag, flagToday));
+  }
   if (custFilter !== 'all') visible = visible.filter((o) => o.customerId === Number(custFilter));
   if (shopFilter !== 'all') visible = visible.filter((o) => o.shop === shopFilter);
   if (productFilter !== 'all')
@@ -382,8 +405,13 @@ export function WholesaleList({
             style={{ background: '#FBF1DA', color: '#8A5A12' }}
           >
             <i className="fa-solid fa-filter"></i>
-            กำลังกรอง: {approvalFilter ? 'รอผู้บริหารอนุมัติ' : filter} ({visible.length}) ·
-            ทุกช่วงเวลา<i className="fa-solid fa-xmark"></i>
+            กำลังกรอง:{' '}
+            {approvalFilter
+              ? 'รอผู้บริหารอนุมัติ'
+              : drillDown === 'flag' && flag
+                ? WS_FLAG_LABELS[flag]
+                : filter}{' '}
+            ({visible.length}) · ทุกช่วงเวลา<i className="fa-solid fa-xmark"></i>
           </button>
         )}
         {cheques.rows.length > 0 && (

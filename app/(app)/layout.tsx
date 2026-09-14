@@ -3,6 +3,8 @@ import { MobileNavProvider } from '@/components/layout/MobileNavContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { getSessionContext } from '@/lib/auth/session';
 
+import { acknowledgeAlertsToday, getAlertSnapshot } from './alerts/actions';
+
 /**
  * The authenticated shell — everything under the `(app)` route group renders
  * inside it. Ports the prototype's signed-in root
@@ -31,7 +33,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <MobileNavProvider>
         <Sidebar hasNav={session.hasNav} />
         <div className="flex-1 min-w-0 flex flex-col">
-          <Header name={session.name} roleId={session.roleId} email={session.email} />
+          <Header
+            name={session.name}
+            roleId={session.roleId}
+            email={session.email}
+            alertsAction={getAlertSnapshot}
+            ackAlertsAction={acknowledgeAlertsToday}
+          />
           <main className="flex-1 px-4 sm:px-6 py-6 max-w-6xl w-full mx-auto">{children}</main>
         </div>
       </MobileNavProvider>

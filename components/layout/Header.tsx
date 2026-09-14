@@ -3,8 +3,10 @@
 import { useState } from 'react';
 
 import { logout } from '@/app/login/actions';
+import type { AlertSnapshot } from '@/lib/alerts/types';
 
 import { useMobileNav } from './MobileNavContext';
+import { NotificationBell } from './NotificationBell';
 import { ThemeToggle } from './ThemeToggle';
 
 /**
@@ -35,7 +37,20 @@ const ROLE_META: Record<string, { name: string; icon: string }> = {
  * The search field is carried over exactly as the prototype had it: decorative,
  * not wired to anything.
  */
-export function Header({ name, roleId, email }: { name: string; roleId: string; email?: string }) {
+export function Header({
+  name,
+  roleId,
+  email,
+  alertsAction,
+  ackAlertsAction,
+}: {
+  name: string;
+  roleId: string;
+  email?: string;
+  /** Server Actions from the layout; without them there is simply no bell. */
+  alertsAction?: () => Promise<AlertSnapshot>;
+  ackAlertsAction?: (urgentKeys: string[]) => Promise<{ ok: boolean; error?: string }>;
+}) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { setOpen } = useMobileNav();
   const role = ROLE_META[roleId] ?? { name: roleId, icon: 'fa-user' };
@@ -67,18 +82,14 @@ export function Header({ name, roleId, email }: { name: string; roleId: string; 
         <div className="flex items-center gap-2 ml-auto">
           <ThemeToggle />
 
-          <button
-            type="button"
-            className="icon-tile relative"
-            aria-label="การแจ้งเตือน"
-            style={{ background: 'var(--paper)' }}
-          >
-            <i className="fa-regular fa-bell text-sm" style={{ color: 'var(--ink-soft)' }} />
-            <span
-              className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full"
-              style={{ background: 'var(--primary)' }}
-            />
-          </button>
+          {/*
+            The bell used to be a picture: no handler, and a red dot hard-coded
+            to show whether or not anything was waiting. It now counts real work
+            for this person (docs/DESIGN-notifications.md).
+          */}
+          {alertsAction && ackAlertsAction && (
+            <NotificationBell loadAction={alertsAction} ackAction={ackAlertsAction} />
+          )}
 
           <div className="relative">
             <button

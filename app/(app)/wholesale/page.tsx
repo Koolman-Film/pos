@@ -56,6 +56,8 @@ export default async function WholesalePage({
       onUpdateStatus={updateOrderStatus}
       initialStatus={typeof params.status === 'string' ? params.status : undefined}
       initialApproval={typeof params.approval === 'string' ? params.approval : undefined}
+      initialFlag={typeof params.flag === 'string' ? params.flag : undefined}
+      initialSale={typeof params.sale === 'string' ? params.sale : undefined}
       stockWarning={stockWarning}
     />
   );
