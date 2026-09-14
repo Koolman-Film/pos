@@ -25,6 +25,7 @@ export function SalesPersonPicker({
   onSelect,
   onSavePerson,
   required = false,
+  accounts = [],
 }: {
   /** The NAME stored on the PO (`orders.sales_by`), not an id. */
   value: string;
@@ -39,7 +40,13 @@ export function SalesPersonPicker({
     shop: string;
     name: string;
     phone: string;
+    userId?: string | null;
   }) => Promise<{ ok: boolean; error?: string; name?: string }>;
+  /**
+   * Logins a rep can be linked to (0058). A linked rep is reminded about the
+   * bills for their own POs rather than every PO in the branch.
+   */
+  accounts?: { id: string; name: string }[];
   /**
    * The branch has a sales team, so the PO must be credited to one of them
    * (migration 0057). The database refuses it otherwise; this only says so first.
@@ -48,19 +55,19 @@ export function SalesPersonPicker({
 }) {
   const [mode, setMode] = useState<'select' | 'new' | 'edit'>('select');
   const [list, setList] = useState<SalesPerson[]>(people);
-  const [form, setForm] = useState({ name: '', phone: '' });
+  const [form, setForm] = useState({ name: '', phone: '', userId: '' });
   const [error, setError] = useState('');
   const current = list.find((p) => p.name === value) ?? null;
 
   function startNew() {
     setError('');
-    setForm({ name: '', phone: '' });
+    setForm({ name: '', phone: '', userId: '' });
     setMode('new');
   }
   function startEdit() {
     if (!current) return;
     setError('');
-    setForm({ name: current.name, phone: current.phone });
+    setForm({ name: current.name, phone: current.phone, userId: current.userId ?? '' });
     setMode('edit');
   }
 
@@ -70,7 +77,15 @@ export function SalesPersonPicker({
       setError('ต้องใส่ชื่อพนักงานขาย');
       return;
     }
-    const res = await onSavePerson?.({ id: current?.id, shop, name, phone: form.phone.trim() });
+    const res = await onSavePerson?.({
+      // Only an EDIT names the row. Pressing เพิ่ม while a rep is selected
+      // used to send that rep's id too, so "adding" someone overwrote them.
+      id: mode === 'edit' ? current?.id : undefined,
+      shop,
+      name,
+      phone: form.phone.trim(),
+      userId: form.userId || null,
+    });
     if (res && !res.ok) {
       setError(res.error ?? 'บันทึกไม่สำเร็จ');
       return;
@@ -83,11 +98,18 @@ export function SalesPersonPicker({
     */
     if (mode === 'edit' && current) {
       setList(
-        list.map((p) => (p.id === current.id ? { ...p, name, phone: form.phone.trim() } : p)),
+        list.map((p) =>
+          p.id === current.id
+            ? { ...p, name, phone: form.phone.trim(), userId: form.userId || null }
+            : p,
+        ),
       );
       if (value === current.name) onSelect(name);
     } else {
-      setList([...list, { id: Date.now(), shop, name, phone: form.phone.trim() }]);
+      setList([
+        ...list,
+        { id: Date.now(), shop, name, phone: form.phone.trim(), userId: form.userId || null },
+      ]);
       onSelect(name);
     }
     setMode('select');
@@ -172,6 +194,29 @@ export function SalesPersonPicker({
           className="field text-sm px-3 py-2"
         />
       </div>
+      {accounts.length > 0 && (
+        <div className="mb-3">
+          <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+            บัญชีเข้าระบบของพนักงานขาย (ถ้ามี)
+          </label>
+          <select
+            aria-label="บัญชีเข้าระบบของพนักงานขาย"
+            value={form.userId}
+            onChange={(e) => setForm({ ...form, userId: e.target.value })}
+            className="field w-full text-sm px-3 py-2"
+          >
+            <option value="">— ไม่ผูกบัญชี —</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+            ผูกแล้ว พนักงานขายคนนี้จะได้รับแจ้งเตือนกำหนดชำระเฉพาะ PO ของตัวเอง
+          </p>
+        </div>
+      )}
       {error && (
         <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
           {error}

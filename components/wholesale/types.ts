@@ -198,7 +198,17 @@ export type WsPrintMode = 'invoice' | 'delivery' | 'ret' | 'receipt' | 'label' |
  * it is printed on a customer’s document: a wholesale buyer rings the rep who
  * sold to them, not a branch switchboard.
  */
-export type SalesPerson = { id: number; shop: string; name: string; phone: string };
+export type SalesPerson = {
+  id: number;
+  shop: string;
+  name: string;
+  phone: string;
+  /**
+   * The rep's own login (migration 0058). Linked, the rep's payment-due
+   * alerts cover their own POs instead of the whole branch.
+   */
+  userId?: string | null;
+};
 
 export type WsCustomer = { id: number; name: string; phone: string; address: string };
 

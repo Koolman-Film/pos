@@ -82,7 +82,7 @@ export function NotificationBell({
         const next = await loadAction();
         if (!alive) return;
         setSnapshot(next);
-        setClosedForSession(readSession(`alerts:closed:${next.today}`) === '1');
+        setClosedForSession(readSession(`alerts:closed:${next.viewer}:${next.today}`) === '1');
         if (next.ackedToday) {
           const seen = new Set(next.ackedKeys);
           const fresh = next.alerts.find(
@@ -91,7 +91,7 @@ export function NotificationBell({
           if (fresh) {
             // Once per set of new records per session — a poll every five
             // minutes must not keep re-announcing the same cheque.
-            const mark = `alerts:toast:${next.today}:${fresh.itemIds
+            const mark = `alerts:toast:${next.viewer}:${next.today}:${fresh.itemIds
               .filter((id) => !seen.has(id))
               .sort()
               .join('|')}`;
@@ -133,7 +133,7 @@ export function NotificationBell({
   const todoCount = alerts.filter((a) => a.level === 'todo').reduce((n, a) => n + a.count, 0);
 
   function closeForSession() {
-    if (snapshot) writeSession(`alerts:closed:${snapshot.today}`, '1');
+    if (snapshot) writeSession(`alerts:closed:${snapshot.viewer}:${snapshot.today}`, '1');
     setClosedForSession(true);
   }
 

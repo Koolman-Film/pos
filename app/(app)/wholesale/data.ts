@@ -359,7 +359,7 @@ export async function loadOrderDetailData(
       // switches the พนักงานขาย list with it.
       supabase
         .from('sales_people')
-        .select('id, shop_id, name, phone')
+        .select('id, shop_id, name, phone, user_id')
         .eq('active', true)
         .in('shop_id', session.accessibleShopIds)
         .order('sort_order'),
@@ -398,6 +398,7 @@ export async function loadOrderDetailData(
     shop: p.shop_id,
     name: p.name,
     phone: p.phone ?? '',
+    userId: p.user_id ?? null,
   }));
 
   const { data: staffRows } = await supabase.from('app_users').select('id, name');

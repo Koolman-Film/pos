@@ -282,6 +282,7 @@ export function WholesaleDetail({
     shop: string;
     name: string;
     phone: string;
+    userId?: string | null;
   }) => Promise<{ ok: boolean; error?: string; name?: string }>;
   /**
    * Persists วิธีชำระเงิน. Without it the picker only edits React state, so a
@@ -777,6 +778,10 @@ export function WholesaleDetail({
     resolved through the staff list; a PO older than the column says so rather
     than naming whoever happens to be looking at it.
   */
+  // Logins a rep can be linked to — the staff list the page already loads.
+  const staffAccounts = Object.entries(staffNames ?? {})
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'th'));
   const openerName = o.createdBy
     ? (staffNames?.[o.createdBy] ?? 'ผู้ใช้ที่ไม่อยู่ในระบบแล้ว')
     : 'ไม่มีข้อมูล (PO ก่อนระบบบันทึกคนเปิด)';
@@ -1080,6 +1085,7 @@ export function WholesaleDetail({
                 onSelect={(name) => field('salesBy', name)}
                 onSavePerson={onSaveSalesPerson}
                 required={branchSales.length > 0}
+                accounts={staffAccounts}
               />
             )}
             {/*

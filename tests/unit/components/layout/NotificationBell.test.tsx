@@ -42,6 +42,7 @@ const ALERTS: AlertSnapshot['alerts'] = [
 ];
 
 const snapshot = (over: Partial<AlertSnapshot> = {}): AlertSnapshot => ({
+  viewer: 'u-admin',
   today: '2026-09-14',
   alerts: ALERTS,
   ackedToday: false,
@@ -112,6 +113,26 @@ describe('NotificationBell', () => {
     await user.click(await screen.findByRole('button', { name: 'ปิดไว้ก่อน' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(ack).not.toHaveBeenCalled();
+  });
+
+  it('closing the summary for one person does not hide it for the next person on the same computer', async () => {
+    const user = userEvent.setup();
+    const first = render(
+      <NotificationBell
+        loadAction={vi.fn(async () => snapshot({ viewer: 'u-admin' }))}
+        ackAction={vi.fn(async () => ({ ok: true }))}
+      />,
+    );
+    await user.click(await screen.findByRole('button', { name: 'ปิดไว้ก่อน' }));
+    first.unmount();
+
+    render(
+      <NotificationBell
+        loadAction={vi.fn(async () => snapshot({ viewer: 'u-sales' }))}
+        ackAction={vi.fn(async () => ({ ok: true }))}
+      />,
+    );
+    expect(await screen.findByRole('dialog', { name: 'สิ่งที่รอคุณวันนี้' })).toBeInTheDocument();
   });
 
   it('points out an urgent record that appeared after acknowledging', async () => {

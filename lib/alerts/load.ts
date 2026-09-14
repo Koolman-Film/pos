@@ -209,6 +209,7 @@ export async function loadAlertSnapshot(
   ]);
 
   return {
+    viewer: session.userId,
     today,
     alerts: buildAlerts({
       today,

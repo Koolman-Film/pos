@@ -34,6 +34,12 @@ export type AlertItem = {
 };
 
 export type AlertSnapshot = {
+  /**
+   * Who the snapshot is for. The browser remembers "closed for now" per
+   * person: the counter computer is shared, and one person closing their
+   * summary must not hide the next person's.
+   */
+  viewer: string;
   /** The shop's calendar day the snapshot was taken on (`YYYY-MM-DD`). */
   today: string;
   alerts: AlertItem[];

@@ -521,6 +521,11 @@ export async function saveSalesPerson(input: {
   shop: string;
   name: string;
   phone: string;
+  /**
+   * บัญชีเข้าระบบของเซลล์ (0058). `undefined` leaves the link as it is; `null`
+   * or an empty string removes it.
+   */
+  userId?: string | null;
 }): Promise<{ ok: boolean; error?: string; name?: string }> {
   const session = await getSessionContext();
   if (!session.canDo('options.manage')) {
@@ -528,6 +533,13 @@ export async function saveSalesPerson(input: {
   }
   const name = input.name.trim();
   if (!name) return { ok: false, error: 'ต้องใส่ชื่อพนักงานขาย' };
+
+  // Only touch the login link when the form actually said something about it.
+  const link = input.userId === undefined ? {} : { user_id: input.userId || null };
+  // One login is one rep (unique index, 0058) — say it in words, not as a
+  // constraint name.
+  const friendly = (message: string) =>
+    message.includes('sales_people_user_uidx') ? 'บัญชีนี้ผูกกับพนักงานขายคนอื่นอยู่แล้ว' : message;
 
   const supabase = await createClient();
   if (input.id) {
@@ -543,9 +555,9 @@ export async function saveSalesPerson(input: {
       .maybeSingle();
     const { error } = await supabase
       .from('sales_people')
-      .update({ name, phone: input.phone })
+      .update({ name, phone: input.phone, ...link })
       .eq('id', input.id);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: friendly(error.message) };
     if (before?.name && before.name !== name) {
       await supabase
         .from('orders')
@@ -556,8 +568,8 @@ export async function saveSalesPerson(input: {
   } else {
     const { error } = await supabase
       .from('sales_people')
-      .insert({ shop_id: input.shop, name, phone: input.phone });
-    if (error) return { ok: false, error: error.message };
+      .insert({ shop_id: input.shop, name, phone: input.phone, ...link });
+    if (error) return { ok: false, error: friendly(error.message) };
   }
 
   revalidatePath('/wholesale');
