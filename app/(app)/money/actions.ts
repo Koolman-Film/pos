@@ -131,6 +131,47 @@ export async function reorderMoneyAccounts(
 }
 
 /**
+ * นำการเติมเงินสดย่อยที่ตกหล่นเข้ายอดเงิน (migration 0056).
+ *
+ * A top-up pressed on บัญชี/ค่าใช้จ่าย before 0056 reached `petty_cash` and
+ * never the balance. This turns one of them into the transfer it should have
+ * been, dated the day it happened. `fromAccountId` null is นอกระบบ.
+ *
+ * One at a time and never automatic: the same money may already have been
+ * keyed as a transfer by hand, and only the person looking can tell.
+ */
+export async function importPettyCashTopup(
+  pettyId: number,
+  fromAccountId: number | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await authorize();
+  if (!session) return { ok: false, error: REFUSED };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('link_petty_cash_topup', {
+    p_petty_id: pettyId,
+    p_from_account: fromAccountId,
+  });
+  if (error) return { ok: false, error: error.message.replace(/^forbidden:\s*/, '') };
+  revalidatePath('/accounting');
+  return done();
+}
+
+/**
+ * "โอนไว้เองแล้ว" — the top-up is already in the balance as a transfer somebody
+ * keyed by hand, so importing it would count the money twice.
+ */
+export async function skipPettyCashTopup(
+  pettyId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await authorize();
+  if (!session) return { ok: false, error: REFUSED };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('skip_petty_cash_topup', { p_petty_id: pettyId });
+  if (error) return { ok: false, error: error.message.replace(/^forbidden:\s*/, '') };
+  return done();
+}
+
+/**
  * ผูกชื่อแหล่งเงินที่ยังไม่มีเจ้าของ เข้ากับบัญชี.
  *
  * A payment or an expense records the LABEL the person picked, and an account

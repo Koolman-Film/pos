@@ -127,7 +127,22 @@ export type NewExpenseInput = {
 };
 
 /** Payload handed to the top-up Server Action. */
-export type TopupInput = { shop: string; amount: number; note: string };
+export type TopupInput = {
+  shop: string;
+  amount: number;
+  note: string;
+  /**
+   * แหล่งเงินที่เอาเงินออกมาเติม. `null` is นอกระบบ — a deliberate answer the
+   * person picks, never a default standing in for "nobody said" (0056).
+   */
+  fromAccountId: number | null;
+};
+
+/** A money account, as the top-up form needs it to ask where cash came from. */
+export type TopupAccount = { id: number; shop: string; name: string; kind: string };
+
+/** The select value that means นอกระบบ. */
+const OUTSIDE = 'outside';
 
 /** Payload handed to the edit Server Action. */
 export type UpdateExpenseInput = {
@@ -192,6 +207,7 @@ export function AccountingModule({
   updateOptionListAction,
   accessibleShops = [],
   canSeeAllShops = true,
+  moneyAccounts = [],
 }: {
   expenses: ExpenseView[];
   pettyCash: PettyCashView[];
@@ -204,7 +220,7 @@ export function AccountingModule({
   /** `options.manage` — may this caller add/remove หมวดค่าใช้จ่าย / จ่ายจาก entries. */
   canManageOptions?: boolean;
   addExpenseAction?: (input: NewExpenseInput) => Promise<void>;
-  topupCashAction?: (input: TopupInput) => Promise<void>;
+  topupCashAction?: (input: TopupInput) => Promise<{ ok: boolean; error?: string } | void>;
   updateExpenseAction?: (input: UpdateExpenseInput) => Promise<void>;
   deleteExpenseAction?: (id: number) => Promise<void>;
   exportAction?: (payload: ExportPayload) => Promise<{ fileName: string; base64: string } | null>;
@@ -226,6 +242,8 @@ export function AccountingModule({
   ) => Promise<{ ok: boolean; error?: string }>;
   accessibleShops?: Shop[];
   canSeeAllShops?: boolean;
+  /** Every money account the caller can see — the top-up form lists its branch's. */
+  moneyAccounts?: TopupAccount[];
 }) {
   const allowAdd = canAddExpense ?? canDo?.('accounting.addExpense') ?? false;
   const allowTopup = canTopupCash ?? canDo?.('accounting.topupCash') ?? false;
@@ -275,7 +293,12 @@ export function AccountingModule({
     paidForFinnix: false,
     lines: [{ desc: '', category: '', amount: 0 }] as ExpenseLine[],
   });
-  const emptyTopup = () => ({ shop: firstShop, amount: 0 as number | string, note: '' });
+  const emptyTopup = () => ({
+    shop: firstShop,
+    amount: 0 as number | string,
+    note: '',
+    from: '',
+  });
   const [ex, setEx] = useState(emptyEx);
   // The chosen receipts, held outside `ex` because a File does not survive the
   // JSON round-trip the dirty check uses — it would stringify to `{}` and every
@@ -289,6 +312,18 @@ export function AccountingModule({
     mimeType: string;
   } | null>(null);
   const [topup, setTopup] = useState(emptyTopup);
+  const [topupError, setTopupError] = useState<string | null>(null);
+  /*
+    เงินมาจากไหน.
+
+    Every account of the branch being topped up except the petty-cash account
+    itself, plus นอกระบบ. A branch with no petty-cash account cannot be topped
+    up at all — there is nowhere in the register for the money to arrive — so
+    the form says that instead of failing on save.
+  */
+  const topupShop = shopFilter === 'all' ? topup.shop : shopFilter;
+  const topupSources = moneyAccounts.filter((a) => a.shop === topupShop && a.kind !== 'petty');
+  const topupHasPetty = moneyAccounts.some((a) => a.shop === topupShop && a.kind === 'petty');
   const isExDirty =
     showAdd && (JSON.stringify(ex) !== JSON.stringify(emptyEx()) || exFiles.length > 0);
   const isTopupDirty = showTopup && JSON.stringify(topup) !== JSON.stringify(emptyTopup());
@@ -543,13 +578,26 @@ export function AccountingModule({
 
   function addTopup() {
     if (!topupCashAction) return;
-    const targetShop = shopFilter === 'all' ? topup.shop : shopFilter;
+    if (!topup.from) {
+      setTopupError('เลือกก่อนว่าเงินที่เติมมาจากแหล่งไหน');
+      return;
+    }
+    if (!(Number(topup.amount) > 0)) {
+      setTopupError('จำนวนเงินต้องมากกว่า 0');
+      return;
+    }
+    setTopupError(null);
     startTransition(async () => {
-      await topupCashAction({
-        shop: targetShop,
+      const res = await topupCashAction({
+        shop: topupShop,
         amount: Number(topup.amount),
         note: topup.note || 'เติมเงินสดย่อย',
+        fromAccountId: topup.from === OUTSIDE ? null : Number(topup.from),
       });
+      if (res && !res.ok) {
+        setTopupError(res.error || 'บันทึกการเติมเงินไม่สำเร็จ');
+        return;
+      }
       setShowTopup(false);
       setTopup(emptyTopup());
     });
@@ -1034,7 +1082,9 @@ export function AccountingModule({
                   <select
                     value={topup.shop}
                     aria-label="สาขาที่เติมเงินสดย่อย"
-                    onChange={(e) => setTopup({ ...topup, shop: e.target.value })}
+                    // The source list belongs to the branch, so a pick made for
+                    // another branch must not survive the switch.
+                    onChange={(e) => setTopup({ ...topup, shop: e.target.value, from: '' })}
                     className="field w-full text-sm px-3 py-2"
                   >
                     {accessibleShops.map((s) => (
@@ -1045,6 +1095,30 @@ export function AccountingModule({
                   </select>
                 </div>
               )}
+              <div className="sm:col-span-2">
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  เงินมาจาก
+                </label>
+                <select
+                  value={topup.from}
+                  aria-label="เงินที่เติมมาจากแหล่งไหน"
+                  onChange={(e) => setTopup({ ...topup, from: e.target.value })}
+                  className="field w-full text-sm px-3 py-2"
+                >
+                  <option value="">เลือกแหล่งเงินที่เอาเงินออกมาเติม...</option>
+                  {topupSources.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                  <option value={OUTSIDE}>นอกระบบ — เช่น เงินที่กรรมการสำรองให้</option>
+                </select>
+                {!topupHasPetty && (
+                  <p className="text-xs mt-1.5" style={{ color: '#B23A48' }}>
+                    สาขานี้ยังไม่มีแหล่งเงินประเภทเงินสดย่อย — เพิ่มที่หน้าการจัดการเงิน/บัญชีก่อน
+                  </p>
+                )}
+              </div>
               <div>
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   จำนวนเงินที่เติม
@@ -1068,8 +1142,14 @@ export function AccountingModule({
                 />
               </div>
             </div>
+            {topupError && (
+              <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
+                {topupError}
+              </p>
+            )}
             <button
               onClick={addTopup}
+              disabled={isPending || !topupHasPetty}
               className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold"
             >
               บันทึกการเติมเงิน

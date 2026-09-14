@@ -10,14 +10,17 @@ import {
   type MoneyAccount,
   type MoneyOverview,
 } from '@/components/dashboard/moneyFlow';
+import type { PendingTopup } from '@/app/(app)/money/data';
 
 import {
   bindMoneyLabel,
   closeMoneyAccount,
+  importPettyCashTopup,
   reorderMoneyAccounts,
   saveMoneyAccount,
   saveMoneyReconciliation,
   saveMoneyTransfer,
+  skipPettyCashTopup,
   type SaveAccountInput,
 } from '@/app/(app)/money/actions';
 
@@ -75,12 +78,15 @@ export function MoneyModule({
   overview,
   transfers,
   reconciliations,
+  pendingTopups = [],
 }: {
   shops: { id: string; name: string }[];
   accounts: MoneyAccount[];
   overview: MoneyOverview;
   transfers: TransferRow[];
   reconciliations: ReconciliationRow[];
+  /** เติมเงินสดย่อยจากหน้าค่าใช้จ่ายที่ยังไม่เข้ายอดเงิน (0056). */
+  pendingTopups?: PendingTopup[];
 }) {
   const [shop, setShop] = useState(shops[0]?.id ?? '');
   const [draft, setDraft] = useState<SaveAccountInput | null>(null);
@@ -145,6 +151,29 @@ export function MoneyModule({
     if (from < 0 || to < 0 || to >= ids.length) return;
     [ids[from], ids[to]] = [ids[to], ids[from]];
     await run(() => reorderMoneyAccounts(shop, ids), 'จัดลำดับแหล่งเงินแล้ว');
+  }
+
+  // ---- เติมเงินสดย่อยที่ยังไม่เข้ายอด ------------------------------------
+  const shopTopups = pendingTopups.filter((t) => t.shop === shop);
+  const [topupFrom, setTopupFrom] = useState<Record<number, string>>({});
+
+  async function importTopup(id: number) {
+    const choice = topupFrom[id] ?? '';
+    if (!choice) {
+      setError('เลือกก่อนว่าเงินที่เติมครั้งนั้นมาจากแหล่งไหน');
+      return;
+    }
+    await run(
+      () => importPettyCashTopup(id, choice === 'outside' ? null : Number(choice)),
+      'นำการเติมเงินสดย่อยเข้ายอดเงินแล้ว',
+    );
+  }
+
+  async function skipTopup(id: number) {
+    if (!window.confirm('ยืนยันว่าเงินก้อนนี้บันทึกเป็นการโอนไว้เองแล้ว? ระบบจะไม่นำเข้าซ้ำอีก')) {
+      return;
+    }
+    await run(() => skipPettyCashTopup(id), 'บันทึกว่าโอนไว้เองแล้ว');
   }
 
   // ---- โอน/ฝากเงิน -----------------------------------------------------
@@ -323,6 +352,95 @@ export function MoneyModule({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/*
+        เติมเงินสดย่อยที่ยังไม่เข้ายอดเงิน.
+
+        Top-ups pressed on บัญชี/ค่าใช้จ่าย before that button became a transfer.
+        The เงินสดย่อย balance is short by every row here, so, like the unmatched
+        labels, this sits above the balances it corrects.
+
+        Never imported in bulk: the same money may already be in the transfer
+        list, keyed by hand on another day. The lookalike line is there so the
+        person deciding can see the likely duplicate without going to find it.
+      */}
+      {shopTopups.length > 0 && (
+        <div className="card p-5 mb-4" style={{ borderLeft: '4px solid #B8860B' }}>
+          <p className="font-semibold" style={{ color: '#8A5A12' }}>
+            <i className="fa-solid fa-wallet mr-2"></i>
+            เติมเงินสดย่อยที่ยังไม่เข้ายอดเงิน
+          </p>
+          <p className="text-sm mt-1 mb-3" style={{ color: 'var(--ink-soft)' }}>
+            รายการเหล่านี้กดเติมจากหน้าค่าใช้จ่ายก่อนที่ระบบจะบันทึกเป็นการโอน ยอดเงินสดย่อยจึง{' '}
+            <strong>ยังไม่รวม</strong> และแหล่งเงินต้นทางก็ยังไม่ลด เลือกว่าเงินมาจากไหนแล้วกด
+            นำเข้า — ถ้าเคยบันทึกการโอนก้อนนี้ไว้เองแล้ว กด “โอนไว้เองแล้ว” เพื่อไม่ให้นับซ้ำ
+          </p>
+          {shopTopups.map((t) => (
+            <div
+              key={t.id}
+              className="flex flex-wrap items-center gap-2 py-2.5"
+              style={{ borderTop: '1px solid var(--line)' }}
+            >
+              <div className="min-w-0 flex-1 text-sm">
+                <span className="font-semibold">{fmt(t.amount)}</span>
+                <span style={{ color: 'var(--ink-soft)' }}>
+                  {' · '}
+                  {fmtThaiDayString(t.on)}
+                  {t.note ? ` · ${t.note}` : ''}
+                </span>
+                {t.lookalikes.length > 0 && (
+                  <p className="text-xs mt-0.5" style={{ color: '#8A5A12' }}>
+                    <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+                    อาจบันทึกไว้แล้วเป็นการโอน:{' '}
+                    {t.lookalikes
+                      .map(
+                        (l) =>
+                          `${fmtThaiDayString(l.on)} ${accountName(l.fromAccountId)} → เงินสดย่อย`,
+                      )
+                      .join(', ')}
+                  </p>
+                )}
+                {t.pettyAccountId === null && (
+                  <p className="text-xs mt-0.5" style={{ color: '#B23A48' }}>
+                    สาขานี้ยังไม่มีแหล่งเงินประเภทเงินสดย่อย — เพิ่มแหล่งเงินก่อนจึงจะนำเข้าได้
+                  </p>
+                )}
+              </div>
+              <select
+                aria-label={`เติมเงิน ${fmt(t.amount)} วันที่ ${fmtThaiDayString(t.on)} มาจากไหน`}
+                value={topupFrom[t.id] ?? ''}
+                onChange={(e) => setTopupFrom({ ...topupFrom, [t.id]: e.target.value })}
+                className="field text-sm px-2 py-1.5"
+              >
+                <option value="">— เงินมาจาก —</option>
+                {shopAccounts
+                  .filter((a) => a.id !== t.pettyAccountId)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                <option value="outside">นอกระบบ</option>
+              </select>
+              <button
+                onClick={() => importTopup(t.id)}
+                disabled={busy || t.pettyAccountId === null}
+                className="btn-outline text-xs px-3 py-1.5 rounded-lg font-medium"
+              >
+                <i className="fa-solid fa-file-import mr-1.5"></i>นำเข้า
+              </button>
+              <button
+                onClick={() => skipTopup(t.id)}
+                disabled={busy}
+                className="text-xs px-3 py-1.5 rounded-lg"
+                style={{ color: 'var(--ink-soft)' }}
+              >
+                โอนไว้เองแล้ว
+              </button>
+            </div>
+          ))}
         </div>
       )}
 

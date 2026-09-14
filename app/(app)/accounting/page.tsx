@@ -87,7 +87,7 @@ export default async function AccountingPage() {
     */
     supabase
       .from('money_accounts')
-      .select('name, shop_id, sort_order')
+      .select('id, name, shop_id, kind, sort_order')
       .eq('active', true)
       .order('sort_order'),
   ]);
@@ -165,6 +165,12 @@ export default async function AccountingPage() {
       detachAction={deleteExpenseAttachment}
       updateOptionListAction={updateOptionListAction}
       accessibleShops={accessibleShops}
+      moneyAccounts={(accountRows ?? []).map((a) => ({
+        id: a.id,
+        shop: a.shop_id,
+        name: a.name,
+        kind: a.kind,
+      }))}
       canSeeAllShops={session.seesAllShops}
     />
   );

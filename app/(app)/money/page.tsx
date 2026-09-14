@@ -55,6 +55,7 @@ export default async function MoneyPage() {
         note: t.note,
       }))}
       reconciliations={money.reconciliations}
+      pendingTopups={money.pendingTopups}
     />
   );
 }

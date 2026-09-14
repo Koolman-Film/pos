@@ -149,21 +149,39 @@ export async function getExpenseAttachmentUrl(
   return { url: data?.signedUrl };
 }
 
-export async function topupCash(input: TopupInput): Promise<void> {
+/**
+ * เติมเงินสดย่อย — บันทึกเป็นการโอนเข้าบัญชีเงินสดย่อยด้วย (migration 0056).
+ *
+ * This used to write `petty_cash` alone, and since 0043 the balances are built
+ * from `money_transfers` — so a top-up pressed here reached the accounting
+ * screen and nowhere else. `topup_petty_cash` writes both rows in one
+ * transaction and records where the money came from.
+ *
+ * Returns a result instead of throwing: the refusals here are ones a person
+ * can act on (the branch has no petty-cash account yet, the source is in
+ * another branch), and a thrown error reached the screen as nothing at all.
+ */
+export async function topupCash(input: TopupInput): Promise<{ ok: boolean; error?: string }> {
   const session = await getSessionContext();
-  if (!session.canDo('accounting.topupCash')) throw new Error('forbidden');
+  if (!session.canDo('accounting.topupCash')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์เติมเงินสดย่อย' };
+  }
+  if (!(Number(input.amount) > 0)) return { ok: false, error: 'จำนวนเงินต้องมากกว่า 0' };
 
   const supabase = await createClient();
-  const { error } = await supabase.from('petty_cash').insert({
-    shop_id: input.shop,
-    type: 'เติมเงิน',
-    amount: Number(input.amount),
-    note: input.note || 'เติมเงินสดย่อย',
-    entry_at: new Date().toISOString(),
+  const { error } = await supabase.rpc('topup_petty_cash', {
+    p_shop: input.shop,
+    p_from_account: input.fromAccountId,
+    p_amount: Number(input.amount),
+    p_note: input.note || 'เติมเงินสดย่อย',
   });
-  if (error) throw error;
+  if (error) return { ok: false, error: error.message.replace(/^forbidden:\s*/, '') };
 
   revalidatePath('/accounting');
+  // The same money now moves the register and the dashboard card.
+  revalidatePath('/money');
+  revalidatePath('/dashboard');
+  return { ok: true };
 }
 
 export async function updateExpense(input: UpdateExpenseInput): Promise<void> {

@@ -79,6 +79,9 @@ from (values
   ('เคน', '', 2)
 ) as p(name, phone, sort_order)
 where exists (select 1 from shops where id = 'north')
+  -- Same name-keyed conflict: rename โหน่ง to a full name and a re-run would add
+  -- a second, phone-less โหน่ง to the picker.
+  and not exists (select 1 from sales_people x where x.shop_id = 'north')
 on conflict (shop_id, name) do nothing;
 
 insert into supabase_migrations.schema_migrations(version, name) values ('0047', 'sales_people') on conflict (version) do nothing;

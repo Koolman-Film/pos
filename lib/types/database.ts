@@ -920,6 +920,9 @@ export type Database = {
       }
       petty_cash: {
         Row: {
+          money_transfer_id: number | null
+          transfer_skipped_at: string | null
+          transfer_skipped_by: string | null
           amount: number
           entry_at: string
           id: number
@@ -928,6 +931,9 @@ export type Database = {
           type: string
         }
         Insert: {
+          money_transfer_id?: number | null
+          transfer_skipped_at?: string | null
+          transfer_skipped_by?: string | null
           amount: number
           entry_at: string
           id?: never
@@ -936,6 +942,9 @@ export type Database = {
           type: string
         }
         Update: {
+          money_transfer_id?: number | null
+          transfer_skipped_at?: string | null
+          transfer_skipped_by?: string | null
           amount?: number
           entry_at?: string
           id?: never
@@ -1941,6 +1950,24 @@ export type Database = {
       decide_order_price: {
         Args: { p_approve: boolean; p_order_id: string }
         Returns: undefined
+      }
+      link_petty_cash_topup: {
+        Args: { p_from_account: number | null; p_petty_id: number }
+        Returns: number
+      }
+      skip_petty_cash_topup: {
+        Args: { p_petty_id: number }
+        Returns: undefined
+      }
+      topup_petty_cash: {
+        Args: {
+          p_amount: number
+          p_from_account: number | null
+          p_note?: string
+          p_on?: string
+          p_shop: string
+        }
+        Returns: number
       }
       confirm_order_return: {
         Args: { p_on?: string; p_order_id: string; p_uid: string }

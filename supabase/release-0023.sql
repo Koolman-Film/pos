@@ -266,9 +266,14 @@ select
 from ticket_items i
 join tickets t on t.id = i.ticket_id
 where i.category = 'ประกัน'
-  and not exists (select 1 from insurance_policies p where p.ticket_id = i.ticket_id);
+  and not exists (select 1 from insurance_policies p where p.ticket_id = i.ticket_id)
+  -- ครั้งเดียวเท่านั้น: on a re-run this would turn any ประกัน line added since
+  -- into a policy the shop never sold, and the DELETE below would remove it.
+  and not exists (select 1 from supabase_migrations.schema_migrations where version = '0023');
 
-delete from ticket_items where category = 'ประกัน';
+delete from ticket_items
+where category = 'ประกัน'
+  and not exists (select 1 from supabase_migrations.schema_migrations where version = '0023');
 
 /*
   `save_ticket_extras` loses its ประกัน half.

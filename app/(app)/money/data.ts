@@ -1,4 +1,9 @@
-import type { MoneyAccount, MoneyMovement, MoneyTransfer } from '@/components/dashboard/moneyFlow';
+import {
+  byAccountOrder,
+  type MoneyAccount,
+  type MoneyMovement,
+  type MoneyTransfer,
+} from '@/components/dashboard/moneyFlow';
 import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import type { createClient } from '@/lib/supabase/server';
 
@@ -66,6 +71,16 @@ type ExpenseRow = {
   expense_attachments: { file_name: string; storage_path: string }[] | null;
 };
 
+type PettyTopupRow = {
+  id: number;
+  shop_id: string;
+  amount: number | string | null;
+  entry_at: string;
+  note: string | null;
+  money_transfer_id: number | null;
+  transfer_skipped_at: string | null;
+};
+
 type TransferRow = {
   id: number;
   shop_id: string;
@@ -96,11 +111,31 @@ export type MoneyReconciliationRecord = {
   note: string;
 };
 
+/**
+ * เติมเงินสดย่อยที่ยังไม่เข้ายอดเงิน — pressed on บัญชี/ค่าใช้จ่าย before 0056
+ * made the button a transfer, and not yet decided on /money.
+ */
+export type PendingTopup = {
+  id: number;
+  shop: string;
+  amount: number;
+  on: string;
+  note: string;
+  /** The branch's petty-cash account, or null if it has none to import into. */
+  pettyAccountId: number | null;
+  /**
+   * Transfers already into petty cash, same amount, within three days, that
+   * no top-up has claimed — the likeliest sign this money was keyed by hand.
+   */
+  lookalikes: { transferId: number; on: string; fromAccountId: number | null }[];
+};
+
 export type MoneyData = {
   accounts: MoneyAccount[];
   movements: MoneyMovement[];
   transfers: MoneyTransferRecord[];
   reconciliations: MoneyReconciliationRecord[];
+  pendingTopups: PendingTopup[];
 };
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -114,7 +149,7 @@ const joined = (...parts: (string | null | undefined)[]) =>
     .join(' · ');
 
 export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
-  const [accountRows, transferRows, reconRows, ticketPays, orderPays, expenseRows] =
+  const [accountRows, transferRows, reconRows, ticketPays, orderPays, expenseRows, pettyRows] =
     await Promise.all([
       fetchAllRows(
         (from, to) =>
@@ -188,6 +223,17 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
             .range(from, to) as unknown as Page<ExpenseRow>,
         'expenses',
       ),
+      fetchAllRows(
+        (from, to) =>
+          supabase
+            .from('petty_cash')
+            .select('id, shop_id, amount, entry_at, note, money_transfer_id, transfer_skipped_at')
+            .eq('type', 'เติมเงิน')
+            .gt('amount', 0)
+            .order('id')
+            .range(from, to) as unknown as Page<PettyTopupRow>,
+        'petty_cash',
+      ),
     ]);
 
   const accounts: MoneyAccount[] = accountRows.map((a) => ({
@@ -259,9 +305,60 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
       })),
   ];
 
+  /*
+    เติมเงินสดย่อยที่ยังไม่เข้ายอดเงิน.
+
+    Only those dated on or after the petty account opened: anything earlier is
+    already inside the opening balance the shop typed, and importing it would
+    add the same money a second time.
+  */
+  const pettyAccountOf = new Map<string, MoneyAccount>();
+  for (const a of [...accounts].sort(byAccountOrder)) {
+    if (a.kind === 'petty' && !pettyAccountOf.has(a.shop)) pettyAccountOf.set(a.shop, a);
+  }
+  const claimedTransfers = new Set(
+    pettyRows.map((r) => r.money_transfer_id).filter((id): id is number => id !== null),
+  );
+  const DAY = 86_400_000;
+  const pendingTopups: PendingTopup[] = pettyRows
+    .filter((r) => r.money_transfer_id === null && r.transfer_skipped_at === null)
+    .map((r) => {
+      const petty = pettyAccountOf.get(r.shop_id) ?? null;
+      const on = day(r.entry_at);
+      const amount = num(r.amount);
+      return {
+        id: r.id,
+        shop: r.shop_id,
+        amount,
+        on,
+        note: r.note ?? '',
+        pettyAccountId: petty?.id ?? null,
+        openedAt: petty?.openedAt ?? null,
+        lookalikes: petty
+          ? transferRows
+              .filter(
+                (t) =>
+                  t.to_account_id === petty.id &&
+                  num(t.amount) === amount &&
+                  !claimedTransfers.has(t.id) &&
+                  Math.abs(Date.parse(t.moved_at) - Date.parse(on)) <= 3 * DAY,
+              )
+              .map((t) => ({
+                transferId: t.id,
+                on: t.moved_at,
+                fromAccountId: t.from_account_id,
+              }))
+          : [],
+      };
+    })
+    .filter((r) => r.openedAt === null || r.on >= r.openedAt)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    .map(({ openedAt, ...rest }) => rest);
+
   return {
     accounts,
     movements,
+    pendingTopups,
     transfers: transferRows.map((t) => ({
       id: t.id,
       shop: t.shop_id,

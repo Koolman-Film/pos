@@ -205,6 +205,11 @@ cross join (values
   ('เงินสดย่อย',      'petty', array['เงินสดย่อย'],                                   3),
   ('บัตรเครดิตบริษัท',  'credit', array['บัตรเครดิตบริษัท','บัตรเครดิต'],                  4)
 ) as a(name, kind, match_names, sort_order)
+-- เฉพาะสาขาที่ยังไม่มีแหล่งเงินเลย. The conflict key is the NAME, so once a
+-- branch renames an account (บัญชีธนาคารสาขา → K-bank คูลมาน) a re-run no
+-- longer recognises it and adds the default back — carrying labels like
+-- โอนเงิน that could then pull money onto the wrong row of the register.
+where not exists (select 1 from money_accounts x where x.shop_id = s.id)
 on conflict (shop_id, name) do nothing;
 
 insert into shop_info (shop_id)

@@ -140,6 +140,11 @@ cross join (values
   ('เงินสดย่อย',      'petty', array['เงินสดย่อย'],                        3),
   ('บัตรเครดิตบริษัท',  'credit', array['บัตรเครดิตบริษัท','บัตรเครดิต'],        4)
 ) as a(name, kind, match_names, sort_order)
+-- เฉพาะสาขาที่ยังไม่มีแหล่งเงินเลย. The conflict key is the NAME, so once a
+-- branch renames an account (บัญชีธนาคารสาขา → K-bank คูลมาน) a re-run no
+-- longer recognises it and adds the default back — carrying labels like
+-- โอนเงิน that could then pull money onto the wrong row of the register.
+where not exists (select 1 from money_accounts x where x.shop_id = s.id)
 on conflict (shop_id, name) do nothing;
 
 /*
@@ -178,6 +183,13 @@ where p.type = 'เติมเงิน'
   -- Matched on the DESTINATION rather than on `from_account_id is null`: once a
   -- shop says where a top-up came from, that earlier version had nothing to
   -- recognise and copied the row a second time.
+  -- ครั้งเดียวเท่านั้น (เพิ่มตอนทำ 0056). The check below stops an exact
+  -- duplicate, but a top-up pressed AFTER this first ran is not a duplicate of
+  -- anything — so every later run of this file (or of release-GO-LIVE.sql)
+  -- used to copy it across as a new transfer from นอกระบบ, including money the
+  -- shop had already keyed by hand on another day. Those are for a person to
+  -- decide on /money now (0056); this copy is only ever the first one.
+  and not exists (select 1 from supabase_migrations.schema_migrations where version = '0043')
   and not exists (
     select 1 from money_transfers t
     where t.shop_id = p.shop_id

@@ -33,7 +33,10 @@ comment on column shop_info.vat_registered is
 -- The one branch that is registered today. Guarded so a re-run cannot undo a
 -- change the shop has since made on the screen.
 insert into shop_info (shop_id, vat_registered)
-values ('cm', true)
+select 'cm', true
+-- ครั้งเดียวเท่านั้น: if the shop has since switched VAT off for this branch, a
+-- re-run must not quietly switch it back on and start printing tax invoices.
+where not exists (select 1 from supabase_migrations.schema_migrations where version = '0035')
 on conflict (shop_id) do update
   set vat_registered = true
   where shop_info.vat_registered is distinct from true;
