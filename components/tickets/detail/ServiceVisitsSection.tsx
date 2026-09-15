@@ -6,8 +6,11 @@ import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 import { fmtThaiDate } from '@/lib/domain/format';
 import { dateInputValue } from '@/lib/domain/now';
+import { buildServiceSchedule } from '@/lib/domain/serviceSchedule';
 
 import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } from '../serviceForm';
+
+import { ServiceScheduleList, type ServiceScheduleProps } from './ServiceScheduleList';
 
 import type { ServiceVisit, ServiceVisitPoint, Ticket } from '../types';
 
@@ -68,6 +71,7 @@ export function ServiceVisitsSection({
   onSave,
   onDelete,
   onPrint,
+  schedule,
 }: {
   t: Ticket;
   /**
@@ -92,6 +96,8 @@ export function ServiceVisitsSection({
   onDelete: (id: number) => Promise<{ ok: boolean; error?: string }>;
   /** Prints one recorded visit, or a blank sheet when given null. */
   onPrint: (visit: ServiceVisit | null) => void;
+  /** นัดเข้า Service. When given, each visit is shown under its own appointment. */
+  schedule?: ServiceScheduleProps;
 }) {
   const used = visits.length;
   const [draft, setDraft] = useState<ServiceVisit | null>(null);
@@ -147,6 +153,332 @@ export function ServiceVisitsSection({
     if (!result.ok) setError(result.error || 'ลบไม่สำเร็จ');
   }
 
+  // นัดเข้า Service — present when the ticket sold visits with a start date.
+  const rows = schedule ? buildServiceSchedule(schedule.start, schedule.count, schedule.saved) : [];
+  const scheduled = rows.length > 0;
+
+  const card = (v: ServiceVisit) => (
+    <div
+      key={v.id ?? v.visitNo}
+      className="rounded-xl p-2.5 mb-2 flex items-start justify-between gap-2"
+      style={{ background: '#fff', border: '1px solid var(--line)' }}
+    >
+      <div className="min-w-0">
+        <p className="text-xs font-semibold">
+          ครั้งที่ {v.visitNo}
+          <span className="font-normal ml-1.5" style={{ color: 'var(--ink-soft)' }}>
+            {v.receivedAt ? fmtThaiDate(new Date(v.receivedAt)) : 'ยังไม่ระบุวันที่'}
+          </span>
+        </p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
+          {v.technicians.length ? v.technicians.join(', ') : 'ยังไม่ระบุช่าง'}
+          {' · '}
+          {v.points.length ? `${v.points.length} จุดแก้ไข` : 'ไม่มีจุดแก้ไข'}
+          {v.overallOk === true ? ' · รอบคันปกติ' : v.overallOk === false ? ' · พบปัญหา' : ''}
+        </p>
+      </div>
+      <div className="flex gap-1.5 flex-shrink-0">
+        <button
+          onClick={() => startEdit(v)}
+          className="btn-outline text-xs px-2.5 py-1 rounded-lg"
+          aria-label={`แก้ไขการเซอร์วิสครั้งที่ ${v.visitNo}`}
+        >
+          <i className="fa-solid fa-pen"></i>
+        </button>
+        <button
+          onClick={() => onPrint(v)}
+          className="btn-outline text-xs px-2.5 py-1 rounded-lg"
+          aria-label={`พิมพ์ใบเซอร์วิสครั้งที่ ${v.visitNo}`}
+        >
+          <i className="fa-solid fa-print"></i>
+        </button>
+        {canDelete && (
+          <button
+            onClick={() => remove(v)}
+            className="text-xs px-2 rounded-lg"
+            style={{ color: '#B23A48' }}
+            aria-label={`ลบการเซอร์วิสครั้งที่ ${v.visitNo}`}
+          >
+            <i className="fa-solid fa-trash"></i>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const form = draft ? (
+    <div
+      className="rounded-xl p-3 mt-1"
+      style={{ background: '#fff', border: '1.5px solid var(--primary)' }}
+    >
+      <p className="text-xs font-bold mb-2.5">
+        {draft.id
+          ? `แก้ไขการเซอร์วิสครั้งที่ ${draft.visitNo}`
+          : `การเซอร์วิสครั้งที่ ${draft.visitNo}`}
+      </p>
+
+      <div className="grid grid-cols-2 gap-2 mb-2.5">
+        <div>
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            วันรับรถ
+          </label>
+          <ThaiDateInput
+            value={draft.receivedAt}
+            onChange={(v) => set('receivedAt', v)}
+            className="field w-full text-xs px-2.5 py-1.5"
+            ariaLabel="วันรับรถ"
+          />
+        </div>
+        <div>
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            เวลารับรถ
+          </label>
+          <input
+            type="time"
+            aria-label="เวลารับรถ"
+            value={draft.receivedTime}
+            onChange={(e) => set('receivedTime', e.target.value)}
+            className="field w-full text-xs px-2.5 py-1.5"
+          />
+        </div>
+        <div>
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            วันส่งมอบรถ
+          </label>
+          <ThaiDateInput
+            value={draft.deliveredAt}
+            onChange={(v) => set('deliveredAt', v)}
+            className="field w-full text-xs px-2.5 py-1.5"
+            ariaLabel="วันส่งมอบรถ"
+          />
+        </div>
+        <div>
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            เวลาส่งมอบรถ
+          </label>
+          <input
+            type="time"
+            aria-label="เวลาส่งมอบรถ"
+            value={draft.deliveredTime}
+            onChange={(e) => set('deliveredTime', e.target.value)}
+            className="field w-full text-xs px-2.5 py-1.5"
+          />
+        </div>
+        <div>
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            เซลล์รับรถ
+          </label>
+          <input
+            aria-label="เซลล์รับรถ"
+            value={draft.salesBy}
+            onChange={(e) => set('salesBy', e.target.value)}
+            className="field w-full text-xs px-2.5 py-1.5"
+          />
+        </div>
+        <div>
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            QC ผู้รับผิดชอบ
+          </label>
+          <input
+            aria-label="QC ผู้รับผิดชอบ"
+            value={draft.qcBy}
+            onChange={(e) => set('qcBy', e.target.value)}
+            className="field w-full text-xs px-2.5 py-1.5"
+          />
+        </div>
+      </div>
+
+      {/*
+            The film, as the ticket sold it. Not asked again and not split into
+            ประเภท / ความหนา / รหัสสี — each SKU states its thickness in the name,
+            so the name is the whole answer. The visit still STORES its own copy,
+            so reprinting an old sheet shows the film fitted that day.
+          */}
+      <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+        ฟิล์มที่ใช้
+      </label>
+      <p
+        className="text-xs mb-2.5 px-2.5 py-1.5 rounded-lg"
+        style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
+      >
+        {draft.filmProduct || 'ยังไม่มีสินค้าฟิล์มในใบงาน'}
+        <span className="ml-1.5" style={{ color: 'var(--ink-faint)' }}>
+          (จากใบงาน)
+        </span>
+      </p>
+      <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+        ทีมช่าง
+      </label>
+      <div className="mb-2.5">
+        <ManagedMultiChipPicker
+          values={draft.technicians}
+          onChange={(v) => set('technicians', v)}
+          options={technicians}
+          setOptions={setTechnicians}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-4 mb-2.5">
+        <div>
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            เช็คสภาพงาน รอบคัน
+          </label>
+          <div className="flex gap-1.5">
+            {[
+              { v: true, label: 'ปกติ' },
+              { v: false, label: 'พบปัญหา' },
+            ].map((o) => (
+              <button
+                key={o.label}
+                onClick={() => set('overallOk', draft.overallOk === o.v ? null : o.v)}
+                className="text-xs px-2.5 py-1 rounded-full font-medium"
+                style={
+                  draft.overallOk === o.v
+                    ? { background: 'var(--primary)', color: '#fff' }
+                    : { border: '1px solid var(--line)' }
+                }
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            ลูกค้า
+          </label>
+          <div className="flex gap-1.5">
+            {[
+              { v: true, label: 'รอ' },
+              { v: false, label: 'ไม่รอ' },
+            ].map((o) => (
+              <button
+                key={o.label}
+                onClick={() => set('customerWaits', draft.customerWaits === o.v ? null : o.v)}
+                className="text-xs px-2.5 py-1 rounded-full font-medium"
+                style={
+                  draft.customerWaits === o.v
+                    ? { background: 'var(--primary)', color: '#fff' }
+                    : { border: '1px solid var(--line)' }
+                }
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {[
+        { title: 'ภายในรถ', parts: SERVICE_INTERIOR_PARTS },
+        { title: 'ภายนอกรถ', parts: SERVICE_EXTERIOR_PARTS },
+      ].map((group) => (
+        <div key={group.title} className="mb-2.5">
+          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+            {group.title}
+          </label>
+          {/*
+                Typed, not picked from three buttons. The paper form leaves a
+                blank cell beside each part precisely because what gets written
+                there varies — a state, a measurement, a note. A row left empty
+                prints empty.
+              */}
+          {group.parts.map((part) => (
+            <div key={part} className="flex items-center gap-2 py-0.5">
+              <span className="text-xs flex-1 min-w-0">{part}</span>
+              <input
+                aria-label={part}
+                value={draft.checks[part] ?? ''}
+                onChange={(e) => setCheck(part, e.target.value)}
+                className="field text-xs px-2 py-1"
+                style={{ width: 150, flexShrink: 0 }}
+              />
+            </div>
+          ))}
+        </div>
+      ))}
+
+      <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+        จุดพิเศษลูกค้าต้องการแก้ไข
+      </label>
+      <div className="mb-2.5">
+        {Array.from({ length: SERVICE_POINT_ROWS }, (_, i) => i + 1).map((seq) => {
+          const p = pointAt(seq);
+          return (
+            <div key={seq} className="flex gap-1.5 mb-1 items-center">
+              <span
+                className="text-xs w-5 text-right flex-shrink-0"
+                style={{ color: 'var(--ink-faint)' }}
+              >
+                {seq}.
+              </span>
+              <input
+                aria-label={`จุดที่ ${seq} ตำแหน่ง`}
+                placeholder="ตำแหน่ง"
+                value={p.position}
+                onChange={(e) => setPoint(seq, 'position', e.target.value)}
+                className="field text-xs px-2 py-1 flex-1 min-w-0"
+              />
+              <input
+                aria-label={`จุดที่ ${seq} รายละเอียด`}
+                placeholder="รายละเอียด"
+                value={p.detail}
+                onChange={(e) => setPoint(seq, 'detail', e.target.value)}
+                className="field text-xs px-2 py-1 flex-1 min-w-0"
+              />
+              <input
+                aria-label={`จุดที่ ${seq} หมายเหตุ`}
+                placeholder="หมายเหตุ"
+                value={p.note}
+                onChange={(e) => setPoint(seq, 'note', e.target.value)}
+                className="field text-xs px-2 py-1 flex-1 min-w-0"
+              />
+            </div>
+          );
+        })}
+        <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+          แถวที่เว้นว่างไว้จะไม่ถูกบันทึก
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => setDraft(null)}
+          className="btn-outline flex-1 text-xs rounded-xl py-2 font-medium"
+        >
+          ยกเลิก
+        </button>
+        <button
+          onClick={save}
+          disabled={saving}
+          className="btn-primary flex-1 text-xs rounded-xl py-2 font-semibold flex items-center justify-center gap-1.5"
+          style={{ opacity: saving ? 0.7 : 1 }}
+        >
+          <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
+          {saving ? 'กำลังบันทึก...' : 'บันทึกการเซอร์วิส'}
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  /** Under one date: the visit being written, the visit on record, or — for the next one due — the button to record it. */
+  const slot = (no: number) => {
+    if (draft?.visitNo === no) return form;
+    const recorded = visits.find((v) => v.visitNo === no);
+    if (recorded) return card(recorded);
+    if (!draft && no === used + 1) {
+      return (
+        <button
+          onClick={startNew}
+          className="btn-outline w-full text-xs rounded-xl py-2 font-medium flex items-center justify-center gap-1.5"
+        >
+          <i className="fa-solid fa-plus"></i>บันทึกการเซอร์วิสครั้งที่ {no}
+        </button>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line)' }}>
       <div className="flex items-center justify-between gap-2 mb-2">
@@ -166,59 +498,27 @@ export function ServiceVisitsSection({
         )}
       </div>
 
-      {visits.length === 0 && (
+      {!scheduled && visits.length === 0 && (
         <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
           ยังไม่มีการเซอร์วิส
         </p>
       )}
-      {visits.map((v) => (
-        <div
-          key={v.id ?? v.visitNo}
-          className="rounded-xl p-2.5 mb-2 flex items-start justify-between gap-2"
-          style={{ background: '#fff', border: '1px solid var(--line)' }}
-        >
-          <div className="min-w-0">
-            <p className="text-xs font-semibold">
-              ครั้งที่ {v.visitNo}
-              <span className="font-normal ml-1.5" style={{ color: 'var(--ink-soft)' }}>
-                {v.receivedAt ? fmtThaiDate(new Date(v.receivedAt)) : 'ยังไม่ระบุวันที่'}
-              </span>
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
-              {v.technicians.length ? v.technicians.join(', ') : 'ยังไม่ระบุช่าง'}
-              {' · '}
-              {v.points.length ? `${v.points.length} จุดแก้ไข` : 'ไม่มีจุดแก้ไข'}
-              {v.overallOk === true ? ' · รอบคันปกติ' : v.overallOk === false ? ' · พบปัญหา' : ''}
-            </p>
-          </div>
-          <div className="flex gap-1.5 flex-shrink-0">
-            <button
-              onClick={() => startEdit(v)}
-              className="btn-outline text-xs px-2.5 py-1 rounded-lg"
-              aria-label={`แก้ไขการเซอร์วิสครั้งที่ ${v.visitNo}`}
-            >
-              <i className="fa-solid fa-pen"></i>
-            </button>
-            <button
-              onClick={() => onPrint(v)}
-              className="btn-outline text-xs px-2.5 py-1 rounded-lg"
-              aria-label={`พิมพ์ใบเซอร์วิสครั้งที่ ${v.visitNo}`}
-            >
-              <i className="fa-solid fa-print"></i>
-            </button>
-            {canDelete && (
-              <button
-                onClick={() => remove(v)}
-                className="text-xs px-2 rounded-lg"
-                style={{ color: '#B23A48' }}
-                aria-label={`ลบการเซอร์วิสครั้งที่ ${v.visitNo}`}
-              >
-                <i className="fa-solid fa-trash"></i>
-              </button>
-            )}
-          </div>
-        </div>
-      ))}
+      {/*
+        นัดเข้า Service: each visit is recorded under its own date, so the
+        appointment and what happened on it read — and are filled in — in one
+        place. Without a schedule, the list stands on its own as before.
+      */}
+      {scheduled && schedule && (
+        <ServiceScheduleList
+          start={schedule.start}
+          count={schedule.count}
+          saved={schedule.saved}
+          onChange={schedule.onChange}
+          recordedVisitNos={visits.map((v) => v.visitNo)}
+          renderVisit={slot}
+        />
+      )}
+      {visits.filter((v) => !scheduled || v.visitNo > rows.length).map((v) => card(v))}
 
       {/* The car's own total, which is the question the shop actually asks. It
           differs from `used` whenever the plate has had more than one job. */}
@@ -241,12 +541,14 @@ export function ServiceVisitsSection({
 
       {!draft && (
         <div className="flex gap-2">
-          <button
-            onClick={startNew}
-            className="btn-outline flex-1 text-xs rounded-xl py-2 font-medium flex items-center justify-center gap-1.5"
-          >
-            <i className="fa-solid fa-plus"></i>บันทึกการเซอร์วิสครั้งใหม่
-          </button>
+          {(!scheduled || used >= rows.length) && (
+            <button
+              onClick={startNew}
+              className="btn-outline flex-1 text-xs rounded-xl py-2 font-medium flex items-center justify-center gap-1.5"
+            >
+              <i className="fa-solid fa-plus"></i>บันทึกการเซอร์วิสครั้งใหม่
+            </button>
+          )}
           {/* Both ways of working, as asked: fill it in here, or take a blank
               sheet to the car and record the outcome afterwards. */}
           <button
@@ -258,260 +560,7 @@ export function ServiceVisitsSection({
         </div>
       )}
 
-      {draft && (
-        <div
-          className="rounded-xl p-3 mt-1"
-          style={{ background: '#fff', border: '1.5px solid var(--primary)' }}
-        >
-          <p className="text-xs font-bold mb-2.5">
-            {draft.id
-              ? `แก้ไขการเซอร์วิสครั้งที่ ${draft.visitNo}`
-              : `การเซอร์วิสครั้งที่ ${draft.visitNo}`}
-          </p>
-
-          <div className="grid grid-cols-2 gap-2 mb-2.5">
-            <div>
-              <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-                วันรับรถ
-              </label>
-              <ThaiDateInput
-                value={draft.receivedAt}
-                onChange={(v) => set('receivedAt', v)}
-                className="field w-full text-xs px-2.5 py-1.5"
-                ariaLabel="วันรับรถ"
-              />
-            </div>
-            <div>
-              <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-                เวลารับรถ
-              </label>
-              <input
-                type="time"
-                aria-label="เวลารับรถ"
-                value={draft.receivedTime}
-                onChange={(e) => set('receivedTime', e.target.value)}
-                className="field w-full text-xs px-2.5 py-1.5"
-              />
-            </div>
-            <div>
-              <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-                วันส่งมอบรถ
-              </label>
-              <ThaiDateInput
-                value={draft.deliveredAt}
-                onChange={(v) => set('deliveredAt', v)}
-                className="field w-full text-xs px-2.5 py-1.5"
-                ariaLabel="วันส่งมอบรถ"
-              />
-            </div>
-            <div>
-              <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-                เวลาส่งมอบรถ
-              </label>
-              <input
-                type="time"
-                aria-label="เวลาส่งมอบรถ"
-                value={draft.deliveredTime}
-                onChange={(e) => set('deliveredTime', e.target.value)}
-                className="field w-full text-xs px-2.5 py-1.5"
-              />
-            </div>
-            <div>
-              <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-                เซลล์รับรถ
-              </label>
-              <input
-                aria-label="เซลล์รับรถ"
-                value={draft.salesBy}
-                onChange={(e) => set('salesBy', e.target.value)}
-                className="field w-full text-xs px-2.5 py-1.5"
-              />
-            </div>
-            <div>
-              <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-                QC ผู้รับผิดชอบ
-              </label>
-              <input
-                aria-label="QC ผู้รับผิดชอบ"
-                value={draft.qcBy}
-                onChange={(e) => set('qcBy', e.target.value)}
-                className="field w-full text-xs px-2.5 py-1.5"
-              />
-            </div>
-          </div>
-
-          {/*
-            The film, as the ticket sold it. Not asked again and not split into
-            ประเภท / ความหนา / รหัสสี — each SKU states its thickness in the name,
-            so the name is the whole answer. The visit still STORES its own copy,
-            so reprinting an old sheet shows the film fitted that day.
-          */}
-          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-            ฟิล์มที่ใช้
-          </label>
-          <p
-            className="text-xs mb-2.5 px-2.5 py-1.5 rounded-lg"
-            style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
-          >
-            {draft.filmProduct || 'ยังไม่มีสินค้าฟิล์มในใบงาน'}
-            <span className="ml-1.5" style={{ color: 'var(--ink-faint)' }}>
-              (จากใบงาน)
-            </span>
-          </p>
-          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-            ทีมช่าง
-          </label>
-          <div className="mb-2.5">
-            <ManagedMultiChipPicker
-              values={draft.technicians}
-              onChange={(v) => set('technicians', v)}
-              options={technicians}
-              setOptions={setTechnicians}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-4 mb-2.5">
-            <div>
-              <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-                เช็คสภาพงาน รอบคัน
-              </label>
-              <div className="flex gap-1.5">
-                {[
-                  { v: true, label: 'ปกติ' },
-                  { v: false, label: 'พบปัญหา' },
-                ].map((o) => (
-                  <button
-                    key={o.label}
-                    onClick={() => set('overallOk', draft.overallOk === o.v ? null : o.v)}
-                    className="text-xs px-2.5 py-1 rounded-full font-medium"
-                    style={
-                      draft.overallOk === o.v
-                        ? { background: 'var(--primary)', color: '#fff' }
-                        : { border: '1px solid var(--line)' }
-                    }
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-                ลูกค้า
-              </label>
-              <div className="flex gap-1.5">
-                {[
-                  { v: true, label: 'รอ' },
-                  { v: false, label: 'ไม่รอ' },
-                ].map((o) => (
-                  <button
-                    key={o.label}
-                    onClick={() => set('customerWaits', draft.customerWaits === o.v ? null : o.v)}
-                    className="text-xs px-2.5 py-1 rounded-full font-medium"
-                    style={
-                      draft.customerWaits === o.v
-                        ? { background: 'var(--primary)', color: '#fff' }
-                        : { border: '1px solid var(--line)' }
-                    }
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {[
-            { title: 'ภายในรถ', parts: SERVICE_INTERIOR_PARTS },
-            { title: 'ภายนอกรถ', parts: SERVICE_EXTERIOR_PARTS },
-          ].map((group) => (
-            <div key={group.title} className="mb-2.5">
-              <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-                {group.title}
-              </label>
-              {/*
-                Typed, not picked from three buttons. The paper form leaves a
-                blank cell beside each part precisely because what gets written
-                there varies — a state, a measurement, a note. A row left empty
-                prints empty.
-              */}
-              {group.parts.map((part) => (
-                <div key={part} className="flex items-center gap-2 py-0.5">
-                  <span className="text-xs flex-1 min-w-0">{part}</span>
-                  <input
-                    aria-label={part}
-                    value={draft.checks[part] ?? ''}
-                    onChange={(e) => setCheck(part, e.target.value)}
-                    className="field text-xs px-2 py-1"
-                    style={{ width: 150, flexShrink: 0 }}
-                  />
-                </div>
-              ))}
-            </div>
-          ))}
-
-          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
-            จุดพิเศษลูกค้าต้องการแก้ไข
-          </label>
-          <div className="mb-2.5">
-            {Array.from({ length: SERVICE_POINT_ROWS }, (_, i) => i + 1).map((seq) => {
-              const p = pointAt(seq);
-              return (
-                <div key={seq} className="flex gap-1.5 mb-1 items-center">
-                  <span
-                    className="text-xs w-5 text-right flex-shrink-0"
-                    style={{ color: 'var(--ink-faint)' }}
-                  >
-                    {seq}.
-                  </span>
-                  <input
-                    aria-label={`จุดที่ ${seq} ตำแหน่ง`}
-                    placeholder="ตำแหน่ง"
-                    value={p.position}
-                    onChange={(e) => setPoint(seq, 'position', e.target.value)}
-                    className="field text-xs px-2 py-1 flex-1 min-w-0"
-                  />
-                  <input
-                    aria-label={`จุดที่ ${seq} รายละเอียด`}
-                    placeholder="รายละเอียด"
-                    value={p.detail}
-                    onChange={(e) => setPoint(seq, 'detail', e.target.value)}
-                    className="field text-xs px-2 py-1 flex-1 min-w-0"
-                  />
-                  <input
-                    aria-label={`จุดที่ ${seq} หมายเหตุ`}
-                    placeholder="หมายเหตุ"
-                    value={p.note}
-                    onChange={(e) => setPoint(seq, 'note', e.target.value)}
-                    className="field text-xs px-2 py-1 flex-1 min-w-0"
-                  />
-                </div>
-              );
-            })}
-            <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-              แถวที่เว้นว่างไว้จะไม่ถูกบันทึก
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => setDraft(null)}
-              className="btn-outline flex-1 text-xs rounded-xl py-2 font-medium"
-            >
-              ยกเลิก
-            </button>
-            <button
-              onClick={save}
-              disabled={saving}
-              className="btn-primary flex-1 text-xs rounded-xl py-2 font-semibold flex items-center justify-center gap-1.5"
-              style={{ opacity: saving ? 0.7 : 1 }}
-            >
-              <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
-              {saving ? 'กำลังบันทึก...' : 'บันทึกการเซอร์วิส'}
-            </button>
-          </div>
-        </div>
-      )}
+      {draft && (!scheduled || draft.visitNo > rows.length) && form}
     </div>
   );
 }

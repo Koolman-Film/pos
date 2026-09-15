@@ -11,7 +11,7 @@ import { suggestedServiceStart } from '@/lib/domain/serviceSchedule';
 
 import { findProductStock } from '../serviceForm';
 
-import { ServiceScheduleList } from './ServiceScheduleList';
+import { ServiceScheduleList, type ServiceScheduleProps } from './ServiceScheduleList';
 
 import type { StockRow, Ticket, TicketExtra } from '../types';
 
@@ -57,6 +57,8 @@ export function ExtrasSection({
     filmProduct: string;
     /** ช่างที่รับผิดชอบหมวดฟิล์มกันรอย — seeds ทีมช่าง on a new visit. */
     assignedTechnicians: string[];
+    /** นัดเข้า Service — drawn inside the record, so each visit sits under its date. */
+    schedule: ServiceScheduleProps;
   }) => React.ReactNode;
 }) {
   // The ชนิดสินค้า on this ticket, which is what a rework can be about.
@@ -382,13 +384,18 @@ export function ExtrasSection({
                           )}
                         </div>
                       </div>
-                      <ServiceScheduleList
-                        start={(ex.serviceDate as string) || ''}
-                        count={(ex.serviceCount as string | number) ?? wrapStock?.serviceCount ?? 0}
-                        saved={ex.schedule}
-                        recordedVisitNos={(t.serviceVisits ?? []).map((v) => v.visitNo)}
-                        onChange={(schedule) => updateExtraDetail(name, 'schedule', schedule)}
-                      />
+                      {/* A saved ticket draws the schedule inside the service record, with each visit under its date. */}
+                      {!serviceVisits && (
+                        <ServiceScheduleList
+                          start={(ex.serviceDate as string) || ''}
+                          count={
+                            (ex.serviceCount as string | number) ?? wrapStock?.serviceCount ?? 0
+                          }
+                          saved={ex.schedule}
+                          recordedVisitNos={(t.serviceVisits ?? []).map((v) => v.visitNo)}
+                          onChange={(schedule) => updateExtraDetail(name, 'schedule', schedule)}
+                        />
+                      )}
                     </>
                   ) : (
                     <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
@@ -408,6 +415,12 @@ export function ExtrasSection({
                       entitled: Number(ex.serviceCount ?? wrapStock?.serviceCount ?? 0) || 0,
                       filmProduct: wrapStock?.name ?? wrapItem?.sold ?? '',
                       assignedTechnicians: t.techByCategory?.['ฟิล์มกันรอย'] ?? [],
+                      schedule: {
+                        start: (ex.serviceDate as string) || '',
+                        count: (ex.serviceCount as string | number) ?? wrapStock?.serviceCount ?? 0,
+                        saved: ex.schedule,
+                        onChange: (schedule) => updateExtraDetail(name, 'schedule', schedule),
+                      },
                     })}
                 </div>
               )}

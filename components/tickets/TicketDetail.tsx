@@ -1116,7 +1116,7 @@ export function TicketDetail({
                       // nothing for it to hang off until the ticket has an id.
                       isNew || !serviceVisitAction
                         ? undefined
-                        : ({ entitled, filmProduct, assignedTechnicians }) => (
+                        : ({ entitled, filmProduct, assignedTechnicians, schedule }) => (
                             <ServiceVisitsSection
                               t={t}
                               // Server-owned: from initialTicket, not the draft.
@@ -1132,6 +1132,7 @@ export function TicketDetail({
                               onSave={saveServiceVisit}
                               onDelete={deleteServiceVisit}
                               onPrint={printServiceSheet}
+                              schedule={schedule}
                             />
                           )
                     }

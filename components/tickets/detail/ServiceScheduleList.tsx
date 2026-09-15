@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import {
   buildServiceSchedule,
@@ -7,6 +9,14 @@ import {
   resetServiceDate,
   type ServiceAppointment,
 } from '@/lib/domain/serviceSchedule';
+
+/** What a form hands down to draw the schedule for one ticket. */
+export type ServiceScheduleProps = {
+  start: string;
+  count: number | string | null | undefined;
+  saved: unknown;
+  onChange: (schedule: ServiceAppointment[]) => void;
+};
 
 /**
  * นัดเข้า Service แต่ละครั้ง — ร่างตามกฎ จนกว่าพนักงานโทรยืนยันกับลูกค้า.
@@ -25,13 +35,16 @@ export function ServiceScheduleList({
   saved,
   recordedVisitNos,
   onChange,
-}: {
-  start: string;
-  count: number | string | null | undefined;
-  saved: unknown;
+  renderVisit,
+}: ServiceScheduleProps & {
   /** `service_visits.visit_no` of the visits that actually happened. */
   recordedVisitNos: number[];
-  onChange: (schedule: ServiceAppointment[]) => void;
+  /**
+   * What goes under one visit's date — its ใบเซอร์วิส, or the button to record
+   * it. Filled in by ServiceVisitsSection, so the date and what happened on it
+   * are read, and written, in one place.
+   */
+  renderVisit?: (no: number) => ReactNode;
 }) {
   const schedule = buildServiceSchedule(start, count, saved);
   if (schedule.length === 0) return null;
@@ -51,52 +64,55 @@ export function ServiceScheduleList({
       <ul className="flex flex-col gap-1.5">
         {schedule.map((s) => {
           const visited = done.has(s.no);
+          const visitBlock = renderVisit?.(s.no);
           const badge = visited
             ? { text: 'เข้าแล้ว', bg: '#EAF3EC', color: '#2F6B3F' }
             : s.confirmed
               ? { text: 'ยืนยันแล้ว', bg: '#E8EEF9', color: '#2563EB' }
               : { text: 'ร่าง', bg: 'var(--paper)', color: 'var(--ink-soft)' };
           return (
-            <li
-              key={s.no}
-              className="grid items-center gap-2"
-              style={{ gridTemplateColumns: '4.5rem minmax(0, 1fr) auto' }}
-            >
-              <span className="text-xs font-semibold">ครั้งที่ {s.no}</span>
-              <ThaiDateInput
-                value={s.date}
-                onChange={(v) => onChange(confirmServiceDate(schedule, s.no, v))}
-                ariaLabel={`วันนัด Service ครั้งที่ ${s.no}`}
-                className="field text-xs px-2.5 py-1.5 w-full"
-              />
-              <span className="flex items-center gap-1.5 justify-end flex-wrap">
-                <span
-                  className="text-xs px-2 py-0.5 rounded-full font-semibold"
-                  style={{ background: badge.bg, color: badge.color }}
-                >
-                  {badge.text}
+            <li key={s.no}>
+              <div
+                className="grid items-center gap-2"
+                style={{ gridTemplateColumns: '4.5rem minmax(0, 1fr) auto' }}
+              >
+                <span className="text-xs font-semibold">ครั้งที่ {s.no}</span>
+                <ThaiDateInput
+                  value={s.date}
+                  onChange={(v) => onChange(confirmServiceDate(schedule, s.no, v))}
+                  ariaLabel={`วันนัด Service ครั้งที่ ${s.no}`}
+                  className="field text-xs px-2.5 py-1.5 w-full"
+                />
+                <span className="flex items-center gap-1.5 justify-end flex-wrap">
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                    style={{ background: badge.bg, color: badge.color }}
+                  >
+                    {badge.text}
+                  </span>
+                  {!visited && !s.confirmed && s.date && (
+                    <button
+                      type="button"
+                      onClick={() => onChange(confirmServiceDate(schedule, s.no, s.date))}
+                      aria-label={`ลูกค้ายืนยันวันนัดครั้งที่ ${s.no}`}
+                      className="btn-outline px-2 py-0.5 rounded-lg text-xs"
+                    >
+                      ลูกค้ายืนยันวันนี้
+                    </button>
+                  )}
+                  {!visited && s.confirmed && (
+                    <button
+                      type="button"
+                      onClick={() => onChange(resetServiceDate(schedule, s.no))}
+                      aria-label={`กลับเป็นร่าง ครั้งที่ ${s.no}`}
+                      className="btn-outline px-2 py-0.5 rounded-lg text-xs"
+                    >
+                      กลับเป็นร่าง
+                    </button>
+                  )}
                 </span>
-                {!visited && !s.confirmed && s.date && (
-                  <button
-                    type="button"
-                    onClick={() => onChange(confirmServiceDate(schedule, s.no, s.date))}
-                    aria-label={`ลูกค้ายืนยันวันนัดครั้งที่ ${s.no}`}
-                    className="btn-outline px-2 py-0.5 rounded-lg text-xs"
-                  >
-                    ลูกค้ายืนยันวันนี้
-                  </button>
-                )}
-                {!visited && s.confirmed && (
-                  <button
-                    type="button"
-                    onClick={() => onChange(resetServiceDate(schedule, s.no))}
-                    aria-label={`กลับเป็นร่าง ครั้งที่ ${s.no}`}
-                    className="btn-outline px-2 py-0.5 rounded-lg text-xs"
-                  >
-                    กลับเป็นร่าง
-                  </button>
-                )}
-              </span>
+              </div>
+              {visitBlock ? <div className="mt-1.5 mb-2">{visitBlock}</div> : null}
             </li>
           );
         })}
