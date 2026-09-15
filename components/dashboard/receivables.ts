@@ -95,6 +95,8 @@ export function computePayables(
 
 export type TrendTicket = TicketForTotals & { shop: string; dropOff: Date | null };
 export type TrendExpense = { shop: string; amount: number; status: string; paidAt: Date | null };
+/** A wholesale revenue line (`wholesaleRevenueLines`): signed amount, on its own day. */
+export type TrendWholesale = { shop: string; on: string; amount: number };
 
 const MONTH_LABELS = [
   'ม.ค.',
@@ -136,9 +138,16 @@ export function buildTrend(
   periodValue: string,
   rangeStart: string,
   rangeEnd: string,
+  /**
+   * ขายส่ง. The line used to plot tickets only, so a wholesale branch showed a
+   * flat revenue line under a revenue card that included its sales.
+   */
+  wholesale: TrendWholesale[] = [],
 ): TrendSeries {
   const inShop = (shop: string) => shopFilter === 'all' || shop === shopFilter;
   const visibleTickets = tickets.filter((t) => inShop(t.shop) && t.dropOff);
+  const visibleWholesale = wholesale.filter((w) => inShop(w.shop) && w.on);
+  const wholesaleDate = (w: TrendWholesale) => new Date(`${w.on.slice(0, 10)}T00:00:00`);
   const paidExpenses = expenses.filter(
     (e) => inShop(e.shop) && e.status === 'จ่ายแล้ว' && e.paidAt,
   );
@@ -151,6 +160,10 @@ export function buildTrend(
     const expense = new Array(12).fill(0);
     for (const t of visibleTickets) {
       if (t.dropOff!.getFullYear() === ceYear) revenue[t.dropOff!.getMonth()] += ticketTotal(t);
+    }
+    for (const w of visibleWholesale) {
+      const d = wholesaleDate(w);
+      if (d.getFullYear() === ceYear) revenue[d.getMonth()] += w.amount;
     }
     for (const e of paidExpenses) {
       if (e.paidAt!.getFullYear() === ceYear)
@@ -191,6 +204,10 @@ export function buildTrend(
   const revByDay = new Map<string, number>();
   for (const t of visibleTickets)
     revByDay.set(dayKey(t.dropOff!), (revByDay.get(dayKey(t.dropOff!)) || 0) + ticketTotal(t));
+  for (const w of visibleWholesale) {
+    const key = dayKey(wholesaleDate(w));
+    revByDay.set(key, (revByDay.get(key) || 0) + w.amount);
+  }
   const expByDay = new Map<string, number>();
   for (const e of paidExpenses)
     expByDay.set(dayKey(e.paidAt!), (expByDay.get(dayKey(e.paidAt!)) || 0) + Number(e.amount || 0));

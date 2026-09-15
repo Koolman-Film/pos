@@ -8,6 +8,7 @@ import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import { itemNetPrice, ticketTotal } from '@/lib/domain/tickets';
 import { needsPriceApproval } from '@/lib/domain/orders';
 import { wholesaleRevenueLines } from '@/lib/domain/wholesaleRevenue';
+import { buildWholesaleOverview } from '@/components/dashboard/buildWholesaleOverview';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
 import { Dashboard } from '@/components/dashboard/Dashboard';
@@ -109,7 +110,7 @@ export default async function DashboardPage({
         supabase
           .from('orders')
           .select(
-            'id, shop_id, customer_id, status, delivered_at, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, paid_at, status, cleared_at)',
+            'id, shop_id, customer_id, status, delivered_at, created_at, due_at, sales_by, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, paid_at, status, cleared_at)',
           )
           // Deleted POs (migration 0040) are out of the wholesale figures here for
           // the same reason deleted tickets are out of the ticket ones above.
@@ -279,6 +280,9 @@ export default async function DashboardPage({
     // วันส่งของ — the day a wholesale sale is earned (0045). Null means the
     // goods have not gone out, and nothing has been earned yet.
     deliveredAt: o.delivered_at,
+    createdAt: o.created_at ?? '',
+    dueAt: o.due_at ?? '',
+    salesBy: o.sales_by ?? '',
     items: (o.order_items ?? []).map((i) => ({
       name: i.name,
       qty: num(i.qty),
@@ -393,6 +397,22 @@ export default async function DashboardPage({
     insuranceRevenue;
   const wholesaleRevenue = wholesaleRevenueIn(null);
   const revenue = retailRevenue + wholesaleRevenue;
+
+  /*
+    ขายส่ง — the dashboard card for POs, for anyone who can open the wholesale
+    module. Branch-scoped like every card here; the sales figure is the period
+    on screen, everything owed or late is "as of now".
+  */
+  const wholesale = session.hasNav('wholesale')
+    ? buildWholesaleOverview({
+        orders: orders.filter((o) => inShop(o.shop)),
+        customers,
+        revenueLines: wholesaleLines.filter(
+          (l) => inShop(l.shop) && inPeriod(new Date(`${l.on}T00:00:00`)),
+        ),
+        today: shopDayKey(now),
+      })
+    : null;
 
   /*
     ประกันใกล้หมดอายุ — the 30-day window the shop asked for.
@@ -624,6 +644,7 @@ export default async function DashboardPage({
     periodValue,
     rangeStart,
     rangeEnd,
+    wholesaleLines.map((l) => ({ shop: l.shop, on: l.on, amount: l.amount })),
   );
 
   // ---- Row 3 / Row 4 widgets (correction C13) ----
@@ -813,6 +834,7 @@ export default async function DashboardPage({
       upcoming={upcoming}
       pendingApprovals={pendingApprovals}
       recentJobs={recentJobs}
+      wholesale={wholesale}
       expiringInsurance={expiringInsurance}
       canDo={session.canDo}
       onUpdateTicketStatus={updateTicketStatus}

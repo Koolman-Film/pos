@@ -1,5 +1,21 @@
 import type { WsOrder } from '@/components/wholesale/types';
-import { orderPaid, orderTotal, PAYMENT_BOUNCED, PAYMENT_REPORTED } from '@/lib/domain/orders';
+import {
+  orderPaid,
+  orderTotal,
+  PAYMENT_BOUNCED,
+  PAYMENT_REPORTED,
+  type OrderForTotals,
+} from '@/lib/domain/orders';
+
+/**
+ * What these questions need to know about a PO — and no more, so the
+ * dashboard, which maps POs its own way, can ask them too.
+ */
+export type BillOrder = OrderForTotals & {
+  status: string;
+  dueAt?: string;
+  payments: Parameters<typeof orderPaid>[0]['payments'];
+};
 
 /**
  * คำถามที่การแจ้งเตือนขายส่งถาม — and the same questions the wholesale list
@@ -28,9 +44,9 @@ export function shiftDay(day: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
-export const outstanding = (o: WsOrder) => orderTotal(o) - orderPaid(o);
+export const outstanding = (o: BillOrder) => orderTotal(o) - orderPaid(o);
 
-const open = (o: WsOrder) => o.status !== 'ปิดงานแล้ว';
+const open = (o: BillOrder) => o.status !== 'ปิดงานแล้ว';
 
 /** A cheque was reported and its date has come, but nobody has confirmed the money. */
 export function hasChequeDue(o: WsOrder, today: string): boolean {
@@ -51,11 +67,11 @@ export function hasReturnAwaitingReceipt(o: WsOrder): boolean {
   return o.returns.some((r) => !r.receivedAt);
 }
 
-export function isOverdue(o: WsOrder, today: string): boolean {
+export function isOverdue(o: BillOrder, today: string): boolean {
   return open(o) && !!o.dueAt && o.dueAt < today && outstanding(o) > OWES;
 }
 
-export function isDueSoon(o: WsOrder, today: string): boolean {
+export function isDueSoon(o: BillOrder, today: string): boolean {
   return (
     open(o) &&
     !!o.dueAt &&

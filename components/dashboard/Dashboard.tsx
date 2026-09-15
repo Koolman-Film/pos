@@ -19,6 +19,8 @@
 
 import Link from 'next/link';
 import { MoneySources } from './MoneySources';
+import { WholesaleOverview } from './WholesaleOverview';
+import type { WholesaleOverviewData } from './buildWholesaleOverview';
 import type { MoneyOverview } from './moneyFlow';
 import { BranchComparison as BranchComparisonCard } from './BranchComparison';
 import type { BranchComparison as BranchComparisonData } from './branchTotals';
@@ -193,6 +195,11 @@ export type DashboardProps = {
   expiringInsurance?: ExpiringInsurance[];
   pendingApprovals?: PendingApprovals;
   recentJobs?: RecentJob[];
+  /**
+   * ขายส่ง. Null for someone without the wholesale module, or when the branch
+   * on screen has no POs — a card of zeros helps nobody.
+   */
+  wholesale?: WholesaleOverviewData | null;
   /** Capability check, for the `list.createNew` button. Denies by default. */
   canDo?: (capabilityKey: string) => boolean;
   /** `updateTicketStatus` Server Action; omitted renders the select read-only. */
@@ -226,6 +233,7 @@ export function Dashboard({
   expiringInsurance = [],
   pendingApprovals,
   recentJobs = [],
+  wholesale = null,
   canDo = () => false,
   onUpdateTicketStatus,
 }: DashboardProps) {
@@ -382,6 +390,13 @@ export function Dashboard({
           </div>
         )}
       </div>
+
+      {/*
+        ขายส่ง — above the job cards, because for a branch that sells only
+        wholesale it is the whole of the business, and the cards below are built
+        from tickets it does not have.
+      */}
+      {wholesale && <WholesaleOverview data={wholesale} />}
 
       {/* Row 2: revenue/expense/profit trend */}
       {hasDashboardWidget('trendChart') && (
