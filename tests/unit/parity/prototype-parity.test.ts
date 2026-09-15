@@ -87,6 +87,13 @@ const MODULES: { name: string; from: number; to: number; dirs: string[] }[] = [
  * `not-a-label`. The genuinely interesting ones are the behavioural divergences.
  */
 const ACCEPTED_ABSENCES: Record<string, string> = {
+  // --- Service: a start date and a schedule, not one date ---
+  // The prototype's "วันที่เข้า Service" is read in two clipped runs, cut at "Service".
+  วันที่เข้า:
+    'divergence: the Service extra had one date. It is now วันที่เริ่มเข้า Service (14 วันหลังส่งมอบงาน) with a drafted appointment every 6 months (lib/domain/serviceSchedule.ts), so the old label would name the wrong thing',
+  'ครั้ง วันที่เข้า':
+    'divergence: the printed line "จำนวน N ครั้ง วันที่เข้า Service" now says วันที่เริ่มเข้า Service, for the same reason as the entry above',
+
   // --- search boxes that now search everything, so their hints say so ---
   '08X-XXX-XXXX':
     'phones are typed without dashes now (ร้านขอ 15 ก.ย. 2569); the ticket phone field shows 0812345678 and the rule beside its label',

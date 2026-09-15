@@ -501,7 +501,7 @@ export function PrintJobSheet({
           } else if (name === 'แก้งาน') {
             detail = (ex.detail as string) || '-';
           } else if (name === 'Service') {
-            detail = `จำนวน ${(ex.serviceCount as string) || '-'} ครั้ง วันที่เข้า Service ${(ex.serviceDate as string) || '-'}`;
+            detail = `จำนวน ${(ex.serviceCount as string) || '-'} ครั้ง วันที่เริ่มเข้า Service ${(ex.serviceDate as string) || '-'}`;
           } else if (name === 'ประกัน') {
             detail = 'รวมอยู่ในรายการสินค้าด้านบนแล้ว';
           } else {

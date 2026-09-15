@@ -1,4 +1,5 @@
 import { shopDayKey } from '@/lib/domain/format';
+import { buildServiceSchedule } from '@/lib/domain/serviceSchedule';
 
 import { appointmentDate, type UpcomingTicket } from './Dashboard';
 
@@ -149,6 +150,35 @@ export function buildAppointments<T extends AppointmentTicket>(
       }
     };
     pushVisits(visitsByTicket.get(t.id) ?? [], 'Service');
+
+    /*
+      นัดเข้า Service ที่ยังมาไม่ถึง — the schedule the package was sold with
+      (lib/domain/serviceSchedule.ts). A draft is on the card so the
+      salesperson sees whom to ring; it says ร่าง until they have. Visits
+      already recorded are counted off the front, so ครั้งที่ 1 does not
+      appear again once the car has been in for it.
+    */
+    const service = t.extras['Service'];
+    if (service?.checked) {
+      const done = (visitsByTicket.get(t.id) ?? []).length;
+      const saved = Array.isArray(service.schedule) ? service.schedule : [];
+      const count = Number(service.serviceCount) || saved.length;
+      for (const s of buildServiceSchedule(String(service.serviceDate ?? ''), count, saved)) {
+        const at = asDate(s.date);
+        if (s.no <= done || !at) continue;
+        visits.push({
+          t,
+          appt: at,
+          row: {
+            ...base,
+            serviceType: 'Service',
+            products: [`นัด Service ครั้งที่ ${s.no}${s.confirmed ? '' : ' (ร่าง — รอโทรยืนยัน)'}`],
+            dropOff: at,
+            pickup: null,
+          },
+        });
+      }
+    }
     pushVisits(claimsByTicket.get(t.id) ?? [], 'เคลมประกัน', ['ฟิล์มกันรอย']);
 
     const visitDays = new Set<string>();

@@ -5,8 +5,13 @@ import { useCanManageOptions } from '@/components/ui/optionManage';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 import { TimeSelect } from '@/components/ui/TimeSelect';
+import { fmtThaiDayString } from '@/lib/domain/format';
+import { dateInputValue } from '@/lib/domain/now';
+import { suggestedServiceStart } from '@/lib/domain/serviceSchedule';
 
 import { findProductStock } from '../serviceForm';
+
+import { ServiceScheduleList } from './ServiceScheduleList';
 
 import type { StockRow, Ticket, TicketExtra } from '../types';
 
@@ -63,6 +68,8 @@ export function ExtrasSection({
   // button used to show to everyone and invite one-off entries nobody needed.
   // `updateOptionListAction` refuses without `options.manage` regardless.
   const canManageOptions = useCanManageOptions();
+  // วันที่เริ่มเข้า Service ที่แนะนำ — 14 days after the car is handed back.
+  const serviceStart = suggestedServiceStart(dateInputValue(t.pickupDateObj));
 
   return (
     <div className="mb-5">
@@ -351,15 +358,37 @@ export function ExtrasSection({
                         </div>
                         <div>
                           <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                            วันที่เข้า Service
+                            วันที่เริ่มเข้า Service (14 วันหลังส่งมอบงาน)
                           </label>
                           <ThaiDateInput
                             value={(ex.serviceDate as string) || ''}
                             onChange={(v) => updateExtraDetail(name, 'serviceDate', v)}
+                            ariaLabel="วันที่เริ่มเข้า Service"
                             className="field text-xs px-2.5 py-1.5 w-full"
                           />
+                          {/*
+                            Offered, not filled in: opening an old ticket must
+                            not quietly change it. One click takes the rule’s
+                            date — 14 days after วันส่งรถ, never a Sunday.
+                          */}
+                          {!ex.serviceDate && serviceStart && (
+                            <button
+                              type="button"
+                              onClick={() => updateExtraDetail(name, 'serviceDate', serviceStart)}
+                              className="btn-outline mt-1 px-2 py-0.5 rounded-lg text-xs"
+                            >
+                              ใช้ {fmtThaiDayString(serviceStart)}
+                            </button>
+                          )}
                         </div>
                       </div>
+                      <ServiceScheduleList
+                        start={(ex.serviceDate as string) || ''}
+                        count={(ex.serviceCount as string | number) ?? wrapStock?.serviceCount ?? 0}
+                        saved={ex.schedule}
+                        recordedVisitNos={(t.serviceVisits ?? []).map((v) => v.visitNo)}
+                        onChange={(schedule) => updateExtraDetail(name, 'schedule', schedule)}
+                      />
                     </>
                   ) : (
                     <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
