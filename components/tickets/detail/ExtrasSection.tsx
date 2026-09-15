@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useCanManageOptions } from '@/components/ui/optionManage';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 import { TimeSelect } from '@/components/ui/TimeSelect';
@@ -58,6 +59,10 @@ export function ExtrasSection({
   const [showOptional, setShowOptional] = useState(false);
   const [addingExtra, setAddingExtra] = useState(false);
   const [newExtraName, setNewExtraName] = useState('');
+  // บริการเสริม is a shop-wide list, so adding to it is an admin's job — the
+  // button used to show to everyone and invite one-off entries nobody needed.
+  // `updateOptionListAction` refuses without `options.manage` regardless.
+  const canManageOptions = useCanManageOptions();
 
   return (
     <div className="mb-5">
@@ -380,7 +385,7 @@ export function ExtrasSection({
             </div>
           );
         })}
-        {addingExtra ? (
+        {!canManageOptions ? null : addingExtra ? (
           <div className="flex gap-2">
             <input
               autoFocus
