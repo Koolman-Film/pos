@@ -96,19 +96,20 @@ export function CustomersModule({
           <h1 className="text-xl font-bold">ทะเบียนลูกค้า</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--ink-soft)' }}>
             ลูกค้าทั้งหมด {customers.length} ราย &middot; ประวัติงานและรถดึงจากใบงานโดยตรง
+            <span className="block text-xs mt-0.5" style={{ color: 'var(--ink-faint)' }}>
+              ลูกค้าใหม่เข้าทะเบียนเองตอนสร้างใบงาน
+            </span>
           </p>
         </div>
-        {canEdit && (
-          <button
-            onClick={() => {
-              setError(null);
-              setForm({ name: '', phone: '' });
-            }}
-            className="btn-primary text-sm px-4 py-2 rounded-xl font-semibold flex items-center gap-2"
-          >
-            <i className="fa-solid fa-user-plus"></i>เพิ่มลูกค้า
-          </button>
-        )}
+        {/*
+          ไม่มีปุ่มเพิ่มลูกค้าที่หน้านี้ (ร้านขอ 15 ก.ย. 2569).
+
+          A customer added here had no job behind it, and the registry filled
+          up with names — some just ". ." — that nobody ever served. A customer
+          now enters the register the way they enter the shop: with a ticket
+          (+ เพิ่มลูกค้าใหม่ in the ticket form). This page looks people up,
+          corrects them, and starts their next job.
+        */}
       </div>
 
       {error && (
@@ -124,9 +125,7 @@ export function CustomersModule({
 
       {form && (
         <div className="card p-5 mb-4">
-          <p className="text-sm font-semibold mb-3">
-            {form.id ? 'แก้ไขข้อมูลลูกค้า' : 'เพิ่มลูกค้าใหม่'}
-          </p>
+          <p className="text-sm font-semibold mb-3">แก้ไขข้อมูลลูกค้า</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label

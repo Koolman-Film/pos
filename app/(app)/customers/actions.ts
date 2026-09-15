@@ -26,37 +26,26 @@ export async function saveCustomer(input: {
   const phone = input.phone.trim();
   if (!name) return { ok: false, error: 'กรุณากรอกชื่อลูกค้า' };
 
-  const supabase = await createClient();
-  if (input.id) {
-    const { error } = await supabase
-      .from('retail_customers')
-      .update({ name, phone })
-      .eq('id', input.id);
-    if (error) return { ok: false, error: error.message };
-    revalidatePath('/customers');
-    return { ok: true, id: input.id };
+  /*
+    แก้ไขได้ เพิ่มใหม่ไม่ได้ (ร้านขอ 15 ก.ย. 2569).
+
+    Removing the button is not enough on its own: a Server Action is a plain
+    POST (C2), so the insert has to go from here too, or the page that no
+    longer offers it could still be made to do it. New customers are created
+    with a ticket, by the ticket actions.
+  */
+  if (!input.id) {
+    return { ok: false, error: 'เพิ่มลูกค้าใหม่ได้ตอนสร้างใบงานเท่านั้น' };
   }
 
-  // The ticket form's `resolveRetailCustomerId` treats name+phone as the
-  // identity of a customer, so adding a duplicate here would create a second row
-  // that the next ticket would never pick. Reuse the existing one instead.
-  const { data: existing } = await supabase
+  const supabase = await createClient();
+  const { error } = await supabase
     .from('retail_customers')
-    .select('id')
-    .eq('name', name)
-    .eq('phone', phone)
-    .limit(1)
-    .maybeSingle();
-  if (existing?.id) return { ok: false, error: 'มีลูกค้าชื่อและเบอร์นี้อยู่แล้วในทะเบียน' };
-
-  const { data, error } = await supabase
-    .from('retail_customers')
-    .insert({ name, phone })
-    .select('id')
-    .single();
+    .update({ name, phone })
+    .eq('id', input.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/customers');
-  return { ok: true, id: data?.id };
+  return { ok: true, id: input.id };
 }
 
 /**
