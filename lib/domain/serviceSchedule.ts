@@ -4,8 +4,9 @@
  * The shop's rule (ร้านขอ 15 ก.ย. 2569):
  *   - the first visit, วันที่เริ่มเข้า Service, is 14 days after the job is
  *     handed over;
- *   - every later visit is 6 months after the start, until the number of
- *     visits sold is used up;
+ *   - every later visit is 6 months after the visit before it, until the
+ *     number of visits sold is used up — so changing one date moves every
+ *     draft after it;
  *   - a date that lands on a Sunday moves to the Monday — the shop is closed.
  *
  * Those dates are a DRAFT. A salesperson rings the customer before each visit
@@ -86,7 +87,8 @@ function readSaved(saved: unknown): ServiceAppointment[] {
  *
  * `count` is the number of visits sold. `saved` is what the ticket stored last
  * time (`extras.Service.schedule`); only its CONFIRMED dates are taken from it —
- * every draft is worked out again from `start`, so moving the start moves them.
+ * every draft is worked out again, 6 months from the visit before it, so moving
+ * the start or any earlier date moves the drafts that follow.
  */
 export function buildServiceSchedule(
   start: string,
@@ -99,18 +101,27 @@ export function buildServiceSchedule(
       .filter((s) => s.confirmed && s.date && s.no > 0)
       .map((s) => [s.no, s.date]),
   );
-  const from = parse(start) ? start : '';
-
-  return Array.from({ length: n }, (_, i) => {
+  /*
+    Each visit counts from the one before it (ร้านขอ 15 ก.ย. 2569): move ครั้งที่ 2
+    and ครั้งที่ 3 onward moves with it. `anchor` is the date the next step is
+    counted from — a confirmed date exactly as agreed, or a draft's date BEFORE
+    its Sunday was moved, so a Monday does not become every later visit's day
+    and push the schedule a day later each time.
+  */
+  let anchor = parse(start) ? start : '';
+  const schedule: ServiceAppointment[] = [];
+  for (let i = 0; i < n; i++) {
     const no = i + 1;
     const agreed = confirmed.get(no);
-    if (agreed) return { no, date: agreed, confirmed: true };
-    return {
-      no,
-      date: from ? skipSunday(addMonths(from, SERVICE_EVERY_MONTHS * i)) : '',
-      confirmed: false,
-    };
-  });
+    if (agreed) {
+      schedule.push({ no, date: agreed, confirmed: true });
+      anchor = agreed;
+      continue;
+    }
+    if (anchor && i > 0) anchor = addMonths(anchor, SERVICE_EVERY_MONTHS);
+    schedule.push({ no, date: anchor ? skipSunday(anchor) : '', confirmed: false });
+  }
+  return schedule;
 }
 
 /** Set the day the customer agreed for one visit. */
