@@ -9,7 +9,9 @@ import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
 import { fmt, fmtThaiDate, fmtThaiDayString } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
+import { amountTerms, matchesSearch } from '@/lib/domain/search';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
+import { useSearchFromUrl } from '@/lib/hooks/useSearchFromUrl';
 import { orderTotal, orderPaid, needsPriceApproval } from '@/lib/domain/orders';
 import { isWsFlag, matchesWsFlag, WS_FLAG_LABELS, type WsFlag } from '@/lib/alerts/wholesale';
 
@@ -50,6 +52,7 @@ export function WholesaleList({
   initialApproval,
   initialFlag,
   initialSale,
+  initialSearch,
 }: {
   orders: WsOrder[];
   customers: WsCustomer[];
@@ -86,6 +89,8 @@ export function WholesaleList({
   initialFlag?: string;
   /** `?sale=` — a rep's own alert opens on their own POs. */
   initialSale?: string;
+  /** `?q=` — the header search, sent to this page. */
+  initialSearch?: string;
 }) {
   const can = canDo ?? ((k: string) => !!caps?.[k]);
   const router = useRouter();
@@ -141,6 +146,7 @@ export function WholesaleList({
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());
   const [productFilter, setProductFilter] = useState('all');
   const [saleFilter, setSaleFilter] = useState(initialSale || 'all');
+  const [search, setSearch] = useSearchFromUrl(initialSearch);
 
   let visible = filter === 'all' ? list : list.filter((o) => o.status === filter);
   // `needsPriceApproval` is the dashboard counter’s own predicate, imported
@@ -159,9 +165,32 @@ export function WholesaleList({
   // is a question somebody has to be able to ask.
   if (saleFilter === 'unassigned') visible = visible.filter((o) => !o.salesBy);
   else if (saleFilter !== 'all') visible = visible.filter((o) => o.salesBy === saleFilter);
+  /*
+    ค้นหา — by anything on the PO: its number, the customer and their phone,
+    the rep, what was sold, the notes, the total (lib/domain/search.ts). Across
+    every date, like a drill-down: someone searching wants one PO, and a
+    period that hides it makes the search look broken.
+  */
+  const searching = search.trim() !== '';
+  if (searching) {
+    visible = visible.filter((o) => {
+      const customer = customers.find((c) => c.id === o.customerId);
+      return matchesSearch(search, [
+        o.id,
+        customer?.name,
+        customer?.phone,
+        o.salesBy,
+        o.status,
+        o.note,
+        o.deliveryNote,
+        o.items.map((it) => it.name),
+        amountTerms(orderTotal(o)),
+      ]);
+    });
+  }
   // The period bar was rendered but never consulted, so every PO showed
   // regardless of the selected window. POs are dated by `orders.created_at`.
-  if (!drillDown) {
+  if (!drillDown && !searching) {
     visible = visible.filter((o) =>
       isInPeriod(o.createdAt, period, periodValue, rangeStart, rangeEnd),
     );
@@ -308,6 +337,20 @@ export function WholesaleList({
       <div className="card p-5 sm:p-6">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex gap-2 flex-wrap">
+            <div className="relative">
+              <i
+                className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs"
+                style={{ color: 'var(--ink-faint)' }}
+              ></i>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="ค้นหา เลขที่ PO / ลูกค้า / เบอร์โทร / เซลล์ / สินค้า"
+                aria-label="ค้นหา PO"
+                className="field text-sm pl-9 pr-3.5 py-2"
+                style={{ minWidth: 240 }}
+              />
+            </div>
             <select
               value={custFilter}
               aria-label="กรองตามลูกค้า"

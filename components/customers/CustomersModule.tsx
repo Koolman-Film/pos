@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { matchesSearch } from '@/lib/domain/search';
+import { useSearchFromUrl } from '@/lib/hooks/useSearchFromUrl';
 import { useState, useTransition } from 'react';
 
 import { Badge, type StatusConfig } from '@/components/ui/Badge';
@@ -26,6 +28,7 @@ export function CustomersModule({
   canCreateTicket,
   saveAction,
   deleteAction,
+  initialSearch,
 }: {
   customers: CustomerRow[];
   shops: { id: string; name: string }[];
@@ -38,29 +41,27 @@ export function CustomersModule({
     phone: string;
   }) => Promise<{ ok: boolean; error?: string }>;
   deleteAction: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  /** `?q=` — the header search, sent to this page. */
+  initialSearch?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useSearchFromUrl(initialSearch);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [form, setForm] = useState<{ id?: number; name: string; phone: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? id;
 
-  const q = search.trim().toLowerCase();
-  const visible = q
-    ? customers.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.phone.toLowerCase().includes(q) ||
-          c.vehicles.some(
-            (v) =>
-              v.plate.toLowerCase().includes(q) ||
-              `${v.brand} ${v.model}`.toLowerCase().includes(q),
-          ),
-      )
-    : customers;
+  // Everything on a customer's card, including the numbers of their ใบงาน.
+  const visible = customers.filter((c) =>
+    matchesSearch(search, [
+      c.name,
+      c.phone,
+      c.vehicles.map((v) => [v.plate, v.brand, v.model, v.carType]),
+      c.tickets.map((t) => [t.id, shopName(t.shop)]),
+    ]),
+  );
 
   function submit() {
     if (!form) return;
@@ -188,7 +189,7 @@ export function CustomersModule({
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="ค้นหาชื่อ / เบอร์โทร / ทะเบียนรถ / รุ่นรถ"
+            placeholder="ค้นหาชื่อ / เบอร์โทร / ทะเบียนรถ / ยี่ห้อรุ่น / เลขใบงาน"
             aria-label="ค้นหาลูกค้า"
             className="field w-full text-sm pl-9 pr-3.5 py-2.5"
           />

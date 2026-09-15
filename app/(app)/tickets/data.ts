@@ -62,12 +62,19 @@ type ListRow = {
   plate: string;
   brand: string | null;
   model: string | null;
+  phone: string | null;
+  color: string | null;
+  car_type: string | null;
+  booking_channel: string | null;
+  service_type: string | null;
   status: string;
   tech_by_category: Record<string, string[]> | null;
   drop_off_date: string | null;
   pickup_date: string | null;
   ticket_items: {
     category: string;
+    sold: string | null;
+    booked: string | null;
     sold_price: number;
     discount_type: string | null;
     discount_value: number | null;
@@ -78,8 +85,8 @@ type ListRow = {
 };
 
 const LIST_SELECT =
-  'id, shop_id, customer_name, plate, brand, model, status, tech_by_category, drop_off_date, pickup_date, deleted_at, deleted_by, ' +
-  'ticket_items(category, sold_price, discount_type, discount_value), ticket_payments(amount)';
+  'id, shop_id, customer_name, plate, brand, model, phone, color, car_type, booking_channel, service_type, status, tech_by_category, drop_off_date, pickup_date, deleted_at, deleted_by, ' +
+  'ticket_items(category, sold, booked, sold_price, discount_type, discount_value), ticket_payments(amount)';
 
 export async function loadTicketList(): Promise<TicketListRow[]> {
   const supabase = await createClient();
@@ -99,9 +106,16 @@ export async function loadTicketList(): Promise<TicketListRow[]> {
     plate: t.plate,
     brand: t.brand ?? '',
     model: t.model ?? '',
+    phone: t.phone ?? '',
+    color: t.color ?? '',
+    carType: t.car_type ?? '',
+    bookingChannel: t.booking_channel ?? '',
+    serviceType: t.service_type ?? '',
     status: t.status,
     items: (t.ticket_items ?? []).map((i) => ({
       category: i.category,
+      sold: i.sold ?? '',
+      booked: i.booked ?? '',
       soldPrice: Number(i.sold_price || 0),
       discountType: (i.discount_type as 'percent' | 'amount' | null) || undefined,
       discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
@@ -138,9 +152,16 @@ export async function loadDeletedTicketList(): Promise<TicketListRow[]> {
     plate: t.plate,
     brand: t.brand ?? '',
     model: t.model ?? '',
+    phone: t.phone ?? '',
+    color: t.color ?? '',
+    carType: t.car_type ?? '',
+    bookingChannel: t.booking_channel ?? '',
+    serviceType: t.service_type ?? '',
     status: t.status,
     items: (t.ticket_items ?? []).map((i) => ({
       category: i.category,
+      sold: i.sold ?? '',
+      booked: i.booked ?? '',
       soldPrice: Number(i.sold_price || 0),
       discountType: (i.discount_type as 'percent' | 'amount' | null) || undefined,
       discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,

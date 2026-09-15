@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { logout } from '@/app/login/actions';
@@ -25,6 +26,9 @@ const ROLE_META: Record<string, { name: string; icon: string }> = {
   tech: { name: 'หัวหน้าช่าง', icon: 'fa-screwdriver-wrench' },
 };
 
+/** Lists that read `?q=` into their own search box. */
+const SEARCHABLE_LISTS = ['/tickets', '/customers', '/stock', '/wholesale'];
+
 /**
  * Port of the prototype's `Header` (reference/v0.4/finnix-film.html:453-498).
  *
@@ -34,8 +38,11 @@ const ROLE_META: Record<string, { name: string; icon: string }> = {
  * Server Action submitted through a `<form>` so sign-out is a POST and the
  * cookie is cleared server-side.
  *
- * The search field is carried over exactly as the prototype had it: decorative,
- * not wired to anything.
+ * The search field searches the page on screen. On a list that has its own
+ * search — ใบงาน, ลูกค้า, สต็อก, ขายส่ง — it sends the words there as `?q=`, and
+ * that list matches them against everything it shows. Anywhere else it sends
+ * them to `searchHome`, the first of those lists this person may open. It was
+ * carried over from the prototype as a picture of a search box.
  */
 export function Header({
   name,
@@ -43,6 +50,7 @@ export function Header({
   email,
   alertsAction,
   ackAlertsAction,
+  searchHome,
 }: {
   name: string;
   roleId: string;
@@ -50,10 +58,23 @@ export function Header({
   /** Server Actions from the layout; without them there is simply no bell. */
   alertsAction?: () => Promise<AlertSnapshot>;
   ackAlertsAction?: (urgentKeys: string[]) => Promise<{ ok: boolean; error?: string }>;
+  /** Where a search typed away from a list goes. Without one there is no search box. */
+  searchHome?: string;
 }) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { setOpen } = useMobileNav();
   const role = ROLE_META[roleId] ?? { name: roleId, icon: 'fa-user' };
+  const router = useRouter();
+  const pathname = usePathname();
+  const [query, setQuery] = useState('');
+  const searchTarget = SEARCHABLE_LISTS.includes(pathname ?? '') ? pathname : searchHome;
+
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!searchTarget) return;
+    const q = query.trim();
+    router.push(q ? `${searchTarget}?q=${encodeURIComponent(q)}` : searchTarget);
+  }
 
   return (
     <div
@@ -71,13 +92,35 @@ export function Header({
           <i className="fa-solid fa-bars" />
         </button>
 
-        <div className="relative flex-1 max-w-xs hidden sm:block">
-          <i
-            className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs"
-            style={{ color: 'var(--ink-faint)' }}
-          />
-          <input placeholder="ค้นหาที่นี่..." className="field w-full text-sm pl-9 pr-3.5 py-2" />
-        </div>
+        {searchTarget ? (
+          <form
+            role="search"
+            onSubmit={submitSearch}
+            className="relative flex-1 max-w-xs hidden sm:block"
+          >
+            <i
+              className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs"
+              style={{ color: 'var(--ink-faint)' }}
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                // Submit on Enter ourselves rather than relying on the form's
+                // implicit submission, which a lone field does not always get
+                // — and never mid-word while a Thai input method is composing.
+                if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }}
+              placeholder="ค้นหา ชื่อ เบอร์โทร ทะเบียน เลขที่เอกสาร แล้วกด Enter"
+              aria-label="ค้นหา"
+              className="field w-full text-sm pl-9 pr-3.5 py-2"
+            />
+          </form>
+        ) : (
+          <div className="flex-1" />
+        )}
 
         <div className="flex items-center gap-2 ml-auto">
           <ThemeToggle />

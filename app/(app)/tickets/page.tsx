@@ -19,6 +19,8 @@ export default async function TicketsPage({
   // should be looking at the same jobs.
   const params = await searchParams;
   const initialStatus = typeof params.status === 'string' ? params.status : undefined;
+  // ?q= — the header search, sent to this page.
+  const initialSearch = typeof params.q === 'string' ? params.q : undefined;
 
   return (
     <TicketListClient
@@ -28,6 +30,7 @@ export default async function TicketsPage({
       shops={shops}
       canSeeAllShops={session.seesAllShops}
       initialStatus={initialStatus}
+      initialSearch={initialSearch}
       capabilities={{
         'list.createNew': session.canDo('list.createNew'),
         'list.printSheet': session.canDo('list.printSheet'),

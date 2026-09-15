@@ -250,11 +250,20 @@ export type TicketListRow = {
   /** ยี่ห้อ/รุ่น — shown beside the plate, because a plate alone is hard to picture. */
   brand?: string;
   model?: string;
+  /** Searched, not shown: what a customer reads out when they ring about their car. */
+  phone?: string;
+  color?: string;
+  carType?: string;
+  bookingChannel?: string;
+  serviceType?: string;
   status: string;
   // discountType is narrowed to the two non-null variants so the row is
   // structurally assignable to lib/domain's `TicketForTotals`.
   items: {
     category?: string;
+    /** สินค้าที่ขาย / ที่จอง — searched, so a job can be found by what went on the car. */
+    sold?: string;
+    booked?: string;
     soldPrice: number;
     discountType?: 'percent' | 'amount';
     discountValue?: number;

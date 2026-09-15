@@ -11,6 +11,8 @@ import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { ticketTotal } from '@/lib/domain/tickets';
+import { amountTerms, matchesSearch } from '@/lib/domain/search';
+import { useSearchFromUrl } from '@/lib/hooks/useSearchFromUrl';
 
 import type { Shop, TicketListRow } from './types';
 
@@ -32,6 +34,7 @@ export function TicketList({
   shops,
   canSeeAllShops = true,
   initialStatus,
+  initialSearch,
 }: {
   tickets: TicketListRow[];
   statuses: StatusConfig[];
@@ -41,6 +44,8 @@ export function TicketList({
   canSeeAllShops?: boolean;
   /** สถานะที่เปิดมาจากลิงก์บนแดชบอร์ด — seeds the filter, does not lock it. */
   initialStatus?: string;
+  /** `?q=` — the header search, sent to this page. */
+  initialSearch?: string;
 }) {
   const shopList = shops ?? accessibleShops;
   const shopName = (id: string) => shopList.find((s) => s.id === id)?.name ?? id;
@@ -53,7 +58,7 @@ export function TicketList({
     canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
   );
   const [customerFilter, setCustomerFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useSearchFromUrl(initialSearch);
   const [period, setPeriod] = useState<string>(DEFAULT_PERIOD);
   const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
@@ -74,13 +79,40 @@ export function TicketList({
   let scoped = tickets;
   if (shopFilter !== 'all') scoped = scoped.filter((t) => t.shop === shopFilter);
   if (customerFilter !== 'all') scoped = scoped.filter((t) => t.customer === customerFilter);
-  if (search.trim()) {
-    const q = search.trim().toLowerCase();
-    scoped = scoped.filter(
-      (t) => t.customer.toLowerCase().includes(q) || t.plate.toLowerCase().includes(q),
+  /*
+    Search looks at everything the shop might remember a job by — the
+    number on the ใบงาน, the phone, the car, what went on it, who fitted it,
+    what it cost — not only the name and the plate (lib/domain/search.ts).
+
+    And it looks across every date. Someone searching is looking for one
+    particular job, usually an old one that has come back; a month filter
+    that hides it makes the search look broken.
+  */
+  const searching = search.trim() !== '';
+  if (searching) {
+    scoped = scoped.filter((t) =>
+      matchesSearch(search, [
+        t.id,
+        t.customer,
+        t.phone,
+        t.plate,
+        t.brand,
+        t.model,
+        t.color,
+        t.carType,
+        t.bookingChannel,
+        t.serviceType,
+        t.status,
+        getStatus(statuses, t.status).short,
+        shopName(t.shop),
+        t.items.map((i) => [i.category, i.sold, i.booked]),
+        Object.values(t.techByCategory ?? {}),
+        amountTerms(ticketTotal(t)),
+      ]),
     );
+  } else {
+    scoped = scoped.filter((t) => inSelectedPeriod(t.dropOffDateObj));
   }
-  scoped = scoped.filter((t) => inSelectedPeriod(t.dropOffDateObj));
 
   const visible = statusFilter === 'all' ? scoped : scoped.filter((t) => t.status === statusFilter);
 
@@ -297,7 +329,8 @@ export function TicketList({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ค้นหา ชื่อ / ทะเบียนรถ/เลขถัง"
+              placeholder="ค้นหา ชื่อ / เบอร์โทร / ทะเบียน / เลขใบงาน / รถ / สินค้า / ช่าง"
+              aria-label="ค้นหาใบงาน"
               className="field w-full text-sm pl-9 pr-3.5 py-2.5"
             />
           </div>

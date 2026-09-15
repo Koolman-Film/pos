@@ -22,6 +22,14 @@ import { acknowledgeAlertsToday, getAlertSnapshot } from './alerts/actions';
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSessionContext();
+  // The header search, typed away from a list, goes to the first list with
+  // a search that this person may open.
+  const searchHome = [
+    ['list', '/tickets'],
+    ['wholesale', '/wholesale'],
+    ['customers', '/customers'],
+    ['stock', '/stock'],
+  ].find(([nav]) => session.hasNav(nav))?.[1];
 
   return (
     // `app-shell` is the print-isolation hook: the `@media print` block in
@@ -39,6 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             email={session.email}
             alertsAction={getAlertSnapshot}
             ackAlertsAction={acknowledgeAlertsToday}
+            searchHome={searchHome}
           />
           <main className="flex-1 px-4 sm:px-6 py-6 max-w-6xl w-full mx-auto">{children}</main>
         </div>

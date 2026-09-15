@@ -87,6 +87,12 @@ const MODULES: { name: string; from: number; to: number; dirs: string[] }[] = [
  * `not-a-label`. The genuinely interesting ones are the behavioural divergences.
  */
 const ACCEPTED_ABSENCES: Record<string, string> = {
+  // --- search boxes that now search everything, so their hints say so ---
+  'ค้นหาที่นี่...':
+    'header search was decorative in the prototype; it now searches the list on screen and its placeholder names what it matches',
+  'ค้นหา ชื่อ / ทะเบียนรถ/เลขถัง':
+    'ticket search now matches phone, ใบงาน number, car, products, technicians and total, and the placeholder lists them (lib/domain/search.ts)',
+
   // --- prototype source comments, not UI ---
   'ลูกหนี้)': 'not-a-label: fragment of the prototype comment above the AR/AP block',
   'เจ้าหนี้)': 'not-a-label: same comment',

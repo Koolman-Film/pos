@@ -12,7 +12,9 @@ import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { findFilmPrice } from '@/lib/domain/filmPrice';
 import type { InsurancePlan } from '@/components/tickets/types';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
+import { matchesSearch } from '@/lib/domain/search';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
+import { useSearchFromUrl } from '@/lib/hooks/useSearchFromUrl';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 
 /**
@@ -165,6 +167,7 @@ export function StockModule({
   movements = [],
   batches = [],
   actions = {},
+  initialSearch,
 }: {
   stock: StockItem[];
   withdrawals?: Withdrawal[];
@@ -193,6 +196,8 @@ export function StockModule({
   /** ล็อตสินค้า, newest first (migration 0027). */
   batches?: StockBatch[];
   actions?: StockActions;
+  /** `?q=` — the header search, sent to this page. */
+  initialSearch?: string;
 }) {
   // Deny by default when neither form is supplied, so a wiring mistake hides
   // controls rather than exposing them.
@@ -553,7 +558,7 @@ export function StockModule({
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<StockItem | null>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useSearchFromUrl(initialSearch);
   const [branchFilter, setBranchFilter] = useState('all');
 
   /**
@@ -590,15 +595,11 @@ export function StockModule({
   const catScoped =
     catFilter === 'all' ? shopScoped : shopScoped.filter((s) => s.category === catFilter);
   const nameOptions = [...new Set(catScoped.map((s) => s.name))];
-  const searchQ = search.trim().toLowerCase();
   const filtered = catScoped.filter(
     (s) =>
       (nameFilterSel === 'all' || s.name === nameFilterSel) &&
       (levelFilter === 'all' || s.qty < s.min) &&
-      (!searchQ ||
-        s.name.toLowerCase().includes(searchQ) ||
-        (s.shortName || '').toLowerCase().includes(searchQ) ||
-        s.sku.toLowerCase().includes(searchQ)),
+      matchesSearch(search, [s.name, s.shortName, s.sku, s.category]),
   );
   const filteredTotalValue = filtered.reduce((sum, i) => sum + i.qty * (i.cost || 0), 0);
   const exportShopIds = accessibleShops
@@ -1910,7 +1911,8 @@ export function StockModule({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ค้นหาชื่อสินค้า / ชื่อย่อ / SKU"
+              placeholder="ค้นหาชื่อสินค้า / ชื่อย่อ / SKU / ชนิดสินค้า"
+              aria-label="ค้นหาสินค้า"
               className="field w-full text-sm pl-9 pr-3.5 py-2.5"
             />
           </div>

@@ -40,7 +40,12 @@ async function optionValues(
   return (data ?? []).map((r) => r.value);
 }
 
-export default async function StockPage() {
+export default async function StockPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
   // Calling getSessionContext() IS the authorization check (redirects if invalid).
   const session = await getSessionContext();
   const supabase = await createClient();
@@ -229,6 +234,7 @@ export default async function StockPage() {
     <StockModule
       stock={stock}
       withdrawals={withdrawals}
+      initialSearch={typeof params.q === 'string' ? params.q : undefined}
       caps={caps}
       canSeeStockPrices={canSeeStockPrices}
       isAdmin={isAdmin}

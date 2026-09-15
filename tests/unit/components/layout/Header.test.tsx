@@ -5,6 +5,11 @@ import userEvent from '@testing-library/user-event';
 // `logout` is a Server Action; importing it for real pulls in the Supabase
 // server client and `next/headers`, neither of which exists under jsdom.
 vi.mock('@/app/login/actions', () => ({ logout: vi.fn() }));
+// The search box routes with the App Router, which is not mounted under jsdom.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/dashboard',
+}));
 
 import { Header } from '@/components/layout/Header';
 

@@ -58,6 +58,7 @@ export default async function WholesalePage({
       initialApproval={typeof params.approval === 'string' ? params.approval : undefined}
       initialFlag={typeof params.flag === 'string' ? params.flag : undefined}
       initialSale={typeof params.sale === 'string' ? params.sale : undefined}
+      initialSearch={typeof params.q === 'string' ? params.q : undefined}
       stockWarning={stockWarning}
     />
   );
