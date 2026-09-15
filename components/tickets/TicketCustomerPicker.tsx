@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 
+import { PhoneInput, PhoneOwnersWarning } from '@/components/ui/PhoneField';
+import { cleanPhones, findPhoneOwners, samePhones } from '@/lib/domain/phone';
+
 import type { RetailCustomer } from './types';
 
 /**
@@ -27,7 +30,16 @@ export function TicketCustomerPicker({
 }) {
   const [mode, setMode] = useState<'select' | 'new' | 'edit'>('select');
   const [form, setForm] = useState({ name: '', phone: '' });
-  const matched = customers.find((c) => c.name === customerName && c.phone === customerPhone);
+  // By the digits: a customer saved as 081-234-5678 is still the one whose
+  // ticket now says 0812345678.
+  const matched = customers.find(
+    (c) => c.name === customerName && samePhones(c.phone, customerPhone),
+  );
+  // เบอร์ซ้ำ — anyone else already under a number being typed in here.
+  const owners =
+    mode === 'select'
+      ? []
+      : findPhoneOwners(form.phone, customers, mode === 'edit' ? matched?.id : undefined);
 
   function startNew() {
     setForm({ name: '', phone: '' });
@@ -39,14 +51,15 @@ export function TicketCustomerPicker({
   }
   function saveNew() {
     const id = Math.max(0, ...customers.map((c) => c.id)) + 1;
-    const rec = { id, ...form };
+    const rec = { id, ...form, phone: cleanPhones(form.phone) };
     setCustomers([...customers, rec]);
     onSelect(rec);
     setMode('select');
   }
   function saveEdit() {
-    if (matched) setCustomers(customers.map((c) => (c.id === matched.id ? { ...c, ...form } : c)));
-    onSelect(form);
+    const rec = { ...form, phone: cleanPhones(form.phone) };
+    if (matched) setCustomers(customers.map((c) => (c.id === matched.id ? { ...c, ...rec } : c)));
+    onSelect(rec);
     setMode('select');
   }
 
@@ -103,13 +116,25 @@ export function TicketCustomerPicker({
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           className="field text-sm px-3 py-2"
         />
-        <input
-          placeholder="เบอร์โทร"
+        <PhoneInput
+          placeholder="เบอร์โทร (ไม่ต้องใส่ - · หลายเบอร์คั่นด้วย ,)"
+          ariaLabel="เบอร์โทรลูกค้าใหม่"
           value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          onChange={(phone) => setForm({ ...form, phone })}
           className="field text-sm px-3 py-2"
         />
       </div>
+      <PhoneOwnersWarning
+        owners={owners}
+        onUse={
+          mode === 'new'
+            ? (c) => {
+                onSelect(c);
+                setMode('select');
+              }
+            : undefined
+        }
+      />
       <div className="flex gap-2">
         <button
           onClick={() => setMode('select')}
@@ -121,7 +146,11 @@ export function TicketCustomerPicker({
           onClick={mode === 'new' ? saveNew : saveEdit}
           className="btn-primary flex-1 rounded-lg py-2 text-xs font-semibold"
         >
-          {mode === 'new' ? 'บันทึกลูกค้าใหม่' : 'บันทึกการแก้ไข'}
+          {mode === 'new'
+            ? owners.length > 0
+              ? 'ยืนยันเพิ่มเป็นลูกค้าใหม่'
+              : 'บันทึกลูกค้าใหม่'
+            : 'บันทึกการแก้ไข'}
         </button>
       </div>
     </div>

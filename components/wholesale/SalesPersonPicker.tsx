@@ -1,5 +1,6 @@
 'use client';
 
+import { sanitizePhoneTyping } from '@/lib/domain/phone';
 import { useState } from 'react';
 
 import type { SalesPerson } from './types';
@@ -187,10 +188,10 @@ export function SalesPersonPicker({
           className="field text-sm px-3 py-2"
         />
         <input
-          placeholder="เบอร์โทร (พิมพ์บนเอกสาร)"
+          placeholder="เบอร์โทร (พิมพ์บนเอกสาร · ไม่ต้องใส่ -)"
           aria-label="เบอร์โทรพนักงานขาย"
           value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          onChange={(e) => setForm({ ...form, phone: sanitizePhoneTyping(e.target.value) })}
           className="field text-sm px-3 py-2"
         />
       </div>

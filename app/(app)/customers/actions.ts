@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { cleanPhones } from '@/lib/domain/phone';
 
 /**
  * Writes for ทะเบียนลูกค้า. Per correction C2 every action authenticates through
@@ -23,7 +24,7 @@ export async function saveCustomer(input: {
     return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขทะเบียนลูกค้า' };
 
   const name = input.name.trim();
-  const phone = input.phone.trim();
+  const phone = cleanPhones(input.phone);
   if (!name) return { ok: false, error: 'กรุณากรอกชื่อลูกค้า' };
 
   /*

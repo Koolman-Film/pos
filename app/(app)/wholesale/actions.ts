@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { cleanPhones } from '@/lib/domain/phone';
 import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
 
 import type { SaveOrderInput } from '@/components/wholesale/types';
@@ -555,7 +556,7 @@ export async function saveSalesPerson(input: {
       .maybeSingle();
     const { error } = await supabase
       .from('sales_people')
-      .update({ name, phone: input.phone, ...link })
+      .update({ name, phone: cleanPhones(input.phone), ...link })
       .eq('id', input.id);
     if (error) return { ok: false, error: friendly(error.message) };
     if (before?.name && before.name !== name) {
@@ -568,7 +569,7 @@ export async function saveSalesPerson(input: {
   } else {
     const { error } = await supabase
       .from('sales_people')
-      .insert({ shop_id: input.shop, name, phone: input.phone, ...link });
+      .insert({ shop_id: input.shop, name, phone: cleanPhones(input.phone), ...link });
     if (error) return { ok: false, error: friendly(error.message) };
   }
 
@@ -731,7 +732,7 @@ export async function saveCustomer(input: {
   if (input.id) {
     const { error } = await supabase
       .from('wholesale_customers')
-      .update({ name: input.name, phone: input.phone, address: input.address })
+      .update({ name: input.name, phone: cleanPhones(input.phone), address: input.address })
       .eq('id', input.id);
     if (error) throw new Error(error.message);
     revalidatePath('/wholesale');
@@ -740,7 +741,7 @@ export async function saveCustomer(input: {
 
   const { data, error } = await supabase
     .from('wholesale_customers')
-    .insert({ name: input.name, phone: input.phone, address: input.address })
+    .insert({ name: input.name, phone: cleanPhones(input.phone), address: input.address })
     .select('id')
     .single();
   if (error) throw new Error(error.message);

@@ -88,6 +88,8 @@ const MODULES: { name: string; from: number; to: number; dirs: string[] }[] = [
  */
 const ACCEPTED_ABSENCES: Record<string, string> = {
   // --- search boxes that now search everything, so their hints say so ---
+  '08X-XXX-XXXX':
+    'phones are typed without dashes now (ร้านขอ 15 ก.ย. 2569); the ticket phone field shows 0812345678 and the rule beside its label',
   'ค้นหาที่นี่...':
     'header search was decorative in the prototype; it now searches the list on screen and its placeholder names what it matches',
   'ค้นหา ชื่อ / ทะเบียนรถ/เลขถัง':

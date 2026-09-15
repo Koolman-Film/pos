@@ -59,7 +59,8 @@ describe('CustomersModule', () => {
     await user.click(screen.getByRole('button', { name: 'บันทึก' }));
     await vi.waitFor(() =>
       expect(saveAction).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 1, phone: '089-000-0000' }),
+        // Typed with dashes, which the field leaves out (ร้านขอ 15 ก.ย. 2569).
+        expect.objectContaining({ id: 1, phone: '0890000000' }),
       ),
     );
   });

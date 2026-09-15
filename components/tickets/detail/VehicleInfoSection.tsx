@@ -3,6 +3,8 @@
 import { DateTimeField } from '@/components/ui/DateTimeField';
 import { ManagedChipPicker } from '@/components/ui/ManagedChipPicker';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { PHONE_HINT, PhoneInput, PhoneOwnersWarning } from '@/components/ui/PhoneField';
+import { findPhoneOwners } from '@/lib/domain/phone';
 
 import { TicketCustomerPicker } from '../TicketCustomerPicker';
 import { BRAND_TH, MODEL_TH, type RetailCustomer, type Ticket } from '../types';
@@ -53,6 +55,12 @@ export function VehicleInfoSection({
    */
   shopChoices?: { id: string; name: string }[];
 }) {
+  // Somebody else in the registry already has this number: say so before the
+  // save creates a second customer under it.
+  const phoneOwners = findPhoneOwners(t.phone, retailCustomers).filter(
+    (c) => c.name.trim() !== t.customer.trim(),
+  );
+
   // The panel and its heading live in the FormSection wrapper this is rendered
   // inside — see detail/FormSection.tsx.
   return (
@@ -140,13 +148,13 @@ export function VehicleInfoSection({
       <div className="mb-3">
         <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
           6. เบอร์โทร <span style={{ color: '#C24B57' }}>*</span>
+          <span style={{ color: 'var(--ink-faint)' }}> · {PHONE_HINT}</span>
         </label>
         <div className="flex gap-2">
-          <input
-            type="tel"
+          <PhoneInput
             value={t.phone}
-            onChange={(e) => field('phone', e.target.value)}
-            placeholder="08X-XXX-XXXX"
+            onChange={(v) => field('phone', v)}
+            ariaLabel="เบอร์โทรลูกค้า"
             className="field flex-1 text-sm px-3 py-2"
             style={{ borderColor: !t.phone ? '#C24B57' : undefined }}
           />
@@ -166,6 +174,11 @@ export function VehicleInfoSection({
             <i className="fa-solid fa-phone"></i>
           </a>
         </div>
+        {phoneOwners.length > 0 && (
+          <div className="mt-2">
+            <PhoneOwnersWarning owners={phoneOwners} onUse={onSelectCustomer} />
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
         <div>

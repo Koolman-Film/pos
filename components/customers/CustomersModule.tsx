@@ -7,7 +7,9 @@ import { useSearchFromUrl } from '@/lib/hooks/useSearchFromUrl';
 import { useState, useTransition } from 'react';
 
 import { Badge, type StatusConfig } from '@/components/ui/Badge';
+import { PHONE_HINT, PhoneOwnersWarning } from '@/components/ui/PhoneField';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { findPhoneOwners, sanitizePhoneTyping } from '@/lib/domain/phone';
 
 import type { CustomerRow } from './types';
 
@@ -52,6 +54,9 @@ export function CustomersModule({
   const [error, setError] = useState<string | null>(null);
 
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? id;
+  // Correcting a number onto one another customer already has is how one
+  // person ends up in the registry twice.
+  const editPhoneOwners = form ? findPhoneOwners(form.phone, customers, form.id) : [];
 
   // Everything on a customer's card, including the numbers of their ใบงาน.
   const visible = customers.filter((c) =>
@@ -155,12 +160,21 @@ export function CustomersModule({
               <input
                 id="customer-phone"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="081-0000000"
+                type="tel"
+                onChange={(e) => setForm({ ...form, phone: sanitizePhoneTyping(e.target.value) })}
+                placeholder="0812345678"
                 className="field w-full text-sm px-3 py-2"
               />
+              <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                {PHONE_HINT}
+              </p>
             </div>
           </div>
+          {editPhoneOwners.length > 0 && (
+            <div className="mt-3">
+              <PhoneOwnersWarning owners={editPhoneOwners} />
+            </div>
+          )}
           <div className="flex gap-3 mt-4">
             <button
               onClick={() => setForm(null)}

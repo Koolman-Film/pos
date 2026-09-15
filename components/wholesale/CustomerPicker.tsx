@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 
+import { PhoneInput, PhoneOwnersWarning } from '@/components/ui/PhoneField';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
+import { cleanPhones, findPhoneOwners } from '@/lib/domain/phone';
 
 import type { WsCustomer } from './types';
 
@@ -36,6 +38,11 @@ export function CustomerPicker({
   const [list, setList] = useState<WsCustomer[]>(customers);
   const [form, setForm] = useState({ name: '', phone: '', address: '' });
   const current = list.find((c) => c.id === customerId);
+  // เบอร์ซ้ำ — another shop already under a number being typed in here.
+  const owners =
+    mode === 'select'
+      ? []
+      : findPhoneOwners(form.phone, list, mode === 'edit' ? current?.id : undefined);
 
   function startEdit() {
     if (!current) return;
@@ -47,20 +54,22 @@ export function CustomerPicker({
     setMode('new');
   }
   async function saveNew() {
+    const rec = { ...form, phone: cleanPhones(form.phone) };
     let id: number;
     if (onSaveCustomer) {
-      id = await onSaveCustomer(form);
+      id = await onSaveCustomer(rec);
     } else {
       id = Math.max(0, ...list.map((c) => c.id)) + 1;
     }
-    setList([...list, { id, ...form }]);
+    setList([...list, { id, ...rec }]);
     onSelect(id);
     setMode('select');
   }
   async function saveEdit() {
     if (!current) return;
-    if (onSaveCustomer) await onSaveCustomer({ id: current.id, ...form });
-    setList(list.map((c) => (c.id === current.id ? { ...c, ...form } : c)));
+    const rec = { ...form, phone: cleanPhones(form.phone) };
+    if (onSaveCustomer) await onSaveCustomer({ id: current.id, ...rec });
+    setList(list.map((c) => (c.id === current.id ? { ...c, ...rec } : c)));
     setMode('select');
   }
 
@@ -123,10 +132,11 @@ export function CustomerPicker({
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           className="field text-sm px-3 py-2 sm:col-span-1"
         />
-        <input
-          placeholder="เบอร์โทร"
+        <PhoneInput
+          placeholder="เบอร์โทร (ไม่ต้องใส่ - · หลายเบอร์คั่นด้วย ,)"
+          ariaLabel="เบอร์โทรลูกค้าใหม่"
           value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          onChange={(phone) => setForm({ ...form, phone })}
           className="field text-sm px-3 py-2"
         />
         <input
@@ -136,6 +146,17 @@ export function CustomerPicker({
           className="field text-sm px-3 py-2"
         />
       </div>
+      <PhoneOwnersWarning
+        owners={owners}
+        onUse={
+          mode === 'new'
+            ? (c) => {
+                onSelect(c.id);
+                setMode('select');
+              }
+            : undefined
+        }
+      />
       <div className="flex gap-2">
         <button
           onClick={() => setMode('select')}
@@ -147,7 +168,11 @@ export function CustomerPicker({
           onClick={mode === 'new' ? saveNew : saveEdit}
           className="btn-primary flex-1 rounded-lg py-2 text-xs font-semibold"
         >
-          {mode === 'new' ? 'บันทึกลูกค้าใหม่' : 'บันทึกการแก้ไข'}
+          {mode === 'new'
+            ? owners.length > 0
+              ? 'ยืนยันเพิ่มเป็นลูกค้าใหม่'
+              : 'บันทึกลูกค้าใหม่'
+            : 'บันทึกการแก้ไข'}
         </button>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { cleanPhones, samePhones } from '@/lib/domain/phone';
 import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
 import { ticketPaid, ticketTotal } from '@/lib/domain/tickets';
 import type { Database, Json } from '@/lib/types/database';
@@ -71,17 +72,21 @@ async function resolveRetailCustomerId(
   phone: string,
 ): Promise<number | null> {
   if (!name.trim()) return null;
-  const { data: existing } = await supabase
+  /*
+    Same name, same numbers — compared by the digits. The registry holds
+    numbers typed before the no-dash rule, so an exact text match would
+    miss "081-234-5678" for "0812345678" and quietly add the customer again
+    the next time their old ticket was saved.
+  */
+  const { data: sameName } = await supabase
     .from('retail_customers')
-    .select('id')
-    .eq('name', name)
-    .eq('phone', phone)
-    .limit(1)
-    .maybeSingle();
-  if (existing?.id) return existing.id;
+    .select('id, phone')
+    .eq('name', name);
+  const existing = (sameName ?? []).find((c) => samePhones(c.phone, phone));
+  if (existing) return existing.id;
   const { data: inserted } = await supabase
     .from('retail_customers')
-    .insert({ name, phone })
+    .insert({ name, phone: cleanPhones(phone) })
     .select('id')
     .single();
   return inserted?.id ?? null;
@@ -210,7 +215,7 @@ function ticketRow(p: TicketSavePayload, id: string, retailCustomerId: number | 
     shop_id: p.shop,
     retail_customer_id: retailCustomerId,
     customer_name: p.customer,
-    phone: p.phone,
+    phone: cleanPhones(p.phone),
     plate: p.plate,
     car_type: p.carType,
     brand: p.brand,
