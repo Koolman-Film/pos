@@ -144,10 +144,31 @@ function blankPermissionRows(
   return rows;
 }
 
+/**
+ * Is another role already called this?
+ *
+ * The user dropdown shows a role by its NAME, and only the role whose id is
+ * `admin` has every permission. A custom role named "แอดมิน/หลังบ้าน" looked
+ * exactly like it in the dropdown while holding none of what that role holds —
+ * two people "with the same role" could then do different things (a GM could
+ * not ปลดล็อกใบงาน). Spacing and case are ignored, so "แอดมิน / หลังบ้าน" is
+ * the same name too.
+ */
+function roleNameTaken(rows: { id: string; name: string }[], name: string, exceptId?: string) {
+  const key = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+  return rows.some((r) => r.id !== exceptId && key(r.name) === key(name));
+}
+
+const duplicateRoleName = (name: string) =>
+  `มีบทบาทชื่อ "${name}" อยู่แล้ว — ตั้งชื่อไม่ให้ซ้ำ เพื่อไม่ให้เลือกบทบาทผิด`;
+
 export async function addRole(name: string, icon: string): Promise<ActionResult> {
   const { supabase } = await authorize();
   const trimmed = name.trim();
   if (!trimmed) return { ok: false, error: 'empty name' };
+  const { data: existing } = await supabase.from('roles').select('id, name');
+  if (roleNameTaken(existing ?? [], trimmed))
+    return { ok: false, error: duplicateRoleName(trimmed) };
   const id = 'role_' + Date.now();
   const { error: roleError } = await supabase.from('roles').insert({ id, name: trimmed, icon });
   if (roleError) return fail(roleError);
@@ -162,6 +183,10 @@ export async function renameRole(id: string, name: string): Promise<ActionResult
   const { supabase } = await authorize();
   const trimmed = name.trim();
   if (!trimmed) return { ok: false, error: 'empty name' };
+  const { data: existing } = await supabase.from('roles').select('id, name');
+  if (roleNameTaken(existing ?? [], trimmed, id)) {
+    return { ok: false, error: duplicateRoleName(trimmed) };
+  }
   const { error } = await supabase.from('roles').update({ name: trimmed }).eq('id', id);
   return error ? fail(error) : done();
 }

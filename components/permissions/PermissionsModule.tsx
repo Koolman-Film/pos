@@ -258,6 +258,23 @@ export function PermissionsModule({
   }
 
   // ----- roles -----
+  /*
+    Only the role whose id is `admin` holds every permission — the name is
+    just a label. A custom role once carried the same name, and the user
+    dropdown showed the two identically, so two "admins" could not do the
+    same things. The real one is marked, and a clash is called out.
+  */
+  const roleKey = (name: string) => name.replace(/\s+/g, '').toLowerCase();
+  const clashingRoleNames = new Set(
+    roles.map((r) => roleKey(r.name)).filter((k, i, all) => all.indexOf(k) !== i),
+  );
+  const roleClashes = (r: Role) => r.id !== 'admin' && clashingRoleNames.has(roleKey(r.name));
+  const roleOptionLabel = (r: Role) =>
+    r.id === 'admin'
+      ? `${r.name} (สิทธิ์เต็ม)`
+      : roleClashes(r)
+        ? `${r.name} (บทบาทเพิ่มเอง — สิทธิ์ไม่เท่าแอดมิน)`
+        : r.name;
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleIcon, setNewRoleIcon] = useState(ROLE_ICON_CHOICES[0]);
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
@@ -411,7 +428,7 @@ export function PermissionsModule({
                 >
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.name}
+                      {roleOptionLabel(r)}
                     </option>
                   ))}
                 </select>
@@ -468,7 +485,7 @@ export function PermissionsModule({
           >
             {roles.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name}
+                {roleOptionLabel(r)}
               </option>
             ))}
           </select>
@@ -537,6 +554,14 @@ export function PermissionsModule({
                         style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }}
                       >
                         สิทธิ์เต็มเสมอ
+                      </span>
+                    )}
+                    {roleClashes(r) && (
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-full"
+                        style={{ background: '#FBE9EB', color: '#B23A48' }}
+                      >
+                        ชื่อซ้ำ — ไม่ใช่บทบาทแอดมิน
                       </span>
                     )}
                   </div>
