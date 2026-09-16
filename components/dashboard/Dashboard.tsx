@@ -271,6 +271,9 @@ export function Dashboard({
             <p className="text-sm mt-0.5" style={{ color: 'var(--ink-soft)' }}>
               ยอดขายรวม (บาท)
             </p>
+            <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+              นับจากเงินที่รับแล้วในช่วงเวลานี้
+            </p>
             {/* Only where both channels earned something: a branch that sells
                 one way gets a line that never changes. */}
             {wholesaleRevenue !== 0 && (

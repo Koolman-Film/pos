@@ -79,7 +79,7 @@ export function WholesaleOverview({ data }: { data: WholesaleOverviewData }) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
-        <Tile label="ยอดขายส่ง (ช่วงที่เลือก)" amount={data.sales} />
+        <Tile label="ขายส่งรับเงินแล้ว (ช่วงที่เลือก)" amount={data.sales} />
         <Tile label="ค้างรับ (ส่งของแล้ว)" amount={data.owing.amount} count={data.owing.count} />
         <Tile
           label="เลยกำหนดชำระ"
@@ -130,7 +130,7 @@ export function WholesaleOverview({ data }: { data: WholesaleOverviewData }) {
                   <tr style={{ color: 'var(--ink-soft)', borderBottom: '1px solid var(--line)' }}>
                     <th className="text-xs font-semibold text-left py-1.5">เซลล์</th>
                     <th className="text-xs font-semibold text-right py-1.5">PO ยังไม่ปิด</th>
-                    <th className="text-xs font-semibold text-right py-1.5">ยอดขาย</th>
+                    <th className="text-xs font-semibold text-right py-1.5">รับเงินแล้ว</th>
                     <th className="text-xs font-semibold text-right py-1.5">ค้างรับ</th>
                   </tr>
                 </thead>

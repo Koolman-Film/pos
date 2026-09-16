@@ -1,6 +1,5 @@
 import { isDueSoon, isOverdue, outstanding, type BillOrder } from '@/lib/alerts/wholesale';
 import { orderTotal } from '@/lib/domain/orders';
-import type { WholesaleRevenueLine } from '@/lib/domain/wholesaleRevenue';
 
 /**
  * ภาพรวมขายส่งบนแดชบอร์ด.
@@ -9,8 +8,9 @@ import type { WholesaleRevenueLine } from '@/lib/domain/wholesaleRevenue';
  * tickets, so a branch that only sells wholesale — Finnix North — opened onto an
  * empty page, and โหน่ง/เคน had nothing about their own work on it at all.
  *
- * Nothing here is a new rule. The period sales come from `wholesaleRevenueLines`
- * (the same lines ยอดขายรวม and โมดูลรายได้ add up); overdue and due-soon use the
+ * Nothing here is a new rule. The period sales are the PO payments received in
+ * it (components/dashboard/cashSales.ts, the same receipts ยอดขายรวม adds up);
+ * overdue and due-soon use the
  * predicates the bell and the wholesale list's `?flag=` filters use, so the
  * number on this card is the number of rows its link opens.
  *
@@ -64,7 +64,7 @@ export function buildWholesaleOverview({
   orders: OverviewOrder[];
   customers: { id: number; name: string }[];
   /** Already limited to the branch and the period on screen. */
-  revenueLines: WholesaleRevenueLine[];
+  revenueLines: { orderId: string; amount: number }[];
   today: string;
 }): WholesaleOverviewData | null {
   // A branch that sells no wholesale gets no card, rather than a card of zeros.

@@ -38,7 +38,7 @@ const DATA: WholesaleOverviewData = {
 describe('WholesaleOverview', () => {
   it('shows sales, what is owed, and what is late', () => {
     render(<WholesaleOverview data={DATA} />);
-    expect(screen.getByText('ยอดขายส่ง (ช่วงที่เลือก)')).toBeInTheDocument();
+    expect(screen.getByText('ขายส่งรับเงินแล้ว (ช่วงที่เลือก)')).toBeInTheDocument();
     expect(screen.getByText('PO ที่ยังไม่ปิด 3 ใบ')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /เลยกำหนดชำระ/ })).toHaveAttribute(
       'href',

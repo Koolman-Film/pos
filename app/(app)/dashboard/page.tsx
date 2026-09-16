@@ -5,10 +5,15 @@ import { daysAgoValue } from '@/lib/domain/now';
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { fetchAllRows } from '@/lib/supabase/fetchAll';
-import { itemNetPrice, ticketTotal } from '@/lib/domain/tickets';
+import { ticketTotal } from '@/lib/domain/tickets';
 import { needsPriceApproval } from '@/lib/domain/orders';
-import { wholesaleRevenueLines } from '@/lib/domain/wholesaleRevenue';
 import { buildWholesaleOverview } from '@/components/dashboard/buildWholesaleOverview';
+import {
+  orderReceipts,
+  receiptDate,
+  sumReceipts,
+  ticketReceipts,
+} from '@/components/dashboard/cashSales';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import type { StatusConfig } from '@/components/ui/Badge';
 import { Dashboard } from '@/components/dashboard/Dashboard';
@@ -26,7 +31,6 @@ import {
   computePayables,
   computeReceivables,
   type TrendExpense,
-  type TrendTicket,
 } from '@/components/dashboard/receivables';
 import type { CalendarTicket } from '@/components/dashboard/JobCalendar';
 import { buildAppointments, type VisitDates } from '@/components/dashboard/appointments';
@@ -265,6 +269,8 @@ export default async function DashboardPage({
       amount: num(p.amount),
       method: p.method ?? '',
       paidAt: toDate(p.paid_at),
+      // The calendar day as stored — what ยอดขาย is dated by (cashSales.ts).
+      paidOn: (p.paid_at ?? '').slice(0, 10),
     })),
     statusHistory: (t.ticket_status_history ?? []).map((h) => ({
       status: h.status,
@@ -308,6 +314,8 @@ export default async function DashboardPage({
       // ค้างรับ counts only รับเงินแล้ว (0048) — `orderPaid` reads this.
       status: p.status ?? '',
       clearedAt: toDate(p.cleared_at),
+      paidOn: (p.paid_at ?? '').slice(0, 10),
+      clearedOn: (p.cleared_at ?? '').slice(0, 10),
     })),
   }));
 
@@ -349,8 +357,9 @@ export default async function DashboardPage({
   /*
     ประกัน sells two ways — with the install, or months later on a closed
     ticket — so it is its own record with its own วันที่ขาย and is never part
-    of a ticket total (migration 0023). Revenue therefore adds the policies
-    sold in the period on top of the tickets delivered in it.
+    of a ticket total (migration 0023). Its premium is taken as a payment on
+    that ticket, so ยอดขาย counts it through the payment (cashSales.ts); the
+    policies here are for ประกันใกล้หมดอายุ.
   */
   type PolicyRow = {
     id: number;
@@ -364,38 +373,68 @@ export default async function DashboardPage({
   const policies = ((policyRows ?? []) as unknown as PolicyRow[]).filter((p) =>
     inShop(shopByTicketId.get(p.ticket_id) ?? ''),
   );
-  const insuranceRevenue = policies
-    .filter((p) => inPeriod(p.sold_at ? new Date(`${p.sold_at}T00:00:00`) : null))
-    .reduce((s, p) => s + num(p.price), 0);
 
   /*
-    ยอดขายส่ง.
+    ยอดขาย = เงินที่รับแล้ว (ร้านขอ 16 ก.ย. 2569).
 
-    Until now wholesale appeared in NO figure on this screen, so a branch like
-    Central Audio — which sells retail through Book งาน and wholesale through
-    the ขายส่ง module — read its own dashboard as if half its business did not
-    exist. The rule for which day a PO counts on lives in
-    `lib/domain/wholesaleRevenue.ts`, shared with โมดูลรายได้, because the two
-    screens quoting different takings for the same month is the one failure
-    neither of them recovers from.
+    The card counted every job dropped off in the period at its full price and
+    every PO at the value of the goods sent out, so it never matched the money
+    the shop actually had. Every sales figure on this screen now comes from
+    the payments received — ticket payments on their paid day, PO payments
+    once รับเงินแล้ว on the day the money arrived — the same rows and days
+    โมดูลการเงิน counts as รับเข้า. The rules and the split by ชนิดสินค้า live
+    in components/dashboard/cashSales.ts.
+
+    ชนิดสินค้า of a wholesale product comes from the stock register, the same
+    place the ขายส่ง picker takes the product from.
   */
-  const wholesaleLines = wholesaleRevenueLines(orders);
-  const wholesaleRevenueIn = (shop: string | null) =>
-    wholesaleLines
-      .filter(
-        (l) =>
-          (shop === null ? inShop(l.shop) : l.shop === shop) &&
-          inPeriod(new Date(`${l.on}T00:00:00`)),
-      )
-      .reduce((n, l) => n + l.amount, 0);
+  const stockCategoryByName = new Map<string, string>();
+  for (const st of stockRows) {
+    if (st.name && st.category && !stockCategoryByName.has(st.name)) {
+      stockCategoryByName.set(st.name, st.category);
+    }
+  }
+  const receipts = [
+    ...ticketReceipts(
+      tickets.map((t) => ({
+        id: t.id,
+        shop: t.shop,
+        held: t.held,
+        items: t.items,
+        payments: t.payments.map((p) => ({ amount: p.amount, on: p.paidOn })),
+      })),
+      ((policyRows ?? []) as unknown as PolicyRow[]).map((p) => ({
+        ticketId: p.ticket_id,
+        price: num(p.price),
+      })),
+    ),
+    ...orderReceipts(
+      orders.map((o) => ({
+        id: o.id,
+        shop: o.shop,
+        items: o.items,
+        payments: o.payments.map((p) => ({
+          amount: p.amount,
+          status: p.status,
+          paidAt: p.paidOn,
+          clearedAt: p.clearedOn,
+        })),
+      })),
+      (name) => stockCategoryByName.get(name) ?? '',
+    ),
+  ];
+  /** Received in the period — for the branch on screen, or for one branch. */
+  const receiptsIn = (shop: string | null) =>
+    receipts.filter(
+      (r) => (shop === null ? inShop(r.shop) : r.shop === shop) && inPeriod(receiptDate(r)),
+    );
 
   // ยอดขาย counts only what the branch earned. เงินรอคืน Finnix is collected
   // and recorded, but it belongs to another shop and is reported separately in
   // โมดูลรายได้ — never folded into this figure.
-  const retailRevenue =
-    visibleTickets.filter((t) => !t.held).reduce((s, t) => s + ticketTotal(t), 0) +
-    insuranceRevenue;
-  const wholesaleRevenue = wholesaleRevenueIn(null);
+  const periodSales = receiptsIn(null).filter((r) => !r.held);
+  const retailRevenue = sumReceipts(periodSales.filter((r) => r.channel === 'ปลีก'));
+  const wholesaleRevenue = sumReceipts(periodSales.filter((r) => r.channel === 'ขายส่ง'));
   const revenue = retailRevenue + wholesaleRevenue;
 
   /*
@@ -407,9 +446,9 @@ export default async function DashboardPage({
     ? buildWholesaleOverview({
         orders: orders.filter((o) => inShop(o.shop)),
         customers,
-        revenueLines: wholesaleLines.filter(
-          (l) => inShop(l.shop) && inPeriod(new Date(`${l.on}T00:00:00`)),
-        ),
+        revenueLines: periodSales
+          .filter((r) => r.channel === 'ขายส่ง')
+          .map((r) => ({ orderId: r.sourceId, amount: r.amount })),
         today: shopDayKey(now),
       })
     : null;
@@ -512,47 +551,15 @@ export default async function DashboardPage({
   );
 
   /*
-    ยอดขายแยกตามชนิดสินค้า.
-
-    The same items and the same `itemNetPrice` the headline uses, grouped by
-    ชนิดสินค้า, plus ประกัน — which hangs off no ticket line (0023) and would
-    otherwise be money in the total with no row explaining it. So the rows add
+    ยอดขายแยกตามชนิดสินค้า — the same receipts as the headline, grouped by the
+    ชนิดสินค้า each payment was split across (ประกัน included), so the rows add
     up to the figure above them, exactly.
   */
-  const revenueItems = visibleTickets
-    .filter((t) => !t.held)
-    .flatMap((t) => t.items.map((i) => ({ category: i.category, net: itemNetPrice(i) })));
-  /*
-    ขายส่งเข้ามาในชนิดสินค้าเดียวกัน.
-
-    A roll of film sold by the case is the same ชนิดสินค้า as a sheet of it
-    sold over the counter, so it belongs in the same row — otherwise the rows
-    stop adding up to the figure above them, which is the one property this
-    breakdown has to keep. ชนิดสินค้า comes from the stock register, the same
-    place the ขายส่ง picker takes the product from.
-  */
-  const stockCategoryByName = new Map<string, string>();
-  for (const st of stockRows) {
-    if (st.name && st.category && !stockCategoryByName.has(st.name)) {
-      stockCategoryByName.set(st.name, st.category);
-    }
-  }
-  const wholesaleItems = wholesaleLines
-    .filter((l) => inShop(l.shop) && inPeriod(new Date(`${l.on}T00:00:00`)))
-    .map((l) => ({
-      category:
-        l.kind === 'ปรับราคา'
-          ? 'ปรับราคาขายส่ง'
-          : (stockCategoryByName.get(l.item) ?? 'ไม่ระบุชนิด'),
-      net: l.amount,
-    }));
-  const allRevenueItems = [...revenueItems, ...wholesaleItems];
-  const revenueByCategory = [...new Set(allRevenueItems.map((i) => i.category))]
+  const revenueByCategory = [...new Set(periodSales.map((r) => r.category))]
     .map((name) => ({
       name,
-      amount: allRevenueItems.filter((i) => i.category === name).reduce((n, i) => n + i.net, 0),
+      amount: sumReceipts(periodSales.filter((r) => r.category === name)),
     }))
-    .concat(insuranceRevenue > 0 ? [{ name: 'ประกัน', amount: insuranceRevenue }] : [])
     .filter((c) => c.name && c.amount !== 0)
     .sort((a, b) => b.amount - a.amount);
 
@@ -575,15 +582,10 @@ export default async function DashboardPage({
     shopFilter === 'all' && session.hasDashboardWidget('branchCompare')
       ? buildBranchComparison(accessibleShops, (shop) => {
           const shopJobs = tickets.filter((t) => t.shop === shop && inPeriod(t.dropOff));
-          const shopPolicies = ((policyRows ?? []) as unknown as PolicyRow[]).filter(
-            (p) =>
-              shopByTicketId.get(p.ticket_id) === shop &&
-              inPeriod(p.sold_at ? new Date(`${p.sold_at}T00:00:00`) : null),
-          );
-          const retail =
-            shopJobs.filter((t) => !t.held).reduce((n, t) => n + ticketTotal(t), 0) +
-            shopPolicies.reduce((n, p) => n + num(p.price), 0);
-          const wholesale = wholesaleRevenueIn(shop);
+          const shopReceipts = receiptsIn(shop);
+          const shopSales = shopReceipts.filter((r) => !r.held);
+          const retail = sumReceipts(shopSales.filter((r) => r.channel === 'ปลีก'));
+          const wholesale = sumReceipts(shopSales.filter((r) => r.channel === 'ขายส่ง'));
           const spend = expenses
             .filter(
               (e) =>
@@ -605,7 +607,7 @@ export default async function DashboardPage({
               0,
             ),
             payable: computePayables(expenses, shop).reduce((n, a) => n + a.amount, 0),
-            heldForFinnix: shopJobs.filter((t) => t.held).reduce((n, t) => n + ticketTotal(t), 0),
+            heldForFinnix: sumReceipts(shopReceipts.filter((r) => r.held)),
           };
         })
       : undefined;
@@ -624,27 +626,22 @@ export default async function DashboardPage({
   }));
   const stockTotal = visibleStock.reduce((s, i) => s + num(i.qty), 0);
 
-  const trendTickets: TrendTicket[] = tickets.map((t) => ({
-    shop: t.shop,
-    dropOff: t.dropOff,
-    items: t.items,
-    payments: t.payments,
-  }));
   const trendExpenses: TrendExpense[] = expenses.map((e) => ({
     shop: e.shop,
     amount: e.amount,
     status: e.status,
     paidAt: e.paidAt,
   }));
+  // The revenue line plots the same receipts as the card, not job totals.
   const trend = buildTrend(
-    trendTickets,
+    [],
     trendExpenses,
     shopFilter,
     period,
     periodValue,
     rangeStart,
     rangeEnd,
-    wholesaleLines.map((l) => ({ shop: l.shop, on: l.on, amount: l.amount })),
+    receipts.filter((r) => !r.held).map((r) => ({ shop: r.shop, on: r.on, amount: r.amount })),
   );
 
   // ---- Row 3 / Row 4 widgets (correction C13) ----
