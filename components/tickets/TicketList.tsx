@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Badge, getStatus, type StatusConfig } from '@/components/ui/Badge';
-import { fmt, fmtThaiDate, fmtThaiDateLong } from '@/lib/domain/format';
+import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
+import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -217,110 +217,31 @@ export function TicketList({
           )}
         </div>
       </div>
-      <div className="card p-3 mb-4 flex flex-wrap items-center gap-2">
-        <div
-          className="flex rounded-xl overflow-hidden"
-          style={{ border: '1.5px solid var(--line)' }}
-        >
-          {(
-            [
-              ['today', 'วันนี้'],
-              ['month', 'รายเดือน'],
-              ['year', 'รายปี'],
-              ['range', 'ช่วงเวลา'],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setPeriod(key)}
-              className="text-xs px-3 py-2 font-semibold"
-              style={{
-                background: period === key ? 'var(--primary)' : 'transparent',
-                color: period === key ? '#fff' : 'var(--ink-soft)',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {period === 'today' && (
-          <span
-            className="text-xs px-3 py-2 rounded-lg font-medium"
-            style={{ background: 'var(--paper)', color: 'var(--ink-soft)' }}
-          >
-            <i className="fa-regular fa-calendar mr-1.5"></i>
-            {fmtThaiDateLong(new Date())}
-          </span>
-        )}
-        {period === 'month' && (
-          <input
-            type="month"
-            value={periodValue}
-            onChange={(e) => setPeriodValue(e.target.value)}
-            aria-label="เลือกเดือน"
-            className="field text-sm px-3 py-2"
-          />
-        )}
-        {period === 'year' && (
-          <select
-            value={periodValue}
-            aria-label="เลือกปี"
-            onChange={(e) => setPeriodValue(e.target.value)}
-            className="field text-sm px-3 py-2"
-          >
-            {[2569, 2568, 2567].map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        )}
-        {period === 'range' && (
-          <div className="flex items-center gap-2">
-            <ThaiDateInput
-              value={rangeStart}
-              onChange={(v) => setRangeStart(v)}
-              className="field text-sm px-3 py-2 w-full"
-            />
-            <i
-              className="fa-solid fa-arrow-right text-xs"
-              style={{ color: 'var(--ink-faint)' }}
-            ></i>
-            <ThaiDateInput
-              value={rangeEnd}
-              onChange={(v) => setRangeEnd(v)}
-              className="field text-sm px-3 py-2 w-full"
-            />
-          </div>
-        )}
-      </div>
+      {/*
+        สาขาเป็นปุ่ม เหมือนแดชบอร์ด (ร้านขอ 17 ก.ย. 2569) — the shared bar the
+        dashboard, สต็อก and ขายส่ง use, instead of a period bar of its own and a
+        branch dropdown further down. Changing branch still clears the customer
+        filter: another branch's customer list is a different list.
+      */}
+      <PeriodShopFilter
+        shopFilter={shopFilter}
+        setShopFilter={(v) => {
+          setShopFilter(v);
+          setCustomerFilter('all');
+        }}
+        period={period}
+        setPeriod={setPeriod}
+        periodValue={periodValue}
+        setPeriodValue={setPeriodValue}
+        rangeStart={rangeStart}
+        setRangeStart={setRangeStart}
+        rangeEnd={rangeEnd}
+        setRangeEnd={setRangeEnd}
+        allowAllShops={canSeeAllShops}
+        shopOptions={accessibleShops}
+      />
       <div className="card p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row gap-3 mb-3">
-          {accessibleShops.length > 1 ? (
-            <select
-              value={shopFilter}
-              aria-label="กรองตามสาขา"
-              onChange={(e) => {
-                setShopFilter(e.target.value);
-                setCustomerFilter('all');
-              }}
-              className="field flex-1 text-sm px-3.5 py-2.5"
-            >
-              {canSeeAllShops && <option value="all">ทุกร้าน ({accessibleShops.length})</option>}
-              {accessibleShops.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div
-              className="field flex-1 text-sm px-3.5 py-2.5"
-              style={{ color: 'var(--ink-soft)' }}
-            >
-              {shopName(accessibleShops[0]?.id || '')}
-            </div>
-          )}
           <div className="relative flex-1">
             <i
               className="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-xs"
