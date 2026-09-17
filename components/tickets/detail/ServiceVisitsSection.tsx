@@ -5,6 +5,7 @@ import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 import { fmtThaiDate } from '@/lib/domain/format';
+import { checkCover, claimProblem } from '@/lib/domain/insuranceCover';
 import { dateInputValue } from '@/lib/domain/now';
 import { buildServiceSchedule } from '@/lib/domain/serviceSchedule';
 
@@ -12,7 +13,7 @@ import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } fr
 
 import { ServiceScheduleList, type ServiceScheduleProps } from './ServiceScheduleList';
 
-import type { ServiceVisit, ServiceVisitPoint, Ticket } from '../types';
+import type { InsurancePolicy, ServiceVisit, ServiceVisitPoint, Ticket } from '../types';
 
 /**
  * ใบเซอร์วิส ลูกค้าหน้าร้าน — the record of visits the car actually made.
@@ -53,6 +54,7 @@ const empty = (
   checks: {},
   notes: '',
   points: [],
+  claim: null,
 });
 
 const labelCls = 'text-xs block mb-1';
@@ -72,6 +74,7 @@ export function ServiceVisitsSection({
   onDelete,
   onPrint,
   schedule,
+  policies = [],
 }: {
   t: Ticket;
   /**
@@ -98,6 +101,8 @@ export function ServiceVisitsSection({
   onPrint: (visit: ServiceVisit | null) => void;
   /** นัดเข้า Service. When given, each visit is shown under its own appointment. */
   schedule?: ServiceScheduleProps;
+  /** This car’s policies — what a visit may claim from (0059). */
+  policies?: InsurancePolicy[];
 }) {
   const used = visits.length;
   const [draft, setDraft] = useState<ServiceVisit | null>(null);
@@ -135,6 +140,11 @@ export function ServiceVisitsSection({
 
   async function save() {
     if (!draft) return;
+    // Said here rather than left to the database, which would refuse it anyway.
+    if (claimError) {
+      setError(claimError);
+      return;
+    }
     setSaving(true);
     setError(null);
     const result = await onSave(draft);
@@ -152,6 +162,28 @@ export function ServiceVisitsSection({
     const result = await onDelete(v.id);
     if (!result.ok) setError(result.error || 'ลบไม่สำเร็จ');
   }
+
+  /*
+    เคลมประกันในการเซอร์วิสครั้งนี้ (ร้านขอ 17 ก.ย. 2569). Which of this car’s
+    policies the visit being written could use, on the day the car came in —
+    the same rules save_service_visit enforces (lib/domain/insuranceCover.ts).
+  */
+  const claimDay = draft?.receivedAt || dateInputValue(new Date());
+  const covers = policies
+    .filter((p) => p.id)
+    .map((policy) => ({ policy, check: checkCover(policy, claimDay, draft?.id) }));
+  const usableCover = covers.find((c) => c.check.ok) ?? null;
+  const noCoverReason =
+    covers.length === 0
+      ? 'รถคันนี้ไม่มีประกัน — เคลมไม่ได้'
+      : `เคลมไม่ได้: ${[...new Set(covers.map((c) => c.check.reason))].join(', ')}`;
+  const claim = draft?.claim ?? null;
+  const claimCover = claim ? covers.find((c) => c.policy.id === claim.policyId) : undefined;
+  const claimError = claim
+    ? claimCover
+      ? claimProblem(claimCover.check, claim.bigUsed, claim.smallUsed)
+      : 'เลือกประกันที่ใช้เคลม'
+    : null;
 
   // นัดเข้า Service — present when the ticket sold visits with a start date.
   const rows = schedule ? buildServiceSchedule(schedule.start, schedule.count, schedule.saved) : [];
@@ -175,6 +207,9 @@ export function ServiceVisitsSection({
           {' · '}
           {v.points.length ? `${v.points.length} จุดแก้ไข` : 'ไม่มีจุดแก้ไข'}
           {v.overallOk === true ? ' · รอบคันปกติ' : v.overallOk === false ? ' · พบปัญหา' : ''}
+          {v.claim
+            ? ` · เคลมประกัน ${v.claim.bigUsed} ชิ้นใหญ่, ${v.claim.smallUsed} ชิ้นเล็ก`
+            : ''}
         </p>
       </div>
       <div className="flex gap-1.5 flex-shrink-0">
@@ -367,6 +402,96 @@ export function ServiceVisitsSection({
             ))}
           </div>
         </div>
+      </div>
+
+      {/*
+        เคลมประกัน — made at the visit it happened at, so the dates and the
+        team are this visit’s and are not asked again. Only this car’s cover,
+        only while it runs, only as many pieces as are left.
+      */}
+      <div className="rounded-lg p-2.5 mb-2.5" style={{ background: 'var(--paper)' }}>
+        <label className="flex items-center gap-2 text-xs font-semibold">
+          <input
+            type="checkbox"
+            checked={!!claim}
+            disabled={!claim && !usableCover}
+            onChange={(e) =>
+              set(
+                'claim',
+                e.target.checked && usableCover?.policy.id
+                  ? { policyId: usableCover.policy.id, bigUsed: 0, smallUsed: 0, detail: '' }
+                  : null,
+              )
+            }
+          />
+          ใช้ประกันเคลมในการเซอร์วิสครั้งนี้
+        </label>
+        {!claim && !usableCover && (
+          <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+            {noCoverReason}
+          </p>
+        )}
+        {claim && (
+          <div className="mt-2 flex flex-col gap-2">
+            <select
+              aria-label="ประกันที่ใช้เคลม"
+              value={claim.policyId}
+              onChange={(e) => set('claim', { ...claim, policyId: Number(e.target.value) })}
+              className="field w-full text-xs px-2.5 py-1.5"
+            >
+              {covers.map(({ policy, check }) => (
+                <option
+                  key={policy.id}
+                  value={policy.id}
+                  disabled={!check.ok && policy.id !== claim.policyId}
+                >
+                  {policy.planName || 'ประกัน'} · เหลือ {check.left.big} ชิ้นใหญ่,{' '}
+                  {check.left.small} ชิ้นเล็ก{check.ok ? '' : ` (${check.reason})`}
+                </option>
+              ))}
+            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+                  ชิ้นใหญ่ที่เคลม
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  aria-label="ชิ้นใหญ่ที่เคลม"
+                  value={claim.bigUsed}
+                  onChange={(e) => set('claim', { ...claim, bigUsed: Number(e.target.value) })}
+                  className="field w-full text-xs px-2.5 py-1.5"
+                />
+              </div>
+              <div>
+                <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+                  ชิ้นเล็กที่เคลม
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  aria-label="ชิ้นเล็กที่เคลม"
+                  value={claim.smallUsed}
+                  onChange={(e) => set('claim', { ...claim, smallUsed: Number(e.target.value) })}
+                  className="field w-full text-xs px-2.5 py-1.5"
+                />
+              </div>
+            </div>
+            <input
+              aria-label="รายการที่เคลม"
+              placeholder="เคลมอะไร เช่น กันชนหน้า"
+              value={claim.detail}
+              onChange={(e) => set('claim', { ...claim, detail: e.target.value })}
+              className="field w-full text-xs px-2.5 py-1.5"
+            />
+            {claimError && (
+              <p className="text-xs" style={{ color: '#B23A48' }}>
+                {claimError}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {[

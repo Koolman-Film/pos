@@ -156,6 +156,7 @@ export function TicketDetail({
     ticketId: string;
     visit: Record<string, unknown>;
     points: { seq: number; position: string; detail: string; note: string }[];
+    claim?: { policyId: number; bigUsed: number; smallUsed: number; detail: string } | null;
   }) => Promise<{ ok: boolean; error?: string; id?: number }>;
   serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
   /** แผนประกัน the branch sells, for the picker (migration 0023). */
@@ -352,7 +353,37 @@ export function TicketDetail({
    * The visit has to be in state before the print portal renders, hence the
    * separate setter rather than reusing `doPrint` alone.
    */
+  /** This car’s policies — the ones a service visit may claim from. */
+  const carPolicies = initialTicket.insuranceForPlate?.length
+    ? initialTicket.insuranceForPlate
+    : (initialTicket.insurancePolicies ?? []);
+
   function printServiceSheet(visit: ServiceVisit | null) {
+    /*
+      A visit that used the cover prints as ONE sheet: the ใบเซอร์วิส with the
+      claim box on it (ร้านขอ 17 ก.ย. 2569), with the cover as it stands now.
+    */
+    const claim = visit?.claim;
+    const policy = claim ? carPolicies.find((p) => p.id === claim.policyId) : undefined;
+    if (visit && claim && policy) {
+      setPrintPolicy(policy);
+      setPrintClaim(
+        policy.claims.find((c) => c.serviceVisitId === visit.id) ?? {
+          claimedAt: visit.receivedAt,
+          bigUsed: claim.bigUsed,
+          smallUsed: claim.smallUsed,
+          detail: claim.detail,
+          technician: visit.technicians.join(', '),
+          receivedAt: visit.receivedAt,
+          receivedTime: visit.receivedTime,
+          deliveredAt: visit.deliveredAt,
+          deliveredTime: visit.deliveredTime,
+        },
+      );
+      setPrintVisit(visit);
+      doPrint('claim');
+      return;
+    }
     setPrintVisit(visit);
     doPrint('service');
   }
@@ -379,6 +410,7 @@ export function TicketDetail({
         notes: visit.notes,
       },
       points: visit.points,
+      claim: visit.claim ?? null,
     });
     // The list lives on the server-rendered ticket, so a refresh is what shows
     // the new visit — and the visit_no the database actually issued.
@@ -1133,6 +1165,7 @@ export function TicketDetail({
                               onDelete={deleteServiceVisit}
                               onPrint={printServiceSheet}
                               schedule={schedule}
+                              policies={carPolicies}
                             />
                           )
                     }

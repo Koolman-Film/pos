@@ -81,6 +81,20 @@ export type ServiceVisit = {
   checks: Record<string, string>;
   notes: string;
   points: ServiceVisitPoint[];
+  /**
+   * เคลมประกันในการเซอร์วิสครั้งนี้ (migration 0059) — null when the visit did
+   * not use the cover. Saved with the visit, in the same transaction.
+   */
+  claim?: VisitClaim | null;
+};
+
+/** What a visit claims from a policy; dates and technician are the visit’s own. */
+export type VisitClaim = {
+  id?: number;
+  policyId: number;
+  bigUsed: number;
+  smallUsed: number;
+  detail: string;
 };
 
 /**
@@ -122,6 +136,12 @@ export type InsuranceClaim = {
   receivedTime?: string;
   deliveredAt?: string;
   deliveredTime?: string;
+  /**
+   * The service visit the claim was made at (0059), and its ครั้งที่. Absent
+   * on claims recorded before claims moved to the visit.
+   */
+  serviceVisitId?: number | null;
+  visitNo?: number;
 };
 
 /**

@@ -375,6 +375,9 @@ type ServiceVisitRow = {
   checks: Record<string, string> | null;
   notes: string;
   service_visit_points: { seq: number; position: string; detail: string; note: string }[] | null;
+  insurance_claims:
+    | { id: number; policy_id: number; big_used: number; small_used: number; detail: string }[]
+    | null;
 };
 
 /**
@@ -394,7 +397,8 @@ async function loadServiceVisits(
       'id, visit_no, plate, received_at, received_time, delivered_at, delivered_time, ' +
         'sales_by, qc_by, technicians, film_product, ' +
         'customer_waits, overall_ok, checks, notes, ' +
-        'service_visit_points(seq, position, detail, note)',
+        'service_visit_points(seq, position, detail, note), ' +
+        'insurance_claims(id, policy_id, big_used, small_used, detail)',
     )
     .eq('ticket_id', ticketId)
     .order('visit_no', { ascending: false });
@@ -418,6 +422,16 @@ async function loadServiceVisits(
     points: (v.service_visit_points ?? [])
       .map((p) => ({ seq: p.seq, position: p.position, detail: p.detail, note: p.note }))
       .sort((a, b) => a.seq - b.seq),
+    // One claim per visit at most (unique index, 0059).
+    claim: v.insurance_claims?.[0]
+      ? {
+          id: v.insurance_claims[0].id,
+          policyId: v.insurance_claims[0].policy_id,
+          bigUsed: Number(v.insurance_claims[0].big_used || 0),
+          smallUsed: Number(v.insurance_claims[0].small_used || 0),
+          detail: v.insurance_claims[0].detail ?? '',
+        }
+      : null,
   }));
 
   // A blank plate would count every other blank-plate ticket's visits as this
@@ -458,6 +472,8 @@ type InsurancePolicyRow = {
         received_time: string;
         delivered_at: string | null;
         delivered_time: string;
+        service_visit_id: number | null;
+        service_visits: { visit_no: number } | null;
       }[]
     | null;
 };
@@ -466,7 +482,7 @@ const POLICY_SELECT =
   'id, ticket_id, plate, plan_name, price, big_pieces, small_pieces, terms, ' +
   'sold_at, starts_at, ends_at, notes, ' +
   'insurance_claims(id, claimed_at, big_used, small_used, detail, technician, ' +
-  'received_at, received_time, delivered_at, delivered_time)';
+  'received_at, received_time, delivered_at, delivered_time, service_visit_id, service_visits(visit_no))';
 
 function toPolicy(p: InsurancePolicyRow): InsurancePolicy {
   return {
@@ -494,6 +510,8 @@ function toPolicy(p: InsurancePolicyRow): InsurancePolicy {
         receivedTime: c.received_time ?? '',
         deliveredAt: c.delivered_at ?? '',
         deliveredTime: c.delivered_time ?? '',
+        serviceVisitId: c.service_visit_id ?? null,
+        visitNo: c.service_visits?.visit_no,
       }))
       .sort((a, b) => (a.claimedAt < b.claimedAt ? 1 : -1)),
   };

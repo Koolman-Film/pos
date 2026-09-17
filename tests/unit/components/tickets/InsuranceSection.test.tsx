@@ -194,37 +194,45 @@ describe('InsuranceSection', () => {
     expect(screen.getByText('หมดอายุแล้ว')).toBeInTheDocument();
   });
 
-  it('records a claim against the policy it belongs to', async () => {
+  it('lists the claims made at service visits, without editing them here', async () => {
     const user = userEvent.setup();
-    const { onSave } = renderSection({ policies: [policy()] });
+    renderSection({
+      policies: [
+        policy({
+          claims: [
+            {
+              id: 4,
+              claimedAt: '2026-09-10',
+              bigUsed: 1,
+              smallUsed: 2,
+              detail: 'กันชนหน้า',
+              technician: 'ช่างเอก',
+              serviceVisitId: 21,
+              visitNo: 3,
+            },
+          ],
+        }),
+      ],
+    });
 
     await user.click(screen.getByLabelText('แก้ไขประกัน ประกันฟิล์มกันรอย 1 ปี'));
-    await user.click(screen.getByRole('button', { name: /เพิ่มการเคลม/ }));
-    await user.clear(screen.getByLabelText('ชิ้นใหญ่ที่ใช้ครั้งที่ 1'));
-    await user.type(screen.getByLabelText('ชิ้นใหญ่ที่ใช้ครั้งที่ 1'), '1');
-    await user.type(screen.getByLabelText('รายละเอียดการเคลมครั้งที่ 1'), 'กันชนหน้า');
-
-    // The remaining count follows what is being typed, before it is even saved.
-    expect(screen.getByText(/เหลือ 1 ชิ้นใหญ่, 20 ชิ้นเล็ก/)).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /^บันทึกประกัน$/ }));
-    expect(onSave.mock.calls[0][0].claims).toEqual([
-      expect.objectContaining({ bigUsed: 1, detail: 'กันชนหน้า' }),
-    ]);
+    expect(screen.getByText(/จากการเซอร์วิสครั้งที่ 3/)).toBeInTheDocument();
+    expect(screen.getAllByText(/เหลือ 1 ชิ้นใหญ่, 18 ชิ้นเล็ก/).length).toBeGreaterThan(0);
+    // Claims are made at the service visit now (0059).
+    expect(screen.queryByRole('button', { name: /เพิ่มการเคลม/ })).not.toBeInTheDocument();
+    // …and a visit’s claim reprints from the visit, as one sheet.
+    expect(screen.queryByLabelText('พิมพ์ใบเคลมครั้งที่ 1')).not.toBeInTheDocument();
   });
 
-  it('prints the receipt and the claim sheet through separate buttons', async () => {
+  it('prints the receipt from the policy row, and no blank claim sheet', async () => {
     const user = userEvent.setup();
-    const p = policy();
-    const { onPrint, onPrintClaim } = renderSection({ policies: [p] });
+    const { onPrint } = renderSection({ policies: [policy()] });
 
     await user.click(screen.getByLabelText('พิมพ์ใบเสร็จประกัน ประกันฟิล์มกันรอย 1 ปี'));
     expect(onPrint).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }));
-
-    // The ใบเคลม button on the policy row is the BLANK sheet — the one the
-    // technician carries to the car before anything is recorded.
-    await user.click(screen.getByLabelText('พิมพ์ใบเคลมประกัน ประกันฟิล์มกันรอย 1 ปี'));
-    expect(onPrintClaim).toHaveBeenLastCalledWith(expect.objectContaining({ id: 7 }), null);
+    expect(
+      screen.queryByLabelText('พิมพ์ใบเคลมประกัน ประกันฟิล์มกันรอย 1 ปี'),
+    ).not.toBeInTheDocument();
   });
 
   it('reprints one recorded claim from its own row', async () => {

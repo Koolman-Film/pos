@@ -582,6 +582,8 @@ export async function saveServiceVisit(input: {
   ticketId: string;
   visit: Record<string, unknown>;
   points: { seq: number; position: string; detail: string; note: string }[];
+  /** เคลมประกันในการเซอร์วิสครั้งนี้ (0059); null = the visit does not use the cover. */
+  claim?: { policyId: number; bigUsed: number; smallUsed: number; detail: string } | null;
 }): Promise<{ ok: boolean; error?: string; id?: number }> {
   const session = await getSessionContext(); // C2: authenticate before mutating
   // The Book งาน nav is the gate, the same one that lets someone edit the ticket
@@ -606,9 +608,12 @@ export async function saveServiceVisit(input: {
       p_ticket_id: input.ticketId,
       p_visit: input.visit as Json,
       p_points: input.points as unknown as Json,
+      // The cover is checked in the database, where it cannot be walked around.
+      p_claim: (input.claim ?? null) as unknown as Json,
     });
     if (error) throw new Error(error.message);
     revalidatePath('/tickets');
+    revalidatePath('/dashboard');
     return { ok: true, id: (data as number) ?? undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };

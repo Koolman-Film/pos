@@ -198,7 +198,9 @@ export default async function DashboardPage({
     // its policy.
     supabase
       .from('insurance_claims')
-      .select('policy_id, received_at, received_time, delivered_at, delivered_time, detail')
+      .select(
+        'policy_id, service_visit_id, received_at, received_time, delivered_at, delivered_time, detail',
+      )
       .not('received_at', 'is', null)
       .gte('received_at', daysAgoValue(365)),
   ]);
@@ -702,6 +704,8 @@ export default async function DashboardPage({
   const ticketByPolicy = new Map(policies.map((p) => [p.id, p.ticket_id]));
   const claimsByTicket = new Map<string, VisitDates[]>();
   for (const c of claimRows ?? []) {
+    // A claim made at a service visit is on the card as that visit already.
+    if (c.service_visit_id) continue;
     const ticketId = ticketByPolicy.get(c.policy_id);
     if (!ticketId) continue;
     const list = claimsByTicket.get(ticketId) ?? [];

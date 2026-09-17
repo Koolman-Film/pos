@@ -512,7 +512,10 @@ describe('TicketDetail — ใบเคลมประกัน ดึงข้�
     vi.spyOn(window, 'print').mockImplementation(() => {});
     renderWithPolicy();
 
-    await user.click(screen.getByLabelText(/พิมพ์ใบเคลมประกัน/));
+    // Claims are made at the service visit now (0059); one recorded before
+    // that still reprints from its own row under the policy.
+    await user.click(screen.getByLabelText('แก้ไขประกัน ประกันฟิล์มกันรอย 1 ปี'));
+    await user.click(screen.getByLabelText('พิมพ์ใบเคลมครั้งที่ 1'));
 
     const sheet = sheetText();
     expect(sheet).toContain('ใบเคลมประกันฟิล์มกันรอย');
@@ -531,14 +534,16 @@ describe('TicketDetail — ใบเคลมประกัน ดึงข้�
     expect(sheet).toMatch(/✓อ้วน/);
   });
 
-  it('prints the latest claim when the button did not name one', async () => {
-    // The ปุ่มใบเคลม on the policy row passes no claim. Printing the claim boxes
-    // blank while a claim is on file is the same paperwork done twice.
+  it('reprints a recorded claim with what it used and what is left', async () => {
+    // A claim on file prints its own boxes filled in, and the cover as it stands.
     const user = userEvent.setup();
     vi.spyOn(window, 'print').mockImplementation(() => {});
     renderWithPolicy();
 
-    await user.click(screen.getByLabelText(/พิมพ์ใบเคลมประกัน/));
+    // Claims are made at the service visit now (0059); one recorded before
+    // that still reprints from its own row under the policy.
+    await user.click(screen.getByLabelText('แก้ไขประกัน ประกันฟิล์มกันรอย 1 ปี'));
+    await user.click(screen.getByLabelText('พิมพ์ใบเคลมครั้งที่ 1'));
 
     const sheet = sheetText();
     expect(sheet).toContain('1 ชิ้นใหญ่, 0 ชิ้นเล็ก');

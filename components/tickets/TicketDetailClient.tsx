@@ -96,6 +96,7 @@ export function TicketDetailClient({
     ticketId: string;
     visit: Record<string, unknown>;
     points: { seq: number; position: string; detail: string; note: string }[];
+    claim?: { policyId: number; bigUsed: number; smallUsed: number; detail: string } | null;
   }) => Promise<{ ok: boolean; error?: string; id?: number }>;
   serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
   insurancePlans?: InsurancePlan[];

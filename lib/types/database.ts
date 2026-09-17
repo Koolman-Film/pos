@@ -309,6 +309,7 @@ export type Database = {
           detail: string
           id: number
           policy_id: number
+          service_visit_id: number | null
           small_used: number
           technician: string
         }
@@ -324,6 +325,7 @@ export type Database = {
           detail?: string
           id?: never
           policy_id: number
+          service_visit_id?: number | null
           small_used?: number
           technician?: string
         }
@@ -339,6 +341,7 @@ export type Database = {
           detail?: string
           id?: never
           policy_id?: number
+          service_visit_id?: number | null
           small_used?: number
           technician?: string
         }
@@ -2037,7 +2040,13 @@ export type Database = {
         Returns: undefined
       }
       save_service_visit: {
-        Args: { p_id: number; p_points: Json; p_ticket_id: string; p_visit: Json }
+        Args: {
+          p_claim?: Json
+          p_id: number
+          p_points: Json
+          p_ticket_id: string
+          p_visit: Json
+        }
         Returns: number
       }
       save_ticket_children: {

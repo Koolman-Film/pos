@@ -5,7 +5,6 @@ import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 import { fmtThaiDate } from '@/lib/domain/format';
 import { dateInputValue } from '@/lib/domain/now';
-import { TimeSelect } from '@/components/ui/TimeSelect';
 
 import type { InsuranceClaim, InsurancePlan, InsurancePolicy, Ticket } from '../types';
 
@@ -71,14 +70,6 @@ function addMonths(iso: string, months: number): string {
   return dateInputValue(d);
 }
 
-const blankClaim = (): InsuranceClaim => ({
-  claimedAt: dateInputValue(new Date()),
-  bigUsed: 0,
-  smallUsed: 0,
-  detail: '',
-  technician: '',
-});
-
 function emptyPolicy(t: Ticket, plan?: InsurancePlan): InsurancePolicy {
   const today = dateInputValue(new Date());
   return {
@@ -103,7 +94,6 @@ export function InsuranceSection({
   policies,
   forPlate,
   plans,
-  technicians,
   canDelete,
   onSave,
   onDelete,
@@ -170,14 +160,6 @@ export function InsuranceSection({
         terms: plan.terms,
         endsAt: d.startsAt ? addMonths(d.startsAt, plan.months) : d.endsAt,
       };
-    });
-  }
-
-  function setClaim(idx: number, field: keyof InsuranceClaim, value: string | number) {
-    setDraft((d) => {
-      if (!d) return d;
-      const claims = d.claims.map((c, i) => (i === idx ? { ...c, [field]: value } : c));
-      return { ...d, claims };
     });
   }
 
@@ -269,13 +251,6 @@ export function InsuranceSection({
                 aria-label={`พิมพ์ใบเสร็จประกัน ${p.planName || 'ประกัน'}`}
               >
                 <i className="fa-solid fa-receipt mr-1"></i>ใบเสร็จ
-              </button>
-              <button
-                onClick={() => onPrintClaim(p, null)}
-                className="btn-outline text-xs px-2.5 py-1 rounded-lg"
-                aria-label={`พิมพ์ใบเคลมประกัน ${p.planName || 'ประกัน'}`}
-              >
-                <i className="fa-solid fa-clipboard-check mr-1"></i>ใบเคลม
               </button>
               {canDelete && (
                 <button
@@ -455,7 +430,10 @@ export function InsuranceSection({
             </div>
           </div>
 
-          {/* การเคลม. Counted, so the row above can say what is left. */}
+          {/*
+            การเคลม — read here, written at the service visit (ร้านขอ 17 ก.ย.
+            2569, migration 0059). Counted, so the row above can say what is left.
+          */}
           <div className="pt-2 mb-2" style={{ borderTop: '1px dashed var(--line)' }}>
             <div className="flex items-center justify-between gap-2 mb-1.5">
               <p className="text-xs font-semibold">การเคลม</p>
@@ -463,132 +441,45 @@ export function InsuranceSection({
                 เหลือ {remainingCover(draft).big} ชิ้นใหญ่, {remainingCover(draft).small} ชิ้นเล็ก
               </p>
             </div>
+            {draft.claims.length === 0 && (
+              <p className="text-xs mb-1.5" style={{ color: 'var(--ink-faint)' }}>
+                ยังไม่มีการเคลม
+              </p>
+            )}
             {draft.claims.map((c, i) => (
-              <div key={i} className="rounded-lg p-2 mb-1.5" style={{ background: 'var(--paper)' }}>
-                <div className="grid grid-cols-3 gap-2 mb-1.5">
-                  <ThaiDateInput
-                    value={c.claimedAt}
-                    onChange={(v) => setClaim(i, 'claimedAt', v)}
-                    className="field text-xs px-2 py-1 w-full"
-                    ariaLabel={`วันที่เคลมครั้งที่ ${i + 1}`}
-                  />
-                  <input
-                    aria-label={`ชิ้นใหญ่ที่ใช้ครั้งที่ ${i + 1}`}
-                    type="number"
-                    value={c.bigUsed}
-                    onChange={(e) => setClaim(i, 'bigUsed', Number(e.target.value))}
-                    placeholder="ชิ้นใหญ่"
-                    className="field text-xs px-2 py-1"
-                  />
-                  <input
-                    aria-label={`ชิ้นเล็กที่ใช้ครั้งที่ ${i + 1}`}
-                    type="number"
-                    value={c.smallUsed}
-                    onChange={(e) => setClaim(i, 'smallUsed', Number(e.target.value))}
-                    placeholder="ชิ้นเล็ก"
-                    className="field text-xs px-2 py-1"
-                  />
+              <div
+                key={c.id ?? i}
+                className="rounded-lg p-2 mb-1.5 flex items-start justify-between gap-2"
+                style={{ background: 'var(--paper)' }}
+              >
+                <div className="text-xs min-w-0">
+                  <p className="font-semibold">
+                    {c.claimedAt ? fmtThaiDate(new Date(c.claimedAt)) : '-'} · {c.bigUsed} ชิ้นใหญ่,{' '}
+                    {c.smallUsed} ชิ้นเล็ก
+                  </p>
+                  <p style={{ color: 'var(--ink-soft)' }}>
+                    {c.visitNo
+                      ? `จากการเซอร์วิสครั้งที่ ${c.visitNo}`
+                      : 'บันทึกก่อนย้ายการเคลมไปที่การเซอร์วิส'}
+                    {c.detail ? ` · ${c.detail}` : ''}
+                  </p>
                 </div>
-                {/*
-                  วันรับรถ/ส่งมอบรถ ของการเคลมครั้งนี้.
-
-                  Separate from the job's own dates on purpose: the ใบเคลม used
-                  to print the day the film was fitted, which can be a year ago.
-                  What the shop has to evidence is the day the customer actually
-                  brought the car in for the claim.
-                */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-1.5">
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                      วันรับรถ
-                    </label>
-                    <ThaiDateInput
-                      value={c.receivedAt ?? ''}
-                      onChange={(v) => setClaim(i, 'receivedAt', v)}
-                      className="field text-xs px-2 py-1 w-full"
-                      ariaLabel={`วันรับรถเคลมครั้งที่ ${i + 1}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                      เวลารับรถ
-                    </label>
-                    <TimeSelect
-                      value={c.receivedTime ?? ''}
-                      onChange={(v) => setClaim(i, 'receivedTime', v)}
-                      ariaLabel={`เวลารับรถเคลมครั้งที่ ${i + 1}`}
-                      placeholder="เวลา..."
-                      className="field text-xs px-2 py-1 w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                      วันส่งมอบรถ
-                    </label>
-                    <ThaiDateInput
-                      value={c.deliveredAt ?? ''}
-                      onChange={(v) => setClaim(i, 'deliveredAt', v)}
-                      className="field text-xs px-2 py-1 w-full"
-                      ariaLabel={`วันส่งมอบรถเคลมครั้งที่ ${i + 1}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                      เวลาส่งมอบรถ
-                    </label>
-                    <TimeSelect
-                      value={c.deliveredTime ?? ''}
-                      onChange={(v) => setClaim(i, 'deliveredTime', v)}
-                      ariaLabel={`เวลาส่งมอบรถเคลมครั้งที่ ${i + 1}`}
-                      placeholder="เวลา..."
-                      className="field text-xs px-2 py-1 w-full"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    aria-label={`รายละเอียดการเคลมครั้งที่ ${i + 1}`}
-                    value={c.detail}
-                    onChange={(e) => setClaim(i, 'detail', e.target.value)}
-                    placeholder="เคลมอะไร เช่น กันชนหน้า"
-                    className="field text-xs px-2 py-1"
-                  />
-                  <select
-                    aria-label={`ช่างที่ทำการเคลมครั้งที่ ${i + 1}`}
-                    value={c.technician}
-                    onChange={(e) => setClaim(i, 'technician', e.target.value)}
-                    className="field text-xs px-2 py-1"
-                  >
-                    <option value="">ช่างที่ทำ...</option>
-                    {technicians.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                    {c.technician && !technicians.includes(c.technician) && (
-                      <option value={c.technician}>{c.technician}</option>
-                    )}
-                  </select>
-                </div>
-                {/* Reprints the sheet for THIS claim. Only for one already saved:
-                    a row still being typed has nothing to print. */}
-                {draft.id && c.id && (
+                {/* A visit’s claim reprints from the visit, as one sheet; only the
+                    ones recorded before that have a sheet of their own. */}
+                {draft.id && c.id && !c.serviceVisitId && (
                   <button
                     onClick={() => onPrintClaim(draft, c)}
-                    className="btn-outline text-xs px-2.5 py-1 rounded-lg mt-1.5"
+                    className="btn-outline text-xs px-2.5 py-1 rounded-lg flex-shrink-0"
                     aria-label={`พิมพ์ใบเคลมครั้งที่ ${i + 1}`}
                   >
-                    <i className="fa-solid fa-print mr-1"></i>พิมพ์ใบเคลมครั้งนี้
+                    <i className="fa-solid fa-print mr-1"></i>พิมพ์
                   </button>
                 )}
               </div>
             ))}
-            <button
-              onClick={() => set('claims', [...draft.claims, blankClaim()])}
-              className="btn-outline text-xs px-2.5 py-1 rounded-lg"
-            >
-              <i className="fa-solid fa-plus mr-1"></i>เพิ่มการเคลม
-            </button>
+            <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+              เคลมประกันได้ที่การบันทึกการเซอร์วิส (บริการเสริม → Service)
+            </p>
           </div>
 
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>

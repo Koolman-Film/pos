@@ -1773,10 +1773,20 @@ export function PrintJobSheet({
       <div className="print-area">
         <div className="print-page">
           <h2 style={{ textAlign: 'center', margin: '0 0 10px', fontSize: 17 }}>
-            {isClaim ? 'ใบเคลมประกันฟิล์มกันรอย' : 'ใบเซอร์วิส ลูกค้าหน้าร้าน'}
+            {/* A claim made at a visit is that visit’s sheet, with the cover on it. */}
+            {isClaim
+              ? v?.visitNo
+                ? 'ใบเซอร์วิส ลูกค้าหน้าร้าน · เคลมประกัน'
+                : 'ใบเคลมประกันฟิล์มกันรอย'
+              : 'ใบเซอร์วิส ลูกค้าหน้าร้าน'}
           </h2>
           {isClaim ? (
             <p style={{ textAlign: 'right', margin: '0 0 6px', fontSize: 11 }}>
+              {v?.visitNo ? (
+                <>
+                  ครั้งที่ <b>{v.visitNo}</b> &middot;{' '}
+                </>
+              ) : null}
               ใบงาน {t.id}
               {insuranceClaim?.claimedAt
                 ? ` · วันที่เคลม ${fmtThaiDate(new Date(insuranceClaim.claimedAt))}`
