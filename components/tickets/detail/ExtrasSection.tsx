@@ -63,7 +63,6 @@ export function ExtrasSection({
 }) {
   // The ชนิดสินค้า on this ticket, which is what a rework can be about.
   const reworkCategories = [...new Set(t.items.map((i) => i.category).filter(Boolean))];
-  const [showOptional, setShowOptional] = useState(false);
   const [addingExtra, setAddingExtra] = useState(false);
   const [newExtraName, setNewExtraName] = useState('');
   // บริการเสริม is a shop-wide list, so adding to it is an admin's job — the
@@ -75,16 +74,18 @@ export function ExtrasSection({
 
   return (
     <div className="mb-5">
-      <button
-        onClick={() => setShowOptional(!showOptional)}
+      {/*
+        Every บริการเสริม is listed, always (ร้านขอ 17 ก.ย. 2569). It used to
+        sit behind a fold that showed only the ticked ones, so what the shop
+        offers was invisible until someone thought to open it. A row stays just
+        its name until it is ticked; its fields open then.
+      */}
+      <p
         className="text-sm font-semibold mb-3 flex items-center gap-2"
         style={{ color: 'var(--primary)' }}
       >
-        <i className="fa-solid fa-sliders"></i>ข้อมูลเพิ่มเติม (กรอกทีหลังได้){' '}
-        <i
-          className={`fa-solid fa-chevron-${showOptional ? 'up' : 'down'} text-xs transition-transform`}
-        ></i>
-      </button>
+        <i className="fa-solid fa-sliders"></i>ข้อมูลเพิ่มเติม (กรอกทีหลังได้)
+      </p>
       <div className="fade-page">
         <p
           className="text-xs font-medium mb-3 flex items-center gap-1.5"
@@ -94,7 +95,6 @@ export function ExtrasSection({
         </p>
         {extraOptions.map((name) => {
           const ex: TicketExtra = t.extras?.[name] || {};
-          if (!showOptional && !ex.checked) return null;
           const wrapItem = t.items.find((i) => i.category === 'ฟิล์มกันรอย' && i.sold);
           const wrapStock = wrapItem ? findProductStock(stock, wrapItem.sold) : null;
           const legs = (ex.legs as SlideLeg[]) || [];

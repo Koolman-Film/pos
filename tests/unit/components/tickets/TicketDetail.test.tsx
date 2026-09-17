@@ -308,8 +308,7 @@ describe('TicketDetail — ใบงานที่ปิดงานแล้�
     const p = props();
     render(<TicketDetail {...p} />);
 
-    // Unticked extras are folded away until the section is opened.
-    fireEvent.click(screen.getByRole('button', { name: /^ข้อมูลเพิ่มเติม/ }));
+    // Every extra is listed without opening anything, ticked or not.
     fireEvent.click(screen.getByLabelText('ประกัน'));
 
     // Ticking it opens the policy form — it does NOT add a line to
