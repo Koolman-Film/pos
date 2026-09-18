@@ -562,9 +562,7 @@ describe('เอกสารการเงิน — ภาษาอังก�
       'Date',
       'Customer',
       'Issued by',
-      'Qty',
       'Description',
-      'Unit Price',
       'Amount',
       'Grand Total',
       'Payment Method',
@@ -572,6 +570,20 @@ describe('เอกสารการเงิน — ภาษาอังก�
     ]) {
       expect(screen.getAllByText(new RegExp(en)).length).toBeGreaterThan(0);
     }
+  });
+
+  it('numbers the lines instead of counting them, and prints no unit price', () => {
+    // A line can cover several panes at different prices (ร้านขอ 18 ก.ย. 2569),
+    // so a per-unit figure was one the shop never quoted.
+    renderDoc({
+      lines: undefined,
+    });
+    const table = document.querySelector('table.doc-table')!;
+    expect(table.textContent).toContain('ลำดับ');
+    expect(table.textContent).not.toContain('ราคา');
+    expect(table.textContent).not.toContain('Unit Price');
+    const firstCell = table.querySelector('tbody tr td');
+    expect(firstCell?.textContent).toBe('1');
   });
 
   it('keeps the Thai as the heading and the English as the gloss', () => {

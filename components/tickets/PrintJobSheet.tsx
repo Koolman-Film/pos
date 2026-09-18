@@ -2230,18 +2230,20 @@ export function PrintJobSheet({
             <thead>
               <tr>
                 {/* The English sits under each heading rather than beside it:
-                    the จำนวน column is 50px wide and a slash would wrap it. */}
+                    the ลำดับ column is 50px wide and a slash would wrap it.
+
+                    ลำดับ, not จำนวน, and no ราคาต่อหน่วย (ร้านขอ 18 ก.ย. 2569):
+                    a line covers several panes of glass at different prices, so
+                    dividing its total by the count printed a price the shop never
+                    quoted. What the line is worth is the ยอดรวม beside it; which
+                    panes it covers is written under the product name. */}
                 <th style={{ width: 50, textAlign: 'center' }}>
-                  จำนวน
-                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Qty</div>
+                  ลำดับ
+                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>No.</div>
                 </th>
                 <th>
                   รายการ
                   <div style={{ fontWeight: 'normal', fontSize: 9 }}>Description</div>
-                </th>
-                <th style={{ width: 100, textAlign: 'right' }}>
-                  ราคา
-                  <div style={{ fontWeight: 'normal', fontSize: 9 }}>Unit Price</div>
                 </th>
                 <th style={{ width: 100, textAlign: 'right' }}>
                   ยอดรวม
@@ -2255,7 +2257,7 @@ export function PrintJobSheet({
                 const short = stockMatch?.shortName || l.product;
                 return (
                   <tr key={li}>
-                    <td style={{ textAlign: 'center' }}>{l.qty}</td>
+                    <td style={{ textAlign: 'center' }}>{li + 1}</td>
                     <td>
                       <b>{short}</b>
                       {stockMatch?.shortName ? ` (${l.product})` : ''}
@@ -2264,7 +2266,6 @@ export function PrintJobSheet({
                         {l.detail ? ` — ${l.detail}` : ''}
                       </div>
                     </td>
-                    <td style={{ textAlign: 'right' }}>{fmt(l.amount / (l.qty || 1))}</td>
                     <td style={{ textAlign: 'right' }}>{fmt(l.amount)}</td>
                   </tr>
                 );
