@@ -8,6 +8,7 @@ import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import { ticketTotal } from '@/lib/domain/tickets';
 import { needsPriceApproval } from '@/lib/domain/orders';
 import { buildWholesaleOverview } from '@/components/dashboard/buildWholesaleOverview';
+import { productLabels } from '@/components/dashboard/productNames';
 import {
   orderReceipts,
   receiptDate,
@@ -99,7 +100,7 @@ export default async function DashboardPage({
         supabase
           .from('tickets')
           .select(
-            'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, sold_price, discount_type, discount_value), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
+            'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, interested, sold_price, discount_type, discount_value), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
           )
           // Soft-deleted tickets (migration 0013) are out of every figure on this
           // screen — revenue, job counts, the calendar and the bookings window.
@@ -257,10 +258,11 @@ export default async function DashboardPage({
     dropOff: toDate(t.drop_off_date),
     pickup: toDate(t.pickup_date),
     extras: (t.extras ?? {}) as Record<string, Record<string, unknown>>,
-    // Distinct product categories, and the product names the prototype shows on
-    // the recent-jobs rows (`i.sold || i.booked`).
+    // Distinct product categories, and the product names the rows show: what was
+    // sold, or — on a job still only booked — what the customer is interested in
+    // (components/dashboard/productNames.ts).
     categories: [...new Set((t.ticket_items ?? []).map((i) => i.category).filter(Boolean))],
-    products: [...new Set((t.ticket_items ?? []).map((i) => i.sold || i.booked).filter(Boolean))],
+    products: productLabels(t.ticket_items ?? []),
     items: (t.ticket_items ?? []).map((i) => ({
       category: i.category,
       soldPrice: num(i.sold_price),
