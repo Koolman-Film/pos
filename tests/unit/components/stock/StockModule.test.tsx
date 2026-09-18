@@ -238,14 +238,10 @@ describe('StockModule — ชนิดสินค้า that is not in the mana
     );
     await user.click(screen.getByLabelText('แก้ไขสินค้า SCREEN-009'));
 
-    // The edit form's picker, not the page's category FILTER — that one also
-    // lists จอ, but its options carry an "all" entry and its value is 'all'.
-    const select = screen.getAllByRole('combobox').find((s) => {
-      const opts = Array.from((s as HTMLSelectElement).options).map((o) => o.value);
-      return opts.includes('จอ') && !opts.includes('all');
-    })!;
-    // Selected, not merely present: an unmatched value shows the FIRST option.
-    expect((select as HTMLSelectElement).value).toBe('จอ');
+    // The edit form's picker, not the page's category FILTER. It reads จอ even
+    // though the managed list has not got it — a typed picker shows the saved
+    // value, where the old <select> fell back to its first entry.
+    expect(screen.getByRole('combobox', { name: 'เลือก...' })).toHaveValue('จอ');
   });
 
   it('persists a new category instead of only holding it in state', async () => {
@@ -262,12 +258,8 @@ describe('StockModule — ชนิดสินค้า that is not in the mana
     );
     await user.click(screen.getByLabelText('แก้ไขสินค้า SCREEN-009'));
 
-    const select = screen
-      .getAllByRole('combobox')
-      .find((s) =>
-        Array.from((s as HTMLSelectElement).options).some((o) => o.value === '__add__'),
-      )!;
-    await user.selectOptions(select, '__add__');
+    await user.click(screen.getByRole('combobox', { name: 'เลือก...' }));
+    await user.click(screen.getByRole('option', { name: '+ เพิ่มตัวเลือกใหม่...' }));
     await user.type(screen.getByPlaceholderText('พิมพ์ตัวเลือกใหม่...'), 'กล้องติดรถยนต์');
     await user.click(screen.getByRole('button', { name: 'เพิ่ม' }));
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { SearchableSelect } from './SearchableSelect';
 import { useCanManageOptions } from './optionManage';
 
 /**
@@ -12,6 +13,11 @@ import { useCanManageOptions } from './optionManage';
  * (`options.manage`). The prototype let anyone extend these lists and the trial
  * run showed where that leads — the time-slot list filled up with typos and
  * duplicates. Everyone can still SELECT from the list.
+ *
+ * พิมพ์ค้นหาได้ (ร้านขอ 18 ก.ย. 2569): the lists behind these — จองผ่าน, ยี่ห้อรถ,
+ * หมวดค่าใช้จ่าย, ชนิดสินค้า — have grown past what anyone can scroll accurately,
+ * so the control is the same typed picker the customer fields use. It still
+ * stores the VALUE, which for these lists is the label itself.
  */
 export function ManagedDropdown({
   value,
@@ -83,30 +89,21 @@ export function ManagedDropdown({
 
   return (
     <div className="flex gap-2">
-      <select
+      <SearchableSelect
         value={value}
-        onChange={(e) => {
-          if (e.target.value === '__add__') {
-            setAdding(true);
-          } else {
-            onChange(e.target.value);
-          }
-        }}
-        // The visible cue for this control is its placeholder option; without
-        // this the select is announced as unnamed.
-        aria-label={placeholder || 'เลือก...'}
+        onChange={(v) => (v === '__add__' ? setAdding(true) : onChange(v))}
+        options={[
+          // Stays above the results, so it is reachable whatever has been typed.
+          ...(canManage
+            ? [{ value: '__add__', label: '+ เพิ่มตัวเลือกใหม่...', action: true }]
+            : []),
+          ...shown.map((o) => ({ value: o, label: o })),
+        ]}
+        placeholder={placeholder || 'เลือก...'}
+        label={placeholder || 'เลือก...'}
         className="field flex-1 text-sm px-3 py-2"
-      >
-        <option value="" disabled>
-          {placeholder || 'เลือก...'}
-        </option>
-        {shown.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-        {canManage && <option value="__add__">+ เพิ่มตัวเลือกใหม่...</option>}
-      </select>
+        emptyText="ไม่พบตัวเลือกที่ค้นหา"
+      />
       {canManage && value && (
         <button
           onClick={removeCurrent}

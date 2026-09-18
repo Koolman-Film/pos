@@ -61,11 +61,15 @@ export function SearchableSelect({
   const wrapRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
-  // An action row ("+ เพิ่มลูกค้าใหม่") is not a search result and stays put, so
-  // it is reachable no matter what has been typed.
+  /*
+    An action row ("+ เพิ่มลูกค้าใหม่") is not a search result, and it is always
+    reachable — but it heads the list only while nothing has been typed. Once
+    somebody is searching, what they typed comes first, so Enter takes the
+    match rather than opening the add form.
+  */
   const actions = options.filter((o) => o.action);
   const found = options.filter((o) => !o.action && matches(o, query));
-  const shown = [...actions, ...found];
+  const shown = query.trim() ? [...found, ...actions] : [...actions, ...found];
 
   useEffect(() => {
     if (!open) return;
@@ -137,7 +141,7 @@ export function SearchableSelect({
             boxShadow: '0 8px 24px rgba(0,0,0,.12)',
           }}
         >
-          {shown.length === 0 && (
+          {found.length === 0 && (
             <li className="px-3 py-2 text-xs" style={{ color: 'var(--ink-faint)' }}>
               {emptyText}
             </li>
