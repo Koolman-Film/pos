@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 
+import { matchesSearch } from '@/lib/domain/search';
+
 /**
  * ช่องเลือกที่พิมพ์ค้นหาได้ สำหรับรายการที่เก็บเป็น id ไม่ใช่ชื่อ.
  *
@@ -31,10 +33,13 @@ export type SearchableOption = {
   action?: boolean;
 };
 
+/*
+  The same matcher every search box in the shop uses (lib/domain/search.ts):
+  every word must appear somewhere, and dashes and spaces are ignored — so 0812
+  finds a customer whose number was typed 081-234-5678 before the no-dash rule.
+*/
 function matches(o: SearchableOption, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return o.label.toLowerCase().includes(q) || (o.note ?? '').toLowerCase().includes(q);
+  return matchesSearch(query, [o.label, o.note]);
 }
 
 export function SearchableSelect({
