@@ -270,10 +270,17 @@ body {
   background: #f2f2f2 !important;
 }
 /* The shop's red — the same #7a2333 the save button carries in light mode,
-   written literally because a printed sheet must not follow the app's theme. */
+   written literally because a printed sheet must not follow the app's theme.
+
+   `th *` as well as `th`: the English sits in a <div> inside the cell, and
+   `.print-area *` above paints every descendant dark. The heading read white
+   in Thai and near-black in English on the same red band. */
+.print-area table.doc-table th,
+.print-area table.doc-table th * {
+  color: #fff !important;
+}
 .print-area table.doc-table th {
   background: #7a2333 !important;
-  color: #fff !important;
 }
 
 /*
