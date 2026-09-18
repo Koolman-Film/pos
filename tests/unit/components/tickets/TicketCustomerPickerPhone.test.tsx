@@ -26,7 +26,8 @@ function renderPicker() {
 }
 
 async function startNew(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(screen.getByLabelText('เลือกลูกค้าจากทะเบียน'), '__new__');
+  await user.click(screen.getByRole('combobox', { name: 'เลือกลูกค้าจากทะเบียน' }));
+  await user.click(screen.getByRole('option', { name: '+ เพิ่มลูกค้าใหม่' }));
 }
 
 describe('TicketCustomerPicker — เบอร์โทร', () => {

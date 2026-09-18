@@ -18,14 +18,16 @@ function renderDropdown(props: Record<string, unknown> = {}) {
   const onChange = vi.fn();
   const setOptions = vi.fn();
   render(
-    <ManagedDropdown
-      value=""
-      onChange={onChange}
-      options={options}
-      setOptions={setOptions}
-      placeholder="เลือกช่องทาง..."
-      {...props}
-    />,
+    <OptionManageProvider canManage>
+      <ManagedDropdown
+        value=""
+        onChange={onChange}
+        options={options}
+        setOptions={setOptions}
+        placeholder="เลือกช่องทาง..."
+        {...props}
+      />
+    </OptionManageProvider>,
   );
   return { onChange, setOptions, user: userEvent.setup() };
 }
@@ -103,6 +105,22 @@ describe('ManagedDropdown', () => {
 });
 
 describe('ManagedDropdown — options.manage gate', () => {
+  it('offers nothing to add where nobody said who may manage the list', async () => {
+    // No provider: the default is deny, so a picker somebody forgot to wrap
+    // cannot be used to extend a shop-wide list.
+    render(
+      <ManagedDropdown
+        value=""
+        onChange={vi.fn()}
+        options={options}
+        setOptions={vi.fn()}
+        placeholder="เลือกช่องทาง..."
+      />,
+    );
+    await userEvent.setup().click(box());
+    expect(screen.queryByRole('option', { name: '+ เพิ่มตัวเลือกใหม่...' })).toBeNull();
+  });
+
   const renderWith = (canManage: boolean) => {
     render(
       <OptionManageProvider canManage={canManage}>

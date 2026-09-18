@@ -2,14 +2,37 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
+import { OptionManageProvider } from '@/components/ui/optionManage';
 
 const options = ['ช่างเอก', 'ช่างบอย', 'ช่างซี'];
+
+/**
+ * These pickers live inside a module that says who may manage the lists. The add
+ * control is admin-only (`options.manage`), so the tests that use it say so.
+ */
+const renderManaged = (ui: React.ReactElement) =>
+  render(<OptionManageProvider canManage>{ui}</OptionManageProvider>);
+
+describe('ManagedMultiChipPicker — options.manage gate', () => {
+  it('offers no add control where nobody said who may manage the list', () => {
+    // No provider: the default is deny (components/ui/optionManage.tsx).
+    render(
+      <ManagedMultiChipPicker
+        values={[]}
+        onChange={vi.fn()}
+        options={options}
+        setOptions={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'เพิ่มตัวเลือกใหม่' })).toBeNull();
+  });
+});
 
 describe('ManagedMultiChipPicker', () => {
   it('selecting an unselected option adds it to the values passed to onChange', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
+    renderManaged(
       <ManagedMultiChipPicker
         values={['ช่างเอก']}
         onChange={onChange}
@@ -25,7 +48,7 @@ describe('ManagedMultiChipPicker', () => {
   it('clicking an already-selected option removes it', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
+    renderManaged(
       <ManagedMultiChipPicker
         values={['ช่างเอก', 'ช่างบอย']}
         onChange={onChange}
@@ -39,7 +62,7 @@ describe('ManagedMultiChipPicker', () => {
   });
 
   it('highlights every selected chip', () => {
-    render(
+    renderManaged(
       <ManagedMultiChipPicker
         values={['ช่างเอก', 'ช่างซี']}
         onChange={vi.fn()}
@@ -61,7 +84,7 @@ describe('ManagedMultiChipPicker', () => {
   it('typing a new value and confirming appends it via setOptions', async () => {
     const user = userEvent.setup();
     const setOptions = vi.fn();
-    render(
+    renderManaged(
       <ManagedMultiChipPicker
         values={[]}
         onChange={vi.fn()}
@@ -80,7 +103,7 @@ describe('ManagedMultiChipPicker', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const setOptions = vi.fn();
-    render(
+    renderManaged(
       <ManagedMultiChipPicker
         values={['ช่างเอก', 'ช่างบอย']}
         onChange={onChange}

@@ -11,13 +11,17 @@ import { createContext, useContext } from 'react';
  * intermediate section would touch a dozen components that have no other reason
  * to know about permissions, so the answer travels by context instead.
  *
- * The default is `true` — the pickers keep their standalone behaviour when
- * rendered without a provider (their own unit tests do exactly that). Every real
- * module wraps its subtree in `OptionManageProvider`, and the actual boundary is
- * server-side anyway: `updateOptionList` re-checks `options.manage` before it
- * writes, so hiding the controls is a courtesy, not the gate.
+ * The default is `false` (ร้านขอ 18 ก.ย. 2569). Every module that renders these
+ * pickers wraps its subtree in `OptionManageProvider`, so the default is only
+ * ever reached by a picker somebody forgot to wrap — and the answer to "may this
+ * person extend a shop-wide list?" must not be yes by omission. The shop asked
+ * for the add control to be admin-only precisely to stop lists filling up with
+ * duplicates and typos.
+ *
+ * The actual boundary is server-side either way: `updateOptionList` re-checks
+ * `options.manage` before it writes, so hiding the control is a courtesy.
  */
-const OptionManageContext = createContext(true);
+const OptionManageContext = createContext(false);
 
 export function OptionManageProvider({
   canManage,

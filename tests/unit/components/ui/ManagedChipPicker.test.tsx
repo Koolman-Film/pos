@@ -2,14 +2,32 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ManagedChipPicker } from '@/components/ui/ManagedChipPicker';
+import { OptionManageProvider } from '@/components/ui/optionManage';
 
 const options = ['เก๋งเล็ก', 'เก๋งใหญ่', 'กระบะ'];
+
+/**
+ * These pickers live inside a module that says who may manage the lists. The add
+ * control is admin-only (`options.manage`), so the tests that use it say so.
+ */
+const renderManaged = (ui: React.ReactElement) =>
+  render(<OptionManageProvider canManage>{ui}</OptionManageProvider>);
+
+describe('ManagedChipPicker — options.manage gate', () => {
+  it('offers no add control where nobody said who may manage the list', () => {
+    // No provider: the default is deny (components/ui/optionManage.tsx).
+    render(
+      <ManagedChipPicker value="" onChange={vi.fn()} options={options} setOptions={vi.fn()} />,
+    );
+    expect(screen.queryByRole('button', { name: 'เพิ่มตัวเลือกใหม่' })).toBeNull();
+  });
+});
 
 describe('ManagedChipPicker', () => {
   it('selecting an existing option calls onChange with that value', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
+    renderManaged(
       <ManagedChipPicker value="" onChange={onChange} options={options} setOptions={vi.fn()} />,
     );
 
@@ -18,7 +36,7 @@ describe('ManagedChipPicker', () => {
   });
 
   it('highlights the selected chip with the primary colour', () => {
-    render(
+    renderManaged(
       <ManagedChipPicker
         value="เก๋งใหญ่"
         onChange={vi.fn()}
@@ -38,7 +56,7 @@ describe('ManagedChipPicker', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const setOptions = vi.fn();
-    render(
+    renderManaged(
       <ManagedChipPicker value="" onChange={onChange} options={options} setOptions={setOptions} />,
     );
 
@@ -54,7 +72,7 @@ describe('ManagedChipPicker', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const setOptions = vi.fn();
-    render(
+    renderManaged(
       <ManagedChipPicker value="" onChange={onChange} options={options} setOptions={setOptions} />,
     );
 
@@ -69,7 +87,7 @@ describe('ManagedChipPicker', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const setOptions = vi.fn();
-    render(
+    renderManaged(
       <ManagedChipPicker
         value="กระบะ"
         onChange={onChange}

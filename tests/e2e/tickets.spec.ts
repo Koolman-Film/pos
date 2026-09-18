@@ -18,9 +18,12 @@ test('sales user can create a ticket and see it in the list', async ({ page }) =
   await page.goto('/tickets/new');
 
   // Pick an existing customer from the register — this fills both the name and
-  // the phone, the two fields the form marks required.
-  // The option label is `{name} · {phone}`, built in TicketCustomerPicker.
-  await page.getByLabel('เลือกลูกค้าจากทะเบียน').selectOption({ label: 'คุณ เอ · 081-234-5678' });
+  // the phone, the two fields the form marks required. The picker is typed:
+  // the name or the phone narrows the list (components/ui/SearchableSelect.tsx).
+  const customerBox = page.getByRole('combobox', { name: 'เลือกลูกค้าจากทะเบียน' });
+  await customerBox.click();
+  await customerBox.fill('081-234-5678');
+  await page.getByRole('option', { name: 'คุณ เอ' }).first().click();
   await page.getByLabel('ทะเบียนรถ/เลขถัง').fill(plate);
 
   await page.click('button:has-text("บันทึกใบงาน")');

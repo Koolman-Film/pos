@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { PhoneInput, PhoneOwnersWarning } from '@/components/ui/PhoneField';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { cleanPhones, findPhoneOwners, samePhones } from '@/lib/domain/phone';
 
 import type { RetailCustomer } from './types';
@@ -14,6 +15,10 @@ import type { RetailCustomer } from './types';
  * `setCustomers` updates the in-session retail-customer list. The chosen
  * customer's name/phone are snapshotted onto the ticket by `onSelect`; the
  * ticket save action persists that snapshot (tickets.customer_name / phone).
+ *
+ * พิมพ์ค้นหาได้ (ร้านขอ 18 ก.ย. 2569): the registry runs to hundreds of names,
+ * which is not a list anyone scrolls accurately. The phone is searchable too —
+ * a customer ringing about their car gives that before their name.
  */
 export function TicketCustomerPicker({
   customerName,
@@ -66,29 +71,29 @@ export function TicketCustomerPicker({
   if (mode === 'select')
     return (
       <div className="flex gap-2 items-center">
-        <select
-          value={matched ? matched.id : ''}
-          aria-label="เลือกลูกค้าจากทะเบียน"
-          onChange={(e) => {
-            if (e.target.value === '__new__') {
+        <SearchableSelect
+          value={matched ? String(matched.id) : ''}
+          label="เลือกลูกค้าจากทะเบียน"
+          placeholder="เลือกลูกค้าจากทะเบียน หรือพิมพ์ชื่อ/เบอร์เพื่อค้นหา..."
+          emptyText="ไม่พบลูกค้าที่ค้นหา — กด + เพิ่มลูกค้าใหม่ ด้านบน"
+          options={[
+            { value: '__new__', label: '+ เพิ่มลูกค้าใหม่', action: true },
+            ...customers.map((c) => ({
+              value: String(c.id),
+              label: c.name,
+              note: c.phone,
+            })),
+          ]}
+          onChange={(v) => {
+            if (v === '__new__') {
               startNew();
-            } else {
-              const c = customers.find((x) => x.id === Number(e.target.value));
-              if (c) onSelect(c);
+              return;
             }
+            const c = customers.find((x) => String(x.id) === v);
+            if (c) onSelect(c);
           }}
           className="field flex-1 text-sm px-3 py-2"
-        >
-          <option value="" disabled>
-            เลือกลูกค้าจากทะเบียน หรือเพิ่มใหม่...
-          </option>
-          <option value="__new__">+ เพิ่มลูกค้าใหม่</option>
-          {customers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} &middot; {c.phone}
-            </option>
-          ))}
-        </select>
+        />
         {matched && (
           <button
             onClick={startEdit}

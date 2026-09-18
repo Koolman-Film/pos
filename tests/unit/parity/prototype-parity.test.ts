@@ -87,6 +87,10 @@ const MODULES: { name: string; from: number; to: number; dirs: string[] }[] = [
  * `not-a-label`. The genuinely interesting ones are the behavioural divergences.
  */
 const ACCEPTED_ABSENCES: Record<string, string> = {
+  // --- pickers that are typed now, so their hints say so ---
+  'เลือกลูกค้าจากทะเบียน หรือเพิ่มใหม่...':
+    'divergence: the ticket customer picker is a typed search now (ร้านขอ 18 ก.ย. 2569) — the registry runs to hundreds of names — so its placeholder invites typing: "เลือกลูกค้าจากทะเบียน หรือพิมพ์ชื่อ/เบอร์เพื่อค้นหา..."',
+
   // --- Service: a start date and a schedule, not one date ---
   // The prototype's "วันที่เข้า Service" is read in two clipped runs, cut at "Service".
   วันที่เข้า:
