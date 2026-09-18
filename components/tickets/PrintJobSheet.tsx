@@ -7,6 +7,7 @@ import { fmt, fmtThaiDate, hhmm, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
+import { groupDocLines } from './docLines';
 import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } from './serviceForm';
 import { WRAP_CATEGORY, WRAP_OPTIONS } from './wrapOptions';
 
@@ -2252,24 +2253,29 @@ export function PrintJobSheet({
               </tr>
             </thead>
             <tbody>
-              {lines.map((l, li) => {
-                const stockMatch = stock.find((s) => s.name === l.product);
-                const short = stockMatch?.shortName || l.product;
-                return (
-                  <tr key={li}>
-                    <td style={{ textAlign: 'center' }}>{li + 1}</td>
-                    <td>
-                      <b>{short}</b>
-                      {stockMatch?.shortName ? ` (${l.product})` : ''}
-                      <div style={{ fontSize: 10, color: '#555' }}>
-                        {l.category}
-                        {l.detail ? ` — ${l.detail}` : ''}
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>{fmt(l.amount)}</td>
-                  </tr>
-                );
-              })}
+              {/* หนึ่งแถวต่อหนึ่งชนิดสินค้า: the products it covers are listed
+                  inside the row, with their panes, and carry no money of their
+                  own (components/tickets/docLines.ts). */}
+              {groupDocLines(lines).map((g, gi) => (
+                <tr key={g.category || gi}>
+                  <td style={{ textAlign: 'center' }}>{gi + 1}</td>
+                  <td>
+                    <b>{g.category || 'รายการอื่นๆ'}</b>
+                    {g.products.map((p, pi) => {
+                      const stockMatch = stock.find((s) => s.name === p.product);
+                      const short = stockMatch?.shortName || p.product;
+                      return (
+                        <div key={pi} style={{ fontSize: 10, color: '#555' }}>
+                          {short}
+                          {stockMatch?.shortName ? ` (${p.product})` : ''}
+                          {p.detail ? ` — ${p.detail}` : ''}
+                        </div>
+                      );
+                    })}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>{fmt(g.amount)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
 

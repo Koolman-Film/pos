@@ -572,6 +572,32 @@ describe('เอกสารการเงิน — ภาษาอังก�
     }
   });
 
+  it('gives each ชนิดสินค้า one row, adding its products up', () => {
+    // Two films on one job read as one ฟิล์มกรองแสง line: the customer agreed a
+    // price for the film, not a split between two of them (ร้านขอ 18 ก.ย. 2569).
+    renderSheet(
+      makeTicket({
+        items: [
+          item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม FINNIX CT 40%', soldPrice: 1300 }),
+          item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม 3M CRM 60%', soldPrice: 2900 }),
+          item({ category: 'ฟิล์มกันรอย', sold: 'TPU กันรอยเกรดพรีเมียม', soldPrice: 2200 }),
+        ],
+      }),
+      'doc',
+      { total: 6400, paid: 6400, payments: [] },
+    );
+
+    const rows = [...document.querySelectorAll('table.doc-table tbody tr')];
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain('ฟิล์มกรองแสง');
+    // 1,300 + 2,900, and neither price of its own.
+    expect(rows[0].textContent).toContain('4,200.00');
+    expect(rows[0].textContent).not.toContain('1,300.00');
+    expect(rows[0].textContent).toContain('ฟิล์ม FINNIX CT 40%');
+    expect(rows[0].textContent).toContain('ฟิล์ม 3M CRM 60%');
+    expect(rows[1].textContent).toContain('2,200.00');
+  });
+
   it('numbers the lines instead of counting them, and prints no unit price', () => {
     // A line can cover several panes at different prices (ร้านขอ 18 ก.ย. 2569),
     // so a per-unit figure was one the shop never quoted.
