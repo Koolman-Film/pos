@@ -1712,6 +1712,19 @@ export function PrintJobSheet({
       no dates of its own and prints blank lines to write on, which is what the
       paper form did anyway.
     */
+    /*
+      ครั้งที่ 2 / 12 — the sheet is worked from at the car, not handed to the
+      customer (ร้านขอ 19 ก.ย. 2569), so what the technician needs on it is how
+      much of the package is left. The entitlement is the ticket's own
+      จำนวนครั้ง; ครั้งที่ comes from the visits already recorded.
+    */
+    const entitled = Number(t.extras?.['Service']?.serviceCount ?? 0) || 0;
+    const visitsSoFar = t.serviceVisits?.length ?? 0;
+    const visitsLeft = Math.max(entitled - visitsSoFar, 0);
+    // A blank sheet is carried to the car and filled in by hand; the date it
+    // was printed is how it is matched back to the job afterwards.
+    const printedOn = fmtThaiDate(new Date());
+
     const claimDates = isClaim ? insuranceClaim : null;
     const visitReceivedAt = (isClaim ? claimDates?.receivedAt : v?.receivedAt) ?? '';
     const visitReceivedTime = (isClaim ? claimDates?.receivedTime : v?.receivedTime) ?? '';
@@ -1781,24 +1794,38 @@ export function PrintJobSheet({
                 : 'ใบเคลมประกันฟิล์มกันรอย'
               : 'ใบเซอร์วิส ลูกค้าหน้าร้าน'}
           </h2>
+          {/* ครั้งที่ N / ทั้งหมด, and what is left of the package. */}
           {isClaim ? (
             <p style={{ textAlign: 'right', margin: '0 0 6px', fontSize: 11 }}>
               {v?.visitNo ? (
                 <>
-                  ครั้งที่ <b>{v.visitNo}</b> &middot;{' '}
+                  ครั้งที่ <b>{v.visitNo}</b>
+                  {entitled > 0 ? ` / ${entitled}` : ''} &middot;{' '}
                 </>
               ) : null}
               ใบงาน {t.id}
               {insuranceClaim?.claimedAt
                 ? ` · วันที่เคลม ${fmtThaiDate(new Date(insuranceClaim.claimedAt))}`
                 : ''}
+              {` · พิมพ์ ${printedOn}`}
             </p>
           ) : (
-            v && (
-              <p style={{ textAlign: 'right', margin: '0 0 6px', fontSize: 11 }}>
-                ครั้งที่ <b>{v.visitNo}</b> &middot; ใบงาน {t.id}
-              </p>
-            )
+            <p style={{ textAlign: 'right', margin: '0 0 6px', fontSize: 11 }}>
+              {v ? (
+                <>
+                  ครั้งที่ <b>{v.visitNo}</b>
+                  {entitled > 0 ? ` / ${entitled}` : ''}
+                  {entitled > 0 ? ` · เหลืออีก ${visitsLeft} ครั้ง` : ''} &middot;{' '}
+                </>
+              ) : (
+                entitled > 0 && (
+                  <>
+                    เซอร์วิส {entitled} ครั้ง · เหลืออีก {visitsLeft} ครั้ง &middot;{' '}
+                  </>
+                )
+              )}
+              ใบงาน {t.id} &middot; พิมพ์ {printedOn}
+            </p>
           )}
 
           <div style={{ fontSize: 11, display: 'flex', flexWrap: 'wrap', gap: '5px 18px' }}>
@@ -1924,8 +1951,7 @@ export function PrintJobSheet({
           */}
           {(jobReceived || jobDelivered) && (
             <div style={{ fontSize: 10, color: '#555', marginTop: -6, marginBottom: 10 }}>
-              {isClaim ? 'งานติดตั้งเดิม' : 'งานเดิม'}: รับ {jobReceived || '-'} · ส่ง{' '}
-              {jobDelivered || '-'}
+              วันติดตั้งเดิม: รับ {jobReceived || '-'} · ส่ง {jobDelivered || '-'}
             </div>
           )}
 
