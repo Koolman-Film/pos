@@ -20,6 +20,12 @@ export function TicketListClient({
   capabilities,
   initialStatus,
   initialSearch,
+  initialShop,
+  initialCustomer,
+  initialPeriod,
+  initialPeriodValue,
+  initialRangeStart,
+  initialRangeEnd,
 }: {
   tickets: TicketListRow[];
   statuses: StatusConfig[];
@@ -31,6 +37,13 @@ export function TicketListClient({
   initialStatus?: string;
   /** `?q=` from the header search. */
   initialSearch?: string;
+  /** มุมมองที่เปิดค้างไว้ — see lib/browser/ticketFilter.ts. */
+  initialShop?: string;
+  initialCustomer?: string;
+  initialPeriod?: string;
+  initialPeriodValue?: string;
+  initialRangeStart?: string;
+  initialRangeEnd?: string;
 }) {
   const canDo = (key: string) => !!capabilities[key];
   return (
@@ -43,6 +56,12 @@ export function TicketListClient({
       canSeeAllShops={canSeeAllShops}
       initialStatus={initialStatus}
       initialSearch={initialSearch}
+      initialShop={initialShop}
+      initialCustomer={initialCustomer}
+      initialPeriod={initialPeriod}
+      initialPeriodValue={initialPeriodValue}
+      initialRangeStart={initialRangeStart}
+      initialRangeEnd={initialRangeEnd}
     />
   );
 }

@@ -10,6 +10,7 @@ import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUn
 import { fmtThaiDate } from '@/lib/domain/format';
 import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { itemNetPrice } from '@/lib/domain/tickets';
+import { ticketsHref } from '@/lib/browser/ticketFilter';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
 import { PrintJobSheet, TAX_DOC_TYPE, docPrefixFor, type PrintMode } from './PrintJobSheet';
@@ -924,7 +925,7 @@ export function TicketDetail({
                 'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
               )
             )
-              router.push('/tickets');
+              router.push(ticketsHref());
           }}
           className="text-sm mb-4 flex items-center gap-2 font-medium"
           style={{ color: 'var(--ink-soft)' }}
@@ -1230,7 +1231,7 @@ export function TicketDetail({
           )}
           <div className="flex gap-3">
             <button
-              onClick={() => router.push('/tickets')}
+              onClick={() => router.push(ticketsHref())}
               className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
             >
               {locked ? 'กลับไปรายการใบงาน' : 'ยกเลิก'}

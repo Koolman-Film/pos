@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Badge, getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
+import { rememberTicketFilter } from '@/lib/browser/ticketFilter';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
@@ -35,6 +36,12 @@ export function TicketList({
   canSeeAllShops = true,
   initialStatus,
   initialSearch,
+  initialShop,
+  initialCustomer,
+  initialPeriod,
+  initialPeriodValue,
+  initialRangeStart,
+  initialRangeEnd,
 }: {
   tickets: TicketListRow[];
   statuses: StatusConfig[];
@@ -46,6 +53,16 @@ export function TicketList({
   initialStatus?: string;
   /** `?q=` — the header search, sent to this page. */
   initialSearch?: string;
+  /**
+   * มุมมองที่เปิดค้างไว้ — the branch, customer and period the list was left on
+   * (lib/browser/ticketFilter.ts). กลับไปรายการใบงาน returns through these.
+   */
+  initialShop?: string;
+  initialCustomer?: string;
+  initialPeriod?: string;
+  initialPeriodValue?: string;
+  initialRangeStart?: string;
+  initialRangeEnd?: string;
 }) {
   const shopList = shops ?? accessibleShops;
   const shopName = (id: string) => shopList.find((s) => s.id === id)?.name ?? id;
@@ -55,14 +72,32 @@ export function TicketList({
 
   const [statusFilter, setStatusFilter] = useState(initialStatus || 'all');
   const [shopFilter, setShopFilter] = useState<string>(
-    canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all',
+    initialShop || (canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all'),
   );
-  const [customerFilter, setCustomerFilter] = useState('all');
+  const [customerFilter, setCustomerFilter] = useState(initialCustomer || 'all');
   const [search, setSearch] = useSearchFromUrl(initialSearch);
-  const [period, setPeriod] = useState<string>(DEFAULT_PERIOD);
-  const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
-  const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
-  const [rangeEnd, setRangeEnd] = useState(() => todayValue());
+  const [period, setPeriod] = useState<string>(initialPeriod || DEFAULT_PERIOD);
+  const [periodValue, setPeriodValue] = useState(() => initialPeriodValue || currentMonthValue());
+  const [rangeStart, setRangeStart] = useState(() => initialRangeStart || daysAgoValue(6));
+  const [rangeEnd, setRangeEnd] = useState(() => initialRangeEnd || todayValue());
+
+  /*
+    What the list is showing, kept for the way back (ร้านขอ 19 ก.ย. 2569).
+    Opening a job and coming back used to land on ทุกร้าน, so the branch and
+    the status had to be picked again every time.
+  */
+  useEffect(() => {
+    rememberTicketFilter({
+      shop: shopFilter,
+      status: statusFilter,
+      customer: customerFilter,
+      search,
+      period,
+      periodValue,
+      rangeStart,
+      rangeEnd,
+    });
+  }, [shopFilter, statusFilter, customerFilter, search, period, periodValue, rangeStart, rangeEnd]);
 
   function inSelectedPeriod(dateObj: Date | null | undefined) {
     return isInPeriod(dateObj, period, periodValue, rangeStart, rangeEnd);
