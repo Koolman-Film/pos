@@ -163,10 +163,15 @@ export function RevenueModule({
     invoice is still answerable here — the กรองตามเอกสาร filter and the
     เลขที่ใบกำกับภาษี column below are untouched.
   */
-  // Cost comes from the lots the jobs actually drew on (migration 0027), so
-  // this is a real margin rather than a quantity times an average.
-  const costTotal = visible.reduce((s, l) => s + l.cost, 0);
-  const margin = total - costTotal;
+  /*
+    กำไรขั้นต้น — การ์ดถูกซ่อนไว้ก่อน (ร้านขอ 19 ก.ย. 2569).
+
+    The figure divided two readings of the same words: cost as the lots a job
+    drew on (migration 0027, what the per-line ต้นทุน in the export still is),
+    or cost as the ต้นทุนขาย category in ค่าใช้จ่าย. Until the shop decides which
+    one it means, the screen says neither — a margin nobody agrees the
+    definition of is worse than no margin at all.
+  */
 
   const byCategory = categories
     .map((c) => {
@@ -306,20 +311,6 @@ export function RevenueModule({
             {heldJobs.length > 0 ? `${heldJobs.length} ใบงาน · ไม่รวมในยอดขาย` : 'ไม่มีในช่วงนี้'}
           </p>
         </div>
-        {canSeeCost && (
-          <div className="card p-4">
-            <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-              กำไรขั้นต้น
-            </p>
-            <p className="text-2xl font-extrabold" style={{ color: '#2F7A4F' }}>
-              {fmt(margin)}
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-faint)' }}>
-              ต้นทุน {fmt(costTotal)}
-              {total > 0 ? ` · ${Math.round((margin / total) * 100)}%` : ''}
-            </p>
-          </div>
-        )}
       </div>
 
       {/* แยกตามชนิดสินค้า — the headline the shop asked for. */}

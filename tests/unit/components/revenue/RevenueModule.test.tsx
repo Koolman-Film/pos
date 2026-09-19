@@ -140,21 +140,16 @@ describe('RevenueModule', () => {
 });
 
 /**
- * กำไรขั้นต้น. The cost comes from the LOTS a job actually drew on (migration
- * 0027), so this is a real margin — and it is behind the same gate as stock
- * prices, because it is the owner's figure rather than the counter's.
+ * กำไรขั้นต้น — ซ่อนการ์ดไว้ก่อน (ร้านขอ 19 ก.ย. 2569).
+ *
+ * The shop has not settled what ต้นทุนขาย means: the lots a job drew on
+ * (migration 0027, which is what the per-line ต้นทุน below still is), or the
+ * ต้นทุนขาย category in ค่าใช้จ่าย. The export keeps carrying the per-line cost
+ * for whoever may see it; the screen shows no margin until that is decided.
  */
 describe('RevenueModule — กำไรขั้นต้น', () => {
-  it('shows margin against the real cost of the goods', () => {
+  it('does not show the กำไรขั้นต้น card, whoever is reading', () => {
     renderModule([line({ amount: 30000, cost: 18000 })], { canSeeCost: true });
-    const card = screen.getByText('กำไรขั้นต้น').parentElement!;
-    expect(within(card).getByText('12,000.00')).toBeInTheDocument();
-    expect(within(card).getByText(/ต้นทุน 18,000.00/)).toBeInTheDocument();
-    expect(within(card).getByText(/40%/)).toBeInTheDocument();
-  });
-
-  it('keeps cost away from a caller who may not see stock prices', () => {
-    renderModule([line({ amount: 30000, cost: 18000 })]);
     expect(screen.queryByText('กำไรขั้นต้น')).not.toBeInTheDocument();
   });
 
