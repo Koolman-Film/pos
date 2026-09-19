@@ -38,6 +38,7 @@ export function TicketList({
   initialSearch,
   initialShop,
   initialCustomer,
+  initialCategory,
   initialPeriod,
   initialPeriodValue,
   initialRangeStart,
@@ -59,6 +60,7 @@ export function TicketList({
    */
   initialShop?: string;
   initialCustomer?: string;
+  initialCategory?: string;
   initialPeriod?: string;
   initialPeriodValue?: string;
   initialRangeStart?: string;
@@ -75,6 +77,7 @@ export function TicketList({
     initialShop || (canSeeAllShops ? 'all' : accessibleShops[0]?.id || 'all'),
   );
   const [customerFilter, setCustomerFilter] = useState(initialCustomer || 'all');
+  const [categoryFilter, setCategoryFilter] = useState(initialCategory || 'all');
   const [search, setSearch] = useSearchFromUrl(initialSearch);
   const [period, setPeriod] = useState<string>(initialPeriod || DEFAULT_PERIOD);
   const [periodValue, setPeriodValue] = useState(() => initialPeriodValue || currentMonthValue());
@@ -91,13 +94,24 @@ export function TicketList({
       shop: shopFilter,
       status: statusFilter,
       customer: customerFilter,
+      category: categoryFilter,
       search,
       period,
       periodValue,
       rangeStart,
       rangeEnd,
     });
-  }, [shopFilter, statusFilter, customerFilter, search, period, periodValue, rangeStart, rangeEnd]);
+  }, [
+    shopFilter,
+    statusFilter,
+    customerFilter,
+    categoryFilter,
+    search,
+    period,
+    periodValue,
+    rangeStart,
+    rangeEnd,
+  ]);
 
   function inSelectedPeriod(dateObj: Date | null | undefined) {
     return isInPeriod(dateObj, period, periodValue, rangeStart, rangeEnd);
@@ -114,6 +128,11 @@ export function TicketList({
   let scoped = tickets;
   if (shopFilter !== 'all') scoped = scoped.filter((t) => t.shop === shopFilter);
   if (customerFilter !== 'all') scoped = scoped.filter((t) => t.customer === customerFilter);
+  // ชนิดสินค้า — a job counts if ANY of its lines is that kind: "งานฟิล์มกันรอย
+  // เดือนนี้มีกี่คัน" is a question about the car coming in, not about a line.
+  if (categoryFilter !== 'all') {
+    scoped = scoped.filter((t) => t.items.some((i) => i.category === categoryFilter));
+  }
   /*
     Search looks at everything the shop might remember a job by — the
     number on the ใบงาน, the phone, the car, what went on it, who fitted it,
@@ -156,6 +175,15 @@ export function TicketList({
       (shopFilter === 'all' ? tickets : tickets.filter((t) => t.shop === shopFilter)).map(
         (t) => t.customer,
       ),
+    ),
+  ].sort((a, b) => a.localeCompare(b, 'th'));
+
+  // The kinds of work this branch actually has on, not the whole register.
+  const categoryOptions = [
+    ...new Set(
+      (shopFilter === 'all' ? tickets : tickets.filter((t) => t.shop === shopFilter))
+        .flatMap((t) => t.items.map((i) => i.category))
+        .filter((c): c is string => !!c),
     ),
   ].sort((a, b) => a.localeCompare(b, 'th'));
 
@@ -300,6 +328,19 @@ export function TicketList({
           >
             <option value="all">ทุกลูกค้า</option>
             {customerOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select
+            value={categoryFilter}
+            aria-label="กรองตามชนิดสินค้า"
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="field flex-1 text-sm px-3.5 py-2.5"
+          >
+            <option value="all">ทุกชนิดสินค้า</option>
+            {categoryOptions.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>

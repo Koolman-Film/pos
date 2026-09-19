@@ -22,6 +22,7 @@ export type TicketFilter = {
   shop: string;
   status: string;
   customer: string;
+  category: string;
   search: string;
   period: string;
   periodValue: string;
@@ -37,6 +38,7 @@ export function ticketFilterQuery(f: Partial<TicketFilter>): string {
   if (!isAll(f.shop ?? '')) params.set('shop', f.shop!);
   if (!isAll(f.status ?? '')) params.set('status', f.status!);
   if (!isAll(f.customer ?? '')) params.set('customer', f.customer!);
+  if (!isAll(f.category ?? '')) params.set('category', f.category!);
   if ((f.search ?? '').trim()) params.set('q', f.search!.trim());
   if (f.period) {
     params.set('period', f.period);

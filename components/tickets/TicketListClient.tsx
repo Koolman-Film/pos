@@ -22,6 +22,7 @@ export function TicketListClient({
   initialSearch,
   initialShop,
   initialCustomer,
+  initialCategory,
   initialPeriod,
   initialPeriodValue,
   initialRangeStart,
@@ -40,6 +41,7 @@ export function TicketListClient({
   /** มุมมองที่เปิดค้างไว้ — see lib/browser/ticketFilter.ts. */
   initialShop?: string;
   initialCustomer?: string;
+  initialCategory?: string;
   initialPeriod?: string;
   initialPeriodValue?: string;
   initialRangeStart?: string;
@@ -58,6 +60,7 @@ export function TicketListClient({
       initialSearch={initialSearch}
       initialShop={initialShop}
       initialCustomer={initialCustomer}
+      initialCategory={initialCategory}
       initialPeriod={initialPeriod}
       initialPeriodValue={initialPeriodValue}
       initialRangeStart={initialRangeStart}

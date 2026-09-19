@@ -37,6 +37,7 @@ export default async function TicketsPage({
       initialSearch={initialSearch}
       initialShop={str('shop')}
       initialCustomer={str('customer')}
+      initialCategory={str('category')}
       initialPeriod={str('period')}
       initialPeriodValue={str('pv')}
       initialRangeStart={str('rs')}

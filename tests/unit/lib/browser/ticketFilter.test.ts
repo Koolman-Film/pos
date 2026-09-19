@@ -13,6 +13,7 @@ const base = {
   shop: 'all',
   status: 'all',
   customer: 'all',
+  category: 'all',
   search: '',
   period: 'month',
   periodValue: '2026-09',
@@ -29,12 +30,14 @@ describe('ticketFilterQuery', () => {
       shop: 'lp',
       status: 'ค้างชำระ',
       customer: 'คุณ ปรีชา',
+      category: 'ฟิล์มกันรอย',
       search: '3ขค',
     });
     const params = new URLSearchParams(q);
     expect(params.get('shop')).toBe('lp');
     expect(params.get('status')).toBe('ค้างชำระ');
     expect(params.get('customer')).toBe('คุณ ปรีชา');
+    expect(params.get('category')).toBe('ฟิล์มกันรอย');
     expect(params.get('q')).toBe('3ขค');
   });
 
@@ -43,6 +46,7 @@ describe('ticketFilterQuery', () => {
     expect(params.get('shop')).toBeNull();
     expect(params.get('status')).toBeNull();
     expect(params.get('customer')).toBeNull();
+    expect(params.get('category')).toBeNull();
     expect(params.get('q')).toBeNull();
   });
 
