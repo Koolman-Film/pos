@@ -14,6 +14,7 @@ import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { FilePreview } from '@/components/ui/FilePreview';
 import { OptionManageProvider } from '@/components/ui/optionManage';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { StatusPill } from '@/components/ui/StatusPill';
 import type { Shop } from '@/components/ui/PeriodShopFilter';
 
@@ -682,19 +683,26 @@ export function AccountingModule({
               </option>
             ))}
           </select>
-          <select
-            value={categoryFilter}
-            aria-label="กรองตามกลุ่มค่าใช้จ่าย"
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="field text-sm px-3 py-2"
-          >
-            <option value="all">ทุกกลุ่มค่าใช้จ่าย</option>
-            {expenseCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          {/*
+            พิมพ์ค้นหาได้ (ร้านขอ 19 ก.ย. 2569): the list is already past twenty
+            groups and keeps growing, which is more than anyone can scroll
+            accurately. The forms below got the typed picker earlier; this is
+            the same list, so it gets the same control.
+          */}
+          <div style={{ minWidth: 200 }}>
+            <SearchableSelect
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              options={[
+                { value: 'all', label: 'ทุกกลุ่มค่าใช้จ่าย' },
+                ...expenseCategories.map((c) => ({ value: c, label: c })),
+              ]}
+              label="กรองตามกลุ่มค่าใช้จ่าย"
+              placeholder="ทุกกลุ่มค่าใช้จ่าย"
+              className="field w-full text-sm px-3 py-2"
+              emptyText="ไม่พบกลุ่มค่าใช้จ่ายที่ค้นหา"
+            />
+          </div>
           <select
             value={statusFilter}
             aria-label="กรองตามสถานะ"
@@ -1430,11 +1438,15 @@ export function AccountingModule({
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                         กลุ่มค่าใช้จ่าย
                       </label>
+                      {/* The placeholder is the picker's accessible name too, so
+                          a bare "เลือก..." left both of these reading the same
+                          to anyone not looking at the caption above. */}
                       <ManagedDropdown
                         value={editExForm.category}
                         onChange={(v) => setEditExForm({ ...editExForm, category: v })}
                         options={expenseCategories}
                         setOptions={setExpenseCategories}
+                        placeholder="เลือกกลุ่มค่าใช้จ่าย..."
                       />
                     </div>
                     <div>
@@ -1446,6 +1458,7 @@ export function AccountingModule({
                         onChange={(v) => setEditExForm({ ...editExForm, source: v })}
                         options={paymentSources}
                         setOptions={setPaymentSources}
+                        placeholder="เลือกแหล่งเงินที่จ่าย..."
                       />
                     </div>
                     <div>

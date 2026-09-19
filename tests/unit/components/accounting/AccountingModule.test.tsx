@@ -447,3 +447,44 @@ describe('AccountingModule — สีของกลุ่มค่าใช้�
     expect(line).toHaveStyle({ color: 'var(--ink-soft)' });
   });
 });
+
+/**
+ * กรองตามกลุ่มค่าใช้จ่าย พิมพ์ค้นหาได้ (ร้านขอ 19 ก.ย. 2569).
+ *
+ * "หากมีกลุ่มค่าใช้จ่ายเยอะกว่านี้จะทำให้เสียเวลาในการเลือก" — the shop already
+ * runs past twenty groups. The forms got the typed picker earlier; this is the
+ * same list in the filter row, so it answers to typing too.
+ */
+describe('AccountingModule — กรองตามกลุ่มค่าใช้จ่าย', () => {
+  const filter = () => screen.getByRole('combobox', { name: 'กรองตามกลุ่มค่าใช้จ่าย' });
+
+  it('narrows the list to what was typed', async () => {
+    const user = userEvent.setup();
+    renderAccounting();
+    await user.click(filter());
+    await user.type(filter(), 'ตลาด');
+    const list = screen.getByRole('listbox');
+    expect(within(list).getByText('การตลาด')).toBeInTheDocument();
+    expect(within(list).queryByText('ค่าเช่า')).not.toBeInTheDocument();
+  });
+
+  it('filters the expenses to the group chosen', async () => {
+    const user = userEvent.setup();
+    renderAccounting();
+    await user.click(filter());
+    await user.type(filter(), 'ตลาด');
+    await user.click(within(screen.getByRole('listbox')).getByText('การตลาด'));
+
+    const list = screen.getByText('รายการค่าใช้จ่าย').closest('.card') as HTMLElement;
+    expect(within(list).getByText('ค่ากาแฟ')).toBeInTheDocument();
+    expect(within(list).queryByText('ค่าเช่าร้าน')).not.toBeInTheDocument();
+  });
+
+  it('says so when nothing matches, instead of showing an empty box', async () => {
+    const user = userEvent.setup();
+    renderAccounting();
+    await user.click(filter());
+    await user.type(filter(), 'ไม่มีกลุ่มนี้');
+    expect(screen.getByText('ไม่พบกลุ่มค่าใช้จ่ายที่ค้นหา')).toBeInTheDocument();
+  });
+});
