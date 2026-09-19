@@ -10,6 +10,8 @@ import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUn
 import { fmtThaiDate } from '@/lib/domain/format';
 import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { itemNetPrice } from '@/lib/domain/tickets';
+import { dateInputValue } from '@/lib/domain/now';
+import { newPaymentUid } from '@/lib/domain/paymentUid';
 import { ticketsHref } from '@/lib/browser/ticketFilter';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
@@ -849,7 +851,18 @@ export function TicketDetail({
       ...t,
       payments: [
         ...t.payments,
-        { type: 'มัดจำ', method: 'เงินสด', amount: 0, date: '', attachments: [] },
+        {
+          type: 'มัดจำ',
+          method: 'เงินสด',
+          amount: 0,
+          // วันนี้ as the starting point, SHOWN on the row so it can be moved to
+          // the day the money actually arrived. It used to be blank here and
+          // filled in as today on the way to the database, where nobody could
+          // see it and nobody could correct it.
+          date: dateInputValue(new Date()),
+          uid: newPaymentUid(),
+          attachments: [],
+        },
       ],
     });
   }

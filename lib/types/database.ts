@@ -1496,6 +1496,7 @@ export type Database = {
           paid_at: string
           ticket_id: string
           type: string
+          uid: string
         }
         Insert: {
           amount: number
@@ -1505,6 +1506,7 @@ export type Database = {
           paid_at: string
           ticket_id: string
           type: string
+          uid?: string
         }
         Update: {
           amount?: number
@@ -1514,6 +1516,7 @@ export type Database = {
           paid_at?: string
           ticket_id?: string
           type?: string
+          uid?: string
         }
         Relationships: [
           {

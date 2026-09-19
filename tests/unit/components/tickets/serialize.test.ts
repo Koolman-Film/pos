@@ -259,6 +259,25 @@ describe('serializeTicket — payment dates', () => {
       `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
     );
   });
+
+  it('carries each row’s own key, so the server can keep its stored date', () => {
+    // The database throws the payment rows away and writes them again on every
+    // save; without a key of its own a row is unrecognisable afterwards, and a
+    // save that named no date moved the money to today (migration 0060).
+    const t = baseTicket({
+      payments: [
+        { type: 'มัดจำ', method: 'เงินสด', amount: 1000, date: '2026-08-13', uid: 'pKEEPME' },
+      ],
+    } as unknown as Partial<Ticket>);
+    expect(serializeTicket(t, false).payments[0].uid).toBe('pKEEPME');
+  });
+
+  it('gives a row that predates the key one of its own', () => {
+    const t = baseTicket({
+      payments: [{ type: 'มัดจำ', method: 'เงินสด', amount: 1000, date: '2026-08-13' }],
+    } as unknown as Partial<Ticket>);
+    expect(serializeTicket(t, false).payments[0].uid).toMatch(/^p\w+$/);
+  });
 });
 
 describe('serializeTicket — รายได้ / รับแทน', () => {

@@ -1,4 +1,5 @@
 import { dateInputValue } from '@/lib/domain/now';
+import { newPaymentUid } from '@/lib/domain/paymentUid';
 
 import type { Ticket, TicketSavePayload } from './types';
 
@@ -96,7 +97,13 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
       type: p.type,
       method: p.method,
       amount: Number(p.amount || 0),
+      // วันที่รับเงินจริง. The blank fallback is the last resort only: the form
+      // fills a new row in with today, and a row loaded from the database
+      // carries its own date, so it reaches the server set either way. If it
+      // ever does arrive empty, migration 0060 keeps the stored date by `uid`
+      // rather than moving the money to today.
       paidAt: toISODate(p.date || '') || dateInputValue(new Date()),
+      uid: p.uid || newPaymentUid(),
       // Storage paths for the transfer slips (migration 0018). These were
       // dropped here entirely — `ticket_payments` had no column for them — so a
       // slip attached to a payment never survived the save.

@@ -27,7 +27,21 @@ export type TicketPayment = {
   type: string;
   method: string;
   amount: number | string;
+  /**
+   * วันที่รับเงินจริง — `YYYY-MM-DD`, the ticket's `paid_at`.
+   *
+   * ยอดขาย and สมุดบัญชีแหล่งเงิน both count money on this day, so it is the
+   * day the money ARRIVED, not the day somebody typed the row in. It used to
+   * have no field on the form at all and was filled in as "today" on every
+   * save (migration 0060).
+   */
   date?: string;
+  /**
+   * คีย์ประจำรายการ that survives a save — see `newPaymentUid`. Without it the
+   * server cannot tell which stored row an incoming one is, and a save that
+   * carried no date moved the money to today.
+   */
+  uid?: string;
   attachments?: string[];
 };
 
@@ -410,6 +424,12 @@ export type TicketSavePayload = {
     method: string;
     amount: number;
     paidAt: string;
+    /**
+     * The row's own key (migration 0060). The server keeps a stored row's
+     * `paid_at` when a save arrives without one, and this is how it knows
+     * which stored row that is.
+     */
+    uid: string;
     /** Storage paths in the `ticket-attachments` bucket (migration 0018). */
     attachments: string[];
   }[];

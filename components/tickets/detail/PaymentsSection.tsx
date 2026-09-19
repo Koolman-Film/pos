@@ -1,5 +1,6 @@
 'use client';
 
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt } from '@/lib/domain/format';
 
 import { AttachmentField } from './AttachmentField';
@@ -156,6 +157,25 @@ export function PaymentsSection({
                 <i className="fa-solid fa-trash"></i>
               </button>
             )}
+          </div>
+          {/*
+            วันที่รับเงิน. ยอดขาย and สมุดบัญชีแหล่งเงิน both count money on this
+            day, and until migration 0060 the row had no date field: whatever
+            day the payment was typed in became the day the money arrived. A
+            transfer that came in on Friday evening and was entered on Monday
+            landed on Monday, in the wrong month at a month end, and there was
+            no way to correct it from anywhere in the app.
+          */}
+          <div className="mb-2">
+            <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              วันที่รับเงิน
+            </label>
+            <ThaiDateInput
+              value={p.date || ''}
+              ariaLabel={`วันที่รับเงินรายการที่ ${idx + 1}`}
+              onChange={(v) => updatePayment(idx, 'date', v)}
+              className="field text-xs px-2.5 py-1.5 w-full"
+            />
           </div>
           {/*
             The slip is the shop's proof the transfer arrived, so it is a real

@@ -24,6 +24,7 @@ import {
   orderPendingAdjustments,
 } from '@/lib/domain/orders';
 import { dateInputValue } from '@/lib/domain/now';
+import { newPaymentUid } from '@/lib/domain/paymentUid';
 import { uploadAttachments, discardAttachments, fileNameFromPath } from '@/lib/storage/attachments';
 
 import { CustomerPicker } from './CustomerPicker';
@@ -45,15 +46,6 @@ import {
   type WsStockItem,
 } from './types';
 
-/**
- * คีย์ประจำรายการรับชำระ.
- *
- * `save_order_children` deletes and re-inserts every child row on each save,
- * so the database id is not stable and a confirmation cannot be keyed on it.
- * This is: generated once when the row is added and carried through every
- * later save. `crypto.randomUUID` is not in every browser this shop runs
- * (nor in jsdom), and uniqueness within one PO is all that is asked of it.
- */
 /*
   แผงรายการสินค้า และแผงการคืนสินค้า.
 
@@ -81,10 +73,6 @@ const panelStyle = (p: { spine: string; tint: string }): React.CSSProperties => 
   border: '1px solid var(--line)',
   borderLeft: `3px solid ${p.spine}`,
 });
-
-function newPaymentUid(): string {
-  return `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-}
 
 /**
  * Ported from reference/v0.4/finnix-film.html:2690-2967.
