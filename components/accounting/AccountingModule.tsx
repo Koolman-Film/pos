@@ -323,6 +323,16 @@ export function AccountingModule({
   }
 
   const [showCashDetail, setShowCashDetail] = useState(false);
+  /**
+   * เงินรอรับคืน Finnix ยุบไว้ก่อน (ร้านขอ 19 ก.ย. 2569).
+   *
+   * The table under it lists every bill the branch fronted for another Finnix
+   * shop, and it sat open above รายการค่าใช้จ่าย — a screen and a half of rows
+   * to scroll past before reaching the list the page is actually for. The
+   * headline (how many, how much) is what gets read daily; the rows are for the
+   * day somebody settles up.
+   */
+  const [showFinnixDetail, setShowFinnixDetail] = useState(false);
   const [cashPeriod, setCashPeriod] = useState<string>(DEFAULT_PERIOD);
   const [cashPeriodValue, setCashPeriodValue] = useState(() => currentMonthValue());
   const [cashRangeStart, setCashRangeStart] = useState(() => daysAgoValue(6));
@@ -864,64 +874,81 @@ export function AccountingModule({
         {/* สรุปเงินรอรับคืน Finnix — only when the period holds any. */}
         {finnixExpenses.length > 0 && (
           <div className="card p-5 mb-4" style={{ borderLeft: '3px solid #8A5A12' }}>
-            <div className="flex items-baseline justify-between gap-2 mb-1 flex-wrap">
-              <p className="text-sm font-semibold">
-                เงินรอรับคืน Finnix ({finnixExpenses.length} รายการ)
+            {/* The whole heading is the toggle: the count and the total stay
+                readable folded, which is all this panel is consulted for most
+                days. */}
+            <button
+              type="button"
+              onClick={() => setShowFinnixDetail(!showFinnixDetail)}
+              aria-expanded={showFinnixDetail}
+              className="w-full text-left"
+            >
+              <div className="flex items-baseline justify-between gap-2 mb-1 flex-wrap">
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  <i
+                    className={`fa-solid fa-chevron-${showFinnixDetail ? 'up' : 'down'} text-xs`}
+                    style={{ color: '#8A5A12', opacity: 0.7 }}
+                  ></i>
+                  เงินรอรับคืน Finnix ({finnixExpenses.length} รายการ)
+                </p>
+                <p className="text-lg font-extrabold" style={{ color: '#8A5A12' }}>
+                  {fmt(finnixTotal)}
+                </p>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                ค่าใช้จ่ายที่จ่ายแทน Finnix ในช่วงเวลานี้ —
+                จ่ายออกไปแล้วแต่ไม่นับเป็นค่าใช้จ่ายของสาขา
+                {!showFinnixDetail && ' · กดเพื่อดูรายการ'}
               </p>
-              <p className="text-lg font-extrabold" style={{ color: '#8A5A12' }}>
-                {fmt(finnixTotal)}
-              </p>
-            </div>
-            <p className="text-xs mb-3" style={{ color: 'var(--ink-soft)' }}>
-              ค่าใช้จ่ายที่จ่ายแทน Finnix ในช่วงเวลานี้ —
-              จ่ายออกไปแล้วแต่ไม่นับเป็นค่าใช้จ่ายของสาขา
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ color: 'var(--ink-soft)' }}>
-                    <th className="text-left font-medium py-2">วันที่</th>
-                    <th className="text-left font-medium py-2">เลขที่เอกสาร</th>
-                    <th className="text-left font-medium py-2">รายการ</th>
-                    <th className="text-left font-medium py-2">หมวด</th>
-                    <th className="text-left font-medium py-2">สถานะ</th>
-                    <th className="text-right font-medium py-2">ยอดจ่ายแทน</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {finnixExpenses.map((e) => (
-                    <tr key={e.id} style={{ borderTop: '1px solid var(--line)' }}>
-                      <td className="py-2 whitespace-nowrap text-xs">{e.date}</td>
-                      <td className="py-2 text-xs">
-                        {e.docNo || '—'}
-                        <span className="block" style={{ color: 'var(--ink-faint)' }}>
-                          {shopName(e.shop)}
-                        </span>
+            </button>
+            {showFinnixDetail && (
+              <div className="overflow-x-auto mt-3">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: 'var(--ink-soft)' }}>
+                      <th className="text-left font-medium py-2">วันที่</th>
+                      <th className="text-left font-medium py-2">เลขที่เอกสาร</th>
+                      <th className="text-left font-medium py-2">รายการ</th>
+                      <th className="text-left font-medium py-2">หมวด</th>
+                      <th className="text-left font-medium py-2">สถานะ</th>
+                      <th className="text-right font-medium py-2">ยอดจ่ายแทน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {finnixExpenses.map((e) => (
+                      <tr key={e.id} style={{ borderTop: '1px solid var(--line)' }}>
+                        <td className="py-2 whitespace-nowrap text-xs">{e.date}</td>
+                        <td className="py-2 text-xs">
+                          {e.docNo || '—'}
+                          <span className="block" style={{ color: 'var(--ink-faint)' }}>
+                            {shopName(e.shop)}
+                          </span>
+                        </td>
+                        <td className="py-2">{e.desc}</td>
+                        <td className="py-2 text-xs">{e.category}</td>
+                        <td className="py-2 text-xs">{e.status}</td>
+                        <td className="py-2 text-right font-semibold whitespace-nowrap">
+                          {fmt(e.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--line-strong)' }}>
+                      <td className="py-2 text-xs font-semibold" colSpan={5}>
+                        รวมเงินรอรับคืน Finnix
                       </td>
-                      <td className="py-2">{e.desc}</td>
-                      <td className="py-2 text-xs">{e.category}</td>
-                      <td className="py-2 text-xs">{e.status}</td>
-                      <td className="py-2 text-right font-semibold whitespace-nowrap">
-                        {fmt(e.amount)}
+                      <td
+                        className="py-2 text-right font-extrabold whitespace-nowrap"
+                        style={{ color: '#8A5A12' }}
+                      >
+                        {fmt(finnixTotal)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ borderTop: '2px solid var(--line-strong)' }}>
-                    <td className="py-2 text-xs font-semibold" colSpan={5}>
-                      รวมเงินรอรับคืน Finnix
-                    </td>
-                    <td
-                      className="py-2 text-right font-extrabold whitespace-nowrap"
-                      style={{ color: '#8A5A12' }}
-                    >
-                      {fmt(finnixTotal)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </tfoot>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

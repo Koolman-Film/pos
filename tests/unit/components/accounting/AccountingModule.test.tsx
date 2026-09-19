@@ -265,8 +265,11 @@ describe('AccountingModule — เงินรอรับคืน Finnix', () 
     expect(within(heldCard).getByText(/1 รายการ/)).toBeInTheDocument();
   });
 
-  it('lists each reimbursable row in its own report', () => {
+  it('lists each reimbursable row in its own report', async () => {
     render(<AccountingModule expenses={mixed} pettyCash={pettyCash} />);
+    // The panel is folded to start (ร้านขอ 19 ก.ย. 2569) — the rows are for the
+    // day somebody settles up, not for every visit to the page.
+    await userEvent.setup().click(screen.getByRole('button', { name: /เงินรอรับคืน Finnix/ }));
     const report = screen
       .getByText(/เงินรอรับคืน Finnix \(1 รายการ\)/)
       .closest('.card') as HTMLElement;
@@ -486,5 +489,47 @@ describe('AccountingModule — กรองตามกลุ่มค่าใ�
     await user.click(filter());
     await user.type(filter(), 'ไม่มีกลุ่มนี้');
     expect(screen.getByText('ไม่พบกลุ่มค่าใช้จ่ายที่ค้นหา')).toBeInTheDocument();
+  });
+});
+
+/**
+ * เงินรอรับคืน Finnix ยุบไว้ (ร้านขอ 19 ก.ย. 2569).
+ *
+ * "ใช้พื้นที่หน้าจอเยอะเกิน" — the table listed every bill the branch fronted
+ * for another Finnix shop and sat open above รายการค่าใช้จ่าย, so the list the
+ * page exists for was a screen and a half down. How many and how much is what
+ * gets read daily; the rows are for the day somebody settles up.
+ */
+describe('AccountingModule — เงินรอรับคืน Finnix', () => {
+  const finnixExpenses = [
+    {
+      id: 9,
+      shop: 'cm',
+      desc: 'ค่าส่งฟิล์มกันรอย',
+      docNo: 'POS-CM-6909081',
+      category: 'ขนส่ง/ไปรษณีย์',
+      source: 'เงินสดย่อย',
+      amount: 120,
+      status: 'จ่ายแล้ว',
+      paidForFinnix: true,
+    },
+  ];
+  const panel = () => screen.getByRole('button', { name: /เงินรอรับคืน Finnix/ });
+  const card = () => panel().closest('.card') as HTMLElement;
+
+  it('keeps the headline but folds the rows away', () => {
+    renderAccounting({ expenses: finnixExpenses });
+    expect(panel()).toHaveAttribute('aria-expanded', 'false');
+    expect(panel()).toHaveTextContent('(1 รายการ)');
+    expect(panel()).toHaveTextContent('120.00');
+    expect(within(card()).queryByText('POS-CM-6909081')).not.toBeInTheDocument();
+  });
+
+  it('opens the rows when the heading is pressed', async () => {
+    const user = userEvent.setup();
+    renderAccounting({ expenses: finnixExpenses });
+    await user.click(panel());
+    expect(panel()).toHaveAttribute('aria-expanded', 'true');
+    expect(within(card()).getByText('POS-CM-6909081')).toBeInTheDocument();
   });
 });
