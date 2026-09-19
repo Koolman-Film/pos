@@ -157,14 +157,12 @@ export function RevenueModule({
   ].sort((a, b) => (a.soldAt < b.soldAt ? 1 : a.soldAt > b.soldAt ? -1 : 0));
   // A ticket selling three categories is ONE job, counted once.
   const jobCount = new Set(visible.map((l) => l.ticketId)).size;
-  const taxTotal = visible.filter((l) => l.taxInvoiceNo).reduce((s, l) => s + l.amount, 0);
   /*
-    ขายส่งไม่ออกใบกำกับภาษี by design — four documents and no tax invoice. So
-    the percentage is taken against RETAIL takings: measured against the total
-    it would fall every time the shop sold a case of film, and read as a
-    compliance problem that is not one.
+    ยอดที่ออกใบกำกับภาษี — การ์ดถูกซ่อนไว้ก่อน (ร้านขอ 19 ก.ย. 2569): the shop
+    does not need the figure on this screen yet. Which sales carry a tax
+    invoice is still answerable here — the กรองตามเอกสาร filter and the
+    เลขที่ใบกำกับภาษี column below are untouched.
   */
-  const taxBase = visible.filter((l) => l.channel === 'ปลีก').reduce((n, l) => n + l.amount, 0);
   // Cost comes from the lots the jobs actually drew on (migration 0027), so
   // this is a real margin rather than a quantity times an average.
   const costTotal = visible.reduce((s, l) => s + l.cost, 0);
@@ -306,16 +304,6 @@ export function RevenueModule({
           </p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--ink-faint)' }}>
             {heldJobs.length > 0 ? `${heldJobs.length} ใบงาน · ไม่รวมในยอดขาย` : 'ไม่มีในช่วงนี้'}
-          </p>
-        </div>
-        <div className="card p-4">
-          {/* The accountant's figure: how much of the period was invoiced. */}
-          <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-            ยอดที่ออกใบกำกับภาษี
-          </p>
-          <p className="text-2xl font-extrabold">{fmt(taxTotal)}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--ink-faint)' }}>
-            {taxBase > 0 ? `${Math.round((taxTotal / taxBase) * 100)}% ของยอดขายปลีก` : '—'}
           </p>
         </div>
         {canSeeCost && (

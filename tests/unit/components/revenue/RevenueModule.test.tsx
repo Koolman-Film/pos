@@ -79,14 +79,12 @@ describe('RevenueModule', () => {
     expect(screen.getByText('ยังไม่ออก')).toBeInTheDocument();
   });
 
-  it('totals how much of the period was invoiced', () => {
-    renderModule([
-      line({ amount: 30000, taxInvoiceNo: 'INV-CM-00216' }),
-      line({ ticketId: 'JT-CM-00217', amount: 10000 }),
-    ]);
-    const card = screen.getByText('ยอดที่ออกใบกำกับภาษี').parentElement!;
-    expect(within(card).getByText('30,000.00')).toBeInTheDocument();
-    expect(within(card).getByText(/75% ของยอดขาย/)).toBeInTheDocument();
+  it('does not show the ยอดที่ออกใบกำกับภาษี card', () => {
+    // ซ่อนไว้ก่อน (ร้านขอ 19 ก.ย. 2569). Which sales carry a tax invoice is
+    // still answerable through the ใบกำกับภาษี filter and the column below.
+    renderModule([line({ amount: 30000, taxInvoiceNo: 'INV-CM-00216' })]);
+    expect(screen.queryByText('ยอดที่ออกใบกำกับภาษี')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('กรองตามใบกำกับภาษี')).toBeInTheDocument();
   });
 
   it('filters down to the sales still missing a tax invoice', async () => {
@@ -298,16 +296,6 @@ describe('RevenueModule — ช่องทางการขาย', () => {
     expect(screen.queryByText('JT-CM-00216')).not.toBeInTheDocument();
     // The split card keeps reading as the whole period, not as the filter.
     expect(screen.getByText('ปลีก / ส่ง').parentElement!).toHaveTextContent('30,000.00');
-  });
-
-  it('คิดสัดส่วนใบกำกับภาษีจากยอดขายปลีก ไม่ใช่ยอดรวม', () => {
-    // ขายส่งไม่ออกใบกำกับภาษี by design. Measured against the total, the ratio
-    // would fall every time the shop sold a case of film and read as a
-    // compliance problem that is not one.
-    renderModule([line({ amount: 10000, taxInvoiceNo: 'INV-1' }), ws({ amount: 90000 })]);
-    expect(screen.getByText('ยอดที่ออกใบกำกับภาษี').parentElement!).toHaveTextContent(
-      '100% ของยอดขายปลีก',
-    );
   });
 
   it('ลิงก์ไปหน้า PO ไม่ใช่หน้าใบงาน', () => {
