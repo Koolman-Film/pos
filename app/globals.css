@@ -34,6 +34,17 @@
   --panel-goods-soft: rgba(47, 111, 143, 0.07);
   --panel-return: #7a4e8f;
   --panel-return-soft: rgba(122, 78, 143, 0.07);
+  /* กลุ่มค่าใช้จ่าย และ แหล่งเงินที่จ่าย ในรายการค่าใช้จ่าย.
+
+     Two answers to two different questions — what the money was spent ON, and
+     which pot it came OUT OF — printed side by side in one grey line with only
+     a middot between them, so reading either one meant reading both. The hues
+     come from the same free-of-meaning pair as the wholesale panels above, and
+     they are kept far apart in LIGHTNESS as well as hue (1.8:1 between the two)
+     so they still separate for a reader who cannot tell blue from violet.
+     Both clear AA on --surface and --paper: 5.54/5.19 and 9.99/9.36. */
+  --expense-group: #2f6f8f;
+  --money-source: #5b2d7a;
 }
 html[data-theme='dark'] {
   --primary: #b23a48;
@@ -58,6 +69,10 @@ html[data-theme='dark'] {
   --panel-goods-soft: rgba(111, 176, 208, 0.11);
   --panel-return: #b18ac9;
   --panel-return-soft: rgba(177, 138, 201, 0.11);
+  /* Same two hues lifted for the dark ground, and the same 1.8:1 kept between
+     them. On --surface and --paper: 8.87/9.73 and 4.93/5.41. */
+  --expense-group: #8cc4de;
+  --money-source: #a878c4;
 }
 * {
   box-sizing: border-box;

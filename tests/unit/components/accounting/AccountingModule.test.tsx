@@ -419,3 +419,31 @@ describe('AccountingModule — รายการรับ-จ่ายเงิ
     expect(within(panel).getByText(/เติมเข้า 5,000\.00/)).toBeInTheDocument();
   });
 });
+
+/**
+ * กลุ่มค่าใช้จ่าย และ แหล่งเงินที่จ่าย คนละสี (ร้านขอ 19 ก.ย. 2569).
+ *
+ * The two answer different questions — what the money went ON, and which pot it
+ * came OUT OF — and sat in one grey line a middot apart, so telling them apart
+ * meant reading both every time.
+ */
+describe('AccountingModule — สีของกลุ่มค่าใช้จ่าย และแหล่งเงิน', () => {
+  const listOf = () => screen.getByText('รายการค่าใช้จ่าย').closest('.card') as HTMLElement;
+
+  it('gives each of the two its own colour', () => {
+    render(<AccountingModule expenses={expenses} pettyCash={pettyCash} canDo={() => true} />);
+    const list = listOf();
+    expect(within(list).getByText('ค่าเช่า')).toHaveStyle({ color: 'var(--expense-group)' });
+    expect(within(list).getByText('บัญชีธนาคารสาขา')).toHaveStyle({
+      color: 'var(--money-source)',
+    });
+  });
+
+  it('leaves the document number and the date as they were', () => {
+    // Only the two that were being confused are tinted; colouring the whole
+    // line would just be a different kind of unreadable.
+    render(<AccountingModule expenses={expenses} pettyCash={pettyCash} canDo={() => true} />);
+    const line = within(listOf()).getByText('ค่าเช่า').parentElement as HTMLElement;
+    expect(line).toHaveStyle({ color: 'var(--ink-soft)' });
+  });
+});

@@ -1634,7 +1634,18 @@ export function AccountingModule({
                           {' · '}
                         </>
                       )}
-                      {e.category} &middot; {e.source} &middot; {e.date}
+                      {/* ค่าใช้จ่ายนี้เป็นกลุ่มไหน และจ่ายออกจากแหล่งเงินไหน — two
+                          different questions that were the same shade of grey,
+                          a middot apart (ร้านขอ 19 ก.ย. 2569). */}
+                      <span style={{ color: 'var(--expense-group)', fontWeight: 500 }}>
+                        {e.category}
+                      </span>
+                      {' · '}
+                      <span style={{ color: 'var(--money-source)', fontWeight: 500 }}>
+                        {e.source}
+                      </span>
+                      {' · '}
+                      {e.date}
                     </p>
                     {/*
                     The bucket is private, so each chip fetches a short-lived
