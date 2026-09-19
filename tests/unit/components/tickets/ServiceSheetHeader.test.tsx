@@ -64,6 +64,11 @@ function renderSheet(serviceVisit: ServiceVisit | null) {
       total={0}
       paid={0}
       docType="ใบเสร็จรับเงิน"
+      buyerName=""
+      buyerTaxId=""
+      buyerAddress=""
+      showCompanyInfo={false}
+      showDisclaimer={false}
       serviceVisit={serviceVisit}
     />,
   );
