@@ -168,6 +168,11 @@ export type WsOrder = {
    * `poOpenedAt`) and leaves the column alone when the day did not change.
    */
   openedOn?: string;
+  /**
+   * บัญชีรับชำระ — the แหล่งเงิน the ใบแจ้งหนี้ tells the customer to pay into
+   * (migration 0062). Null prints the branch's ช่องทางการชำระเงิน as before.
+   */
+  payToAccountId?: number | null;
   items: WsItem[];
   returns: WsReturn[];
   adjustments: WsAdjustment[];

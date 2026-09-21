@@ -4,6 +4,7 @@ import { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
 import { fmt, fmtThaiDate, hhmm, thaiBahtText } from '@/lib/domain/format';
+import { payAccountLine, type PayAccount } from '@/lib/domain/payAccount';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
@@ -362,6 +363,7 @@ export function PrintJobSheet({
   buyerAddress,
   showCompanyInfo,
   showDisclaimer,
+  payToAccount = null,
   serviceVisit = null,
   insurancePolicy = null,
   insuranceClaim = null,
@@ -382,6 +384,8 @@ export function PrintJobSheet({
   buyerAddress: string;
   showCompanyInfo: boolean;
   showDisclaimer: boolean;
+  /** บัญชีรับชำระ printed on a ใบเสนอราคา (migration 0062). */
+  payToAccount?: PayAccount | null;
   /** The visit to print on the service sheet; null prints a blank one. */
   serviceVisit?: ServiceVisit | null;
   /** The policy behind a ใบเสร็จค่าประกัน or a ใบเคลมประกัน. */
@@ -2335,6 +2339,25 @@ export function PrintJobSheet({
             line and two words; the money needs the room.
           */}
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', marginBottom: 12 }}>
+            {/* บัญชีรับชำระ (0062): where the quotation asks the money to go. */}
+            {isQuotation && payToAccount && (
+              <div
+                style={{
+                  flex: 2,
+                  border: '1px solid #666',
+                  borderRadius: 6,
+                  padding: '8px 10px',
+                  fontSize: 11,
+                }}
+              >
+                <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>
+                  {bi('ชำระเงินเข้าบัญชี', 'Pay to')}
+                </p>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 'bold' }}>
+                  {payAccountLine(payToAccount)}
+                </p>
+              </div>
+            )}
             {!isQuotation && (
               <div
                 style={{

@@ -417,6 +417,30 @@ export async function saveTicketExtras(input: {
 }
 
 /**
+ * บัญชีรับชำระบนใบเสนอราคา (migration 0062) — saved the moment it is picked.
+ *
+ * On its own rather than with บันทึกใบงาน: somebody picks the account and
+ * prints the quotation, and nothing else on the form has changed — asking them
+ * to save the whole ticket for it would lose the choice every time they did
+ * not. The database checks the account is this branch's; this checks who.
+ */
+export async function setTicketPayAccount(input: {
+  ticketId: string;
+  accountId: number | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขใบงาน' };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('tickets')
+    .update({ pay_to_account_id: input.accountId })
+    .eq('id', input.ticketId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/tickets/${input.ticketId}`);
+  return { ok: true };
+}
+
+/**
  * ปลดล็อกใบงาน — reopen a closed ticket for editing, gated on `list.unlock`
  * (admin). The ticket re-locks by itself on the next save if it still qualifies,
  * so this is "let me fix this one thing", not a permanent switch.

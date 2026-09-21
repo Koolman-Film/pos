@@ -12,6 +12,7 @@ import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { dateInputValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
+import { payableAccounts, payAccountLine, type PayAccount } from '@/lib/domain/payAccount';
 import { ticketsHref } from '@/lib/browser/ticketFilter';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
@@ -97,6 +98,8 @@ export function TicketDetail({
   corporateBuyerAction,
   carModelAction,
   extrasAction,
+  payAccounts = [],
+  payAccountAction,
   serviceVisitAction,
   serviceVisitDeleteAction,
   insurancePlans = [],
@@ -155,6 +158,13 @@ export function TicketDetail({
   extrasAction?: (input: {
     ticketId: string;
     extras: Record<string, unknown>;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  /** แหล่งเงินของสาขาที่ผู้ใช้เข้าถึงได้ — บัญชีรับชำระบนใบเสนอราคา (0062). */
+  payAccounts?: PayAccount[];
+  /** Saves the บัญชีรับชำระ on its own, the moment it is picked. */
+  payAccountAction?: (input: {
+    ticketId: string;
+    accountId: number | null;
   }) => Promise<{ ok: boolean; error?: string }>;
   /** Records one ใบเซอร์วิส visit against this ticket (migration 0020). */
   serviceVisitAction?: (input: {
@@ -295,6 +305,30 @@ export function TicketDetail({
   const [docType, setDocType] = useState('ใบเสร็จรับเงิน');
   const [showCompanyInfo, setShowCompanyInfo] = useState(false);
   const [buyerName, setBuyerName] = useState('');
+  /*
+    บัญชีรับชำระบนใบเสนอราคา (0062). Its own state, not a field on `t`: it is
+    saved the moment it is picked, so it must not make the form read as
+    unsaved, and บันทึกใบงาน must not write it back from a stale copy.
+  */
+  const [payToAccountId, setPayToAccountId] = useState<number | null>(
+    initialTicket.payToAccountId ?? null,
+  );
+  const [payAccountError, setPayAccountError] = useState('');
+  const shopPayAccounts = payableAccounts(payAccounts, t.shop);
+  const payToAccount = shopPayAccounts.find((a) => a.id === payToAccountId) ?? null;
+  async function choosePayAccount(accountId: number | null) {
+    const before = payToAccountId;
+    setPayToAccountId(accountId);
+    setPayAccountError('');
+    if (!payAccountAction) return;
+    const res = await payAccountAction({ ticketId: t.id, accountId });
+    if (!res.ok) {
+      // Put the old choice back: the paper must not name an account the
+      // ticket does not.
+      setPayToAccountId(before);
+      setPayAccountError(res.error || 'บันทึกบัญชีรับชำระไม่สำเร็จ');
+    }
+  }
   const [buyerTaxId, setBuyerTaxId] = useState('');
   const [buyerAddress, setBuyerAddress] = useState('');
   const [showDisclaimer, setShowDisclaimer] = useState(true);
@@ -1363,6 +1397,39 @@ export function TicketDetail({
                   <span>{taxBlockedReason}</span>
                 </p>
               )}
+              {/*
+                บัญชีรับชำระ (ร้านขอ 21 ก.ย. 2569) — which of this branch's
+                แหล่งเงิน the quotation tells the customer to pay into. Only on a
+                quotation: a receipt records what was paid and how, it does not
+                ask for money.
+              */}
+              {docType === 'ใบเสนอราคา' && (
+                <div className="mb-2.5">
+                  <label className="text-xs" style={{ color: '#1D4ED8' }}>
+                    บัญชีรับชำระ (พิมพ์ในใบเสนอราคา)
+                  </label>
+                  <select
+                    aria-label="บัญชีรับชำระ"
+                    value={payToAccountId ?? ''}
+                    onChange={(e) =>
+                      void choosePayAccount(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className="field w-full text-xs px-2.5 py-1.5"
+                  >
+                    <option value="">ไม่ระบุ</option>
+                    {shopPayAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {payAccountLine(a)}
+                      </option>
+                    ))}
+                  </select>
+                  {payAccountError && (
+                    <p className="text-xs mt-1" style={{ color: '#B23A48' }}>
+                      {payAccountError}
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="mb-2.5">
                 <label className="text-xs" style={{ color: '#1D4ED8' }}>
                   ชื่อลูกค้าในเอกสาร
@@ -1544,6 +1611,7 @@ export function TicketDetail({
           buyerAddress={buyerAddress}
           showCompanyInfo={showCompanyInfo}
           showDisclaimer={showDisclaimer}
+          payToAccount={payToAccount}
           serviceVisit={printVisit}
           insurancePolicy={printPolicy}
           insuranceClaim={printClaim}

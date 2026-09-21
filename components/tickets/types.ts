@@ -255,6 +255,11 @@ export type Ticket = {
    * Absent counts as รายได้ — the ticket predates the choice.
    */
   revenueKind?: 'รายได้' | 'รับแทน';
+  /**
+   * บัญชีรับชำระ printed on the ใบเสนอราคา (migration 0062). Saved on its own
+   * the moment it is picked — see `setTicketPayAccount` — not with the form.
+   */
+  payToAccountId?: number | null;
   createdBy?: string;
   /**
    * QC ผู้รับผิดชอบ — the one person who signed off the work on this ticket.

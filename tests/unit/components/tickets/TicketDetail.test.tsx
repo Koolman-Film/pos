@@ -765,3 +765,57 @@ describe('TicketDetail — เลือกสาขาตอนเปิดใ�
     expect(screen.queryByLabelText('สาขาที่เปิดใบงาน')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * บัญชีรับชำระบนใบเสนอราคา (ร้านขอ 21 ก.ย. 2569) — the customer is told which
+ * account to pay into, and the choice stays with the ticket.
+ */
+describe('TicketDetail — บัญชีรับชำระบนใบเสนอราคา', () => {
+  const ACCOUNTS = [
+    { id: 11, shop: 'cm', name: 'กสิกร ออมทรัพย์', kind: 'bank', accountNo: '236-1-38053-6' },
+    { id: 21, shop: 'lpg', name: 'SCB ลำปาง', kind: 'bank', accountNo: '999-9' },
+  ];
+
+  async function openQuotation(props: Record<string, unknown> = {}) {
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket())} payAccounts={ACCOUNTS} {...props} />);
+    await user.click(screen.getByRole('button', { name: 'ใบเสนอราคา' }));
+    return user;
+  }
+
+  it('offers this branch’s accounts on a quotation', async () => {
+    await openQuotation();
+    const options = within(screen.getByLabelText('บัญชีรับชำระ'))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(options).toEqual(['ไม่ระบุ', 'กสิกร ออมทรัพย์ · เลขที่บัญชี 236-1-38053-6']);
+  });
+
+  it('saves the choice at once, without making the form unsaved', async () => {
+    const payAccountAction = vi.fn(async () => ({ ok: true }));
+    const user = await openQuotation({ payAccountAction });
+    await user.selectOptions(screen.getByLabelText('บัญชีรับชำระ'), '11');
+    expect(payAccountAction).toHaveBeenCalledWith({ ticketId: 'JT-CM-00214', accountId: 11 });
+    // And the account is on the paper.
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    await user.click(screen.getByRole('button', { name: /^ออก/ }));
+    const sheet = document.querySelector('.print-area')?.textContent ?? '';
+    expect(sheet).toContain('ชำระเงินเข้าบัญชี');
+    expect(sheet).toContain('236-1-38053-6');
+  });
+
+  it('puts the old choice back when the save is refused', async () => {
+    const payAccountAction = vi.fn(async () => ({ ok: false, error: 'ใบงานนี้ถูกล็อก' }));
+    const user = await openQuotation({ payAccountAction });
+    await user.selectOptions(screen.getByLabelText('บัญชีรับชำระ'), '11');
+    expect(screen.getByLabelText('บัญชีรับชำระ')).toHaveValue('');
+    expect(screen.getByText('ใบงานนี้ถูกล็อก')).toBeInTheDocument();
+  });
+
+  it('is not asked for on a receipt, which records money already paid', async () => {
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket())} payAccounts={ACCOUNTS} />);
+    await user.click(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' }));
+    expect(screen.queryByLabelText('บัญชีรับชำระ')).not.toBeInTheDocument();
+  });
+});

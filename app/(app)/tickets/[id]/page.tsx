@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 
 import { TicketDetailClient } from '@/components/tickets/TicketDetailClient';
 import { getSessionContext } from '@/lib/auth/session';
+import { loadPayAccounts } from '@/lib/money/payAccounts';
+import { createClient } from '@/lib/supabase/server';
 
 import {
   deleteTicket,
@@ -15,6 +17,7 @@ import {
   recordTicketDocument,
   saveTicket,
   saveTicketExtras,
+  setTicketPayAccount,
   unlockTicket,
   updateOptionList,
 } from '../actions';
@@ -30,11 +33,13 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const session = await getSessionContext();
 
-  const [ticket, shops, statuses, registries] = await Promise.all([
+  const supabase = await createClient();
+  const [ticket, shops, statuses, registries, payAccounts] = await Promise.all([
     loadTicket(id),
     loadShops(),
     loadStatuses(),
     loadDetailRegistries(),
+    loadPayAccounts(supabase, session.accessibleShopIds),
   ]);
   // RLS already scopes which tickets are visible; a miss is a genuine 404.
   if (!ticket) notFound();
@@ -75,6 +80,8 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       corporateBuyerAction={saveCorporateBuyer}
       carModelAction={saveCarModel}
       extrasAction={saveTicketExtras}
+      payAccounts={payAccounts}
+      payAccountAction={setTicketPayAccount}
       serviceVisitAction={saveServiceVisit}
       serviceVisitDeleteAction={deleteServiceVisit}
       insurancePlans={insurancePlans}

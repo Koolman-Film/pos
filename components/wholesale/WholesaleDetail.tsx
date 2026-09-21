@@ -32,6 +32,7 @@ import {
 } from '@/lib/domain/orders';
 import { dateInputValue, todayValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
+import { payableAccounts, payAccountLine, type PayAccount } from '@/lib/domain/payAccount';
 import { uploadAttachments, discardAttachments, fileNameFromPath } from '@/lib/storage/attachments';
 
 import { CustomerPicker } from './CustomerPicker';
@@ -141,6 +142,7 @@ export function WholesaleDetail({
   stock = [],
   orders = [],
   paymentMethods = DEFAULT_PAYMENT_METHODS,
+  payAccounts = [],
   shopInfo = {},
   wsStatuses = DEFAULT_WS_STATUS,
   shops = [],
@@ -176,6 +178,8 @@ export function WholesaleDetail({
   stock?: WsStockItem[];
   orders?: WsOrder[];
   paymentMethods?: string[];
+  /** แหล่งเงินของทุกสาขาที่ผู้ใช้เข้าถึงได้ — the บัญชีรับชำระ picker (0062). */
+  payAccounts?: PayAccount[];
   shopInfo?: Record<string, WsShopInfo>;
   wsStatuses?: WsStatusMap;
   shops?: Shop[];
@@ -417,7 +421,8 @@ export function WholesaleDetail({
       if (!match) return { ...it, name: '', listPrice: 0, requestedPrice: 0 };
       return { ...it, listPrice: match.sellPrice, requestedPrice: match.sellPrice };
     });
-    setO({ ...o, shop: shopId, items });
+    // Another branch's account cannot go on this branch's invoice (0062).
+    setO({ ...o, shop: shopId, items, payToAccountId: null });
   }
   function addItem() {
     setO({
@@ -755,6 +760,11 @@ export function WholesaleDetail({
     have a "โหน่ง" and they are not the same person.
   */
   const branchSales = salesPeople.filter((p) => p.shop === o.shop);
+  // บัญชีรับชำระ: this branch's accounts only — the database refuses another
+  // branch's (0062), and a PO that switches branch drops a choice that no
+  // longer belongs to it rather than printing the wrong bank.
+  const shopPayAccounts = payableAccounts(payAccounts, o.shop);
+  const payToAccount = shopPayAccounts.find((a) => a.id === o.payToAccountId) ?? null;
   /*
     The NAME comes from the PO, not from the staff list.
 
@@ -1303,6 +1313,36 @@ export function WholesaleDetail({
             />
             <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
               พิมพ์ลงในใบแจ้งหนี้และใบส่งของ เว้นว่างได้ถ้ายังไม่ได้ตกลงวันกัน
+            </p>
+          </div>
+          {/*
+            บัญชีรับชำระ (ร้านขอ 21 ก.ย. 2569) — which of this branch's แหล่งเงิน
+            the ใบแจ้งหนี้ tells the customer to pay into. Beside the credit term
+            because both are agreed when the order is taken. Left on the first
+            option, the invoice prints the branch's ช่องทางการชำระเงิน as before.
+          */}
+          <div className="mb-5">
+            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+              <i className="fa-solid fa-building-columns mr-1.5"></i>บัญชีรับชำระ
+            </label>
+            <select
+              aria-label="บัญชีรับชำระ"
+              value={o.payToAccountId ?? ''}
+              onChange={(e) =>
+                setO({ ...o, payToAccountId: e.target.value ? Number(e.target.value) : null })
+              }
+              className="field text-sm px-3 py-2 w-full"
+            >
+              <option value="">ใช้ช่องทางการชำระเงินของสาขา</option>
+              {shopPayAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {payAccountLine(a)}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+              พิมพ์ลงในใบแจ้งหนี้ ให้ลูกค้ารู้ว่าต้องโอนเงินเข้าบัญชีไหน — ตั้งชื่อและเลขบัญชีได้ที่
+              การจัดการเงิน/บัญชี
             </p>
           </div>
           <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.returns)}>
@@ -2160,7 +2200,18 @@ export function WholesaleDetail({
                   )}
                 </div>
               )}
+              {/* บัญชีรับชำระ that this PO names (0062) — the one place the
+                  customer is told where the money goes. */}
+              {printMode === 'invoice' && payToAccount && (
+                <div style={{ marginBottom: 16 }}>
+                  <p style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>ชำระเงินเข้าบัญชี</p>
+                  <p style={{ fontSize: 12, fontWeight: 'bold', margin: 0 }}>
+                    {payAccountLine(payToAccount)}
+                  </p>
+                </div>
+              )}
               {printMode === 'invoice' &&
+                !payToAccount &&
                 (shopInfo?.[o.shop]?.paymentChannels || []).filter(Boolean).length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <p style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>

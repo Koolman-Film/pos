@@ -897,6 +897,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          pay_to_account_id: number | null
           created_by: string | null
           sales_by: string
           note: string
@@ -917,6 +918,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          pay_to_account_id?: number | null
           created_by?: string | null
           sales_by?: string
           note?: string
@@ -937,6 +939,7 @@ export type Database = {
           status: string
         }
         Update: {
+          pay_to_account_id?: number | null
           created_by?: string | null
           sales_by?: string
           note?: string
@@ -1601,6 +1604,7 @@ export type Database = {
       }
       tickets: {
         Row: {
+          pay_to_account_id: number | null
           revenue_kind: string
           booking_channel: string
           brand: string
@@ -1625,6 +1629,7 @@ export type Database = {
           tech_by_category: Json
         }
         Insert: {
+          pay_to_account_id?: number | null
           revenue_kind?: string
           booking_channel?: string
           brand?: string
@@ -1649,6 +1654,7 @@ export type Database = {
           tech_by_category?: Json
         }
         Update: {
+          pay_to_account_id?: number | null
           revenue_kind?: string
           booking_channel?: string
           brand?: string

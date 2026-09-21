@@ -181,6 +181,7 @@ export const FIELD_LABELS: Record<string, string> = {
   // Only a PO's created_at is ever edited (วันที่เปิด PO, 21 ก.ย. 2569); on every
   // other table it is bookkeeping and stays out of creates and deletes.
   created_at: 'วันที่เปิด PO',
+  pay_to_account_id: 'บัญชีรับชำระ (รหัสแหล่งเงิน)',
   // สต็อก / ตั้งค่า
   name: 'ชื่อ',
   short_name: 'ชื่อย่อ',

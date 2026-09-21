@@ -60,6 +60,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       orders={data.orders}
       stock={data.stock}
       paymentMethods={data.paymentMethods}
+      payAccounts={data.payAccounts}
       shopInfo={data.shopInfo}
       wsStatuses={data.wsStatuses}
       shops={data.shops}

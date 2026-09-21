@@ -1194,3 +1194,80 @@ describe('WholesaleDetail — วันที่เปิด PO', () => {
     );
   });
 });
+
+/**
+ * บัญชีรับชำระบนใบแจ้งหนี้ (ร้านขอ 21 ก.ย. 2569) — "เพื่อให้ลูกค้ารู้ว่าจ่ายเงิน
+ * ไปที่ไหน".
+ */
+describe('WholesaleDetail — บัญชีรับชำระ', () => {
+  const ACCOUNTS = [
+    { id: 11, shop: 'cm', name: 'กสิกร ออมทรัพย์', kind: 'bank', accountNo: '236-1-38053-6' },
+    { id: 12, shop: 'cm', name: 'เงินสดย่อย', kind: 'petty', accountNo: '' },
+    { id: 21, shop: 'lpg', name: 'SCB ลำปาง', kind: 'bank', accountNo: '999-9' },
+  ];
+  const cmOrder = { ...order, id: 'WS-CM-0130', shop: 'cm' } as unknown as WsOrder;
+  const printed = () => document.querySelector('.print-area')!;
+
+  it('offers only this branch’s accounts a customer can pay into', () => {
+    render(<WholesaleDetail order={cmOrder} payAccounts={ACCOUNTS} canDo={() => true} />);
+    const options = within(screen.getByLabelText('บัญชีรับชำระ'))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(options).toEqual([
+      'ใช้ช่องทางการชำระเงินของสาขา',
+      'กสิกร ออมทรัพย์ · เลขที่บัญชี 236-1-38053-6',
+    ]);
+  });
+
+  it('prints the chosen account on the ใบแจ้งหนี้', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={{ ...cmOrder, payToAccountId: 11 } as unknown as WsOrder}
+        payAccounts={ACCOUNTS}
+        canDo={() => true}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบแจ้งหนี้/ }));
+    expect(printed().textContent).toContain('ชำระเงินเข้าบัญชี');
+    expect(printed().textContent).toContain('236-1-38053-6');
+  });
+
+  it('keeps printing the branch channels when no account is chosen', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={cmOrder}
+        payAccounts={ACCOUNTS}
+        shopInfo={{
+          cm: { companyName: '', address: '', phone: '', paymentChannels: ['โอน TTB 111-2'] },
+        }}
+        canDo={() => true}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /ใบแจ้งหนี้/ }));
+    expect(printed().textContent).toContain('โอน TTB 111-2');
+    expect(printed().textContent).not.toContain('ชำระเงินเข้าบัญชี');
+  });
+
+  it('saves the choice with the PO', async () => {
+    const onSaveOrder = vi.fn();
+    render(
+      <WholesaleDetail
+        order={cmOrder}
+        payAccounts={ACCOUNTS}
+        canDo={() => true}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText('บัญชีรับชำระ'), '11');
+    await user.click(screen.getByRole('button', { name: 'บันทึก PO' }));
+    expect(onSaveOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ payToAccountId: 11 }),
+      false,
+    );
+  });
+});

@@ -2,6 +2,8 @@
 
 import type { StatusConfig } from '@/components/ui/Badge';
 
+import type { PayAccount } from '@/lib/domain/payAccount';
+
 import { TicketDetail, type SaveResult } from './TicketDetail';
 import type {
   CarModel,
@@ -48,6 +50,8 @@ export function TicketDetailClient({
   corporateBuyerAction,
   carModelAction,
   extrasAction,
+  payAccounts = [],
+  payAccountAction,
   serviceVisitAction,
   serviceVisitDeleteAction,
   insurancePlans,
@@ -93,6 +97,11 @@ export function TicketDetailClient({
   extrasAction?: (input: {
     ticketId: string;
     extras: Record<string, unknown>;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  payAccounts?: PayAccount[];
+  payAccountAction?: (input: {
+    ticketId: string;
+    accountId: number | null;
   }) => Promise<{ ok: boolean; error?: string }>;
   serviceVisitAction?: (input: {
     id?: number;
@@ -147,6 +156,8 @@ export function TicketDetailClient({
       corporateBuyerAction={corporateBuyerAction}
       carModelAction={carModelAction}
       extrasAction={extrasAction}
+      payAccounts={payAccounts}
+      payAccountAction={payAccountAction}
       serviceVisitAction={serviceVisitAction}
       serviceVisitDeleteAction={serviceVisitDeleteAction}
       insurancePlans={insurancePlans}

@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { fetchAllRows } from '@/lib/supabase/fetchAll';
+import { loadPayAccounts } from '@/lib/money/payAccounts';
+import type { PayAccount } from '@/lib/domain/payAccount';
 import type { SessionContext } from '@/lib/auth/session';
 import {
   DEFAULT_PAYMENT_METHODS,
@@ -25,6 +27,7 @@ import {
 
 export const ORDER_SELECT = `
   id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by, created_by,
+  pay_to_account_id,
   price_decision, price_decided_at, price_decided_by, note, delivery_note, delivery_attachments,
   order_items(name, qty, list_price, requested_price, reason),
   order_returns(item_name, qty, reason, returned_at, uid, received_at),
@@ -42,6 +45,7 @@ export type OrderRow = {
   due_at: string | null;
   sales_by: string | null;
   created_by: string | null;
+  pay_to_account_id: number | null;
   price_decision: string | null;
   price_decided_at: string | null;
   price_decided_by: string | null;
@@ -106,6 +110,7 @@ export function mapOrder(row: OrderRow): WsOrder {
     dueAt: row.due_at ?? '',
     salesBy: row.sales_by ?? '',
     createdBy: row.created_by ?? '',
+    payToAccountId: row.pay_to_account_id ?? null,
     priceDecision: row.price_decision ?? '',
     priceDecidedAt: row.price_decided_at ?? '',
     priceDecidedBy: row.price_decided_by ?? '',
@@ -270,6 +275,8 @@ export async function loadOrderDetailData(
   shops: Shop[];
   shopInfo: Record<string, WsShopInfo>;
   paymentMethods: string[];
+  /** แหล่งเงินที่ใบแจ้งหนี้บอกให้ลูกค้าโอนเข้าได้ (0062). */
+  payAccounts: PayAccount[];
   /** auth id → ชื่อพนักงาน, for turning `price_decided_by` into something readable. */
   staffNames: Record<string, string>;
 } | null> {
@@ -401,6 +408,7 @@ export async function loadOrderDetailData(
     userId: p.user_id ?? null,
   }));
 
+  const payAccounts = await loadPayAccounts(supabase, session.accessibleShopIds);
   const { data: staffRows } = await supabase.from('app_users').select('id, name');
   const staffNames: Record<string, string> = {};
   for (const u of staffRows ?? []) staffNames[u.id] = u.name;
@@ -416,6 +424,7 @@ export async function loadOrderDetailData(
     shops,
     shopInfo,
     paymentMethods: paymentMethods.length ? paymentMethods : DEFAULT_PAYMENT_METHODS,
+    payAccounts,
     staffNames,
   };
 }
