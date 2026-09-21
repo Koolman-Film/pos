@@ -586,6 +586,17 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
         'ticket_payments(type, method, amount, paid_at, uid, attachments)',
     )
     .eq('id', id)
+    /*
+      In the order they were entered. Without this Postgres returns embedded
+      rows in whatever order they sit on disk, and any update moves a row: a
+      payment whose date was corrected came back as the LAST row, so
+      "รายการที่ 2" on screen was a different payment from the one it had been
+      a moment before — and an edit meant for one row landed on the other. The
+      ประวัติการใช้งาน page is how this was caught (21 ก.ย. 2569).
+    */
+    .order('id', { referencedTable: 'ticket_items' })
+    .order('id', { referencedTable: 'ticket_items.ticket_item_positions' })
+    .order('id', { referencedTable: 'ticket_payments' })
     .maybeSingle();
   const t = data as unknown as DetailRow | null;
   if (!t) return null;
