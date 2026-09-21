@@ -568,7 +568,19 @@ export function Dashboard({
         )}
 
         {hasDashboardWidget('jobCalendar') && (
-          <JobCalendar tickets={calendarTickets} shopFilter={shopFilter} />
+          /*
+            The shop's own statuses, the same list the งานทั้งหมด bars below
+            read. Left out, the calendar fell back to the palette built into
+            it, so a colour changed in จัดการสิทธิ์ showed on the bars and not on
+            the calendar — ส่งมอบแล้ว blue in one place and grey in the other —
+            and a status the shop added (ออกใบงานแล้ว, ยกเลิกนัด) never appeared
+            on the calendar at all.
+          */
+          <JobCalendar
+            tickets={calendarTickets}
+            shopFilter={shopFilter}
+            statuses={statuses.length > 0 ? statuses : undefined}
+          />
         )}
       </div>
 

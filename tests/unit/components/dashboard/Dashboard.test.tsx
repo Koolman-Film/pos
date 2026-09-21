@@ -515,3 +515,53 @@ describe('Dashboard — ยอดขายรวมแยกช่องทา�
     expect(screen.queryByText(/ขายส่ง /)).not.toBeInTheDocument();
   });
 });
+
+/**
+ * ปฏิทินงาน กับ แถบงานทั้งหมด ต้องใช้สีสถานะชุดเดียวกัน (ร้านแจ้ง 21 ก.ย. 2569).
+ *
+ * The calendar was never handed the shop's statuses and fell back to a palette
+ * built into it. A colour changed in จัดการสิทธิ์ reached the bars and not the
+ * calendar — ส่งมอบแล้ว blue under งานทั้งหมด, grey on every calendar day — and
+ * a status the shop added itself never showed on the calendar at all.
+ */
+describe('Dashboard — ปฏิทินงานใช้สีสถานะของร้าน', () => {
+  const shopStatuses = [
+    { key: 'จองแล้ว', short: 'จองแล้ว', bg: '#EEE', text: '#555', dot: '#B5AAA1' },
+    // Recoloured by the shop — the built-in palette has it grey.
+    { key: 'ส่งมอบแล้ว', short: 'ส่งมอบแล้ว', bg: '#E4ECFC', text: '#1E3A8A', dot: '#1D4ED8' },
+    // Added by the shop — the built-in palette has never heard of it.
+    { key: 'ยกเลิกนัด', short: 'ยกเลิกนัด', bg: '#EEE', text: '#555', dot: '#7F1D1D' },
+  ];
+  const today = new Date();
+  const onToday = (id: string, status: string) => ({
+    id,
+    shop: 'cm',
+    status,
+    dropOff: today,
+    statusHistory: [],
+  });
+
+  function renderWith() {
+    render(
+      <Dashboard
+        {...base}
+        statuses={shopStatuses}
+        calendarTickets={[onToday('JT-1', 'ส่งมอบแล้ว'), onToday('JT-2', 'ยกเลิกนัด')]}
+      />,
+    );
+    return screen.getByText(/ปฏิทินงาน/).closest('.card') as HTMLElement;
+  }
+
+  const dotBeside = (calendar: HTMLElement, label: string) =>
+    within(calendar).getByText(label).previousElementSibling as HTMLElement;
+
+  it('draws a status in the colour the shop set for it', () => {
+    const calendar = renderWith();
+    expect(dotBeside(calendar, 'ส่งมอบแล้ว')).toHaveStyle({ background: '#1D4ED8' });
+  });
+
+  it('shows a status the shop added itself', () => {
+    const calendar = renderWith();
+    expect(dotBeside(calendar, 'ยกเลิกนัด')).toHaveStyle({ background: '#7F1D1D' });
+  });
+});
