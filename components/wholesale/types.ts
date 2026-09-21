@@ -162,6 +162,12 @@ export type WsOrder = {
    * on an unsaved draft from `blankOrder`, which the filter then always shows.
    */
   createdAt?: string;
+  /**
+   * วันที่เปิด PO as the form holds it — `YYYY-MM-DD`, a shop day. Set only when
+   * somebody touches the field; the server turns it into `created_at` (see
+   * `poOpenedAt`) and leaves the column alone when the day did not change.
+   */
+  openedOn?: string;
   items: WsItem[];
   returns: WsReturn[];
   adjustments: WsAdjustment[];

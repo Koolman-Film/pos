@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { cleanPhones } from '@/lib/domain/phone';
+import { shopDayKey } from '@/lib/domain/format';
+import { poOpenedAt } from '@/lib/domain/orders';
 import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
 
 import type { SaveOrderInput } from '@/components/wholesale/types';
@@ -59,7 +61,10 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
     moment cannot be handed the same one.
   */
   let orderId = input.id;
+  // วันที่เปิด PO: only written when the day actually moved (lib/domain/orders.ts).
+  const today = shopDayKey(new Date());
   if (isNew) {
+    const openedAt = poOpenedAt(input.openedOn, null, today);
     const { data, error } = await supabase
       .from('orders')
       .insert({
@@ -72,12 +77,23 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         due_at: input.dueAt || null,
         note: input.note ?? '',
         sales_by: input.salesBy ?? '',
+        ...(openedAt ? { created_at: openedAt } : {}),
       })
       .select('id')
       .single();
     if (error) throw new Error(error.message);
     orderId = data.id;
   } else {
+    // Compared with what is STORED, not with what the browser loaded: the
+    // form's copy can be stale, and re-writing the same day would still
+    // replace the real time of day with noon.
+    const { data: current } = await supabase
+      .from('orders')
+      .select('created_at')
+      .eq('id', orderId)
+      .maybeSingle();
+    const storedDay = current?.created_at ? shopDayKey(new Date(current.created_at)) : '';
+    const openedAt = poOpenedAt(input.openedOn, { day: storedDay }, today);
     const { error } = await supabase
       .from('orders')
       .update({
@@ -87,6 +103,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         due_at: input.dueAt || null,
         note: input.note ?? '',
         sales_by: input.salesBy ?? '',
+        ...(openedAt ? { created_at: openedAt } : {}),
       })
       .eq('id', orderId);
     if (error) throw new Error(error.message);

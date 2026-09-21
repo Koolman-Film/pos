@@ -123,3 +123,35 @@ export function orderReported(o: { payments: OrderPayment[] }): number {
     0,
   );
 }
+
+/*
+  วันที่เปิด PO (ร้านขอ 21 ก.ย. 2569) — today by default, changeable.
+
+  The PO's date is `orders.created_at`: the list's period filter, the invoice
+  reference date and the dashboard's order all read it. It used to be only
+  ever "the moment somebody pressed save", so a PO agreed on the phone on
+  Friday and typed in on Monday was a Monday PO, in the wrong week and at a
+  month end in the wrong month — with no way to say otherwise.
+
+  The form deals in shop days (`YYYY-MM-DD`, Bangkok); the column is an
+  instant. So:
+    - a day that is the one already stored changes nothing, and the stored
+      instant (with its real time of day) is kept;
+    - a new PO dated today is left to the database's own now();
+    - any other day becomes noon of that day in Bangkok — the middle of the
+      shop day, so no time-zone slip can carry it into the day before or after.
+  The PO NUMBER is not touched either way: it was issued when the PO was
+  saved, and document numbers never change.
+*/
+const SHOP_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The `created_at` to write, or `null` to leave the column as it is. */
+export function poOpenedAt(
+  openedOn: string | undefined,
+  stored: { day: string } | null,
+  today: string,
+): string | null {
+  if (!openedOn || !SHOP_DAY.test(openedOn)) return null;
+  if (stored ? openedOn === stored.day : openedOn === today) return null;
+  return `${openedOn}T12:00:00+07:00`;
+}

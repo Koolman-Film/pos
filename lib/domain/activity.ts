@@ -178,6 +178,9 @@ export const FIELD_LABELS: Record<string, string> = {
   adjusted_at: 'วันที่ปรับ',
   sales_by: 'เซลล์',
   delivered_at: 'วันที่จัดส่ง',
+  // Only a PO's created_at is ever edited (วันที่เปิด PO, 21 ก.ย. 2569); on every
+  // other table it is bookkeeping and stays out of creates and deletes.
+  created_at: 'วันที่เปิด PO',
   // สต็อก / ตั้งค่า
   name: 'ชื่อ',
   short_name: 'ชื่อย่อ',

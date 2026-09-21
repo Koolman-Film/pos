@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { orderTotal, orderPaid, orderReported, orderPendingAdjustments } from '@/lib/domain/orders';
+import {
+  orderTotal,
+  orderPaid,
+  orderReported,
+  orderPendingAdjustments,
+  poOpenedAt,
+} from '@/lib/domain/orders';
 
 describe('orderTotal', () => {
   it('subtracts returns and adjustments from the items total', () => {
@@ -162,5 +168,37 @@ describe('orderPendingAdjustments', () => {
       { amount: 100 },
     ];
     expect(orderPendingAdjustments({ adjustments })).toBe(200);
+  });
+});
+
+/**
+ * วันที่เปิด PO (ร้านขอ 21 ก.ย. 2569) — today by default, changeable. The rule
+ * for when `created_at` is actually written, and to what.
+ */
+describe('poOpenedAt', () => {
+  const today = '2026-09-21';
+
+  it('leaves a new PO dated today to the database’s own clock', () => {
+    expect(poOpenedAt('2026-09-21', null, today)).toBeNull();
+    expect(poOpenedAt(undefined, null, today)).toBeNull();
+  });
+
+  it('dates a new PO on the day chosen, at noon in Bangkok so no zone can shift it', () => {
+    expect(poOpenedAt('2026-09-19', null, today)).toBe('2026-09-19T12:00:00+07:00');
+  });
+
+  it('keeps an existing PO’s real time when its day was not changed', () => {
+    expect(poOpenedAt('2026-09-10', { day: '2026-09-10' }, today)).toBeNull();
+  });
+
+  it('moves an existing PO to the day it was really opened', () => {
+    expect(poOpenedAt('2026-09-08', { day: '2026-09-10' }, today)).toBe(
+      '2026-09-08T12:00:00+07:00',
+    );
+  });
+
+  it('ignores anything that is not a date', () => {
+    expect(poOpenedAt('19/09/2026', null, today)).toBeNull();
+    expect(poOpenedAt('', { day: '2026-09-10' }, today)).toBeNull();
   });
 });

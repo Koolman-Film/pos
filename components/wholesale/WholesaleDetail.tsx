@@ -8,7 +8,13 @@ import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { ProductPicker, type ProductOption } from '@/components/ui/ProductPicker';
 import { ShopButtons } from '@/components/ui/ShopButtons';
 import { OptionManageProvider } from '@/components/ui/optionManage';
-import { fmt, fmtThaiDateLong, fmtThaiDayString, thaiBahtText } from '@/lib/domain/format';
+import {
+  fmt,
+  fmtThaiDateLong,
+  fmtThaiDayString,
+  shopDayKey,
+  thaiBahtText,
+} from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import {
@@ -24,7 +30,7 @@ import {
   isApprovedAdjustment,
   orderPendingAdjustments,
 } from '@/lib/domain/orders';
-import { dateInputValue } from '@/lib/domain/now';
+import { dateInputValue, todayValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
 import { uploadAttachments, discardAttachments, fileNameFromPath } from '@/lib/storage/attachments';
 
@@ -1093,6 +1099,24 @@ export function WholesaleDetail({
                 {o.createdAt ? ` · ${fmtThaiDateLong(new Date(o.createdAt))}` : ''}
               </p>
             )}
+          </div>
+          {/*
+            วันที่เปิด PO — today unless somebody says otherwise (ร้านขอ 21 ก.ย.
+            2569). A PO agreed on the phone on Friday and typed in on Monday is
+            a Friday PO; it used to become a Monday one with no way to correct
+            it. The list's period filter and the invoice's reference date both
+            read this day.
+          */}
+          <div className="mb-5">
+            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+              <i className="fa-solid fa-calendar-day mr-1.5"></i>วันที่เปิด PO
+            </label>
+            <ThaiDateInput
+              value={o.openedOn ?? (o.createdAt ? shopDayKey(new Date(o.createdAt)) : todayValue())}
+              onChange={(v) => field('openedOn', v)}
+              ariaLabel="วันที่เปิด PO"
+              className="field text-sm px-3 py-2 w-full"
+            />
           </div>
           <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.items)}>
             <p className="text-xs font-semibold mb-3" style={{ color: PANEL.items.spine }}>

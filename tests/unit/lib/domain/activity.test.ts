@@ -201,3 +201,14 @@ describe('groupByTransaction', () => {
     expect(groups.map((g) => g.map((x) => x.id))).toEqual([[3, 2], [1]]);
   });
 });
+
+describe('วันที่เปิด PO in the history', () => {
+  it('names a moved PO date in Thai, not as created_at', () => {
+    const r = readEntry({
+      entity: 'orders',
+      action: 'แก้ไข',
+      changes: { created_at: ['2026-09-12T06:02:01+00:00', '2026-09-08T05:00:00+00:00'] },
+    });
+    expect(r.shape === 'fields' && r.fields[0].path).toBe('วันที่เปิด PO');
+  });
+});

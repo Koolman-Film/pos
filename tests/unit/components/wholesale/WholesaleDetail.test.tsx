@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // WholesaleList navigates with useRouter(); jsdom has no app-router context.
@@ -1147,5 +1147,50 @@ describe('WholesaleDetail — เซลล์เจ้าของยอดข�
     );
     await user.click(screen.getByRole('button', { name: /บันทึก PO/ }));
     expect(onSaveOrder).toHaveBeenCalled();
+  });
+});
+
+/**
+ * วันที่เปิด PO (ร้านขอ 21 ก.ย. 2569) — today by default, changeable.
+ */
+describe('WholesaleDetail — วันที่เปิด PO', () => {
+  const draft = {
+    ...order,
+    id: 'WS-NEW-1234',
+    shop: 'cm',
+    createdAt: undefined,
+  } as unknown as WsOrder;
+  const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+
+  it('starts a new PO on today', () => {
+    render(<WholesaleDetail order={draft} isNew canDo={() => true} />);
+    expect(screen.getByLabelText('วันที่เปิด PO')).toHaveValue(today());
+  });
+
+  it('shows a saved PO on the day it was opened', () => {
+    render(
+      <WholesaleDetail
+        order={{ ...order, createdAt: '2026-09-10T03:30:00Z' } as unknown as WsOrder}
+        canDo={() => true}
+      />,
+    );
+    expect(screen.getByLabelText('วันที่เปิด PO')).toHaveValue('2026-09-10');
+  });
+
+  it('carries a changed day to the save', async () => {
+    const onSaveOrder = vi.fn();
+    render(
+      <WholesaleDetail
+        order={{ ...order, createdAt: '2026-09-10T03:30:00Z' } as unknown as WsOrder}
+        canDo={() => true}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('วันที่เปิด PO'), { target: { value: '2026-09-08' } });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'บันทึก PO' }));
+    expect(onSaveOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ openedOn: '2026-09-08' }),
+      false,
+    );
   });
 });
