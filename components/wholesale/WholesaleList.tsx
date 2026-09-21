@@ -148,23 +148,33 @@ export function WholesaleList({
   const [saleFilter, setSaleFilter] = useState(initialSale || 'all');
   const [search, setSearch] = useSearchFromUrl(initialSearch);
 
-  let visible = filter === 'all' ? list : list.filter((o) => o.status === filter);
+  /*
+    ตัวเลขบนปุ่มสถานะ ต้องนับจากสิ่งที่กรองอยู่ (ร้านแจ้ง 21 ก.ย. 2569).
+
+    The chips used to count every PO in every branch and every period, while
+    the rows below were narrowed to the branch, period, customer, product and
+    seller chosen above — so "รออนุมัติราคา 1" could open an empty list, the
+    one PO being in another branch or another year. `scoped` is every filter
+    EXCEPT the status one; the chips count it, so each number is exactly what
+    pressing that chip shows. Book งาน's chips already work this way.
+  */
+  let scoped = list;
   // `needsPriceApproval` is the dashboard counter’s own predicate, imported
   // rather than restated: a count of 2 opening a list of 5 is worse than
   // having had no link at all.
-  if (approvalFilter) visible = visible.filter(needsPriceApproval);
+  if (approvalFilter) scoped = scoped.filter(needsPriceApproval);
   if (drillDown === 'flag' && flag) {
-    visible = visible.filter((o) => matchesWsFlag(o, flag, flagToday));
+    scoped = scoped.filter((o) => matchesWsFlag(o, flag, flagToday));
   }
-  if (custFilter !== 'all') visible = visible.filter((o) => o.customerId === Number(custFilter));
-  if (shopFilter !== 'all') visible = visible.filter((o) => o.shop === shopFilter);
+  if (custFilter !== 'all') scoped = scoped.filter((o) => o.customerId === Number(custFilter));
+  if (shopFilter !== 'all') scoped = scoped.filter((o) => o.shop === shopFilter);
   if (productFilter !== 'all')
-    visible = visible.filter((o) => o.items.some((it) => it.name === productFilter));
+    scoped = scoped.filter((o) => o.items.some((it) => it.name === productFilter));
   // `unassigned` is its own choice, not a gap in the list: POs raised before
   // the field existed have no seller, and "which of mine are missing a name"
   // is a question somebody has to be able to ask.
-  if (saleFilter === 'unassigned') visible = visible.filter((o) => !o.salesBy);
-  else if (saleFilter !== 'all') visible = visible.filter((o) => o.salesBy === saleFilter);
+  if (saleFilter === 'unassigned') scoped = scoped.filter((o) => !o.salesBy);
+  else if (saleFilter !== 'all') scoped = scoped.filter((o) => o.salesBy === saleFilter);
   /*
     ค้นหา — by anything on the PO: its number, the customer and their phone,
     the rep, what was sold, the notes, the total (lib/domain/search.ts). Across
@@ -173,7 +183,7 @@ export function WholesaleList({
   */
   const searching = search.trim() !== '';
   if (searching) {
-    visible = visible.filter((o) => {
+    scoped = scoped.filter((o) => {
       const customer = customers.find((c) => c.id === o.customerId);
       return matchesSearch(search, [
         o.id,
@@ -191,10 +201,12 @@ export function WholesaleList({
   // The period bar was rendered but never consulted, so every PO showed
   // regardless of the selected window. POs are dated by `orders.created_at`.
   if (!drillDown && !searching) {
-    visible = visible.filter((o) =>
+    scoped = scoped.filter((o) =>
       isInPeriod(o.createdAt, period, periodValue, rangeStart, rangeEnd),
     );
   }
+  // ... and the status last, so the chips above can count `scoped`.
+  const visible = filter === 'all' ? scoped : scoped.filter((o) => o.status === filter);
 
   const productScoped = list.filter(
     (o) =>
@@ -420,7 +432,7 @@ export function WholesaleList({
               filter === 'all' ? 'pill-active' : 'pill-inactive'
             }`}
           >
-            ทั้งหมด {list.length}
+            ทั้งหมด {scoped.length}
           </button>
           {Object.keys(wsStatuses).map((s) => (
             <button
@@ -430,7 +442,7 @@ export function WholesaleList({
                 filter === s ? 'pill-active' : 'pill-inactive'
               }`}
             >
-              {s} {list.filter((o) => o.status === s).length}
+              {s} {scoped.filter((o) => o.status === s).length}
             </button>
           ))}
         </div>
