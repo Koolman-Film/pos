@@ -30,6 +30,7 @@ export function TicketDetailClient({
   accessibleShops,
   statuses,
   capabilities,
+  canSeeHistory = false,
   currentUserName,
   initialOptions,
   initialStock,
@@ -60,6 +61,8 @@ export function TicketDetailClient({
   accessibleShops?: Shop[];
   statuses: StatusConfig[];
   capabilities: Record<string, boolean>;
+  /** Role admin — the ประวัติการแก้ไข button (migration 0061). */
+  canSeeHistory?: boolean;
   currentUserName: string;
   initialOptions: Record<OptionListName, string[]>;
   initialStock: StockRow[];
@@ -126,6 +129,7 @@ export function TicketDetailClient({
       accessibleShops={accessibleShops}
       statuses={statuses}
       canDo={canDo}
+      canSeeHistory={canSeeHistory}
       currentUserName={currentUserName}
       initialOptions={initialOptions}
       initialStock={initialStock}

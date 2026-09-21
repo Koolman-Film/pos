@@ -79,6 +79,7 @@ export function TicketDetail({
   accessibleShops = [],
   statuses,
   canDo,
+  canSeeHistory = false,
   currentUserName,
   initialOptions,
   initialStock,
@@ -113,6 +114,8 @@ export function TicketDetail({
   accessibleShops?: Shop[];
   statuses: StatusConfig[];
   canDo: (key: string) => boolean;
+  /** Role admin — shows ประวัติการแก้ไข (migration 0061). */
+  canSeeHistory?: boolean;
   currentUserName: string;
   initialOptions: Options;
   initialStock: StockRow[];
@@ -930,21 +933,43 @@ export function TicketDetail({
   return (
     <OptionManageProvider canManage={canDo('options.manage')}>
       <div className="max-w-2xl fade-page">
-        <button
-          onClick={() => {
-            if (
-              confirmDiscardIfDirty(
-                isDirty,
-                'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <button
+            onClick={() => {
+              if (
+                confirmDiscardIfDirty(
+                  isDirty,
+                  'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
+                )
               )
-            )
-              router.push(ticketsHref());
-          }}
-          className="text-sm mb-4 flex items-center gap-2 font-medium"
-          style={{ color: 'var(--ink-soft)' }}
-        >
-          <i className="fa-solid fa-arrow-left"></i>กลับไปรายการใบงาน
-        </button>
+                router.push(ticketsHref());
+            }}
+            className="text-sm flex items-center gap-2 font-medium"
+            style={{ color: 'var(--ink-soft)' }}
+          >
+            <i className="fa-solid fa-arrow-left"></i>กลับไปรายการใบงาน
+          </button>
+          {/*
+            ใครแก้ใบงานนี้ เมื่อไหร่ จากอะไรเป็นอะไร — the question the history
+            was built for (ร้านขอ 19 ก.ย. 2569). Admin only, like the page.
+          */}
+          {!isNew && canSeeHistory && (
+            <button
+              onClick={() => {
+                if (
+                  confirmDiscardIfDirty(
+                    isDirty,
+                    'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้โดยไม่บันทึกหรือไม่?',
+                  )
+                )
+                  router.push(`/activity?doc=${encodeURIComponent(t.id)}`);
+              }}
+              className="text-xs flex items-center gap-1.5 font-medium btn-outline px-3 py-1.5 rounded-lg"
+            >
+              <i className="fa-solid fa-clock-rotate-left"></i>ประวัติการแก้ไข
+            </button>
+          )}
+        </div>
         <div className="card p-5 sm:p-7">
           <div className="flex items-start justify-between mb-1">
             <p

@@ -41,9 +41,12 @@ describe('Sidebar', () => {
       'revenue',
       'money',
       'permissions',
+      'activity',
     ]);
 
-    for (const item of NAV_ITEMS) {
+    // Each GRANTABLE module is gated on its own key; ประวัติการใช้งาน is gated on
+    // the admin role instead, and has its own test below.
+    for (const item of NAV_ITEMS.filter((i) => !i.adminOnly)) {
       const { unmount } = render(<Sidebar activePath="/dashboard" hasNav={(k) => k === item.id} />);
       expect(screen.getByText(item.label)).toBeInTheDocument();
       for (const other of NAV_ITEMS) {
@@ -51,6 +54,17 @@ describe('Sidebar', () => {
       }
       unmount();
     }
+  });
+
+  it('shows ประวัติการใช้งาน to role admin only, whatever the nav permissions say', () => {
+    // A stray permission row must not hand the history to anybody: it is
+    // admin by role (migration 0061), and the permissions screen never lists it.
+    const { unmount } = render(<Sidebar activePath="/dashboard" hasNav={() => true} />);
+    expect(screen.queryByText('ประวัติการใช้งาน')).not.toBeInTheDocument();
+    unmount();
+
+    render(<Sidebar activePath="/dashboard" hasNav={() => false} isAdmin />);
+    expect(screen.getByText('ประวัติการใช้งาน').closest('a')).toHaveAttribute('href', '/activity');
   });
 
   it('links each nav item at its route', () => {

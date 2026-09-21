@@ -93,7 +93,18 @@ describe('permission registry covers what the code checks', () => {
     // These were separate copies once, and โมดูลรายได้ lived in only one of them:
     // it shipped in the sidebar and stayed ungovernable. Pinning them equal is
     // what stops the next module repeating it.
-    expect(NAV_ITEMS.map((n) => n.id)).toEqual(SIDEBAR_NAV.map((n) => n.id));
+    // The one exception is an item marked adminOnly (ประวัติการใช้งาน, 0061):
+    // shown to role admin by role, and kept OFF this list on purpose so it can
+    // never be granted to anybody else.
+    expect(NAV_ITEMS.map((n) => n.id)).toEqual(
+      SIDEBAR_NAV.filter((n) => !n.adminOnly).map((n) => n.id),
+    );
+  });
+
+  it('never offers an admin-only module to be granted', () => {
+    const adminOnly = SIDEBAR_NAV.filter((n) => n.adminOnly).map((n) => n.id);
+    expect(adminOnly).toContain('activity');
+    for (const id of adminOnly) expect(declared.nav.has(id)).toBe(false);
   });
 
   it('has a Thai label for every key it lists', () => {

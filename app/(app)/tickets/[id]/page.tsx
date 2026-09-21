@@ -55,6 +55,9 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
         'list.delete': session.canDo('list.delete'),
         'list.unlock': session.canDo('list.unlock'),
       }}
+      // ประวัติการแก้ไข — admin by ROLE, like the page it opens (0061). Not a
+      // capability: those are what จัดการสิทธิ์ hands out, and this is not.
+      canSeeHistory={session.roleId === 'admin'}
       currentUserName={session.name}
       initialOptions={registries.options}
       initialStock={registries.stock}

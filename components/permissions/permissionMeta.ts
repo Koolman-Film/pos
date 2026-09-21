@@ -61,9 +61,10 @@ export const ROLE_ICON_CHOICES = [
  * means a module added to the sidebar is grantable the same day, with no second
  * place to remember.
  */
-export const NAV_ITEMS: { id: string; label: string; icon: string }[] = SIDEBAR_NAV.map(
-  ({ id, label, icon }) => ({ id, label, icon }),
-);
+export const NAV_ITEMS: { id: string; label: string; icon: string }[] = SIDEBAR_NAV
+  // ประวัติการใช้งาน and anything like it: admin by role, never by grant.
+  .filter((n) => !n.adminOnly)
+  .map(({ id, label, icon }) => ({ id, label, icon }));
 
 /** reference/v0.4/finnix-film.html:182-191 */
 export const DASHBOARD_WIDGETS: LabeledKey[] = [

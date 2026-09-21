@@ -20,11 +20,20 @@ import { NAV_ITEMS } from './navItems';
  */
 export function Sidebar({
   hasNav,
+  isAdmin = false,
   activePath,
 }: {
   hasNav: (navKey: string) => boolean;
+  /** Role `admin` — the only one an `adminOnly` item is shown to, whatever a
+   *  stray permission row might say. */
+  isAdmin?: boolean;
   /** Overrides `usePathname()`. Test seam; the app never passes it. */
   activePath?: string;
 }) {
-  return <SidebarNav items={NAV_ITEMS.filter((item) => hasNav(item.id))} activePath={activePath} />;
+  return (
+    <SidebarNav
+      items={NAV_ITEMS.filter((item) => (item.adminOnly ? isAdmin : hasNav(item.id)))}
+      activePath={activePath}
+    />
+  );
 }

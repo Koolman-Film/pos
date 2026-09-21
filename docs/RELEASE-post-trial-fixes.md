@@ -34,7 +34,7 @@ npx supabase db push                     # applies 0012 … 0037 only
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
 `supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 30 ในตารางข้างล่าง
-(`release-0019` … `release-0060` และ `repair-categories-and-services.sql`)
+(`release-0019` … `release-0061` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -96,7 +96,8 @@ it twice changes nothing, and each records its versions in
 | 39    | `supabase/release-0058.sql`                   | a normal connection                                 |
 | 40    | `supabase/release-0059.sql`                   | a normal connection                                 |
 | 41    | `supabase/release-0060.sql`                   | a normal connection                                 |
-| 42    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 42    | `supabase/release-0061.sql`                   | a normal connection                                 |
+| 43    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -174,6 +175,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0058_alerts`                         | **การแจ้งเตือน** — ตารางจำว่ารับทราบหน้าต่างสรุปแล้ววันไหน และผูกเซลล์กับบัญชีเข้าระบบ                                                                                                                                                                                                                                                                                                                                                                         | ต่ำ. ไม่แตะข้อมูลเดิม หลังขึ้นระบบให้ผูกบัญชีของโหน่ง/เคนที่หน้า PO ไม่งั้นเซลล์จะเห็นกำหนดชำระของทั้งสาขา                                                                                                                                                        |
 | `0059_service_visit_claims`           | **เคลมประกันผ่านการเซอร์วิส** — การเคลมผูกกับการเซอร์วิสครั้งที่ใช้ประกัน บันทึกพร้อมกันในครั้งเดียว ระบบตรวจว่าเป็นประกันของรถคันนั้น อยู่ในช่วงคุ้มครอง และชิ้นไม่เกินที่เหลือ; เพิ่มการเคลมแยกจากส่วนประกันไม่ได้แล้ว                                                                                                                                                                                                                                       | ต่ำ. การเคลมเดิมอยู่ครบและยังนับหักชิ้นตามเดิม ต้องขึ้นโค้ดชุดนี้พร้อมกัน เพราะหน้าประกันแบบเดิมจะบันทึกการเคลมไม่ได้หลังรันไฟล์นี้                                                                                                                               |
 | `0060_ticket_payment_date`            | **วันที่รับเงินของใบงานไม่ถูกเขียนทับเป็นวันนี้อีก** — ใบงานมีช่อง "วันที่รับเงิน" ต่อรายการ และรายการรับเงินมี uid ประจำตัว ถ้าการบันทึกไม่ได้ส่งวันที่มา ระบบใช้วันที่เดิมของรายการนั้นแทนวันที่ปัจจุบัน                                                                                                                                                                                                                                                     | ต่ำ. ข้อมูลเดิมไม่ถูกแก้ วันที่ที่บันทึกไว้แล้วยังอยู่ตามเดิม ต้องขึ้นโค้ดชุดนี้พร้อมกันเพื่อให้พนักงานแก้วันที่ได้จากหน้าใบงาน                                                                                                                                   |
+| `0061_activity_log`                   | **ประวัติการใช้งานทั้งระบบ** — ทุกการสร้าง แก้ไข ลบ ถูกบันทึกโดย trigger ว่าใครทำ เมื่อไหร่ ค่าเดิมคืออะไร ชุดรายการที่ลบแล้วเขียนใหม่ทุกครั้ง (รายการในใบงาน/PO, จุดตรวจเซอร์วิส, ตัวเลือก, สาขาของผู้ใช้) บันทึกเป็นบรรทัดเดียวต่อการบันทึก และไม่บันทึกเมื่อไม่มีอะไรเปลี่ยน; อ่านได้เฉพาะแอดมิน แก้/ลบไม่ได้                                                                                                                                               | ต่ำ. ไม่แก้ข้อมูลเดิม ประวัติเริ่มนับจากตอนรันไฟล์ ย้อนหลังไม่ได้ ทุกการบันทึกเขียนเพิ่มหนึ่งแถวขึ้นไป ตารางจะโตตามการใช้งาน ยังไม่มีการลบประวัติเก่าอัตโนมัติ                                                                                                    |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

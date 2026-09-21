@@ -19,6 +19,12 @@ export type NavItem = {
   /** Font Awesome icon class, e.g. `fa-gauge-high`. */
   icon: string;
   href: string;
+  /**
+   * Shown to role `admin` only, and never offered in จัดการสิทธิ์. The admin role
+   * passes every `hasNav` check already; leaving the item out of the grantable
+   * list is what keeps it from ever being handed to anybody else.
+   */
+  adminOnly?: boolean;
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -45,6 +51,18 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'revenue', label: 'รายได้', icon: 'fa-sack-dollar', href: '/revenue' },
   { id: 'money', label: 'การจัดการเงิน/บัญชี', icon: 'fa-vault', href: '/money' },
   { id: 'permissions', label: 'จัดการสิทธิ์', icon: 'fa-user-shield', href: '/permissions' },
+  /*
+    ประวัติการใช้งาน (migration 0061) — แอดมินเท่านั้น, as the shop decided on
+    19 ก.ย. 2569. It is the record of who changed what; a role that could be
+    granted it could be granted the means to see who is watching.
+  */
+  {
+    id: 'activity',
+    label: 'ประวัติการใช้งาน',
+    icon: 'fa-clock-rotate-left',
+    href: '/activity',
+    adminOnly: true,
+  },
 ];
 
 /**

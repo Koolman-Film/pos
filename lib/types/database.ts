@@ -9,6 +9,48 @@ export type Json =
 export type Database = {
   pos: {
     Tables: {
+      activity_log: {
+        Row: {
+          action: string
+          actor: string | null
+          actor_name: string
+          at: string
+          changes: Json
+          doc_ref: string
+          entity: string
+          id: number
+          record_id: string
+          shop_id: string | null
+          tx: number
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          actor_name?: string
+          at?: string
+          changes?: Json
+          doc_ref?: string
+          entity: string
+          id?: never
+          record_id?: string
+          shop_id?: string | null
+          tx?: number
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          actor_name?: string
+          at?: string
+          changes?: Json
+          doc_ref?: string
+          entity?: string
+          id?: never
+          record_id?: string
+          shop_id?: string | null
+          tx?: number
+        }
+        Relationships: []
+      }
       alert_acknowledgements: {
         Row: {
           acked_at: string

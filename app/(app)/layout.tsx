@@ -39,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Shares the mobile drawer's open state between the header's hamburger
           and the sidebar, which this Server Component cannot hold itself. */}
       <MobileNavProvider>
-        <Sidebar hasNav={session.hasNav} />
+        <Sidebar hasNav={session.hasNav} isAdmin={session.roleId === 'admin'} />
         <div className="flex-1 min-w-0 flex flex-col">
           <Header
             name={session.name}
