@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // TicketDetail calls useRouter(); there is no app-router context under jsdom, so
@@ -737,7 +737,12 @@ describe('TicketDetail — เลือกสาขาตอนเปิดใ�
       />,
     );
 
-    await user.selectOptions(screen.getByLabelText('สาขาที่เปิดใบงาน'), 'lpg');
+    // Buttons, like every other branch choice (ร้านแจ้ง 21 ก.ย. 2569).
+    await user.click(
+      within(screen.getByRole('group', { name: 'สาขาที่เปิดใบงาน' })).getByRole('button', {
+        name: /ลำปาง/,
+      }),
+    );
     await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
     expect(saveAction).toHaveBeenCalledWith(expect.objectContaining({ shop: 'lpg' }));
   });

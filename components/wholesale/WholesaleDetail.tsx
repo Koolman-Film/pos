@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { ProductPicker, type ProductOption } from '@/components/ui/ProductPicker';
+import { ShopButtons } from '@/components/ui/ShopButtons';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { fmt, fmtThaiDateLong, fmtThaiDayString, thaiBahtText } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -1012,18 +1013,13 @@ export function WholesaleDetail({
               the stock it draws and the customer's paperwork all name it.
             */}
             {isNew && shops.length > 1 ? (
-              <select
+              // Buttons, like every other branch choice (ร้านแจ้ง 21 ก.ย. 2569).
+              <ShopButtons
+                label="สาขาที่เปิด PO"
+                shops={shops}
                 value={o.shop}
-                aria-label="สาขาที่เปิด PO"
-                onChange={(e) => changeShop(e.target.value)}
-                className="field text-xs px-2.5 py-1.5"
-              >
-                {shops.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                onChange={changeShop}
+              />
             ) : (
               <p
                 className="text-xs font-semibold flex items-center gap-1.5"

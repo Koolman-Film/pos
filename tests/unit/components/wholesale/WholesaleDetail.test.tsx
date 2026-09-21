@@ -176,9 +176,16 @@ describe('WholesaleDetail — เลือกสาขาตอนเปิด P
 
   it('offers the branches the caller may act for', () => {
     render(<WholesaleDetail order={blank} isNew shops={SHOPS} canDo={() => true} />);
-    const picker = screen.getByLabelText('สาขาที่เปิด PO');
-    expect(picker).toHaveValue('cm');
-    expect(within(picker).getByRole('option', { name: SHOPS[1].name })).toBeInTheDocument();
+    // Buttons, like every other branch choice (ร้านแจ้ง 21 ก.ย. 2569).
+    const picker = screen.getByRole('group', { name: 'สาขาที่เปิด PO' });
+    expect(within(picker).getByRole('button', { name: /เชียงใหม่/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(picker).getByRole('button', { name: /ลำปาง/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
   });
 
   it('keeps it fixed on a PO that already exists', () => {
@@ -265,7 +272,11 @@ describe('WholesaleDetail — สาขา และ ถังขยะ', () => 
     expect(screen.queryByText(/ฟิล์มกันรอย/)).not.toBeInTheDocument();
 
     // Switch to the wholesale-only branch: its shelf is what the PO now sells.
-    await user.selectOptions(screen.getByLabelText('สาขาที่เปิด PO'), 'north');
+    await user.click(
+      within(screen.getByRole('group', { name: 'สาขาที่เปิด PO' })).getByRole('button', {
+        name: 'Finnix North',
+      }),
+    );
     await user.click(screen.getByLabelText('สินค้าในรายการ'));
     expect(screen.getByText(/ฟิล์มกันรอย/)).toBeInTheDocument();
   });
@@ -297,7 +308,11 @@ describe('WholesaleDetail — สาขา และ ถังขยะ', () => 
       <WholesaleDetail order={withItem} isNew shops={shops} stock={stock} canDo={() => true} />,
     );
 
-    await user.selectOptions(screen.getByLabelText('สาขาที่เปิด PO'), 'north');
+    await user.click(
+      within(screen.getByRole('group', { name: 'สาขาที่เปิด PO' })).getByRole('button', {
+        name: 'Finnix North',
+      }),
+    );
     // Kept as a line (the quantity is still wanted) but no longer claiming to
     // sell a product that branch has never stocked.
     expect(screen.getByLabelText('สินค้าในรายการ')).toHaveValue('');

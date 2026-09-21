@@ -1,6 +1,7 @@
 'use client';
 
-import { fmtThaiDateLong, shortShopName } from '@/lib/domain/format';
+import { fmtThaiDateLong } from '@/lib/domain/format';
+import { ShopButtons } from '@/components/ui/ShopButtons';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 export type Shop = { id: string; name: string };
@@ -41,38 +42,18 @@ export function PeriodShopFilter({
 }) {
   return (
     <div className="card p-3 mb-4 flex flex-wrap items-center gap-2">
-      {/*
-        สาขาเป็นปุ่ม ไม่ใช่ดรอปดาวน์.
-
-        A dropdown hides every branch but the chosen one, so switching between
-        two of them is three actions and you cannot see what else is there. The
-        period control beside it has always been a row of buttons; the branches
-        are the same kind of choice — a short, fixed list — and now read the
-        same way. The row wraps, so a sixth branch costs a line, not a redesign.
-      */}
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="เลือกสาขา">
-        {(allowAllShops
-          ? [{ id: 'all', name: `ทุกร้าน (${shopOptions.length})` }, ...shopOptions]
-          : shopOptions
-        ).map((s) => {
-          const on = shopFilter === s.id;
-          return (
-            <button
-              key={s.id}
-              onClick={() => setShopFilter(s.id)}
-              aria-pressed={on}
-              className="text-xs px-3 py-2 rounded-xl font-semibold"
-              style={{
-                background: on ? 'var(--primary)' : 'transparent',
-                color: on ? '#fff' : 'var(--ink-soft)',
-                border: on ? '1.5px solid var(--primary)' : '1.5px solid var(--line)',
-              }}
-            >
-              {shortShopName(s.name)}
-            </button>
-          );
-        })}
-      </div>
+      {/* สาขาเป็นปุ่ม ไม่ใช่ดรอปดาวน์ — the same control the ticket and PO forms
+          use, see components/ui/ShopButtons.tsx. */}
+      <ShopButtons
+        label="เลือกสาขา"
+        shops={
+          allowAllShops
+            ? [{ id: 'all', name: `ทุกร้าน (${shopOptions.length})` }, ...shopOptions]
+            : shopOptions
+        }
+        value={shopFilter}
+        onChange={setShopFilter}
+      />
       <div
         className="flex rounded-xl overflow-hidden"
         style={{ border: '1.5px solid var(--line)' }}

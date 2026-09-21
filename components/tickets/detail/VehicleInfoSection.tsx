@@ -4,6 +4,7 @@ import { DateTimeField } from '@/components/ui/DateTimeField';
 import { ManagedChipPicker } from '@/components/ui/ManagedChipPicker';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { PHONE_HINT, PhoneInput, PhoneOwnersWarning } from '@/components/ui/PhoneField';
+import { ShopButtons } from '@/components/ui/ShopButtons';
 import { findPhoneOwners } from '@/lib/domain/phone';
 
 import { TicketCustomerPicker } from '../TicketCustomerPicker';
@@ -71,21 +72,17 @@ export function VehicleInfoSection({
           number and stock movements that already name its branch. */}
       {shopChoices.length > 1 && (
         <div className="mb-3">
-          <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
+          <p className={labelCls} style={{ color: 'var(--ink-soft)' }}>
             สาขาที่เปิดใบงาน
-          </label>
-          <select
+          </p>
+          {/* Buttons, like every other branch choice in the app (ร้านแจ้ง
+              21 ก.ย. 2569) — a dropdown hid which branches there were. */}
+          <ShopButtons
+            label="สาขาที่เปิดใบงาน"
+            shops={shopChoices}
             value={t.shop}
-            aria-label="สาขาที่เปิดใบงาน"
-            onChange={(e) => field('shop', e.target.value)}
-            className="field w-full text-sm px-3 py-2"
-          >
-            {shopChoices.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+            onChange={(id) => field('shop', id)}
+          />
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
