@@ -2,13 +2,17 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { createPortal, flushSync } from 'react-dom';
 
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
+import { useIsMounted } from '@/lib/hooks/useIsMounted';
 
 import type { SaleLine } from '@/app/(app)/revenue/data';
+
+import { groupRevenueReport, type ReportRow } from './revenueReport';
 
 /**
  * โมดูลรายได้ — รายการการขายแยกตามชนิดสินค้า.
@@ -192,61 +196,119 @@ export function RevenueModule({
     .sort((a, b) => b.amount - a.amount);
   const scopedTotal = byCategory.reduce((s, c) => s + c.amount, 0);
 
+  /*
+    รายงาน = what the filters leave on screen, laid out สาขา → แหล่งเงิน →
+    วันที่: a table per แหล่งเงิน with its totals, a total per branch and for
+    the whole report (components/revenue/revenueReport.ts). The PDF and the
+    Excel file are the same report (ร้านขอ 22 ก.ย. 2569).
+  */
+  const report = groupRevenueReport(
+    visible,
+    accessibleShops.map((s) => s.id),
+  );
+  const mounted = useIsMounted();
+  /*
+    The printed report is built only for the print it is asked for: it repeats
+    every row on the page, and a second full copy sitting in the document the
+    rest of the time is weight for nothing.
+  */
+  const [printing, setPrinting] = useState(false);
+  function exportPDF() {
+    flushSync(() => setPrinting(true));
+    window.print();
+    setPrinting(false);
+  }
+
   async function exportExcel() {
     if (!exportAction) return;
-    // A widened row shape: held jobs carry a เงินรอคืน column the sales rows
-    // leave empty, so one sheet holds both piles without a second header.
-    const rows: Record<string, string | number>[] = visible.map((l) => ({
-      วันที่ขาย: l.soldAt,
-      ใบงาน: l.ticketId,
-      สาขา: shopName(l.shop),
-      ลูกค้า: l.customer,
-      ทะเบียน: l.plate,
-      'ยี่ห้อ/รุ่น': l.car ?? '',
-      จองผ่าน: l.bookingChannel ?? '',
-      ช่องทาง: l.channel,
-      ชนิดสินค้า: l.category,
-      สินค้า: l.product,
-      ยอดขาย: l.amount,
-      ...(canSeeCost ? { ต้นทุน: l.cost, กำไรขั้นต้น: l.amount - l.cost } : {}),
-      /*
-        การชำระเงิน (ร้านขอ 22 ก.ย. 2569). Paid and owed are the whole
-        document's, on its first line only, so the columns still add up.
-      */
-      วิธีชำระ: l.payment?.methods ?? '',
-      สถานะชำระ: l.payment?.status ?? '',
-      ชำระแล้ว: l.payment?.paid ?? 0,
-      ค้างชำระ: l.payment?.due ?? 0,
-      เลขที่ใบกำกับภาษี: l.taxInvoiceNo,
-    }));
-    // Held jobs ride along at the bottom rather than in a second file: the
-    // accountant reconciles the drawer against both piles at once.
-    for (const j of heldJobs) {
-      rows.push({
-        วันที่ขาย: j.soldAt,
-        ใบงาน: j.ticketId,
-        สาขา: shopName(j.shop),
-        ลูกค้า: j.customer,
-        ทะเบียน: j.plate,
-        'ยี่ห้อ/รุ่น': j.car,
-        จองผ่าน: j.bookingChannel,
-        ช่องทาง: 'ปลีก',
-        ชนิดสินค้า: 'เงินรอคืน Finnix',
-        สินค้า: j.products.join(', '),
-        ยอดขาย: 0,
-        ...(canSeeCost ? { ต้นทุน: 0, กำไรขั้นต้น: 0 } : {}),
-        วิธีชำระ: j.payment?.methods ?? '',
-        สถานะชำระ: j.payment?.status ?? '',
-        ชำระแล้ว: j.payment?.paid ?? 0,
-        ค้างชำระ: j.payment?.due ?? 0,
-        เลขที่ใบกำกับภาษี: '',
-        เงินรอคืน: j.amount,
+    const rowOf = (r: ReportRow): Record<string, string | number> => {
+      const l = r.line;
+      return {
+        วันที่ขาย: l.soldAt,
+        ใบงาน: l.ticketId,
+        ลูกค้า: l.customer,
+        ทะเบียน: l.plate,
+        'ยี่ห้อ/รุ่น': l.car ?? '',
+        จองผ่าน: l.bookingChannel ?? '',
+        ช่องทาง: l.channel,
+        ชนิดสินค้า: l.category,
+        สินค้า: l.product,
+        ยอดขาย: l.amount,
+        ...(canSeeCost ? { ต้นทุน: l.cost, กำไรขั้นต้น: l.amount - l.cost } : {}),
+        วิธีชำระ: l.payment?.methods ?? '',
+        สถานะชำระ: l.payment?.status ?? '',
+        // The document's money, on the first of its lines in the report only.
+        ชำระแล้ว: r.paid,
+        ค้างชำระ: r.due,
+        เลขที่ใบกำกับภาษี: l.taxInvoiceNo,
+      };
+    };
+    const totalRow = (
+      label: string,
+      t: { amount: number; paid: number; due: number },
+    ): Record<string, string | number> => ({
+      วันที่ขาย: '',
+      ใบงาน: '',
+      ลูกค้า: label,
+      ยอดขาย: t.amount,
+      ชำระแล้ว: t.paid,
+      ค้างชำระ: t.due,
+    });
+    const groups: { sheetName: string; rows: Record<string, string | number>[] }[] = [
+      ...report.sections.map((sec) => ({
+        sheetName: shopName(sec.shopId),
+        rows: [
+          ...sec.tables.flatMap((t) => [
+            ...t.rows.map(rowOf),
+            totalRow(`รวม แหล่งเงิน ${t.source}`, t),
+          ]),
+          totalRow(`รวมทั้งสาขา ${shopName(sec.shopId)}`, sec),
+        ],
+      })),
+      {
+        sheetName: 'สรุปรวม',
+        rows: [
+          ...report.sections.flatMap((sec) =>
+            sec.tables.map((t) => ({
+              สาขา: shopName(sec.shopId),
+              แหล่งเงิน: t.source,
+              ยอดขาย: t.amount,
+              ชำระแล้ว: t.paid,
+              ค้างชำระ: t.due,
+            })),
+          ),
+          {
+            สาขา: 'ยอดรวมทั้งหมด',
+            แหล่งเงิน: '',
+            ยอดขาย: report.amount,
+            ชำระแล้ว: report.paid,
+            ค้างชำระ: report.due,
+          },
+        ],
+      },
+    ];
+    // เงินรอคืน Finnix: collected here, not this branch's takings — its own
+    // sheet, in the file the accountant reconciles the drawer with, but in none
+    // of the totals above.
+    if (heldJobs.length) {
+      groups.push({
+        sheetName: 'เงินรอคืน Finnix',
+        rows: heldJobs.map((j) => ({
+          วันที่ขาย: j.soldAt,
+          ใบงาน: j.ticketId,
+          สาขา: shopName(j.shop),
+          ลูกค้า: j.customer,
+          ทะเบียน: j.plate,
+          'ยี่ห้อ/รุ่น': j.car,
+          จองผ่าน: j.bookingChannel,
+          สินค้า: j.products.join(', '),
+          วิธีชำระ: j.payment?.methods ?? '',
+          สถานะชำระ: j.payment?.status ?? '',
+          เงินรอคืน: j.amount,
+        })),
       });
     }
-    const result = await exportAction({
-      fileNameBase: `รายได้-${exportStamp()}`,
-      groups: [{ sheetName: 'รายการขาย', rows }],
-    });
+    const result = await exportAction({ fileNameBase: `รายได้-${exportStamp()}`, groups });
     if (result) downloadBase64(result.base64, result.fileName);
   }
 
@@ -255,12 +317,21 @@ export function RevenueModule({
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <h1 className="text-xl font-bold">รายได้</h1>
         {canExport && (
-          <button
-            onClick={exportExcel}
-            className="btn-outline text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2"
-          >
-            <i className="fa-solid fa-file-excel" style={{ color: '#1D6F42' }}></i>Excel
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={exportExcel}
+              className="btn-outline text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2"
+            >
+              <i className="fa-solid fa-file-excel" style={{ color: '#1D6F42' }}></i>Excel
+            </button>
+            {/* PDF (ร้านขอ 22 ก.ย. 2569) — the same report as the Excel file. */}
+            <button
+              onClick={exportPDF}
+              className="btn-outline text-sm px-3.5 py-2 rounded-xl font-semibold flex items-center gap-2"
+            >
+              <i className="fa-solid fa-file-pdf" style={{ color: '#C0392B' }}></i>PDF
+            </button>
+          </div>
         )}
       </div>
 
@@ -576,6 +647,107 @@ export function RevenueModule({
           </table>
         </div>
       </div>
+      {mounted &&
+        printing &&
+        createPortal(
+          <div className="print-area">
+            <h2>
+              รายงานรายได้{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
+              {categoryFilter !== 'all' ? ' · ' + categoryFilter : ''}
+              {channelFilter !== 'all' ? ' · ขาย' + channelFilter : ''} ·{' '}
+              {periodCaption(period, periodValue, rangeStart, rangeEnd, new Date()).replace(
+                'สรุปข้อมูล',
+                '',
+              )}
+            </h2>
+            <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
+            {report.sections.map((sec) => (
+              <div key={sec.shopId} style={{ marginBottom: 18 }}>
+                <h3>{shopName(sec.shopId)}</h3>
+                {sec.tables.map((t) => (
+                  <div key={t.source} style={{ marginBottom: 12 }}>
+                    <p style={{ fontWeight: 'bold', margin: '8px 0 4px' }}>แหล่งเงิน: {t.source}</p>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>วันที่ขาย</th>
+                          <th>ใบงาน</th>
+                          <th>ลูกค้า / ทะเบียน</th>
+                          <th>ยี่ห้อ/รุ่น</th>
+                          <th>จองผ่าน</th>
+                          <th>ชนิดสินค้า</th>
+                          <th>สินค้า</th>
+                          <th style={{ textAlign: 'right' }}>ยอดขาย</th>
+                          <th>สถานะชำระ</th>
+                          <th style={{ textAlign: 'right' }}>ชำระแล้ว</th>
+                          <th style={{ textAlign: 'right' }}>ค้างชำระ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {t.rows.map((r, i) => (
+                          <tr key={`${r.line.ticketId}-${i}`}>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {fmtThaiDate(new Date(`${r.line.soldAt}T00:00:00`))}
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{r.line.ticketId}</td>
+                            <td>
+                              {r.line.customer}
+                              {r.line.plate ? ` · ${r.line.plate}` : ''}
+                            </td>
+                            <td>{r.line.car || '-'}</td>
+                            <td>{r.line.bookingChannel || '-'}</td>
+                            <td>{r.line.category}</td>
+                            <td>{r.line.product}</td>
+                            <td style={{ textAlign: 'right' }}>{fmt(r.line.amount)}</td>
+                            <td>{r.line.payment?.status ?? '-'}</td>
+                            <td style={{ textAlign: 'right' }}>{r.paid ? fmt(r.paid) : ''}</td>
+                            <td style={{ textAlign: 'right' }}>{r.due ? fmt(r.due) : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan={7} style={{ fontWeight: 'bold' }}>
+                            รวม แหล่งเงิน {t.source}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                            {fmt(t.amount)}
+                          </td>
+                          <td></td>
+                          <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{fmt(t.paid)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{fmt(t.due)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ))}
+                <p style={{ textAlign: 'right', margin: '4px 0 0' }}>
+                  <strong>
+                    รวมทั้งสาขา {shopName(sec.shopId)}: ยอดขาย {fmt(sec.amount)} · ชำระแล้ว{' '}
+                    {fmt(sec.paid)} · ค้างชำระ {fmt(sec.due)} บาท
+                  </strong>
+                </p>
+              </div>
+            ))}
+            <p style={{ textAlign: 'right', fontSize: 14 }}>
+              <strong>
+                ยอดรวมทั้งหมด: ยอดขาย {fmt(report.amount)} · ชำระแล้ว {fmt(report.paid)} · ค้างชำระ{' '}
+                {fmt(report.due)} บาท
+              </strong>
+            </p>
+            <p style={{ fontSize: 11 }}>
+              ชำระแล้ว / ค้างชำระ เป็นยอดของทั้งใบงานหรือ PO นับครั้งเดียวต่อเอกสาร
+              จึงไม่จำเป็นต้องเท่ากับยอดขายของช่วงนี้ เช่น ประกันที่ขายต่างเดือนกับใบงาน
+            </p>
+            {heldJobs.length > 0 && (
+              <p style={{ fontSize: 11 }}>
+                เงินรอคืน Finnix ในช่วงนี้ {heldJobs.length} ใบงาน รวม{' '}
+                {fmt(heldJobs.reduce((s, j) => s + j.amount, 0))} บาท — ไม่รวมในยอดข้างบน
+              </p>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

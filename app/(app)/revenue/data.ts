@@ -70,9 +70,8 @@ export type SaleLine = {
   bookingChannel?: string;
   car?: string;
   /**
-   * The DOCUMENT's payments. Methods and status on every line; `paid` / `due`
-   * on the document's first line only, and 0 elsewhere — a sum down the column
-   * must not count one ticket's money once per product on it.
+   * The DOCUMENT's payments, the same on each of its lines. A report counts
+   * `paid` / `due` once per document — see components/revenue/revenueReport.ts.
    */
   payment?: PaymentSummary;
 };
@@ -151,19 +150,30 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
   const tickets = (ticketRows ?? []) as unknown as TicketRow[];
   const byId = new Map(tickets.map((t) => [t.id, t]));
 
-  // การชำระเงินของใบงาน — against the ticket's lines, the total the ticket shows.
+  /*
+    การชำระเงินของใบงาน — against everything the report sells on the ticket:
+    its lines AND any ประกัน sold on it. The premium is paid on the ticket
+    (cashSales does the same), so leaving it out of the total understated what
+    is owed by every unpaid premium.
+  */
+  const premiumOn = new Map<string, number>();
+  for (const p of policyRows ?? []) {
+    premiumOn.set(p.ticket_id, (premiumOn.get(p.ticket_id) ?? 0) + Number(p.price || 0));
+  }
   const paymentOf = new Map<string, PaymentSummary>();
   for (const t of tickets) {
-    const total = (t.ticket_items ?? []).reduce(
-      (s, i) =>
-        s +
-        itemNetPrice({
-          soldPrice: Number(i.sold_price || 0),
-          discountType: (i.discount_type as 'percent' | 'amount' | null) ?? undefined,
-          discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
-        }),
-      0,
-    );
+    const total =
+      (premiumOn.get(t.id) ?? 0) +
+      (t.ticket_items ?? []).reduce(
+        (s, i) =>
+          s +
+          itemNetPrice({
+            soldPrice: Number(i.sold_price || 0),
+            discountType: (i.discount_type as 'percent' | 'amount' | null) ?? undefined,
+            discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
+          }),
+        0,
+      );
     paymentOf.set(
       t.id,
       summarizePayments(
@@ -172,15 +182,11 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       ),
     );
   }
-  // The amounts ride on the first line the report prints for a ticket.
-  const amountsGiven = new Set<string>();
-  const paymentForLine = (ticketId: string): PaymentSummary | undefined => {
-    const p = paymentOf.get(ticketId);
-    if (!p) return undefined;
-    if (amountsGiven.has(ticketId)) return { ...p, paid: 0, due: 0 };
-    amountsGiven.add(ticketId);
-    return p;
-  };
+  // The document's summary rides on every one of its lines; a report counts
+  // the amounts once per document (components/revenue/revenueReport.ts), on
+  // whichever of its lines it prints first — so a filter hiding the first
+  // line cannot hide the money.
+  const paymentForLine = (ticketId: string): PaymentSummary | undefined => paymentOf.get(ticketId);
   const carOf = (t: TicketRow) => [t.brand, t.model].filter(Boolean).join(' ');
 
   const lines: SaleLine[] = [];
@@ -360,7 +366,6 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       ),
     );
   }
-  const poAmountsGiven = new Set<string>();
   // The ledger records consumption against the PO, not against a line of it,
   // so the cost rides on that PO’s first line — the same rule retail uses.
   const costLeft = new Map<string, number>();
@@ -391,13 +396,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       channel: 'ส่ง' as const,
       bookingChannel: '',
       car: '',
-      payment: (() => {
-        const p = orderPayment.get(l.orderId);
-        if (!p) return undefined;
-        if (poAmountsGiven.has(l.orderId)) return { ...p, paid: 0, due: 0 };
-        poAmountsGiven.add(l.orderId);
-        return p;
-      })(),
+      payment: orderPayment.get(l.orderId),
     };
   });
 }

@@ -134,8 +134,10 @@ describe('RevenueModule', () => {
     await user.click(screen.getByRole('button', { name: /Excel/ }));
 
     const payload = exportAction.mock.calls[0][0];
-    expect(payload.groups[0].rows).toHaveLength(1);
-    expect(payload.groups[0].rows[0]['เลขที่ใบกำกับภาษี']).toBe('INV-CM-00216');
+    // The branch sheet: the sale rows, then its table and branch total rows.
+    const sales = payload.groups[0].rows.filter((r) => r['ใบงาน']);
+    expect(sales).toHaveLength(1);
+    expect(sales[0]['เลขที่ใบกำกับภาษี']).toBe('INV-CM-00216');
   });
 });
 
@@ -337,21 +339,21 @@ describe('RevenueModule — จองผ่าน / ยี่ห้อรุ่�
           amount: 3000,
           payment: paid,
         }),
-        // Second line of the same ticket: the amounts are not repeated.
         line({
           product: 'ลำโพง JBL',
           category: 'เครื่องเสียง',
           amount: 1500,
           bookingChannel: 'เพจร้าน',
           car: 'Honda City',
-          payment: { ...paid, paid: 0, due: 0 },
+          payment: paid,
         }),
       ],
       { canExport: true, exportAction },
     );
     await user.click(screen.getByRole('button', { name: /Excel/ }));
 
-    const rows = exportAction.mock.calls[0][0].groups[0].rows;
+    const rows = exportAction.mock.calls[0][0].groups[0].rows.filter((r) => r['ใบงาน']);
+    expect(rows).toHaveLength(2);
     for (const r of rows) {
       expect(r).toMatchObject({
         'ยี่ห้อ/รุ่น': 'Honda City',
@@ -360,8 +362,71 @@ describe('RevenueModule — จองผ่าน / ยี่ห้อรุ่�
         สถานะชำระ: 'ค้างชำระ',
       });
     }
-    // Summed down the column, the ticket's money is counted once.
+    // Summed down the column, the ticket's money is counted once — on the
+    // first of its lines, whichever that is after the filters.
     expect(rows.reduce((s, r) => s + Number(r['ชำระแล้ว']), 0)).toBe(3000);
     expect(rows.reduce((s, r) => s + Number(r['ค้างชำระ']), 0)).toBe(1500);
+  });
+});
+
+/**
+ * รายงานรายได้ PDF และการจัดเรียง (ร้านขอ 22 ก.ย. 2569): สาขา → แหล่งเงิน →
+ * วันที่, a table per แหล่งเงิน with its totals, and the grand total.
+ */
+describe('RevenueModule — รายงานแยกตาราง', () => {
+  const cash = { methods: 'เงินสดหน้าร้าน', status: 'ชำระครบ', paid: 3000, due: 0 };
+  const bank = { methods: 'โอน กสิกร', status: 'ค้างชำระ', paid: 1000, due: 4000 };
+  const lines = [
+    line({ ticketId: 'JT-CM-00002', soldAt: thisMonth(9), amount: 5000, payment: bank }),
+    line({ ticketId: 'JT-CM-00001', soldAt: thisMonth(3), amount: 3000, payment: cash }),
+    line({ ticketId: 'JT-CM-00003', soldAt: thisMonth(4), amount: 2000 }),
+  ];
+
+  it('prints a table per แหล่งเงิน with its totals, unpaid last, and the grand total', async () => {
+    let printed = '';
+    vi.spyOn(window, 'print').mockImplementation(() => {
+      printed = document.querySelector('.print-area')?.textContent ?? '';
+    });
+    const user = userEvent.setup();
+    renderModule(lines, { canExport: true });
+    await user.click(screen.getByRole('button', { name: /PDF/ }));
+
+    const order = ['แหล่งเงิน: เงินสดหน้าร้าน', 'แหล่งเงิน: โอน กสิกร', 'แหล่งเงิน: ยังไม่ชำระ'];
+    for (const t of order) expect(printed).toContain(t);
+    expect(order.map((t) => printed.indexOf(t))).toEqual(
+      [...order.map((t) => printed.indexOf(t))].sort((a, b) => a - b),
+    );
+    expect(printed).toContain('รวม แหล่งเงิน โอน กสิกร');
+    expect(printed).toContain(
+      'ยอดรวมทั้งหมด: ยอดขาย 10,000.00 · ชำระแล้ว 4,000.00 · ค้างชำระ 4,000.00',
+    );
+    // Built for the print only, then gone.
+    expect(document.querySelector('.print-area')).toBeNull();
+  });
+
+  it('gives the Excel file the same tables, and a summary sheet with the grand total', async () => {
+    const exportAction = vi.fn(
+      async (payload: {
+        fileNameBase: string;
+        groups: { sheetName: string; rows: Record<string, string | number>[] }[];
+      }) => {
+        void payload;
+        return null;
+      },
+    );
+    const user = userEvent.setup();
+    renderModule(lines, { canExport: true, exportAction });
+    await user.click(screen.getByRole('button', { name: /Excel/ }));
+    const groups = exportAction.mock.calls[0][0].groups;
+    expect(groups.map((g) => g.sheetName)).toEqual(['FINNIX CM', 'สรุปรวม']);
+    expect(
+      groups[0].rows.map((r) => r['ลูกค้า']).filter((c) => String(c).startsWith('รวม')),
+    ).toEqual([
+      'รวม แหล่งเงิน เงินสดหน้าร้าน',
+      'รวม แหล่งเงิน โอน กสิกร',
+      'รวม แหล่งเงิน ยังไม่ชำระ',
+      'รวมทั้งสาขา FINNIX CM',
+    ]);
+    expect(groups[1].rows.at(-1)).toMatchObject({ สาขา: 'ยอดรวมทั้งหมด', ยอดขาย: 10000 });
   });
 });
