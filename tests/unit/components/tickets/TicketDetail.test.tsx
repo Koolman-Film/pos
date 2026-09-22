@@ -819,3 +819,35 @@ describe('TicketDetail — บัญชีรับชำระบนใบเ�
     expect(screen.queryByLabelText('บัญชีรับชำระ')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * บันทึกโดย บนหน้าจอ (ร้านขอ 22 ก.ย. 2569) — the name was only ever on the
+ * printed sheet, so finding out who raised a ticket meant printing it.
+ */
+describe('TicketDetail — บันทึกโดย', () => {
+  it('shows who saved the ticket, and when, under its number', () => {
+    render(
+      <TicketDetail
+        {...baseProps(
+          makeTicket({
+            createdBy: 'คุณป๊อก',
+            createdAt: '2026-09-22T03:05:00Z',
+          } as unknown as Partial<Ticket>),
+        )}
+      />,
+    );
+    const line = screen.getByText('คุณป๊อก').closest('p') as HTMLElement;
+    expect(line).toHaveTextContent('บันทึกโดย');
+    expect(line).toHaveTextContent('22 ก.ย. 2569');
+  });
+
+  it('says it does not know, rather than naming nobody, on an old ticket', () => {
+    render(<TicketDetail {...baseProps(makeTicket({ createdBy: '' } as Partial<Ticket>))} />);
+    expect(screen.getByText('ไม่ทราบ').closest('p')).toHaveTextContent('บันทึกโดย');
+  });
+
+  it('is not shown on a ticket that has not been saved yet', () => {
+    render(<TicketDetail {...baseProps(makeTicket())} isNew />);
+    expect(screen.queryByText('บันทึกโดย')).not.toBeInTheDocument();
+  });
+});

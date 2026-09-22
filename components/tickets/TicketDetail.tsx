@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
-import { fmtThaiDate } from '@/lib/domain/format';
+import { fmtThaiDate, fmtThaiDateTime } from '@/lib/domain/format';
 import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { dateInputValue } from '@/lib/domain/now';
@@ -1030,7 +1030,28 @@ export function TicketDetail({
               ))}
             </select>
           </div>
-          <p className="text-lg font-bold mb-5">{isNew ? 'สร้างใบงานใหม่' : `ใบงาน #${t.id}`}</p>
+          <p className={`text-lg font-bold ${isNew ? 'mb-5' : 'mb-1'}`}>
+            {isNew ? 'สร้างใบงานใหม่' : `ใบงาน #${t.id}`}
+          </p>
+          {/*
+            บันทึกโดย (ร้านขอ 22 ก.ย. 2569) — the name was only ever on the
+            printed sheet, so finding out who raised a ticket meant printing it.
+            The same name, on screen, under the number. Same line the PO carries
+            ("เปิด PO โดย …"). Who edited it afterwards is in ประวัติการแก้ไข.
+          */}
+          {!isNew && (
+            <p
+              className="text-xs mb-5 flex items-center gap-1.5 flex-wrap"
+              style={{ color: 'var(--ink-soft)' }}
+            >
+              <i className="fa-solid fa-user-pen"></i>
+              บันทึกโดย
+              <span className="font-semibold" style={{ color: 'var(--ink)' }}>
+                {t.createdBy || 'ไม่ทราบ'}
+              </span>
+              {t.createdAt && <span>· {fmtThaiDateTime(new Date(t.createdAt))}</span>}
+            </p>
+          )}
 
           {/*
             A closed ticket (ส่งมอบแล้ว + ชำระครบ) is what commission, revenue and

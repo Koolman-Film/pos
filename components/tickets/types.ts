@@ -260,6 +260,8 @@ export type Ticket = {
    * the moment it is picked — see `setTicketPayAccount` — not with the form.
    */
   payToAccountId?: number | null;
+  /** `tickets.created_at` — when the ticket was first saved. Read-only. */
+  createdAt?: string;
   createdBy?: string;
   /**
    * QC ผู้รับผิดชอบ — the one person who signed off the work on this ticket.
