@@ -12,7 +12,12 @@ import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { dateInputValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
-import { payableAccounts, payAccountLine, type PayAccount } from '@/lib/domain/payAccount';
+import {
+  defaultPayMethod,
+  payableAccounts,
+  payAccountLine,
+  type PayAccount,
+} from '@/lib/domain/payAccount';
 import { ticketsHref } from '@/lib/browser/ticketFilter';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
@@ -341,14 +346,14 @@ export function TicketDetail({
   const shopName = (id: string) => shops.find((s) => s.id === id)?.name ?? id;
 
   /**
-   * วิธีชำระเงิน comes from the shop's ช่องทางการชำระเงิน, set in จัดการสิทธิ์ →
-   * ข้อมูลนิติบุคคลของสาขา — the same list that prints on its invoices. The
-   * global `payment_methods` option list is the fallback for a shop that has not
-   * filled its channels in yet, because a dropdown with nothing in it would make
-   * recording a payment impossible.
+   * วิธีชำระเงิน = the branch's แหล่งเงิน (migration 0064, ร้านขอ 22 ก.ย. 2569).
+   *
+   * It used to be the shop's ช่องทางการชำระเงิน from จัดการสิทธิ์, falling back
+   * to a global list — words that reached a balance only if they happened to
+   * match an account's name. Picking the account itself is what ties the
+   * payment to the money: whatever is chosen here is where the balance moves.
    */
-  const shopChannels = (shopInfo[t.shop]?.paymentChannels ?? []).filter(Boolean);
-  const paymentMethodOptions = shopChannels.length > 0 ? shopChannels : options.payment_methods;
+  const paymentMethodOptions = payableAccounts(payAccounts, t.shop).map((a) => a.name);
 
   /**
    * ใบกำกับภาษีออกไม่ได้ถ้าใบงานเป็น "รับแทน Finnix".
@@ -685,6 +690,19 @@ export function TicketDetail({
   }
 
   function field(key: keyof Ticket, value: unknown) {
+    if (key === 'shop' && value !== t.shop) {
+      // A new ticket moving branch: a payment method is the OLD branch's
+      // account, which the new branch's balance would never see. Swap any
+      // such row for the new branch's default rather than carry it across.
+      const names = new Set(payableAccounts(payAccounts, String(value)).map((a) => a.name));
+      const fallback = defaultPayMethod(payAccounts, String(value));
+      setT({
+        ...t,
+        shop: String(value),
+        payments: t.payments.map((p) => (names.has(p.method) ? p : { ...p, method: fallback })),
+      });
+      return;
+    }
     setT({ ...t, [key]: value });
   }
   /** หมายเหตุของชนิดสินค้าหนึ่ง — prints only on that category's ใบงานติดตั้ง. */
@@ -890,7 +908,7 @@ export function TicketDetail({
         ...t.payments,
         {
           type: 'มัดจำ',
-          method: 'เงินสด',
+          method: defaultPayMethod(payAccounts, t.shop),
           amount: 0,
           // วันนี้ as the starting point, SHOWN on the row so it can be moved to
           // the day the money actually arrived. It used to be blank here and

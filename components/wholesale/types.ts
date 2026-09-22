@@ -94,6 +94,11 @@ export type WsPayment = {
   chequeBank?: string;
   /** วันที่หน้าเช็ค — วันที่ที่คาดว่าเงินจะเข้า. */
   chequeDate?: string;
+  /**
+   * ชำระด้วยเช็ค (migration 0064). Its own flag now: `method` is the แหล่งเงิน
+   * the money will land in, so the word "เช็ค" no longer appears in it.
+   */
+  isCheque?: boolean;
   /** วันที่เงินเข้าจริง. Set by ยืนยันเงินเข้า, never typed on this form. */
   clearedAt?: string;
   bouncedAt?: string;

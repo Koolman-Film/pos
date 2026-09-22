@@ -1315,3 +1315,78 @@ describe('WholesaleDetail — หมายเหตุสำหรับลู�
     );
   });
 });
+
+/**
+ * วิธีชำระขายส่ง = แหล่งเงินของสาขา และเช็คเป็นช่องของตัวเอง (migration 0064).
+ */
+describe('WholesaleDetail — วิธีชำระจากแหล่งเงิน', () => {
+  const ACCOUNTS = [
+    { id: 1, shop: 'cm', name: 'เงินสดหน้าร้าน', kind: 'cash', accountNo: '' },
+    { id: 2, shop: 'cm', name: 'กสิกร ออมทรัพย์', kind: 'bank', accountNo: '236-1' },
+    { id: 4, shop: 'lpg', name: 'SCB ลำปาง', kind: 'bank', accountNo: '9' },
+  ];
+  const cmOrder = { ...order, id: 'WS-CM-0150', shop: 'cm' } as unknown as WsOrder;
+
+  it('offers only this branch’s accounts for where the money lands', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={cmOrder} payAccounts={ACCOUNTS} canDo={() => true} />);
+    await user.click(screen.getByRole('button', { name: /เพิ่มรายการรับเงิน/ }));
+    const picker = screen.getByLabelText('เงินเข้าแหล่งเงิน');
+    expect(picker).toHaveValue('เงินสดหน้าร้าน');
+    expect(
+      within(picker)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['เลือกแหล่งเงินที่เงินเข้า...', 'เงินสดหน้าร้าน', 'กสิกร ออมทรัพย์']);
+  });
+
+  it('asks for the cheque details when the box is ticked, and saves the tick', async () => {
+    const onSaveOrder = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <WholesaleDetail
+        order={cmOrder}
+        payAccounts={ACCOUNTS}
+        canDo={() => true}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /เพิ่มรายการรับเงิน/ }));
+    expect(screen.queryByLabelText('เลขที่เช็ค')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('checkbox', { name: 'ชำระด้วยเช็ค' }));
+    expect(screen.getByLabelText('เลขที่เช็ค')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'บันทึก PO' }));
+    expect(onSaveOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payments: [expect.objectContaining({ isCheque: true, method: 'เงินสดหน้าร้าน' })],
+      }),
+      false,
+    );
+  });
+
+  it('still reads a cheque saved before the tick box existed as a cheque', () => {
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...cmOrder,
+            payments: [
+              {
+                amount: 5000,
+                method: 'เช็คธนาคารกสิกร',
+                date: '2026-09-01',
+                uid: 'pOLD',
+                status: 'แจ้งแล้ว',
+                attachments: [],
+              },
+            ],
+          } as unknown as WsOrder
+        }
+        payAccounts={ACCOUNTS}
+        canDo={() => true}
+      />,
+    );
+    expect(screen.getByRole('checkbox', { name: 'ชำระด้วยเช็ค' })).toBeChecked();
+    expect(screen.getByLabelText('เงินเข้าแหล่งเงิน')).toHaveValue('เช็คธนาคารกสิกร');
+  });
+});

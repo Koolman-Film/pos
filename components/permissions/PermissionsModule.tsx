@@ -927,8 +927,15 @@ export function PermissionsModule({
                   />
                 </div>
                 <div className="mt-2">
-                  <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--ink-soft)' }}>
-                    ช่องทางการชำระเงิน (แสดงในใบแจ้งหนี้)
+                  <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--ink-soft)' }}>
+                    ข้อความช่องทางการชำระเงินในใบแจ้งหนี้
+                  </p>
+                  {/* Printed text only since 0064. The payment pickers in Book งาน,
+                      ขายส่ง and ค่าใช้จ่าย list the branch's แหล่งเงิน instead, so
+                      money is tied to an account rather than to a matching word. */}
+                  <p className="text-[11px] mb-1.5" style={{ color: 'var(--ink-faint)' }}>
+                    พิมพ์ในใบแจ้งหนี้ขายส่งเมื่อ PO ไม่ได้เลือกบัญชีรับชำระ —
+                    วิธีชำระและจ่ายจากทุกโมดูล เลือกจากแหล่งเงินที่ การจัดการเงิน/บัญชี
                   </p>
                   <div className="flex flex-col gap-1.5 mb-1.5">
                     {(info?.paymentChannels || []).map((pc, idx) => (

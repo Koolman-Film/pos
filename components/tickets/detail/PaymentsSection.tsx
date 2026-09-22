@@ -2,6 +2,7 @@
 
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt } from '@/lib/domain/format';
+import { LEGACY_METHOD_SUFFIX } from '@/lib/domain/payAccount';
 
 import { AttachmentField } from './AttachmentField';
 
@@ -25,7 +26,7 @@ export function PaymentsSection({
   shop: string;
   /** Mints a signed URL so a stored slip can be previewed. */
   attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
-  /** The shop's ช่องทางการชำระเงิน from จัดการสิทธิ์ (falls back to the global list). */
+  /** The branch's แหล่งเงิน by name — the payment lands in the account picked (0064). */
   paymentMethods: string[];
   addPayment: () => void;
   /** Drops the row entirely — see `removePayment` in TicketDetail for why. */
@@ -102,11 +103,10 @@ export function PaymentsSection({
             </select>
             <div className="flex-1">
               {/*
-                A plain select, not a ManagedDropdown: the channels are set per
-                shop in จัดการสิทธิ์ → ข้อมูลนิติบุคคลของสาขา, and Book งาน is not
-                the place to invent new ones. A method already saved on this
-                payment stays selectable even if it has since been removed from
-                the shop's list, so an old ticket still reads correctly.
+                The branch's แหล่งเงิน (0064) — the account the money goes into,
+                managed in การจัดการเงิน/บัญชี; Book งาน is not the place to
+                invent new ones. A method saved before, or on an account since
+                closed, stays selectable so an old ticket still reads correctly.
               */}
               <select
                 value={p.method}
@@ -115,21 +115,20 @@ export function PaymentsSection({
                 className="field w-full text-xs px-2.5 py-1.5"
               >
                 <option value="" disabled>
-                  เลือกวิธีชำระ...
+                  เลือกแหล่งเงินที่เงินเข้า...
                 </option>
                 {(p.method && !paymentMethods.includes(p.method)
                   ? [p.method, ...paymentMethods]
                   : paymentMethods
                 ).map((m) => (
                   <option key={m} value={m}>
-                    {m}
+                    {paymentMethods.includes(m) ? m : m + LEGACY_METHOD_SUFFIX}
                   </option>
                 ))}
               </select>
               {paymentMethods.length === 0 && (
                 <p className="text-xs mt-1" style={{ color: '#B23A48' }}>
-                  ยังไม่ได้ตั้งช่องทางการชำระเงินของสาขานี้ — ตั้งได้ที่ จัดการสิทธิ์ &rarr;
-                  ข้อมูลนิติบุคคลของสาขา
+                  สาขานี้ยังไม่มีแหล่งเงินให้เลือก — เพิ่มได้ที่ การจัดการเงิน/บัญชี
                 </p>
               )}
             </div>

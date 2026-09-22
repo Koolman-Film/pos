@@ -533,3 +533,51 @@ describe('AccountingModule — เงินรอรับคืน Finnix', () 
     expect(within(card()).getByText('POS-CM-6909081')).toBeInTheDocument();
   });
 });
+
+/**
+ * จ่ายจาก = แหล่งเงินของสาขา (migration 0064, ร้านขอ 22 ก.ย. 2569) — the account
+ * picked is the balance the expense comes off.
+ */
+describe('AccountingModule — จ่ายจากแหล่งเงิน', () => {
+  const ACCOUNTS = [
+    { id: 1, shop: 'cm', name: 'เงินสดย่อย', kind: 'petty' },
+    { id: 2, shop: 'cm', name: 'กสิกร ออมทรัพย์', kind: 'bank' },
+    { id: 3, shop: 'cm', name: 'บัตรเครดิตบริษัท', kind: 'credit' },
+    { id: 4, shop: 'lp', name: 'SCB ลำพูน', kind: 'bank' },
+  ];
+
+  async function openAdd(addExpenseAction = vi.fn(async () => {})) {
+    const user = userEvent.setup();
+    renderAccounting({ moneyAccounts: ACCOUNTS, addExpenseAction });
+    await user.click(screen.getByRole('button', { name: /เพิ่มรายการ/ }));
+    // The list opens on the first branch the caller has — เชียงใหม่ here.
+    return { user, addExpenseAction };
+  }
+
+  it('offers every account of the branch — petty cash and the company card included', async () => {
+    await openAdd();
+    const options = within(screen.getByLabelText('จ่ายจาก'))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(options).toEqual([
+      'เลือกแหล่งเงินที่จ่าย...',
+      'เงินสดย่อย',
+      'กสิกร ออมทรัพย์',
+      'บัตรเครดิตบริษัท',
+    ]);
+  });
+
+  it('will not save money already paid out without saying where it came from', async () => {
+    const { user, addExpenseAction } = await openAdd();
+    await user.type(screen.getByLabelText('รายละเอียดรายการที่ 1'), 'ค่าน้ำมัน');
+    await user.click(screen.getByRole('button', { name: /บันทึกข้อมูล/ }));
+    expect(addExpenseAction).not.toHaveBeenCalled();
+    expect(screen.getByText(/เลือก "จ่ายจาก"/)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('จ่ายจาก'), 'เงินสดย่อย');
+    await user.click(screen.getByRole('button', { name: /บันทึกข้อมูล/ }));
+    expect(addExpenseAction).toHaveBeenCalledWith(
+      expect.objectContaining({ shop: 'cm', source: 'เงินสดย่อย' }),
+    );
+  });
+});

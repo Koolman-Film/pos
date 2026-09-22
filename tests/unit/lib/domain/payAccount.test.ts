@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
-import { payableAccounts, payAccountLine, type PayAccount } from '@/lib/domain/payAccount';
+import {
+  defaultPayMethod,
+  payableAccounts,
+  payAccountLine,
+  type PayAccount,
+} from '@/lib/domain/payAccount';
 
 /**
  * บัญชีรับชำระ (ร้านขอ 21 ก.ย. 2569) — which แหล่งเงิน a ใบแจ้งหนี้ or a
@@ -41,5 +46,25 @@ describe('payAccountLine', () => {
 
   it('prints just the name when there is no number', () => {
     expect(payAccountLine(acc({ name: 'เงินสดหน้าร้าน', accountNo: '' }))).toBe('เงินสดหน้าร้าน');
+  });
+});
+
+describe('defaultPayMethod', () => {
+  const accounts = [
+    acc({ id: 1, name: 'กสิกร ออมทรัพย์' }),
+    acc({ id: 2, name: 'เงินสดหน้าร้าน', kind: 'cash', accountNo: '' }),
+    acc({ id: 3, name: 'เงินสดย่อย', kind: 'petty', accountNo: '' }),
+  ];
+
+  it('starts a new payment on the branch’s counter cash', () => {
+    expect(defaultPayMethod(accounts, 'north')).toBe('เงินสดหน้าร้าน');
+  });
+
+  it('falls back to its first account a customer can pay into', () => {
+    expect(defaultPayMethod([accounts[0], accounts[2]], 'north')).toBe('กสิกร ออมทรัพย์');
+  });
+
+  it('leaves it empty for a branch with no accounts, rather than inventing a word', () => {
+    expect(defaultPayMethod(accounts, 'cm')).toBe('');
   });
 });

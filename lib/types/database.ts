@@ -785,6 +785,7 @@ export type Database = {
       }
       order_payments: {
         Row: {
+          is_cheque: boolean
           bounce_note: string
           bounced_at: string | null
           cheque_bank: string
@@ -803,6 +804,7 @@ export type Database = {
           paid_at: string
         }
         Insert: {
+          is_cheque?: boolean
           bounce_note?: string
           bounced_at?: string | null
           cheque_bank?: string
@@ -821,6 +823,7 @@ export type Database = {
           paid_at: string
         }
         Update: {
+          is_cheque?: boolean
           bounce_note?: string
           bounced_at?: string | null
           cheque_bank?: string

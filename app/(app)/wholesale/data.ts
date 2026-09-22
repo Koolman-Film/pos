@@ -32,7 +32,7 @@ export const ORDER_SELECT = `
   order_items(name, qty, list_price, requested_price, reason),
   order_returns(item_name, qty, reason, returned_at, uid, received_at),
   order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
-  order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, cleared_at, bounced_at, bounce_note)
+  order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, is_cheque, cleared_at, bounced_at, bounce_note)
 `;
 
 export type OrderRow = {
@@ -93,6 +93,7 @@ export type OrderRow = {
         cheque_no: string;
         cheque_bank: string;
         cheque_date: string | null;
+        is_cheque: boolean | null;
         cleared_at: string | null;
         bounced_at: string | null;
         bounce_note: string;
@@ -155,6 +156,7 @@ export function mapOrder(row: OrderRow): WsOrder {
       chequeNo: p.cheque_no ?? '',
       chequeBank: p.cheque_bank ?? '',
       chequeDate: p.cheque_date ?? '',
+      isCheque: !!p.is_cheque,
       clearedAt: p.cleared_at ?? '',
       bouncedAt: p.bounced_at ?? '',
       bounceNote: p.bounce_note ?? '',

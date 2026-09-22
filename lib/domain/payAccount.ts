@@ -32,3 +32,24 @@ export function payAccountLine(a: Pick<PayAccount, 'name' | 'accountNo'>): strin
   const no = a.accountNo.trim();
   return no ? `${a.name} · เลขที่บัญชี ${no}` : a.name;
 }
+
+/**
+ * วิธีชำระที่ตั้งให้แถวรับเงินใหม่ — the branch's counter cash when it has one,
+ * since that is how most payments at the counter arrive; otherwise its first
+ * payable account; otherwise nothing, and the row asks for one.
+ *
+ * It used to be the literal "เงินสด", which is not the name of any account —
+ * the money only reached a balance because someone had listed that word under
+ * an account's match names.
+ */
+export function defaultPayMethod(accounts: PayAccount[], shop: string): string {
+  const payable = payableAccounts(accounts, shop);
+  return (payable.find((a) => a.kind === 'cash') ?? payable[0])?.name ?? '';
+}
+
+/**
+ * A method saved before 0064, or on an account since renamed or closed. It
+ * stays selectable so the record reads as it was, marked so nobody picks it
+ * for new money thinking it is one of the branch's accounts.
+ */
+export const LEGACY_METHOD_SUFFIX = ' (ชื่อเดิม)';

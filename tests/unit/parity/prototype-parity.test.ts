@@ -101,6 +101,12 @@ const ACCEPTED_ABSENCES: Record<string, string> = {
   // --- search boxes that now search everything, so their hints say so ---
   '08X-XXX-XXXX':
     'phones are typed without dashes now (ร้านขอ 15 ก.ย. 2569); the ticket phone field shows 0812345678 and the rule beside its label',
+  'ช่องทางการชำระเงิน (แสดงในใบแจ้งหนี้)':
+    'since migration 0064 the branch payment channels are printed text only; every payment picker lists the แหล่งเงิน, so the setting is relabelled ข้อความช่องทางการชำระเงินในใบแจ้งหนี้ and says so',
+  'เลือกวิธีชำระ...':
+    'a wholesale payment now picks the แหล่งเงิน the money lands in (migration 0064), in Book งาน and ขายส่ง alike, so the prompt reads เลือกแหล่งเงินที่เงินเข้า; เช็ค is its own tick box',
+  'เลือกแหล่งจ่ายเงิน...':
+    'จ่ายจาก on an expense now lists the branch แหล่งเงิน (migration 0064) instead of a shared free-text list; the prompt reads เลือกแหล่งเงินที่จ่าย',
   'ค้นหาที่นี่...':
     'header search was decorative in the prototype; it now searches the list on screen and its placeholder names what it matches',
   'ค้นหา ชื่อ / ทะเบียนรถ/เลขถัง':

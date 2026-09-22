@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 
 import { TicketDetailClient } from '@/components/tickets/TicketDetailClient';
 import { getSessionContext } from '@/lib/auth/session';
+import { loadPayAccounts } from '@/lib/money/payAccounts';
+import { createClient } from '@/lib/supabase/server';
 
 import {
   getTicketAttachmentUrl,
@@ -25,10 +27,13 @@ export default async function NewTicketPage({
   // direct navigation to /tickets/new should not render the form otherwise.
   if (!session.canDo('list.createNew')) redirect('/tickets');
 
-  const [shops, statuses, registries] = await Promise.all([
+  const supabase = await createClient();
+  const [shops, statuses, registries, payAccounts] = await Promise.all([
     loadShops(),
     loadStatuses(),
     loadDetailRegistries(),
+    // วิธีชำระ picks from these (0064), a new ticket included.
+    loadPayAccounts(supabase, session.accessibleShopIds),
   ]);
   const accessibleShops = shops.filter((s) => session.accessibleShopIds.includes(s.id));
   const defaultShop = accessibleShops[0]?.id ?? shops[0]?.id ?? 'cm';
@@ -64,6 +69,7 @@ export default async function NewTicketPage({
       initialRetailCustomers={registries.retailCustomers}
       initialCorporateBuyers={registries.corporateBuyers}
       shopInfo={registries.shopInfo}
+      payAccounts={payAccounts}
       saveAction={saveTicket}
       optionAction={updateOptionList}
       attachmentUrlAction={getTicketAttachmentUrl}

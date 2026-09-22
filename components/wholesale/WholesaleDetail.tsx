@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { createPortal } from 'react-dom';
 
-import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { ProductPicker, type ProductOption } from '@/components/ui/ProductPicker';
 import { ShopButtons } from '@/components/ui/ShopButtons';
 import { OptionManageProvider } from '@/components/ui/optionManage';
@@ -32,7 +31,13 @@ import {
 } from '@/lib/domain/orders';
 import { dateInputValue, todayValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
-import { payableAccounts, payAccountLine, type PayAccount } from '@/lib/domain/payAccount';
+import {
+  defaultPayMethod,
+  LEGACY_METHOD_SUFFIX,
+  payableAccounts,
+  payAccountLine,
+  type PayAccount,
+} from '@/lib/domain/payAccount';
 import { uploadAttachments, discardAttachments, fileNameFromPath } from '@/lib/storage/attachments';
 
 import { CustomerPicker } from './CustomerPicker';
@@ -42,7 +47,6 @@ import {
   customerPurchasedProducts,
   shopName,
   DEFAULT_WS_STATUS,
-  DEFAULT_PAYMENT_METHODS,
   type Shop,
   type SalesPerson,
   type WsCustomer,
@@ -141,7 +145,6 @@ export function WholesaleDetail({
   customers = [],
   stock = [],
   orders = [],
-  paymentMethods = DEFAULT_PAYMENT_METHODS,
   payAccounts = [],
   shopInfo = {},
   wsStatuses = DEFAULT_WS_STATUS,
@@ -163,7 +166,6 @@ export function WholesaleDetail({
   onSaveCustomer,
   onSaveSalesPerson,
   onBack,
-  updateOptionListAction,
 }: {
   order: WsOrder;
   /**
@@ -294,12 +296,6 @@ export function WholesaleDetail({
 }) {
   const can = canDo ?? ((k: string) => !!caps?.[k]);
   const [o, setO] = useState<WsOrder>(order);
-  const [methods, setMethodsState] = useState<string[]>(paymentMethods);
-  /** Optimistic locally, persisted through the shared option-list action. */
-  function setMethods(next: string[]) {
-    setMethodsState(next);
-    void updateOptionListAction?.('payment_methods', next);
-  }
   const mounted = useIsMounted();
   /*
     เอกสารขายส่ง สี่ใบ.
@@ -421,8 +417,13 @@ export function WholesaleDetail({
       if (!match) return { ...it, name: '', listPrice: 0, requestedPrice: 0 };
       return { ...it, listPrice: match.sellPrice, requestedPrice: match.sellPrice };
     });
-    // Another branch's account cannot go on this branch's invoice (0062).
-    setO({ ...o, shop: shopId, items, payToAccountId: null });
+    // Another branch's account cannot go on this branch's invoice (0062), nor
+    // take this branch's money (0064): a payment on an account the new branch
+    // does not have moves to its default instead of being carried across.
+    const names = new Set(payableAccounts(payAccounts, shopId).map((a) => a.name));
+    const fallback = defaultPayMethod(payAccounts, shopId);
+    const payments = o.payments.map((p) => (names.has(p.method) ? p : { ...p, method: fallback }));
+    setO({ ...o, shop: shopId, items, payments, payToAccountId: null });
   }
   function addItem() {
     setO({
@@ -564,7 +565,7 @@ export function WholesaleDetail({
         ...o.payments,
         {
           amount: 0,
-          method: 'เงินสด',
+          method: defaultPayMethod(payAccounts, o.shop),
           date: dateInputValue(new Date()),
           uid: newPaymentUid(),
           status: PAYMENT_REPORTED,
@@ -576,7 +577,7 @@ export function WholesaleDetail({
   function updatePayment(
     idx: number,
     k: keyof WsOrder['payments'][number],
-    v: string | number | string[],
+    v: string | number | boolean | string[],
   ) {
     const payments = [...o.payments];
     payments[idx] = { ...payments[idx], [k]: v };
@@ -1681,8 +1682,7 @@ export function WholesaleDetail({
                 key={idx}
                 p={p}
                 idx={idx}
-                methods={methods}
-                setMethods={setMethods}
+                methods={payableAccounts(payAccounts, o.shop).map((a) => a.name)}
                 onChange={updatePayment}
                 saved={savedPaymentUids.has(p.uid ?? '')}
                 canConfirm={canConfirmPayments}
@@ -2315,7 +2315,6 @@ function PaymentRow({
   p,
   idx,
   methods,
-  setMethods,
   onChange,
   saved,
   canConfirm,
@@ -2328,9 +2327,9 @@ function PaymentRow({
 }: {
   p: WsPayment;
   idx: number;
+  /** The branch's แหล่งเงิน by name (0064). */
   methods: string[];
-  setMethods: (next: string[]) => void;
-  onChange: (idx: number, k: keyof WsPayment, v: string | number | string[]) => void;
+  onChange: (idx: number, k: keyof WsPayment, v: string | number | boolean | string[]) => void;
   saved: boolean;
   canConfirm: boolean;
   panel: { mode: 'confirm' | 'bounce'; on: string; note: string } | null;
@@ -2344,13 +2343,14 @@ function PaymentRow({
   const received = st === PAYMENT_RECEIVED;
   const bounced = st === PAYMENT_BOUNCED;
   /*
-    เช็คหรือไม่ ดูจากชื่อวิธีชำระ.
+    เช็คหรือไม่ — its own tick box (migration 0064).
 
-    วิธีชำระเงิน is an admin-managed free-text list — "เช็คธนาคารกสิกร",
-    "เช็ค 30 วัน" — so there is no id to key on, and no reason to stop the shop
-    adding another wording. The cheque fields simply appear when the word does.
+    It used to be read off the method's wording ("เช็คธนาคารกสิกร"). The method
+    is now the แหล่งเงิน the money will land in, which says nothing about how
+    it was paid, so the cheque is its own answer. A row saved before, with the
+    word in its method, still counts as one.
   */
-  const isCheque = (p.method || '').includes('เช็ค');
+  const isCheque = p.isCheque ?? (p.method || '').includes('เช็ค');
 
   return (
     <div
@@ -2397,15 +2397,43 @@ function PaymentRow({
           className="field text-xs px-2.5 py-1.5 w-28"
         />
         <div className="flex-1">
-          <ManagedDropdown
+          <select
+            aria-label="เงินเข้าแหล่งเงิน"
             value={p.method}
-            onChange={(v) => onChange(idx, 'method', v)}
-            options={methods}
-            setOptions={setMethods}
-            placeholder="เลือกวิธีชำระ..."
-          />
+            onChange={(e) => onChange(idx, 'method', e.target.value)}
+            className="field text-xs px-2.5 py-1.5 w-full"
+          >
+            <option value="" disabled>
+              เลือกแหล่งเงินที่เงินเข้า...
+            </option>
+            {/* A method saved before 0064, or on an account since closed,
+                stays selectable so an old PO still reads correctly. */}
+            {(p.method && !methods.includes(p.method) ? [p.method, ...methods] : methods).map(
+              (m) => (
+                <option key={m} value={m}>
+                  {methods.includes(m) ? m : m + LEGACY_METHOD_SUFFIX}
+                </option>
+              ),
+            )}
+          </select>
+          {methods.length === 0 && (
+            <p className="text-xs mt-1" style={{ color: '#B23A48' }}>
+              สาขานี้ยังไม่มีแหล่งเงินให้เลือก — เพิ่มได้ที่ การจัดการเงิน/บัญชี
+            </p>
+          )}
         </div>
       </div>
+      <label
+        className="text-xs mb-2 flex items-center gap-1.5"
+        style={{ color: 'var(--ink-soft)' }}
+      >
+        <input
+          type="checkbox"
+          checked={isCheque}
+          onChange={(e) => onChange(idx, 'isCheque', e.target.checked)}
+        />
+        ชำระด้วยเช็ค
+      </label>
       <div className="mb-2">
         <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
           วันที่รับชำระ

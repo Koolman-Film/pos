@@ -15,6 +15,7 @@ import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { FilePreview } from '@/components/ui/FilePreview';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
+import { LEGACY_METHOD_SUFFIX } from '@/lib/domain/payAccount';
 import { StatusPill } from '@/components/ui/StatusPill';
 import type { Shop } from '@/components/ui/PeriodShopFilter';
 
@@ -176,7 +177,6 @@ export function AccountingModule({
   expenses,
   pettyCash,
   expenseCategories: expenseCategoriesProp = [],
-  paymentSources: paymentSourcesProp = [],
   canDo,
   canAddExpense,
   canTopupCash,
@@ -243,15 +243,26 @@ export function AccountingModule({
   // pickers used to hand ManagedDropdown a bare setState, so "+ เพิ่มตัวเลือกใหม่"
   // added an entry that survived exactly until the page reloaded.
   const [expenseCategories, setExpenseCategoriesState] = useState<string[]>(expenseCategoriesProp);
-  const [paymentSources, setPaymentSourcesState] = useState<string[]>(paymentSourcesProp);
   function setExpenseCategories(next: string[]) {
     setExpenseCategoriesState(next);
     void updateOptionListAction?.('expense_categories', next);
   }
-  function setPaymentSources(next: string[]) {
-    setPaymentSourcesState(next);
-    void updateOptionListAction?.('payment_sources', next);
-  }
+  /*
+    จ่ายจาก = the branch's แหล่งเงิน (migration 0064, ร้านขอ 22 ก.ย. 2569).
+
+    It used to be a free-text list shared by every branch, which reached a
+    balance only when a word happened to match an account's name — the
+    dashboard was short by every expense paid "from" a label nobody claimed.
+    Every account counts here, เงินสดย่อย and บัตรเครดิตบริษัท included: those
+    are exactly what bills get paid from. A label saved before stays shown on
+    the expense it belongs to.
+  */
+  const sourcesFor = (shop: string, current = '') => {
+    const names = moneyAccounts.filter((a) => a.shop === shop).map((a) => a.name);
+    return current && !names.includes(current) ? [current, ...names] : names;
+  };
+  const isAccountName = (shop: string, name: string) =>
+    moneyAccounts.some((a) => a.shop === shop && a.name === name);
   const [isPending, startTransition] = useTransition();
 
   // Gates the body-level print portal below; document does not exist during SSR.
@@ -503,6 +514,12 @@ export function AccountingModule({
       .filter((l) => l.desc.trim() || l.category || Number(l.amount) > 0)
       .map((l) => ({ desc: l.desc, category: l.category, amount: Number(l.amount || 0) }));
     if (lines.length === 0) return;
+    // Money that has left came out of somewhere; with no แหล่งเงิน it would
+    // leave no balance at all. A bill still to be paid need not say yet.
+    if (ex.status === 'จ่ายแล้ว' && !sourcesFor(targetShop).includes(ex.source)) {
+      setAddError('เลือก "จ่ายจาก" เป็นแหล่งเงินของสาขานี้ก่อนบันทึก');
+      return;
+    }
     setAddError(null);
     startTransition(async () => {
       try {
@@ -1227,6 +1244,7 @@ export function AccountingModule({
                         รายละเอียด
                       </label>
                       <input
+                        aria-label={`รายละเอียดรายการที่ ${idx + 1}`}
                         value={l.desc}
                         onChange={(e) => updateExLine(idx, 'desc', e.target.value)}
                         className="field w-full text-sm px-3 py-2"
@@ -1282,13 +1300,23 @@ export function AccountingModule({
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   จ่ายจาก
                 </label>
-                <ManagedDropdown
-                  value={ex.source}
-                  onChange={(v) => setEx({ ...ex, source: v })}
-                  options={paymentSources}
-                  setOptions={setPaymentSources}
-                  placeholder="เลือกแหล่งจ่ายเงิน..."
-                />
+                <select
+                  aria-label="จ่ายจาก"
+                  value={
+                    sourcesFor(shopFilter === 'all' ? ex.shop : shopFilter).includes(ex.source)
+                      ? ex.source
+                      : ''
+                  }
+                  onChange={(e) => setEx({ ...ex, source: e.target.value })}
+                  className="field w-full text-sm px-3 py-2"
+                >
+                  <option value="">เลือกแหล่งเงินที่จ่าย...</option>
+                  {sourcesFor(shopFilter === 'all' ? ex.shop : shopFilter).map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
@@ -1480,13 +1508,19 @@ export function AccountingModule({
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                         จ่ายจาก
                       </label>
-                      <ManagedDropdown
+                      <select
+                        aria-label="แก้ไขจ่ายจาก"
                         value={editExForm.source}
-                        onChange={(v) => setEditExForm({ ...editExForm, source: v })}
-                        options={paymentSources}
-                        setOptions={setPaymentSources}
-                        placeholder="เลือกแหล่งเงินที่จ่าย..."
-                      />
+                        onChange={(e) => setEditExForm({ ...editExForm, source: e.target.value })}
+                        className="field w-full text-sm px-3 py-2"
+                      >
+                        <option value="">เลือกแหล่งเงินที่จ่าย...</option>
+                        {sourcesFor(editExForm.shop, editExForm.source).map((m) => (
+                          <option key={m} value={m}>
+                            {isAccountName(editExForm.shop, m) ? m : m + LEGACY_METHOD_SUFFIX}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>

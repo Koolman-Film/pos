@@ -851,3 +851,43 @@ describe('TicketDetail — บันทึกโดย', () => {
     expect(screen.queryByText('บันทึกโดย')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * วิธีชำระ = แหล่งเงินของสาขา (migration 0064, ร้านขอ 22 ก.ย. 2569) — whatever
+ * is picked is the account the money lands in.
+ */
+describe('TicketDetail — วิธีชำระจากแหล่งเงิน', () => {
+  const ACCOUNTS = [
+    { id: 1, shop: 'cm', name: 'เงินสดหน้าร้าน', kind: 'cash', accountNo: '' },
+    { id: 2, shop: 'cm', name: 'กสิกร ออมทรัพย์', kind: 'bank', accountNo: '236-1' },
+    { id: 3, shop: 'cm', name: 'เงินสดย่อย', kind: 'petty', accountNo: '' },
+    { id: 4, shop: 'lpg', name: 'SCB ลำปาง', kind: 'bank', accountNo: '9' },
+  ];
+
+  it('offers this branch’s accounts a customer can pay into, and starts on its cash', async () => {
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket({ payments: [] }))} payAccounts={ACCOUNTS} />);
+    await user.click(screen.getByRole('button', { name: /เพิ่มรายการรับเงิน/ }));
+    const picker = screen.getByLabelText('วิธีชำระเงินรายการที่ 1');
+    expect(picker).toHaveValue('เงินสดหน้าร้าน');
+    expect(
+      within(picker)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['เลือกแหล่งเงินที่เงินเข้า...', 'เงินสดหน้าร้าน', 'กสิกร ออมทรัพย์']);
+  });
+
+  it('still shows a method saved before, so an old ticket reads as it was', () => {
+    render(
+      <TicketDetail
+        {...baseProps(
+          makeTicket({
+            payments: [{ type: 'มัดจำ', method: 'โอน TTB', amount: 1000, date: '2026-09-01' }],
+          }),
+        )}
+        payAccounts={ACCOUNTS}
+      />,
+    );
+    expect(screen.getByLabelText('วิธีชำระเงินรายการที่ 1')).toHaveValue('โอน TTB');
+  });
+});
