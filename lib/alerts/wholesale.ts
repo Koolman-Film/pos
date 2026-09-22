@@ -4,6 +4,7 @@ import {
   orderTotal,
   PAYMENT_BOUNCED,
   PAYMENT_REPORTED,
+  isOpenOrderStatus,
   type OrderForTotals,
 } from '@/lib/domain/orders';
 
@@ -46,7 +47,7 @@ export function shiftDay(day: string, days: number): string {
 
 export const outstanding = (o: BillOrder) => orderTotal(o) - orderPaid(o);
 
-const open = (o: BillOrder) => o.status !== 'ปิดงานแล้ว';
+const open = (o: BillOrder) => isOpenOrderStatus(o.status);
 
 /** A cheque was reported and its date has come, but nobody has confirmed the money. */
 export function hasChequeDue(o: WsOrder, today: string): boolean {

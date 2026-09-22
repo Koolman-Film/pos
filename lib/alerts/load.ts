@@ -4,6 +4,7 @@ import { shopDayKey } from '@/lib/domain/format';
 import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import type { createClient } from '@/lib/supabase/server';
 
+import { WS_OPEN_STATUSES } from '@/lib/domain/orders';
 import { buildAlerts } from './build';
 import type { AlertSnapshot } from './types';
 import { DUE_SOON_DAYS, shiftDay } from './wholesale';
@@ -63,7 +64,7 @@ export async function loadAlertSnapshot(
                   .from('orders')
                   .select(ORDER_SELECT)
                   .is('deleted_at', null)
-                  .neq('status', 'ปิดงานแล้ว')
+                  .in('status', [...WS_OPEN_STATUSES])
                   .order('id')
                   .range(from, to) as unknown as Page<OrderRow>,
               'orders',

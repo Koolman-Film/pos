@@ -191,6 +191,18 @@ describe('buildAlerts — กฎของแต่ละเรื่อง', () 
     expect(find(a, 'receivable.dueSoon')?.itemIds).toEqual(['duesoon:SOON']);
   });
 
+  it('does not chase a closed PO, whatever the shop calls its final step', () => {
+    const a = buildAlerts(
+      input({
+        orders: [
+          po({ id: 'OLD', status: 'ปิดงานแล้ว', dueAt: '2026-09-01' }),
+          po({ id: 'RENAMED', status: 'เสร็จสิ้น', dueAt: '2026-09-01' }),
+        ],
+      }),
+    );
+    expect(find(a, 'receivable.overdue')).toBeUndefined();
+  });
+
   it('does not chase a bill that has been paid', () => {
     const a = buildAlerts(
       input({

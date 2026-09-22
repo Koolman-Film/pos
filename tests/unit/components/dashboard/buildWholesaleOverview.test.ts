@@ -71,6 +71,17 @@ describe('buildWholesaleOverview', () => {
     ]);
   });
 
+  it('treats the final step as closed whatever the shop has renamed it to', () => {
+    // Production renamed ปิดงานแล้ว to เสร็จสิ้น in the status settings.
+    const d = build([
+      po({ id: 'OPEN', dueAt: '2026-09-10' }),
+      po({ id: 'DONE', status: 'เสร็จสิ้น', dueAt: '2026-09-10' }),
+    ])!;
+    expect(d.openCount).toBe(1);
+    expect(d.owing).toEqual({ count: 1, amount: 10000 });
+    expect(d.overdue).toEqual({ count: 1, amount: 10000 });
+  });
+
   it('owes only for goods that have gone out and are not paid for', () => {
     const d = build([
       po({ id: 'SENT' }),

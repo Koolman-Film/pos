@@ -1,5 +1,5 @@
 import { isDueSoon, isOverdue, outstanding, type BillOrder } from '@/lib/alerts/wholesale';
-import { orderTotal } from '@/lib/domain/orders';
+import { isOpenOrderStatus, orderTotal, WS_OPEN_STATUSES } from '@/lib/domain/orders';
 
 /**
  * ภาพรวมขายส่งบนแดชบอร์ด.
@@ -29,7 +29,7 @@ export type OverviewOrder = BillOrder & {
   salesBy: string;
 };
 
-export const WS_OPEN_STATUSES = ['รออนุมัติราคา', 'รอจัดส่ง', 'จัดส่งแล้ว', 'ค้างชำระ'] as const;
+export { WS_OPEN_STATUSES };
 
 type Money = { count: number; amount: number };
 
@@ -71,7 +71,7 @@ export function buildWholesaleOverview({
   if (orders.length === 0) return null;
 
   const nameOf = new Map(customers.map((c) => [c.id, c.name]));
-  const open = orders.filter((o) => o.status !== 'ปิดงานแล้ว');
+  const open = orders.filter((o) => isOpenOrderStatus(o.status));
   const owing = open.filter((o) => !!o.deliveredAt && outstanding(o) > OWES);
   const rep = (o: OverviewOrder) => (o.salesBy ?? '').trim();
   const repOfOrder = new Map(orders.map((o) => [o.id, rep(o)]));

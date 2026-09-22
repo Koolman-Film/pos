@@ -3,6 +3,20 @@
 
 export type OrderItem = { name: string; qty: number; requestedPrice: number };
 export type OrderReturn = { item: string; qty: number };
+
+/**
+ * The steps a PO is still moving through. Anything else is the closing step.
+ *
+ * Listed rather than naming the closing step, because the shop names that one
+ * itself: production calls it เสร็จสิ้น, the seed ปิดงานแล้ว. The four open
+ * steps are the workflow the code drives, so they are fixed.
+ */
+export const WS_OPEN_STATUSES = ['รออนุมัติราคา', 'รอจัดส่ง', 'จัดส่งแล้ว', 'ค้างชำระ'] as const;
+
+export function isOpenOrderStatus(status: string): boolean {
+  return (WS_OPEN_STATUSES as readonly string[]).includes(status);
+}
+
 /**
  * สถานะการอนุมัติของรายการปรับราคา (migration 0050).
  *
