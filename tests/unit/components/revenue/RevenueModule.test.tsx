@@ -306,3 +306,62 @@ describe('RevenueModule — ช่องทางการขาย', () => {
     expect(screen.getByText('ขายโดย โหน่ง')).toBeInTheDocument();
   });
 });
+
+/**
+ * รายงานรายได้ (ร้านขอ 22 ก.ย. 2569) — "ยังขาดข้อมูลการชำระเงิน, จองผ่าน,
+ * ยี่ห้อ/รุ่น ซึ่งจำเป็น".
+ */
+describe('RevenueModule — จองผ่าน / ยี่ห้อรุ่น / การชำระเงิน ในรายงาน', () => {
+  it('carries the booking channel, the car and the payment on every exported row', async () => {
+    const user = userEvent.setup();
+    const exportAction = vi.fn(
+      async (payload: {
+        fileNameBase: string;
+        groups: { sheetName: string; rows: Record<string, string | number>[] }[];
+      }) => {
+        void payload;
+        return null;
+      },
+    );
+    const paid = {
+      methods: 'เงินสดหน้าร้าน, โอน กสิกร',
+      status: 'ค้างชำระ',
+      paid: 3000,
+      due: 1500,
+    };
+    renderModule(
+      [
+        line({
+          bookingChannel: 'เพจร้าน',
+          car: 'Honda City',
+          amount: 3000,
+          payment: paid,
+        }),
+        // Second line of the same ticket: the amounts are not repeated.
+        line({
+          product: 'ลำโพง JBL',
+          category: 'เครื่องเสียง',
+          amount: 1500,
+          bookingChannel: 'เพจร้าน',
+          car: 'Honda City',
+          payment: { ...paid, paid: 0, due: 0 },
+        }),
+      ],
+      { canExport: true, exportAction },
+    );
+    await user.click(screen.getByRole('button', { name: /Excel/ }));
+
+    const rows = exportAction.mock.calls[0][0].groups[0].rows;
+    for (const r of rows) {
+      expect(r).toMatchObject({
+        'ยี่ห้อ/รุ่น': 'Honda City',
+        จองผ่าน: 'เพจร้าน',
+        วิธีชำระ: 'เงินสดหน้าร้าน, โอน กสิกร',
+        สถานะชำระ: 'ค้างชำระ',
+      });
+    }
+    // Summed down the column, the ticket's money is counted once.
+    expect(rows.reduce((s, r) => s + Number(r['ชำระแล้ว']), 0)).toBe(3000);
+    expect(rows.reduce((s, r) => s + Number(r['ค้างชำระ']), 0)).toBe(1500);
+  });
+});

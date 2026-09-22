@@ -47,6 +47,9 @@ type HeldJob = {
   soldAt: string;
   customer: string;
   plate: string;
+  car: string;
+  bookingChannel: string;
+  payment?: SaleLine['payment'];
   products: string[];
   amount: number;
 };
@@ -146,6 +149,10 @@ export function RevenueModule({
           soldAt: l.soldAt,
           customer: l.customer,
           plate: l.plate,
+          car: l.car ?? '',
+          bookingChannel: l.bookingChannel ?? '',
+          // The first line carries the ticket's amounts; that is the one kept.
+          payment: l.payment,
           products: [] as string[],
           amount: 0,
         };
@@ -195,11 +202,21 @@ export function RevenueModule({
       สาขา: shopName(l.shop),
       ลูกค้า: l.customer,
       ทะเบียน: l.plate,
+      'ยี่ห้อ/รุ่น': l.car ?? '',
+      จองผ่าน: l.bookingChannel ?? '',
       ช่องทาง: l.channel,
       ชนิดสินค้า: l.category,
       สินค้า: l.product,
       ยอดขาย: l.amount,
       ...(canSeeCost ? { ต้นทุน: l.cost, กำไรขั้นต้น: l.amount - l.cost } : {}),
+      /*
+        การชำระเงิน (ร้านขอ 22 ก.ย. 2569). Paid and owed are the whole
+        document's, on its first line only, so the columns still add up.
+      */
+      วิธีชำระ: l.payment?.methods ?? '',
+      สถานะชำระ: l.payment?.status ?? '',
+      ชำระแล้ว: l.payment?.paid ?? 0,
+      ค้างชำระ: l.payment?.due ?? 0,
       เลขที่ใบกำกับภาษี: l.taxInvoiceNo,
     }));
     // Held jobs ride along at the bottom rather than in a second file: the
@@ -211,11 +228,17 @@ export function RevenueModule({
         สาขา: shopName(j.shop),
         ลูกค้า: j.customer,
         ทะเบียน: j.plate,
+        'ยี่ห้อ/รุ่น': j.car,
+        จองผ่าน: j.bookingChannel,
         ช่องทาง: 'ปลีก',
         ชนิดสินค้า: 'เงินรอคืน Finnix',
         สินค้า: j.products.join(', '),
         ยอดขาย: 0,
         ...(canSeeCost ? { ต้นทุน: 0, กำไรขั้นต้น: 0 } : {}),
+        วิธีชำระ: j.payment?.methods ?? '',
+        สถานะชำระ: j.payment?.status ?? '',
+        ชำระแล้ว: j.payment?.paid ?? 0,
+        ค้างชำระ: j.payment?.due ?? 0,
         เลขที่ใบกำกับภาษี: '',
         เงินรอคืน: j.amount,
       });

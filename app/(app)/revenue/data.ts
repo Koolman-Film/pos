@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import { itemNetPrice } from '@/lib/domain/tickets';
+import { summarizePayments, type PaymentSummary } from '@/lib/domain/docPayment';
+import { isReceived, orderTotal } from '@/lib/domain/orders';
 import { wholesaleRevenueLines, type WholesaleRevenueOrder } from '@/lib/domain/wholesaleRevenue';
 
 /**
@@ -61,6 +63,18 @@ export type SaleLine = {
    * it out: a jump in takings with nothing to say where it came from.
    */
   channel: SaleChannel;
+  /*
+    ข้อมูลที่รายงานขาด (ร้านขอ 22 ก.ย. 2569): จองผ่าน, ยี่ห้อ/รุ่น, การชำระเงิน.
+    Blank on a wholesale line, which has no booking channel and no vehicle.
+  */
+  bookingChannel?: string;
+  car?: string;
+  /**
+   * The DOCUMENT's payments. Methods and status on every line; `paid` / `due`
+   * on the document's first line only, and 0 elsewhere — a sum down the column
+   * must not count one ticket's money once per product on it.
+   */
+  payment?: PaymentSummary;
 };
 
 const TAX_INVOICE = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
@@ -74,8 +88,9 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       supabase
         .from('tickets')
         .select(
-          'id, shop_id, customer_name, plate, drop_off_date, revenue_kind, ' +
-            'ticket_items(category, sold, sold_price, discount_type, discount_value)',
+          'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, ' +
+            'ticket_items(category, sold, sold_price, discount_type, discount_value), ' +
+            'ticket_payments(amount, method)',
         )
         .is('deleted_at', null),
       supabase.from('insurance_policies').select('ticket_id, plan_name, price, sold_at'),
@@ -95,6 +110,10 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
     plate: string;
     drop_off_date: string | null;
     revenue_kind: string;
+    brand: string | null;
+    model: string | null;
+    booking_channel: string | null;
+    ticket_payments: { amount: number; method: string }[] | null;
     ticket_items: {
       category: string;
       sold: string;
@@ -132,6 +151,38 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
   const tickets = (ticketRows ?? []) as unknown as TicketRow[];
   const byId = new Map(tickets.map((t) => [t.id, t]));
 
+  // การชำระเงินของใบงาน — against the ticket's lines, the total the ticket shows.
+  const paymentOf = new Map<string, PaymentSummary>();
+  for (const t of tickets) {
+    const total = (t.ticket_items ?? []).reduce(
+      (s, i) =>
+        s +
+        itemNetPrice({
+          soldPrice: Number(i.sold_price || 0),
+          discountType: (i.discount_type as 'percent' | 'amount' | null) ?? undefined,
+          discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
+        }),
+      0,
+    );
+    paymentOf.set(
+      t.id,
+      summarizePayments(
+        total,
+        (t.ticket_payments ?? []).map((p) => ({ amount: Number(p.amount || 0), method: p.method })),
+      ),
+    );
+  }
+  // The amounts ride on the first line the report prints for a ticket.
+  const amountsGiven = new Set<string>();
+  const paymentForLine = (ticketId: string): PaymentSummary | undefined => {
+    const p = paymentOf.get(ticketId);
+    if (!p) return undefined;
+    if (amountsGiven.has(ticketId)) return { ...p, paid: 0, due: 0 };
+    amountsGiven.add(ticketId);
+    return p;
+  };
+  const carOf = (t: TicketRow) => [t.brand, t.model].filter(Boolean).join(' ');
+
   const lines: SaleLine[] = [];
   for (const t of tickets) {
     const soldAt = (t.drop_off_date ?? '').slice(0, 10);
@@ -162,6 +213,9 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
         taxInvoiceNo: taxNo(t.id),
         documents: docsByTicket.get(t.id) ?? [],
         channel: 'ปลีก',
+        bookingChannel: t.booking_channel ?? '',
+        car: carOf(t),
+        payment: paymentForLine(t.id),
       });
       costLeft = 0;
     }
@@ -187,6 +241,9 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       taxInvoiceNo: taxNo(p.ticket_id),
       documents: docsByTicket.get(p.ticket_id) ?? [],
       channel: 'ปลีก',
+      bookingChannel: t.booking_channel ?? '',
+      car: carOf(t),
+      payment: paymentForLine(p.ticket_id),
     });
   }
 
@@ -216,7 +273,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       supabase
         .from('orders')
         .select(
-          'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status)',
+          'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, status)',
         )
         .is('deleted_at', null)
         .not('delivered_at', 'is', null),
@@ -284,6 +341,26 @@ async function wholesaleLines(): Promise<SaleLine[]> {
   }));
 
   const orderById = new Map((orderRows ?? []).map((o) => [o.id, o]));
+
+  /*
+    การชำระเงินของ PO — only money actually received counts as paid, the same
+    rule every money figure in the app uses; a cheque that is only reported
+    is still owed.
+  */
+  const orderPayment = new Map<string, PaymentSummary>();
+  for (const o of orders) {
+    const row = orderById.get(o.id);
+    orderPayment.set(
+      o.id,
+      summarizePayments(
+        orderTotal(o),
+        (row?.order_payments ?? [])
+          .filter((p) => isReceived({ status: p.status ?? undefined }))
+          .map((p) => ({ amount: Number(p.amount || 0), method: p.method ?? '' })),
+      ),
+    );
+  }
+  const poAmountsGiven = new Set<string>();
   // The ledger records consumption against the PO, not against a line of it,
   // so the cost rides on that PO’s first line — the same rule retail uses.
   const costLeft = new Map<string, number>();
@@ -312,6 +389,15 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       taxInvoiceNo: '',
       documents: [],
       channel: 'ส่ง' as const,
+      bookingChannel: '',
+      car: '',
+      payment: (() => {
+        const p = orderPayment.get(l.orderId);
+        if (!p) return undefined;
+        if (poAmountsGiven.has(l.orderId)) return { ...p, paid: 0, due: 0 };
+        poAmountsGiven.add(l.orderId);
+        return p;
+      })(),
     };
   });
 }
