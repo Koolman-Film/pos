@@ -4,14 +4,24 @@ import { groupDocLines } from '@/components/tickets/docLines';
 
 /** เอกสารการเงิน: หนึ่งแถวต่อหนึ่งชนิดสินค้า พร้อมยอดรวมของชนิดนั้น. */
 
-const film = { category: 'ฟิล์มกรองแสง', product: 'ฟิล์ม FINNIX CT 40%', detail: 'บานหน้า', amount: 1300 };
+const film = {
+  category: 'ฟิล์มกรองแสง',
+  product: 'ฟิล์ม FINNIX CT 40%',
+  detail: 'บานหน้า',
+  amount: 1300,
+};
 const film2 = {
   category: 'ฟิล์มกรองแสง',
   product: 'ฟิล์ม 3M CRM 60%',
   detail: 'คู่หน้า, คู่หลัง',
   amount: 2900,
 };
-const wrap = { category: 'ฟิล์มกันรอย', product: 'TPU กันรอยเกรดพรีเมียม', detail: 'เต็มคัน', amount: 2200 };
+const wrap = {
+  category: 'ฟิล์มกันรอย',
+  product: 'TPU กันรอยเกรดพรีเมียม',
+  detail: 'เต็มคัน',
+  amount: 2200,
+};
 
 describe('groupDocLines', () => {
   it('adds up one ชนิดสินค้า into a single row', () => {
