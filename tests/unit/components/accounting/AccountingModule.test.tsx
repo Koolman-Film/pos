@@ -581,3 +581,83 @@ describe('AccountingModule — จ่ายจากแหล่งเงิน'
     );
   });
 });
+
+/**
+ * รายงานเงินสดย่อย Excel / PDF (ร้านขอ 22 ก.ย. 2569), and the cash book
+ * following the branch's real petty-cash account.
+ */
+describe('AccountingModule — รายงานเงินสดย่อย', () => {
+  const today = new Date();
+  const ymd = today.toLocaleDateString('en-CA');
+  const cash = [
+    { id: 1, shop: 'cm', type: 'เติมเงิน', amount: 10000, dateObj: today, date: ymd, note: '' },
+  ];
+  const spent = [
+    {
+      id: 21,
+      shop: 'cm',
+      desc: 'ค่ากาแฟรับลูกค้า',
+      category: 'การตลาด',
+      // The petty-cash account, renamed by the branch.
+      source: 'กล่องเงินสดย่อยหน้าร้าน',
+      amount: 150,
+      status: 'จ่ายแล้ว',
+      dateObj: today,
+      date: ymd,
+    },
+  ];
+  const ACCOUNTS = [{ id: 3, shop: 'cm', name: 'กล่องเงินสดย่อยหน้าร้าน', kind: 'petty' }];
+
+  async function openCashBook(
+    exportAction = vi.fn(async () => ({ fileName: 'x.xlsx', base64: '' })),
+  ) {
+    const user = userEvent.setup();
+    renderAccounting({
+      expenses: spent,
+      pettyCash: cash,
+      moneyAccounts: ACCOUNTS,
+      canExport: true,
+      exportAction,
+    });
+    await user.click(screen.getByText('เงินสดย่อยคงเหลือ'));
+    return { user, exportAction };
+  }
+
+  it('counts a spend from the branch’s petty-cash account, whatever it is called', async () => {
+    await openCashBook();
+    // The expense list shows it too; the cash book's footer is the one that
+    // only moves when the spend is counted as petty cash.
+    expect(screen.getAllByText('ค่ากาแฟรับลูกค้า').length).toBeGreaterThan(1);
+    expect(screen.getByText(/เติมเข้า 10,000.00/)).toHaveTextContent('จ่ายออก 150.00');
+  });
+
+  it('exports the cash book to Excel, money in and out in their own columns', async () => {
+    const { user, exportAction } = await openCashBook();
+    await user.click(screen.getByRole('button', { name: 'ส่งออกเงินสดย่อยเป็น Excel' }));
+    const payload = (exportAction.mock.calls as unknown as unknown[][])[0][0] as {
+      groups: { sheetName: string; rows: Record<string, unknown>[] }[];
+    };
+    expect(payload.groups[0].sheetName).toBe('เงินสดย่อย');
+    const rows = payload.groups[0].rows;
+    expect(rows).toContainEqual(
+      expect.objectContaining({ รายการ: 'ค่ากาแฟรับลูกค้า', จ่ายออก: 150 }),
+    );
+    expect(rows).toContainEqual(expect.objectContaining({ ประเภท: 'เติมเงิน', รับเข้า: 10000 }));
+    expect(rows).toContainEqual(
+      expect.objectContaining({ รายการ: 'เคลื่อนไหวสุทธิ', รับเข้า: 9850 }),
+    );
+  });
+
+  it('prints the cash book, not the expense list, for its PDF', async () => {
+    let printed = '';
+    vi.spyOn(window, 'print').mockImplementation(() => {
+      printed = document.querySelector('.print-area')?.textContent ?? '';
+    });
+    const { user } = await openCashBook();
+    await user.click(screen.getByRole('button', { name: 'พิมพ์เงินสดย่อยเป็น PDF' }));
+    expect(printed).toContain('รายการรับ-จ่ายเงินสดย่อย');
+    expect(printed).toContain('เคลื่อนไหวสุทธิ: 9,850.00');
+    // …and the page's own print goes back to the expense list afterwards.
+    expect(document.querySelector('.print-area')?.textContent).toContain('รายการค่าใช้จ่าย');
+  });
+});

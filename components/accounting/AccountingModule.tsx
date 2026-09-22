@@ -3,10 +3,10 @@
 import { useState, useTransition } from 'react';
 
 import { uploadAttachments } from '@/lib/storage/attachments';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { downloadBase64 } from '@/lib/browser/download';
 
-import { fmt, fmtThaiDate, fmtThaiDateLong } from '@/lib/domain/format';
+import { fmt, fmtThaiDate, fmtThaiDateLong, fmtThaiMonthYear } from '@/lib/domain/format';
 import { currentMonthValue, dateInputValue, daysAgoValue, todayValue } from '@/lib/domain/now';
 import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -379,8 +379,22 @@ export function AccountingModule({
   const cashTopups = pettyCash
     .filter((p) => (shopFilter === 'all' || p.shop === shopFilter) && p.type === 'เติมเงิน')
     .reduce((s, p) => s + Number(p.amount), 0);
+  /*
+    เงินสดย่อย ตามบัญชีจริงของสาขา (0064). จ่ายจาก now holds the petty-cash
+    ACCOUNT's name, and a branch may have renamed it; matching only the literal
+    word would drop every spend recorded after the rename from this balance.
+    The old word still counts, for everything saved before.
+  */
+  const pettyNames = new Map<string, Set<string>>();
+  for (const a of moneyAccounts) {
+    if (a.kind !== 'petty') continue;
+    if (!pettyNames.has(a.shop)) pettyNames.set(a.shop, new Set());
+    pettyNames.get(a.shop)!.add(a.name);
+  }
+  const isPettySource = (e: { shop: string; source: string }) =>
+    e.source === 'เงินสดย่อย' || !!pettyNames.get(e.shop)?.has(e.source);
   const cashSpent = shopExpensesAllCat
-    .filter((e) => e.source === 'เงินสดย่อย' && e.status === 'จ่ายแล้ว')
+    .filter((e) => isPettySource(e) && e.status === 'จ่ายแล้ว')
     .reduce((s, e) => s + Number(e.amount), 0);
   const cashBalance = cashTopups - cashSpent;
   /*
@@ -398,6 +412,10 @@ export function AccountingModule({
     meta: string;
     amount: number;
     at: number;
+    shop: string;
+    date: string;
+    kind: 'เติมเงิน' | 'จ่ายออก';
+    category: string;
   };
   const stamp = (d: Date | string | null | undefined) => (d ? new Date(d).getTime() : 0);
 
@@ -411,17 +429,23 @@ export function AccountingModule({
         meta: `เติมเงินสดย่อย · ${p.date ?? '-'}`,
         amount: Number(p.amount),
         at: stamp(p.dateObj),
+        shop: p.shop,
+        date: p.date ?? '-',
+        kind: 'เติมเงิน' as const,
+        category: '',
       })),
     ...shopExpensesAllCat
-      .filter(
-        (e) => e.source === 'เงินสดย่อย' && e.status === 'จ่ายแล้ว' && inCashPeriod(e.dateObj),
-      )
+      .filter((e) => isPettySource(e) && e.status === 'จ่ายแล้ว' && inCashPeriod(e.dateObj))
       .map((e) => ({
         key: `spend-${e.id}`,
         title: e.desc,
         meta: `${e.category} · ${e.date ?? '-'}`,
         amount: -Number(e.amount),
         at: stamp(e.dateObj),
+        shop: e.shop,
+        date: e.date ?? '-',
+        kind: 'จ่ายออก' as const,
+        category: e.category,
       })),
   ].sort((a, b) => b.at - a.at);
 
@@ -473,6 +497,68 @@ export function AccountingModule({
   }
   function exportPDF() {
     window.print();
+  }
+
+  /*
+    รายงานเงินสดย่อย (ร้านขอ 22 ก.ย. 2569) — the cash book on screen, as a file.
+
+    Oldest first, the way a cash book is read and checked against the tin, with
+    money in and money out in their own columns and the window's totals at the
+    foot. The same rows the panel shows, for the same branch and window.
+  */
+  const cashPeriodLabel =
+    cashPeriod === 'today'
+      ? fmtThaiDate(new Date())
+      : cashPeriod === 'month'
+        ? 'เดือน ' + fmtThaiMonthYear(new Date(cashPeriodValue + '-01T00:00:00'))
+        : cashPeriod === 'year'
+          ? 'ปี ' + cashPeriodValue
+          : cashRangeStart + ' ถึง ' + cashRangeEnd;
+  const cashBookRows = [...cashDetailItems].sort((a, b) => a.at - b.at);
+  const [printPetty, setPrintPetty] = useState(false);
+
+  async function exportPettyExcel() {
+    if (!exportAction) return;
+    const rows: Record<string, string | number>[] = cashBookRows.map((r) => ({
+      วันที่: r.date,
+      สาขา: shopName(r.shop),
+      รายการ: r.title,
+      ประเภท: r.kind,
+      กลุ่มค่าใช้จ่าย: r.category,
+      รับเข้า: r.amount > 0 ? r.amount : '',
+      จ่ายออก: r.amount < 0 ? -r.amount : '',
+    }));
+    rows.push(
+      {
+        วันที่: '',
+        สาขา: '',
+        รายการ: 'รวม',
+        ประเภท: '',
+        กลุ่มค่าใช้จ่าย: '',
+        รับเข้า: cashDetailIn,
+        จ่ายออก: cashDetailOut,
+      },
+      {
+        วันที่: '',
+        สาขา: '',
+        รายการ: 'เคลื่อนไหวสุทธิ',
+        ประเภท: '',
+        กลุ่มค่าใช้จ่าย: '',
+        รับเข้า: cashDetailTotal,
+        จ่ายออก: '',
+      },
+    );
+    const res = await exportAction({
+      fileNameBase: `petty-cash-${shopFilter}`,
+      groups: [{ sheetName: 'เงินสดย่อย', rows }],
+    });
+    if (res) downloadBase64(res.base64, res.fileName);
+  }
+  function exportPettyPDF() {
+    // The print sheet swaps to the cash book for this one print, then back.
+    flushSync(() => setPrintPetty(true));
+    window.print();
+    setPrintPetty(false);
   }
 
   function updateExLine(idx: number, field: keyof ExpenseLine, val: string) {
@@ -971,10 +1057,30 @@ export function AccountingModule({
 
         {showCashDetail && (
           <div className="card p-5 mb-4 fade-page">
-            <p className="text-sm font-semibold mb-3">
-              รายการที่รับ-จ่ายจากเงินสดย่อย
-              {shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
-            </p>
+            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+              <p className="text-sm font-semibold">
+                รายการที่รับ-จ่ายจากเงินสดย่อย
+                {shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
+              </p>
+              {allowExport && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={exportPettyExcel}
+                    aria-label="ส่งออกเงินสดย่อยเป็น Excel"
+                    className="btn-outline text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1.5"
+                  >
+                    <i className="fa-solid fa-file-excel" style={{ color: '#1D6F42' }}></i>Excel
+                  </button>
+                  <button
+                    onClick={exportPettyPDF}
+                    aria-label="พิมพ์เงินสดย่อยเป็น PDF"
+                    className="btn-outline text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1.5"
+                  >
+                    <i className="fa-solid fa-file-pdf" style={{ color: '#C0392B' }}></i>PDF
+                  </button>
+                </div>
+              )}
+            </div>
             <div
               className="card p-3 mb-4 flex flex-wrap items-center gap-2"
               style={{ background: 'var(--paper)' }}
@@ -1789,58 +1895,100 @@ export function AccountingModule({
           the first client render, which is a hydration mismatch. */}
         {mounted &&
           createPortal(
-            <div className="print-area">
-              <h2>
-                รายการค่าใช้จ่าย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
-                {categoryFilter !== 'all' ? ' · ' + categoryFilter : ''}
-                {period === 'today'
-                  ? ' · ' + fmtThaiDate(new Date())
-                  : period === 'month'
-                    ? ' · เดือน ' + periodValue
-                    : period === 'year'
-                      ? ' · ปี ' + periodValue
-                      : period === 'range'
-                        ? ' · ' + rangeStart + ' ถึง ' + rangeEnd
-                        : ''}
-              </h2>
-              <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
-              {exportGroups.map((g) => (
-                <div key={g.shopId} style={{ marginBottom: 16 }}>
-                  <h3>{shopName(g.shopId)}</h3>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>วันที่</th>
-                        <th>กลุ่มค่าใช้จ่าย</th>
-                        <th>เลขที่เอกสาร</th>
-                        <th>รายละเอียด</th>
-                        <th>จ่ายจาก</th>
-                        <th>สถานะ</th>
-                        <th style={{ textAlign: 'right' }}>ยอดเงิน</th>
+            printPetty ? (
+              <div className="print-area">
+                <h2>
+                  รายการรับ-จ่ายเงินสดย่อย
+                  {shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''} · {cashPeriodLabel}
+                </h2>
+                <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>วันที่</th>
+                      {shopFilter === 'all' && <th>สาขา</th>}
+                      <th>รายการ</th>
+                      <th>ประเภท</th>
+                      <th>กลุ่มค่าใช้จ่าย</th>
+                      <th style={{ textAlign: 'right' }}>รับเข้า</th>
+                      <th style={{ textAlign: 'right' }}>จ่ายออก</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cashBookRows.map((r) => (
+                      <tr key={r.key}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{r.date}</td>
+                        {shopFilter === 'all' && <td>{shopName(r.shop)}</td>}
+                        <td>{r.title}</td>
+                        <td>{r.kind}</td>
+                        <td>{r.category || '-'}</td>
+                        <td style={{ textAlign: 'right' }}>{r.amount > 0 ? fmt(r.amount) : ''}</td>
+                        <td style={{ textAlign: 'right' }}>{r.amount < 0 ? fmt(-r.amount) : ''}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {g.items.map((e) => (
-                        <tr key={e.id}>
-                          <td>{e.date}</td>
-                          <td>{e.category}</td>
-                          <td style={{ whiteSpace: 'nowrap' }}>{e.docNo || '-'}</td>
-                          <td>{e.desc}</td>
-                          <td>{e.source}</td>
-                          <td>{e.status}</td>
-                          <td style={{ textAlign: 'right' }}>{fmt(e.amount)}</td>
+                    ))}
+                  </tbody>
+                </table>
+                <p style={{ textAlign: 'right' }}>
+                  เติมเข้า {fmt(cashDetailIn)} · จ่ายออก {fmt(cashDetailOut)}
+                </p>
+                <p style={{ textAlign: 'right' }}>
+                  <strong>เคลื่อนไหวสุทธิ: {fmt(cashDetailTotal)} บาท</strong>
+                </p>
+              </div>
+            ) : (
+              <div className="print-area">
+                <h2>
+                  รายการค่าใช้จ่าย{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
+                  {categoryFilter !== 'all' ? ' · ' + categoryFilter : ''}
+                  {period === 'today'
+                    ? ' · ' + fmtThaiDate(new Date())
+                    : period === 'month'
+                      ? ' · เดือน ' + fmtThaiMonthYear(new Date(periodValue + '-01T00:00:00'))
+                      : period === 'year'
+                        ? ' · ปี ' + periodValue
+                        : period === 'range'
+                          ? ' · ' + rangeStart + ' ถึง ' + rangeEnd
+                          : ''}
+                </h2>
+                <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
+                {exportGroups.map((g) => (
+                  <div key={g.shopId} style={{ marginBottom: 16 }}>
+                    <h3>{shopName(g.shopId)}</h3>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>วันที่</th>
+                          <th>กลุ่มค่าใช้จ่าย</th>
+                          <th>เลขที่เอกสาร</th>
+                          <th>รายละเอียด</th>
+                          <th>จ่ายจาก</th>
+                          <th>สถานะ</th>
+                          <th style={{ textAlign: 'right' }}>ยอดเงิน</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-              <p style={{ textAlign: 'right' }}>
-                <strong>
-                  ยอดรวม: {fmt(shopExpenses.reduce((s, e) => s + Number(e.amount), 0))} บาท
-                </strong>
-              </p>
-            </div>,
+                      </thead>
+                      <tbody>
+                        {g.items.map((e) => (
+                          <tr key={e.id}>
+                            <td>{e.date}</td>
+                            <td>{e.category}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{e.docNo || '-'}</td>
+                            <td>{e.desc}</td>
+                            <td>{e.source}</td>
+                            <td>{e.status}</td>
+                            <td style={{ textAlign: 'right' }}>{fmt(e.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+                <p style={{ textAlign: 'right' }}>
+                  <strong>
+                    ยอดรวม: {fmt(shopExpenses.reduce((s, e) => s + Number(e.amount), 0))} บาท
+                  </strong>
+                </p>
+              </div>
+            ),
             document.body,
           )}
 
