@@ -2896,6 +2896,19 @@ insert into supabase_migrations.schema_migrations(version, name) values ('0037',
 
 
 -- ==========================================================================
+-- 0038 และ 0039 — บันทึกว่ารันแล้ว โดยไม่รันเนื้อใน
+-- ==========================================================================
+--
+-- ทั้งสองไฟล์มีแค่ `create or replace function reset_permissions_to_defaults()`
+-- ซึ่ง 0040, 0042, 0044 และ 0048 ในไฟล์นี้สร้างทับด้วยเวอร์ชันที่ใหม่กว่าอยู่แล้ว
+-- รันเนื้อในซ้ำจึงไม่ได้อะไร แต่ถ้าไม่บันทึกไว้ `supabase db push` ครั้งต่อไป
+-- จะเห็นว่ายังไม่เคยรัน แล้วรันให้ — เอาฟังก์ชันรีเซ็ตสิทธิ์เวอร์ชันเก่าไปทับ
+-- เวอร์ชันปัจจุบันเงียบ ๆ
+insert into supabase_migrations.schema_migrations(version, name) values ('0038', 'reset_matches_the_grants') on conflict (version) do nothing;
+insert into supabase_migrations.schema_migrations(version, name) values ('0039', 'reset_keeps_custom_roles') on conflict (version) do nothing;
+
+
+-- ==========================================================================
 -- supabase/release-0040.sql
 -- ==========================================================================
 
