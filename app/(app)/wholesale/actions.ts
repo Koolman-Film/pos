@@ -79,6 +79,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         sales_by: input.salesBy ?? '',
         ...(openedAt ? { created_at: openedAt } : {}),
         pay_to_account_id: input.payToAccountId ?? null,
+        customer_note: input.customerNote ?? '',
       })
       .select('id')
       .single();
@@ -106,6 +107,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         sales_by: input.salesBy ?? '',
         ...(openedAt ? { created_at: openedAt } : {}),
         pay_to_account_id: input.payToAccountId ?? null,
+        customer_note: input.customerNote ?? '',
       })
       .eq('id', orderId);
     if (error) throw new Error(error.message);

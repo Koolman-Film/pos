@@ -1285,21 +1285,45 @@ export function WholesaleDetail({
             goods because it is agreed when the order is taken, not when the
             money is chased.
           */}
-          {/* หมายเหตุ — whatever this PO needs to carry that no other field
-              has a place for. Kept next to the money fields because that is
-              where the exceptions worth writing down tend to come up. */}
+          {/*
+            หมายเหตุ 2 แบบ (ร้านขอ 22 ก.ย. 2569). One note used to do both jobs
+            and never printed, so nothing meant for the customer could reach
+            their paperwork, and anything written for the shop was one "print
+            it" decision away from reaching it. Now they are two fields that
+            say out loud who reads them. The old note keeps its meaning — the
+            shop's — so nothing already written starts appearing on invoices.
+          */}
           <div className="mb-5">
             <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-note-sticky mr-1.5"></i>หมายเหตุ
+              <i className="fa-solid fa-comment mr-1.5"></i>หมายเหตุสำหรับลูกค้า
             </label>
             <textarea
-              aria-label="หมายเหตุของ PO"
+              aria-label="หมายเหตุสำหรับลูกค้า"
+              rows={2}
+              value={o.customerNote ?? ''}
+              onChange={(e) => field('customerNote', e.target.value)}
+              placeholder="เช่น ส่งของภายใน 3 วันทำการ สินค้ารับประกัน 1 ปี"
+              className="field text-sm px-3 py-2 w-full"
+            />
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+              พิมพ์ลงในใบแจ้งหนี้ ใบส่งของ ใบเสร็จ และใบรับคืนสินค้า
+            </p>
+          </div>
+          <div className="mb-5">
+            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+              <i className="fa-solid fa-note-sticky mr-1.5"></i>หมายเหตุสำหรับร้าน
+            </label>
+            <textarea
+              aria-label="หมายเหตุสำหรับร้าน"
               rows={2}
               value={o.note ?? ''}
               onChange={(e) => field('note', e.target.value)}
               placeholder="เช่น ส่งของช่วงบ่าย ติดต่อหน้าร้านก่อน"
               className="field text-sm px-3 py-2 w-full"
             />
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+              เห็นเฉพาะในระบบ ไม่พิมพ์ลงเอกสารใด ๆ ที่ให้ลูกค้า
+            </p>
           </div>
           <div className="mb-5">
             <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
@@ -2224,6 +2248,21 @@ export function WholesaleDetail({
                     </ul>
                   </div>
                 )}
+              {/* หมายเหตุสำหรับลูกค้า (0063) — the shop's own note never prints. */}
+              {(o.customerNote ?? '').trim() && (
+                <div
+                  style={{
+                    marginBottom: 12,
+                    border: '1px solid #999',
+                    borderRadius: 6,
+                    padding: '6px 10px',
+                    fontSize: 11,
+                  }}
+                >
+                  <span style={{ fontWeight: 'bold' }}>หมายเหตุ: </span>
+                  <span style={{ whiteSpace: 'pre-wrap' }}>{o.customerNote}</span>
+                </div>
+              )}
               <div
                 style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 44, fontSize: 12 }}
               >

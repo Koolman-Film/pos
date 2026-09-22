@@ -32,7 +32,7 @@ const storedReturn = async () => {
 const storedOrder = async () => {
   const { data } = await admin
     .from('orders')
-    .select('stock_deducted_at, note')
+    .select('stock_deducted_at, note, customer_note')
     .eq('id', ORDER)
     .single();
   return data;
@@ -125,5 +125,21 @@ describe('สต๊อกขายส่ง — ตัดตอนส่งข�
       (await admin.from('orders').update({ note: 'ส่งของช่วงบ่าย' }).eq('id', ORDER)).error,
     );
     expect(await storedOrder()).toMatchObject({ note: 'ส่งของช่วงบ่าย' });
+  });
+
+  it('หมายเหตุสำหรับลูกค้าเก็บแยกจากหมายเหตุของร้าน (0063)', async () => {
+    assertNoError(
+      'set both notes',
+      (
+        await admin
+          .from('orders')
+          .update({ note: 'โทรก่อนส่ง', customer_note: 'รับประกัน 1 ปี' })
+          .eq('id', ORDER)
+      ).error,
+    );
+    expect(await storedOrder()).toMatchObject({
+      note: 'โทรก่อนส่ง',
+      customer_note: 'รับประกัน 1 ปี',
+    });
   });
 });

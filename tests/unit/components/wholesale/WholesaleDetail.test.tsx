@@ -1271,3 +1271,47 @@ describe('WholesaleDetail — บัญชีรับชำระ', () => {
     );
   });
 });
+
+/**
+ * หมายเหตุ 2 แบบ (ร้านขอ 22 ก.ย. 2569) — one for the customer's paperwork, one
+ * the customer must never see.
+ */
+describe('WholesaleDetail — หมายเหตุสำหรับลูกค้า / สำหรับร้าน', () => {
+  const noted = {
+    ...order,
+    id: 'WS-CM-0140',
+    customerNote: 'สินค้ารับประกัน 1 ปี',
+    note: 'ลูกค้ารายนี้ชอบต่อราคา',
+  } as unknown as WsOrder;
+  const printed = () => document.querySelector('.print-area')?.textContent ?? '';
+
+  it('offers both, each saying who reads it', () => {
+    render(<WholesaleDetail order={noted} canDo={() => true} />);
+    expect(screen.getByLabelText('หมายเหตุสำหรับลูกค้า')).toHaveValue('สินค้ารับประกัน 1 ปี');
+    expect(screen.getByLabelText('หมายเหตุสำหรับร้าน')).toHaveValue('ลูกค้ารายนี้ชอบต่อราคา');
+  });
+
+  it('prints the customer’s note on every document, and never the shop’s', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(<WholesaleDetail order={noted} canDo={() => true} />);
+    for (const doc of [/ใบแจ้งหนี้/, /ใบส่งของ/]) {
+      await user.click(screen.getByRole('button', { name: doc }));
+      expect(printed()).toContain('สินค้ารับประกัน 1 ปี');
+      expect(printed()).not.toContain('ลูกค้ารายนี้ชอบต่อราคา');
+    }
+  });
+
+  it('saves both with the PO', async () => {
+    const onSaveOrder = vi.fn();
+    render(<WholesaleDetail order={order} canDo={() => true} onSaveOrder={onSaveOrder} />);
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('หมายเหตุสำหรับลูกค้า'), 'ส่งภายใน 3 วัน');
+    await user.type(screen.getByLabelText('หมายเหตุสำหรับร้าน'), 'โทรก่อนส่ง');
+    await user.click(screen.getByRole('button', { name: 'บันทึก PO' }));
+    expect(onSaveOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ customerNote: 'ส่งภายใน 3 วัน', note: 'โทรก่อนส่ง' }),
+      false,
+    );
+  });
+});

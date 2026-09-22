@@ -27,7 +27,7 @@ import {
 
 export const ORDER_SELECT = `
   id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by, created_by,
-  pay_to_account_id,
+  pay_to_account_id, customer_note,
   price_decision, price_decided_at, price_decided_by, note, delivery_note, delivery_attachments,
   order_items(name, qty, list_price, requested_price, reason),
   order_returns(item_name, qty, reason, returned_at, uid, received_at),
@@ -46,6 +46,7 @@ export type OrderRow = {
   sales_by: string | null;
   created_by: string | null;
   pay_to_account_id: number | null;
+  customer_note: string | null;
   price_decision: string | null;
   price_decided_at: string | null;
   price_decided_by: string | null;
@@ -111,6 +112,7 @@ export function mapOrder(row: OrderRow): WsOrder {
     salesBy: row.sales_by ?? '',
     createdBy: row.created_by ?? '',
     payToAccountId: row.pay_to_account_id ?? null,
+    customerNote: row.customer_note ?? '',
     priceDecision: row.price_decision ?? '',
     priceDecidedAt: row.price_decided_at ?? '',
     priceDecidedBy: row.price_decided_by ?? '',

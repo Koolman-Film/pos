@@ -173,6 +173,11 @@ export type WsOrder = {
    * (migration 0062). Null prints the branch's ช่องทางการชำระเงิน as before.
    */
   payToAccountId?: number | null;
+  /**
+   * หมายเหตุสำหรับลูกค้า — printed on every document the customer receives
+   * (migration 0063). `note` stays the shop's own and never prints.
+   */
+  customerNote?: string;
   items: WsItem[];
   returns: WsReturn[];
   adjustments: WsAdjustment[];

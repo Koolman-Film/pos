@@ -897,6 +897,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          customer_note: string
           pay_to_account_id: number | null
           created_by: string | null
           sales_by: string
@@ -918,6 +919,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          customer_note?: string
           pay_to_account_id?: number | null
           created_by?: string | null
           sales_by?: string
@@ -939,6 +941,7 @@ export type Database = {
           status: string
         }
         Update: {
+          customer_note?: string
           pay_to_account_id?: number | null
           created_by?: string | null
           sales_by?: string

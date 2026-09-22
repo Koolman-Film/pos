@@ -192,6 +192,7 @@ export function WholesaleList({
         o.salesBy,
         o.status,
         o.note,
+        o.customerNote,
         o.deliveryNote,
         o.items.map((it) => it.name),
         amountTerms(orderTotal(o)),
