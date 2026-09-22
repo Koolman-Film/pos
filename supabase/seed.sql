@@ -288,6 +288,13 @@ insert into insurance_policies (
   'คุ้มครองฟองอากาศและการหลุดล่อนจากการติดตั้ง',
   current_date - 30, current_date - 30, current_date + 335, '');
 
+/*
+  A claim from before 0059, with no service visit — production still holds
+  these. 0059 lets only service_role write one, as it does for repair scripts,
+  so the insert borrows that role and hands it straight back.
+*/
+select set_config('request.jwt.claim.role', 'service_role', false);
+
 insert into insurance_claims (
   policy_id, claimed_at, big_used, small_used, detail, technician,
   received_at, received_time, delivered_at, delivered_time
@@ -295,6 +302,8 @@ insert into insurance_claims (
   (select id from insurance_policies where ticket_id = 'JT-CM-00214'),
   current_date + 5, 1, 0, 'กันชนหน้ามีรอยขีด ขอเคลมชิ้นใหญ่ 1 ชิ้น', 'ช่างเอก',
   current_date + 5, '10:00', current_date + 5, '15:00');
+
+select set_config('request.jwt.claim.role', '', false);
 
 -- ---------------------------------------------------------------- wholesale --
 

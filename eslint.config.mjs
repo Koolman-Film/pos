@@ -23,6 +23,10 @@ const eslintConfig = defineConfig([
     // Playwright output.
     'playwright-report/**',
     'test-results/**',
+    // Local tool state, not source: session notes and agent worktrees (whole
+    // copies of the repo, which would otherwise be linted twice).
+    '.remember/**',
+    '.claude/**',
   ]),
 ]);
 

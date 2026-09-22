@@ -25,3 +25,7 @@ docs/superpowers/
 
 # supabase CLI scratch
 supabase/.temp/
+
+# Local tool state: session notes and agent worktrees.
+.remember/
+.claude/

@@ -22,7 +22,17 @@ export const SEED_PASSWORD = 'finnix-staging-2026';
  * login server action is what resolves the user's profile and permissions — the
  * thing most of these specs are actually testing the consequences of.
  */
+const alertHandled = new WeakSet<Page>();
+
 export async function login(page: Page, account: keyof typeof ACCOUNTS) {
+  // The daily alerts summary opens over whatever page loads first after login
+  // and swallows every click until it is closed. These specs are not about it.
+  if (!alertHandled.has(page)) {
+    alertHandled.add(page);
+    await page.addLocatorHandler(page.getByRole('button', { name: 'ปิดไว้ก่อน' }), (b) =>
+      b.click(),
+    );
+  }
   await page.goto('/login');
   await page.fill('input[name=email]', ACCOUNTS[account]);
   await page.fill('input[name=password]', SEED_PASSWORD);

@@ -11,7 +11,9 @@ export default defineConfig({
     // Playwright specs under tests/e2e are driven by the Playwright runner
     // (Task 21), not Vitest. Without this exclude, Vitest globs them and dies
     // with "Playwright Test did not expect test() to be called here".
-    exclude: ['**/node_modules/**', '**/tests/e2e/**'],
+    // Agent worktrees under .claude/ are whole copies of the repo; their tests
+    // run against their own code, not this checkout's.
+    exclude: ['**/node_modules/**', '**/tests/e2e/**', '.claude/**'],
   },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },
