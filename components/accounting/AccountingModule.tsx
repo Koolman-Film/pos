@@ -16,6 +16,8 @@ import { FilePreview } from '@/components/ui/FilePreview';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { LEGACY_METHOD_SUFFIX } from '@/lib/domain/payAccount';
+
+import { groupExpenseReport, NO_SOURCE } from './expenseReport';
 import { StatusPill } from '@/components/ui/StatusPill';
 import type { Shop } from '@/components/ui/PeriodShopFilter';
 
@@ -456,41 +458,75 @@ export function AccountingModule({
     .filter((r) => r.amount < 0)
     .reduce((s, r) => s - r.amount, 0);
   const cashDetailTotal = cashDetailIn - cashDetailOut;
-  const exportShopIds =
-    shopFilter === 'all'
-      ? accessibleShops.map((s) => s.id).filter((id) => shopExpenses.some((e) => e.shop === id))
-      : [shopFilter];
-  const exportGroups = exportShopIds.map((id) => ({
-    shopId: id,
-    items: shopExpenses
-      .filter((e) => e.shop === id)
-      .sort(
-        (a, b) =>
-          a.category.localeCompare(b.category, 'th') ||
-          (a.date || '').localeCompare(b.date || '', 'th') ||
-          a.desc.localeCompare(b.desc, 'th'),
-      ),
-  }));
+  /*
+    รายงาน = what the filters leave on screen, laid out สาขา → จ่ายจาก → วันที่,
+    a table per จ่ายจาก with its total, a total per branch and a grand total
+    (components/accounting/expenseReport.ts).
+  */
+  const report = groupExpenseReport(
+    shopExpenses,
+    accessibleShops.map((s) => s.id),
+    (shop) => moneyAccounts.filter((a) => a.shop === shop).map((a) => a.name),
+  );
 
   async function exportExcel() {
     if (!exportAction) return;
+    // One sheet per branch: each จ่ายจาก's rows in date order, closed by its
+    // own total row, and the branch total at the foot. A last sheet sums every
+    // table and gives the grand total.
+    const blank = {
+      เลขที่เอกสาร: '',
+      วันที่: '',
+      กลุ่มค่าใช้จ่าย: '',
+      รายละเอียด: '',
+      จ่ายจาก: '',
+      สถานะ: '',
+      ประเภท: '',
+    };
     const payload: ExportPayload = {
       fileNameBase: `expenses-${shopFilter}`,
-      groups: exportGroups.map((g) => ({
-        sheetName: shopName(g.shopId),
-        rows: g.items.map((e) => ({
-          เลขที่เอกสาร: e.docNo ?? '',
-          วันที่: e.date ?? '',
-          กลุ่มค่าใช้จ่าย: e.category,
-          รายละเอียด: e.desc,
-          จ่ายจาก: e.source,
-          สถานะ: e.status,
-          // The sheet has to say which pile a row is in; the two totals
-          // underneath it are not the same money.
-          ประเภท: e.paidForFinnix ? 'จ่ายแทน Finnix' : 'ค่าใช้จ่ายของสาขา',
-          ยอดเงิน: e.amount,
+      groups: [
+        ...report.sections.map((sec) => ({
+          sheetName: shopName(sec.shopId),
+          rows: [
+            ...sec.tables.flatMap((t) => [
+              ...t.items.map((e) => ({
+                เลขที่เอกสาร: e.docNo ?? '',
+                วันที่: e.status === 'รอจ่าย' ? (e.due ?? '') : (e.date ?? ''),
+                กลุ่มค่าใช้จ่าย: e.category,
+                รายละเอียด: e.desc,
+                จ่ายจาก: e.source || NO_SOURCE,
+                สถานะ: e.status,
+                // The sheet has to say which pile a row is in; the two totals
+                // underneath it are not the same money.
+                ประเภท: e.paidForFinnix ? 'จ่ายแทน Finnix' : 'ค่าใช้จ่ายของสาขา',
+                ยอดเงิน: e.amount,
+              })),
+              { ...blank, รายละเอียด: `รวม จ่ายจาก ${t.source}`, ยอดเงิน: t.total },
+            ]),
+            { ...blank, รายละเอียด: `รวมทั้งสาขา ${shopName(sec.shopId)}`, ยอดเงิน: sec.total },
+          ],
         })),
-      })),
+        {
+          sheetName: 'สรุปรวม',
+          rows: [
+            ...report.sections.flatMap((sec) =>
+              sec.tables.map((t) => ({
+                สาขา: shopName(sec.shopId),
+                จ่ายจาก: t.source,
+                จำนวนรายการ: t.items.length,
+                ยอดเงิน: t.total,
+              })),
+            ),
+            {
+              สาขา: 'ยอดรวมทั้งหมด',
+              จ่ายจาก: '',
+              จำนวนรายการ: shopExpenses.length,
+              ยอดเงิน: report.total,
+            },
+          ],
+        },
+      ],
     };
     const res = await exportAction(payload);
     if (res) downloadBase64(res.base64, res.fileName);
@@ -1951,41 +1987,63 @@ export function AccountingModule({
                           : ''}
                 </h2>
                 <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
-                {exportGroups.map((g) => (
-                  <div key={g.shopId} style={{ marginBottom: 16 }}>
-                    <h3>{shopName(g.shopId)}</h3>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>วันที่</th>
-                          <th>กลุ่มค่าใช้จ่าย</th>
-                          <th>เลขที่เอกสาร</th>
-                          <th>รายละเอียด</th>
-                          <th>จ่ายจาก</th>
-                          <th>สถานะ</th>
-                          <th style={{ textAlign: 'right' }}>ยอดเงิน</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {g.items.map((e) => (
-                          <tr key={e.id}>
-                            <td>{e.date}</td>
-                            <td>{e.category}</td>
-                            <td style={{ whiteSpace: 'nowrap' }}>{e.docNo || '-'}</td>
-                            <td>{e.desc}</td>
-                            <td>{e.source}</td>
-                            <td>{e.status}</td>
-                            <td style={{ textAlign: 'right' }}>{fmt(e.amount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {report.sections.map((sec) => (
+                  <div key={sec.shopId} style={{ marginBottom: 18 }}>
+                    <h3>{shopName(sec.shopId)}</h3>
+                    {sec.tables.map((t) => (
+                      <div key={t.source} style={{ marginBottom: 12 }}>
+                        <p style={{ fontWeight: 'bold', margin: '8px 0 4px' }}>
+                          จ่ายจาก: {t.source}
+                        </p>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>วันที่</th>
+                              <th>กลุ่มค่าใช้จ่าย</th>
+                              <th>เลขที่เอกสาร</th>
+                              <th>รายละเอียด</th>
+                              <th>สถานะ</th>
+                              <th style={{ textAlign: 'right' }}>ยอดเงิน</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {t.items.map((e) => (
+                              <tr key={e.id}>
+                                {/* A bill not yet paid has no paid date; its due
+                                    date is the day it belongs to. */}
+                                <td style={{ whiteSpace: 'nowrap' }}>
+                                  {e.status === 'รอจ่าย' && e.due ? `กำหนด ${e.due}` : e.date}
+                                </td>
+                                <td>{e.category}</td>
+                                <td style={{ whiteSpace: 'nowrap' }}>{e.docNo || '-'}</td>
+                                <td>{e.desc}</td>
+                                <td>{e.status}</td>
+                                <td style={{ textAlign: 'right' }}>{fmt(e.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr>
+                              <td colSpan={5} style={{ fontWeight: 'bold' }}>
+                                รวม จ่ายจาก {t.source}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                                {fmt(t.total)}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    ))}
+                    <p style={{ textAlign: 'right', margin: '4px 0 0' }}>
+                      <strong>
+                        รวมทั้งสาขา {shopName(sec.shopId)}: {fmt(sec.total)} บาท
+                      </strong>
+                    </p>
                   </div>
                 ))}
-                <p style={{ textAlign: 'right' }}>
-                  <strong>
-                    ยอดรวม: {fmt(shopExpenses.reduce((s, e) => s + Number(e.amount), 0))} บาท
-                  </strong>
+                <p style={{ textAlign: 'right', fontSize: 14 }}>
+                  <strong>ยอดรวมทั้งหมด: {fmt(report.total)} บาท</strong>
                 </p>
               </div>
             ),

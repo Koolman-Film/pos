@@ -661,3 +661,29 @@ describe('AccountingModule — รายงานเงินสดย่อย'
     expect(document.querySelector('.print-area')?.textContent).toContain('รายการค่าใช้จ่าย');
   });
 });
+
+describe('AccountingModule — รายงานค่าใช้จ่ายแยกตาราง', () => {
+  it('prints a table per จ่ายจาก with its total, and the grand total', async () => {
+    let printed = '';
+    vi.spyOn(window, 'print').mockImplementation(() => {
+      printed = document.querySelector('.print-area')?.textContent ?? '';
+    });
+    const user = userEvent.setup();
+    renderAccounting({
+      canExport: true,
+      moneyAccounts: [
+        { id: 1, shop: 'cm', name: 'บัญชีธนาคารสาขา', kind: 'bank' },
+        { id: 2, shop: 'cm', name: 'เงินสดย่อย', kind: 'petty' },
+      ],
+    });
+    await user.click(screen.getByRole('button', { name: /^PDF$/ }));
+    expect(printed).toContain('จ่ายจาก: บัญชีธนาคารสาขา');
+    expect(printed).toContain('รวม จ่ายจาก บัญชีธนาคารสาขา');
+    expect(printed).toContain('จ่ายจาก: เงินสดย่อย');
+    expect(printed).toContain('ยอดรวมทั้งหมด');
+    // Bank first — the register's order — then petty cash.
+    expect(printed.indexOf('จ่ายจาก: บัญชีธนาคารสาขา')).toBeLessThan(
+      printed.indexOf('จ่ายจาก: เงินสดย่อย'),
+    );
+  });
+});
