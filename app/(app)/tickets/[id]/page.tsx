@@ -17,6 +17,7 @@ import {
   recordTicketDocument,
   saveTicket,
   saveTicketExtras,
+  saveTicketTech,
   setTicketPayAccount,
   unlockTicket,
   updateOptionList,
@@ -80,6 +81,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       corporateBuyerAction={saveCorporateBuyer}
       carModelAction={saveCarModel}
       extrasAction={saveTicketExtras}
+      techAction={saveTicketTech}
       payAccounts={payAccounts}
       payAccountAction={setTicketPayAccount}
       serviceVisitAction={saveServiceVisit}

@@ -417,6 +417,65 @@ export async function saveTicketExtras(input: {
 }
 
 /**
+ * บันทึกเฉพาะ ข้อมูลของช่าง — ใช้ได้แม้ใบงานปิดแล้ว (migration 0066).
+ *
+ * The other narrow write a closed ticket accepts. The technician's part of the
+ * job is often finished after the customer has paid and gone: the car left on
+ * Friday, the numbers for what came off the roll are written down on Monday.
+ * `save_ticket_tech` can reach the QC fields, the per-category technicians and
+ * each item's actual quantity, and nothing else — no price, no payment, not the
+ * lock itself — so this action only decides WHO may call it.
+ *
+ * Stock moves here exactly as it does on a full save: the stored totals are read
+ * first, the difference is applied afterwards, and a product that no longer
+ * exists in this branch comes back as a warning rather than failing the save.
+ */
+export async function saveTicketTech(input: {
+  ticketId: string;
+  shop: string;
+  extras: Record<string, unknown>;
+  techByCategory: Record<string, string[]>;
+  /** One map per ticket item, in the order the form loaded them. */
+  actualQty: QtyMap[];
+}): Promise<SaveResult> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขใบงาน' };
+  const supabase = await createClient();
+
+  // Before the write, like updateTicket — this is the other side of the delta.
+  const before = await storedActualQty(supabase, input.ticketId);
+  const { error } = await supabase.rpc('save_ticket_tech', {
+    p_ticket_id: input.ticketId,
+    p_extras: input.extras as Json,
+    p_tech_by_category: input.techByCategory as Json,
+    p_actual_qty: input.actualQty as Json,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  let unmatched: string[] = [];
+  const delta = diffQtyMaps(before, sumQtyMaps(input.actualQty));
+  if (Object.keys(delta).length > 0) {
+    try {
+      const result = await applyStockMovements(supabase, delta, {
+        kind: 'ใบงาน',
+        documentId: input.ticketId,
+        by: session.name || 'ระบบ (ใบงาน)',
+        shopId: input.shop,
+      });
+      unmatched = result.unmatched;
+    } catch {
+      // Non-fatal, for the reason syncTicketStock gives: the technician's work
+      // is already saved and losing it would be the worse outcome.
+    }
+  }
+
+  revalidatePath('/tickets');
+  revalidatePath(`/tickets/${input.ticketId}`);
+  revalidatePath('/stock');
+  return { ok: true, id: input.ticketId, stockWarning: stockWarningFor(unmatched) };
+}
+
+/**
  * บัญชีรับชำระบนใบเสนอราคา (migration 0062) — saved the moment it is picked.
  *
  * On its own rather than with บันทึกใบงาน: somebody picks the account and

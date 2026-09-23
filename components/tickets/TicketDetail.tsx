@@ -18,6 +18,7 @@ import {
   payAccountLine,
   type PayAccount,
 } from '@/lib/domain/payAccount';
+import { reworkTicked, techOpenWhileLocked } from '@/lib/domain/techQty';
 import { ticketsHref } from '@/lib/browser/ticketFilter';
 import { fitPrintPages } from '@/lib/print/fitToPage';
 
@@ -103,6 +104,7 @@ export function TicketDetail({
   corporateBuyerAction,
   carModelAction,
   extrasAction,
+  techAction,
   payAccounts = [],
   payAccountAction,
   serviceVisitAction,
@@ -164,6 +166,18 @@ export function TicketDetail({
     ticketId: string;
     extras: Record<string, unknown>;
   }) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Saves ข้อมูลของช่าง on its own, for the same reason `extrasAction` exists:
+   * the technician's part of a job is often finished after the ticket closed
+   * (migration 0066).
+   */
+  techAction?: (input: {
+    ticketId: string;
+    shop: string;
+    extras: Record<string, unknown>;
+    techByCategory: Record<string, string[]>;
+    actualQty: Record<string, number>[];
+  }) => Promise<SaveResult>;
   /** แหล่งเงินของสาขาที่ผู้ใช้เข้าถึงได้ — บัญชีรับชำระบนใบเสนอราคา (0062). */
   payAccounts?: PayAccount[];
   /** Saves the บัญชีรับชำระ on its own, the moment it is picked. */
@@ -290,6 +304,51 @@ export function TicketDetail({
       return;
     }
     setExtrasSaved(true);
+    router.refresh();
+  }
+
+  /**
+   * ข้อมูลของช่าง บนใบงานที่ปิดแล้ว — ยังกรอกได้จนกว่าจะครบ.
+   *
+   * A technician often writes their part down after the customer has paid and
+   * gone, so the lock lets this block through while any จำนวนสินค้าที่ใช้จริง is
+   * still blank, and again whenever แก้งาน is ticked — a rework takes more
+   * material off the shelf.
+   *
+   * The two halves are read from different places on purpose. The quantities
+   * come from `initialTicket` — what is STORED — because reading the draft
+   * would close the section under the technician's hands: typing the last
+   * number would make it complete, and the save button would disappear before
+   * it could be pressed. The tick comes from the draft, so ticking แก้งาน opens
+   * the boxes straight away rather than after saving and reloading.
+   */
+  const techOpen = locked && techOpenWhileLocked({ items: initialTicket.items, extras: t.extras });
+  const techFrozen = locked && !techOpen;
+
+  const [savingTech, setSavingTech] = useState(false);
+  const [techSaved, setTechSaved] = useState(false);
+  async function saveTech() {
+    if (!techAction) return;
+    setSaveError(null);
+    setTechSaved(false);
+    setSavingTech(true);
+    // Through the serializer, so the quantities are cleaned exactly as a full
+    // save cleans them — blanks and zeros dropped rather than sent as NaN.
+    const payload = serializeTicket(t, false);
+    const result = await techAction({
+      ticketId: t.id,
+      shop: payload.shop,
+      extras: payload.extras,
+      techByCategory: payload.techByCategory,
+      actualQty: payload.items.map((i) => i.actualQty),
+    });
+    setSavingTech(false);
+    if (!result.ok) {
+      setSaveError(result.error || 'บันทึกข้อมูลของช่างไม่สำเร็จ');
+      return;
+    }
+    if (result.stockWarning) setSaveError(result.stockWarning);
+    setTechSaved(true);
     router.refresh();
   }
 
@@ -1607,9 +1666,9 @@ export function TicketDetail({
           */}
           <div
             style={
-              locked ? { pointerEvents: 'none', opacity: 0.65, userSelect: 'text' } : undefined
+              techFrozen ? { pointerEvents: 'none', opacity: 0.65, userSelect: 'text' } : undefined
             }
-            aria-disabled={locked || undefined}
+            aria-disabled={techFrozen || undefined}
           >
             <FormSection
               step={5}
@@ -1630,6 +1689,42 @@ export function TicketDetail({
                 shareQcAlbum={shareQcAlbum}
                 shopName={shopName}
               />
+              {techOpen && (
+                <p className="text-xs mt-1 flex items-start gap-1.5" style={{ color: '#4C7A3E' }}>
+                  <i className="fa-solid fa-lock-open mt-0.5"></i>
+                  <span>
+                    ยังกรอกข้อมูลของช่างได้แม้ใบงานปิดแล้ว —{' '}
+                    {reworkTicked(t.extras)
+                      ? 'ใบงานนี้ติ๊ก "แก้งาน" ไว้ จึงแก้จำนวนสินค้าที่ใช้จริงได้อีกครั้ง'
+                      : 'ยังกรอกจำนวนสินค้าที่ใช้จริงไม่ครบ'}{' '}
+                    (ราคาและการรับเงินยังล็อกอยู่)
+                  </span>
+                </p>
+              )}
+              {/* Its own save: the ticket-wide one is gone while locked. */}
+              {techOpen && techAction && (
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    onClick={saveTech}
+                    disabled={savingTech}
+                    className="btn-primary rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2"
+                    style={{ opacity: savingTech ? 0.7 : 1 }}
+                  >
+                    <i
+                      className={`fa-solid ${savingTech ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}
+                    ></i>
+                    {savingTech ? 'กำลังบันทึก...' : 'บันทึกข้อมูลของช่าง'}
+                  </button>
+                  {techSaved && (
+                    <span
+                      className="text-xs font-semibold flex items-center gap-1.5"
+                      style={{ color: '#4C7A3E' }}
+                    >
+                      <i className="fa-solid fa-circle-check"></i>บันทึกแล้ว
+                    </span>
+                  )}
+                </div>
+              )}
             </FormSection>
           </div>
         </div>

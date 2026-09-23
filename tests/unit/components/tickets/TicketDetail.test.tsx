@@ -891,3 +891,104 @@ describe('TicketDetail — วิธีชำระจากแหล่งเ�
     expect(screen.getByLabelText('วิธีชำระเงินรายการที่ 1')).toHaveValue('โอน TTB');
   });
 });
+
+/**
+ * ข้อมูลของช่าง บนใบงานที่ปิดแล้ว (migration 0066, ร้านขอ 23 ก.ย. 2569).
+ *
+ * The technician's part of a job is often finished after the customer has paid
+ * and gone — the car leaves on Friday, the numbers for what came off the roll
+ * are written down on Monday. So the lock lets this block through while any
+ * จำนวนสินค้าที่ใช้จริง is blank, and again whenever แก้งาน is ticked.
+ */
+describe('TicketDetail — ข้อมูลของช่างหลังปิดงาน', () => {
+  const soldItem = (actualQtyMap: Record<string, number> = {}) => ({
+    category: 'ฟิล์มกรองแสง',
+    booked: '',
+    bookedPrice: 0,
+    sold: 'ฟิล์ม 3M CR70',
+    soldPrice: 5000,
+    actualQtyMap,
+  });
+
+  const closedWith = (over: Partial<Ticket> = {}) =>
+    makeTicket({
+      locked: true,
+      status: 'ส่งมอบแล้ว',
+      items: [soldItem()],
+      ...over,
+    });
+
+  const techProps = (ticket: Ticket) => ({
+    ...baseProps(ticket),
+    initialOptions: options({ extra_options: ['Service', 'แก้งาน'], technicians: ['ช่างเอ'] }),
+    // Typed through its argument, so `mock.calls[0][0]` is the payload rather
+    // than `never`.
+    techAction: vi.fn(
+      async (input: {
+        ticketId: string;
+        shop: string;
+        extras: Record<string, unknown>;
+        techByCategory: Record<string, string[]>;
+        actualQty: Record<string, number>[];
+      }) => ({ ok: true, id: input.ticketId }),
+    ),
+  });
+
+  /** Guards are the greyed-out wrappers; the tech block has its own. */
+  const guards = (c: HTMLElement) => c.querySelectorAll('[aria-disabled="true"]').length;
+
+  it('leaves ข้อมูลของช่าง open while a quantity is still blank', () => {
+    const { container } = render(<TicketDetail {...techProps(closedWith())} />);
+    expect(screen.getByText(/ใบงานนี้ปิดงานแล้ว/)).toBeInTheDocument();
+    // One guard, not two: the money is frozen, the technician block is not.
+    expect(guards(container)).toBe(1);
+    expect(screen.getByText(/ยังกรอกจำนวนสินค้าที่ใช้จริงไม่ครบ/)).toBeInTheDocument();
+    expect(screen.getByLabelText('จำนวนที่ใช้จริง ฟิล์ม 3M CR70')).toBeInTheDocument();
+  });
+
+  it('freezes it once every quantity has been recorded', () => {
+    const { container } = render(
+      <TicketDetail {...techProps(closedWith({ items: [soldItem({ 'ฟิล์ม 3M CR70': 2 })] }))} />,
+    );
+    expect(guards(container)).toBe(2);
+    expect(screen.queryByRole('button', { name: /บันทึกข้อมูลของช่าง/ })).toBeNull();
+  });
+
+  it('opens it again when แก้งาน is ticked, without saving first', async () => {
+    // The tick is read from the DRAFT: ticking the box and reaching straight
+    // for the quantity is the whole point, not two saves and a reload.
+    const user = userEvent.setup();
+    const { container } = render(
+      <TicketDetail {...techProps(closedWith({ items: [soldItem({ 'ฟิล์ม 3M CR70': 2 })] }))} />,
+    );
+    expect(guards(container)).toBe(2);
+    await user.click(screen.getByLabelText('แก้งาน'));
+    expect(guards(container)).toBe(1);
+    expect(screen.getByText(/ติ๊ก "แก้งาน" ไว้/)).toBeInTheDocument();
+  });
+
+  it('saves the technician fields on their own, and nothing else', async () => {
+    const user = userEvent.setup();
+    const props = techProps(closedWith());
+    render(<TicketDetail {...props} />);
+
+    await user.type(screen.getByLabelText('จำนวนที่ใช้จริง ฟิล์ม 3M CR70'), '2');
+    await user.click(screen.getByRole('button', { name: /บันทึกข้อมูลของช่าง/ }));
+
+    expect(props.techAction).toHaveBeenCalledTimes(1);
+    const payload = props.techAction.mock.calls[0][0];
+    expect(payload).toMatchObject({ ticketId: 'JT-CM-00214', shop: 'cm' });
+    // One map per item, in the order the form loaded them.
+    expect(payload.actualQty).toEqual([{ 'ฟิล์ม 3M CR70': 2 }]);
+    // The whole-ticket save stays gone: this path cannot move a price.
+    expect(screen.queryByRole('button', { name: /^บันทึกใบงาน/ })).toBeNull();
+  });
+
+  it('is not offered on an open ticket — the ordinary save covers it', () => {
+    const { container } = render(
+      <TicketDetail {...techProps(makeTicket({ items: [soldItem()] }))} />,
+    );
+    expect(guards(container)).toBe(0);
+    expect(screen.queryByRole('button', { name: /บันทึกข้อมูลของช่าง/ })).toBeNull();
+  });
+});

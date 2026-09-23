@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
+import { NO_QTY_CATEGORY, qtyProducts } from '@/lib/domain/techQty';
 
 import { AttachmentField } from './AttachmentField';
 
@@ -316,7 +317,7 @@ export function TechSection({
                 setOptions={setTechnicians}
               />
             </div>
-            {cat !== 'งานบริการ' && (
+            {cat !== NO_QTY_CATEGORY && (
               <div>
                 <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>
                   จำนวนสินค้าที่ใช้จริง
@@ -340,14 +341,13 @@ export function TechSection({
                 </p>
                 {catItems.map((it) => {
                   const realIdx = t.items.indexOf(it);
-                  // A film item keeps its products in `positions`, and its `sold`
-                  // is a summary line ("บานหน้า: …, คู่หน้า: …"), not a product —
-                  // so the rows have to come from the positions, one per DISTINCT
-                  // product, with the positions it covers listed beside it.
+                  // One row per DISTINCT product — from the positions on a film
+                  // item, whose `sold` is a summary line ("บานหน้า: …, คู่หน้า: …")
+                  // rather than a product. `qtyProducts` is also what decides
+                  // whether this block stays open on a closed ticket, so the box
+                  // on screen and the row that rule counts are the same row.
                   const withPositions = it.positions && it.positions.length > 0;
-                  const products = withPositions
-                    ? [...new Set(it.positions!.map((p) => p.product).filter(Boolean))]
-                    : [it.sold].filter(Boolean);
+                  const products = qtyProducts(it);
                   return products.map((prod) => {
                     const stockMatch = stock.find((s) => s.name === prod);
                     const covers = withPositions
