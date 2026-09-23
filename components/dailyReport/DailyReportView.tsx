@@ -546,7 +546,10 @@ function SourceCard({
                       ⚠
                     </span>
                   )}
-                  <span className="text-xs ml-1.5" style={{ color: 'var(--ink-soft)' }}>
+                  <span
+                    className="text-xs ml-1.5 whitespace-nowrap"
+                    style={{ color: 'var(--ink-soft)' }}
+                  >
                     {r.count} รายการ
                   </span>
                 </td>
