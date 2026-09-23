@@ -84,7 +84,8 @@ describe('ServiceVisitsSection — each visit under its date', () => {
     expect(
       within(row(2)).getByRole('button', { name: /บันทึกการเซอร์วิสครั้งที่ 2/ }),
     ).toBeInTheDocument();
-    expect(within(row(3)).queryByRole('button', { name: /บันทึกการเซอร์วิส/ })).toBeNull();
+    // ครั้งที่ 3 is not on screen at all until ครั้งที่ 2 has been recorded.
+    expect(screen.queryByLabelText('วันนัด Service ครั้งที่ 3')).toBeNull();
     // No second, detached way in while the schedule covers the visit.
     expect(screen.queryByRole('button', { name: /บันทึกการเซอร์วิสครั้งใหม่/ })).toBeNull();
     // The blank sheet is still there for working on paper.

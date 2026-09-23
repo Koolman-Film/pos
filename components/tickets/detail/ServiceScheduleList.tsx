@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
+import { fmtThaiMonthYear } from '@/lib/domain/format';
 import {
   buildServiceSchedule,
   confirmServiceDate,
@@ -28,6 +29,13 @@ export type ServiceScheduleProps = {
  *
  * `onChange` receives the whole schedule — it is stored on the ticket as
  * `extras.Service.schedule`, which is editable even on a closed ticket (0022).
+ *
+ * Only what is settled is listed, plus ONE draft: the visit due next
+ * (ร้านขอ 23 ก.ย. 2569). A package of ten used to draw ten rows, so a car two
+ * visits in showed eight blank dates for appointments years out, and a ticket
+ * with no start date yet showed ten rows saying nothing at all — the counter
+ * could not see which one it was meant to act on. The schedule behind it is
+ * unchanged: every date is still computed, stored and read by the dashboard.
  */
 export function ServiceScheduleList({
   start,
@@ -50,6 +58,12 @@ export function ServiceScheduleList({
   if (schedule.length === 0) return null;
   const done = new Set(recordedVisitNos);
 
+  // Visits made, days the customer has already agreed to, and the next one due.
+  const nextNo = schedule.find((a) => !done.has(a.no))?.no ?? 0;
+  const shown = schedule.filter((a) => done.has(a.no) || a.confirmed || a.no === nextNo);
+  const later = schedule.length - shown.length;
+  const lastDate = schedule[schedule.length - 1]?.date ?? '';
+
   return (
     <div className="mt-3">
       <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ink-soft)' }}>
@@ -62,7 +76,7 @@ export function ServiceScheduleList({
           : 'ใส่วันที่เริ่มเข้า Service ก่อน ระบบจะร่างวันนัดแต่ละครั้งให้'}
       </p>
       <ul className="flex flex-col gap-1.5">
-        {schedule.map((s) => {
+        {shown.map((s) => {
           const visited = done.has(s.no);
           const visitBlock = renderVisit?.(s.no);
           const badge = visited
@@ -117,6 +131,17 @@ export function ServiceScheduleList({
           );
         })}
       </ul>
+      {later > 0 && (
+        <p className="text-xs mt-2" style={{ color: 'var(--ink-faint)' }}>
+          <i className="fa-regular fa-clock mr-1"></i>
+          เหลืออีก {later} ครั้ง · ระบบจะแสดงนัดครั้งถัดไปให้ทีละครั้ง หลังบันทึกการเซอร์วิสครั้งนี้
+          {lastDate
+            ? ` · ครบทั้ง ${schedule.length} ครั้งราวเดือน ${fmtThaiMonthYear(
+                new Date(`${lastDate}T00:00:00+07:00`),
+              )}`
+            : ''}
+        </p>
+      )}
     </div>
   );
 }
