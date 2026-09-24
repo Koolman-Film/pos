@@ -10,21 +10,42 @@ export type PayAccount = {
   id: number;
   shop: string;
   name: string;
-  /** money_accounts.kind — bank / cash / petty / credit. */
+  /** money_accounts.kind — bank / cash / edc / petty / credit. */
   kind: string;
   accountNo: string;
 };
 
 /**
+ * ประเภทที่ลูกค้าจ่ายเข้าไม่ได้ และเหตุผล.
+ *
+ * เงินสดย่อย is the counter's float — money goes OUT of it to buy things, and
+ * nobody pays a bill into it. บัตรเครดิตของร้าน is the shop's own card for
+ * paying suppliers; a customer's money cannot land on it either.
+ *
+ * Everything else can take a customer's money and so appears in every
+ * รับเงิน picker. The reason is here rather than inline in the filter because
+ * การจัดการเงิน/บัญชี prints it beside the account: an account quietly missing
+ * from the ใบงาน dropdown with nothing on screen to explain it cost the shop a
+ * morning (ร้านแจ้ง 24 ก.ย. 2569).
+ */
+export const NON_PAYABLE_REASON: Record<string, string> = {
+  petty: 'เงินสดย่อยเป็นเงินทอน/เงินสำรองของหน้าร้าน ลูกค้าจ่ายเข้าไม่ได้',
+  credit: 'บัตรเครดิตของร้านไว้จ่ายออก ไม่ใช่บัญชีรับเงินจากลูกค้า',
+};
+
+/** Why a customer cannot be sent to this account, or null when they can. */
+export function nonPayableReason(a: Pick<PayAccount, 'kind'>): string | null {
+  return NON_PAYABLE_REASON[a.kind] ?? null;
+}
+
+/**
  * The accounts a customer can actually be sent to.
  *
- * Not เงินสดย่อย — that is the counter's float, nobody pays into it — and not
- * บัตรเครดิตบริษัท, which is the shop's own card for paying bills. What is left
- * is where a customer's money can go: the bank accounts, and เงินสดหน้าร้าน for
- * a customer who will pay at the counter.
+ * เครื่องรูดบัตร counts: the customer's money genuinely lands there before it
+ * settles into the bank, which is what the shop's own EDC balance shows.
  */
 export function payableAccounts(accounts: PayAccount[], shop: string): PayAccount[] {
-  return accounts.filter((a) => a.shop === shop && a.kind !== 'petty' && a.kind !== 'credit');
+  return accounts.filter((a) => a.shop === shop && !nonPayableReason(a));
 }
 
 /** How the account reads on paper: its name, then its number when it has one. */

@@ -7,6 +7,7 @@ import { SavedToast } from '@/components/ui/SavedToast';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt, fmtThaiDayString, shortShopName } from '@/lib/domain/format';
 import { dateInputValue, todayValue } from '@/lib/domain/now';
+import { nonPayableReason } from '@/lib/domain/payAccount';
 import {
   byAccountOrder,
   type MoneyAccount,
@@ -57,11 +58,21 @@ export type ReconciliationRow = {
   note: string;
 };
 
+/*
+  ประเภทแหล่งเงิน — the labels say what the account is FOR, not just what it is.
+
+  "บัตรเครดิต" on its own was read as "the card machine at the counter", so a
+  shop filed its เครื่องรูดบัตร under it — and that kind is one customers cannot
+  pay into, so the account vanished from every รับเงิน dropdown with nothing on
+  screen saying why (ร้านแจ้ง 24 ก.ย. 2569). เครื่องรูดบัตร is its own kind now,
+  and the card the shop pays suppliers with says so in its name.
+*/
 const KINDS: { key: string; label: string }[] = [
   { key: 'bank', label: 'บัญชีธนาคาร' },
-  { key: 'cash', label: 'เงินสด' },
-  { key: 'petty', label: 'เงินสดย่อย' },
-  { key: 'credit', label: 'บัตรเครดิต' },
+  { key: 'cash', label: 'เงินสด (ลิ้นชักหน้าร้าน)' },
+  { key: 'edc', label: 'เครื่องรูดบัตร (รับเงินจากลูกค้า)' },
+  { key: 'petty', label: 'เงินสดย่อย (เงินสำรองไว้จ่าย)' },
+  { key: 'credit', label: 'บัตรเครดิตของร้าน (ไว้จ่ายออก)' },
 ];
 
 const blankAccount = (shop: string): SaveAccountInput => ({
@@ -510,6 +521,22 @@ export function MoneyModule({
                         {a.accountNo && (
                           <span className="text-xs ml-1.5" style={{ color: 'var(--ink-faint)' }}>
                             {a.accountNo}
+                          </span>
+                        )}
+                        {/*
+                          Said here because this is the only screen that can say
+                          it: the ใบงาน dropdown can only leave the account out,
+                          and an option that is simply absent teaches nobody
+                          anything (ร้านแจ้ง 24 ก.ย. 2569).
+                        */}
+                        {source && nonPayableReason(source) && (
+                          <span
+                            className="block text-xs mt-0.5"
+                            style={{ color: 'var(--ink-faint)' }}
+                            title={nonPayableReason(source) ?? undefined}
+                          >
+                            <i className="fa-regular fa-circle-xmark mr-1"></i>
+                            ไม่แสดงในช่องรับเงินของใบงาน/ขายส่ง — {nonPayableReason(source)}
                           </span>
                         )}
                       </td>

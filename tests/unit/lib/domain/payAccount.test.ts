@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
   defaultPayMethod,
+  nonPayableReason,
   payableAccounts,
   payAccountLine,
   type PayAccount,
@@ -28,10 +29,22 @@ describe('payableAccounts', () => {
     acc({ id: 3, name: 'เงินสดย่อย', kind: 'petty', accountNo: '' }),
     acc({ id: 4, name: 'บัตรเครดิตบริษัท', kind: 'credit', accountNo: '' }),
     acc({ id: 5, shop: 'cm' }),
+    acc({ id: 6, name: 'K-bank เครื่องรูด', kind: 'edc', accountNo: '80740799' }),
   ];
 
-  it('offers the branch’s bank accounts and its counter cash', () => {
-    expect(payableAccounts(all, 'north').map((a) => a.id)).toEqual([1, 2]);
+  it('offers the branch’s bank accounts, its counter cash and its card machine', () => {
+    // เครื่องรูดบัตร belongs here: the customer's money genuinely lands there
+    // before it settles into the bank (ร้านแจ้ง 24 ก.ย. 2569).
+    expect(payableAccounts(all, 'north').map((a) => a.id)).toEqual([1, 2, 6]);
+  });
+
+  it('keeps out the two nobody can pay into, and says why', () => {
+    expect(nonPayableReason(acc({ kind: 'petty' }))).toContain('เงินทอน');
+    expect(nonPayableReason(acc({ kind: 'credit' }))).toContain('จ่ายออก');
+    // The ones a customer CAN be sent to have no reason to show.
+    for (const kind of ['bank', 'cash', 'edc']) {
+      expect(nonPayableReason(acc({ kind }))).toBeNull();
+    }
   });
 
   it('never offers another branch’s account', () => {
