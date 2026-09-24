@@ -73,8 +73,10 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         customer_id: input.customerId,
         status: input.status,
         // null, not the empty string: the column is a date, and "no date
-        // agreed" is exactly what null means.
+        // agreed" is exactly what null means. วันที่ส่งของ the same way — blank
+        // means the goods have not gone out, which is not the same as a date.
         due_at: input.dueAt || null,
+        delivered_at: input.deliveredAt || null,
         note: input.note ?? '',
         sales_by: input.salesBy ?? '',
         ...(openedAt ? { created_at: openedAt } : {}),
@@ -103,6 +105,7 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
         customer_id: input.customerId,
         status: input.status,
         due_at: input.dueAt || null,
+        delivered_at: input.deliveredAt || null,
         note: input.note ?? '',
         sales_by: input.salesBy ?? '',
         ...(openedAt ? { created_at: openedAt } : {}),
@@ -307,10 +310,17 @@ async function moveOrderStock(
  * wholesale figure will be attributed to, which is why issuing the document
  * writes it rather than leaving it to somebody to remember.
  *
- * Written ONCE. A second ใบส่งของ is a reprint — the customer lost theirs —
- * and silently re-dating the sale because a page was printed again would move
- * revenue between months with nobody deciding to. Changing a delivery date that
- * is wrong is a deliberate edit, not a side effect of pressing print.
+ * THE DATE is written once. A second ใบส่งของ is a reprint — the customer lost
+ * theirs — and silently re-dating the sale because a page was printed again
+ * would move revenue between months with nobody deciding to. A date already on
+ * the PO also stands: the form carries วันที่ส่งของ of its own (ร้านขอ 24 ก.ย.
+ * 2569), and what the shop typed there is its own statement of when the goods
+ * went out. Changing a wrong date is a deliberate edit on the form.
+ *
+ * THE EVIDENCE is written every time. It used to ride along with the date in
+ * one guarded update, so issuing a ใบส่งของ for a PO that already had a date
+ * saved nothing at all — no ข้อมูลการจัดส่ง, no attachment, and the status left
+ * where it was — and said ok.
  *
  * Moves the PO to จัดส่งแล้ว at the same time, since that is what has happened.
  */
@@ -341,17 +351,25 @@ export async function recordOrderDelivery(
 
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  const { data: current, error: readError } = await supabase
+    .from('orders')
+    .select('shop_id, delivered_at')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (readError) return { ok: false, error: readError.message };
+  if (!current) return { ok: false, error: 'ไม่พบ PO นี้' };
+
+  const { error } = await supabase
     .from('orders')
     .update({
-      delivered_at: deliveredAt,
+      // The first date stands, whether it came from an earlier ใบส่งของ or
+      // from the field on the form.
+      ...(current.delivered_at ? {} : { delivered_at: deliveredAt }),
       status: 'จัดส่งแล้ว',
       delivery_note: deliveryNote.trim(),
       delivery_attachments: attachments,
     })
-    .eq('id', orderId)
-    .is('delivered_at', null)
-    .select('id, shop_id');
+    .eq('id', orderId);
   if (error) return { ok: false, error: error.message };
 
   /*
@@ -368,9 +386,8 @@ export async function recordOrderDelivery(
     with nobody the wiser until a stocktake.
   */
   let unmatched: string[] = [];
-  const delivered = data ?? [];
-  if (delivered.length > 0) {
-    const shopId = delivered[0].shop_id;
+  {
+    const shopId = current.shop_id;
     const { data: claimed } = await supabase
       .from('orders')
       .update({ stock_deducted_at: new Date().toISOString() })
@@ -398,14 +415,10 @@ export async function recordOrderDelivery(
       }
     }
   }
-  // No row updated means it already had a delivery date. Not an error: the
-  // document prints either way, and the first date stands.
-  if (delivered.length > 0) {
-    revalidatePath('/wholesale');
-    revalidatePath(`/wholesale/${orderId}`);
-    revalidatePath('/dashboard');
-    revalidatePath('/stock');
-  }
+  revalidatePath('/wholesale');
+  revalidatePath(`/wholesale/${orderId}`);
+  revalidatePath('/dashboard');
+  revalidatePath('/stock');
   return {
     ok: true,
     error:

@@ -143,3 +143,49 @@ describe('buildTrend — ขายส่งอยู่ในเส้นรา�
     expect(t.revenue[8]).toBe(0);
   });
 });
+
+/**
+ * ค้างรับ ตามวันที่ส่งของที่กรอกเอง (ร้านขอ 24 ก.ย. 2569).
+ *
+ * The shop drags a PO straight to ค้างชำระ without issuing a ใบส่งของ, which
+ * used to leave `deliveredAt` null — so the money was owed on screen, counted
+ * in ลูกหนี้, and missing from this card and from รายงานรายได้ both. The form
+ * carries วันที่ส่งของ of its own now, and filling it in is what puts the PO
+ * back into ค้างรับ.
+ */
+describe('buildWholesaleOverview — ค้างรับ ตามวันที่ส่งของ', () => {
+  const unpaid = { id: 'WS-NT-0010', status: 'ค้างชำระ', payments: [] };
+
+  it('leaves a ค้างชำระ PO out of ค้างรับ while no delivery date is written', () => {
+    const d = build([po({ ...unpaid, deliveredAt: null })])!;
+    expect(d.owing).toEqual({ count: 0, amount: 0 });
+    // The status chip still counts it, which is the mismatch the shop saw.
+    expect(d.statusCounts.find((s) => s.status === 'ค้างชำระ')?.count).toBe(1);
+  });
+
+  it('counts it the moment the delivery date is filled in', () => {
+    const d = build([po({ ...unpaid, deliveredAt: '2026-09-20' })])!;
+    expect(d.owing).toEqual({ count: 1, amount: 10000 });
+  });
+
+  it('gives the sales rep their own ค้างรับ back with it', () => {
+    // โหน่ง showed 0.00 against four unpaid POs, for this one reason.
+    const d = build([
+      po({ ...unpaid, deliveredAt: '2026-09-20', salesBy: 'โหน่ง' }),
+      po({
+        id: 'WS-NT-0011',
+        status: 'ค้างชำระ',
+        payments: [],
+        deliveredAt: null,
+        salesBy: 'โหน่ง',
+      }),
+    ])!;
+    expect(d.byRep.find((r) => r.name === 'โหน่ง')?.owing).toBe(10000);
+  });
+
+  it('does not count a PO that has been closed, dated or not', () => {
+    // ปิดงานแล้ว is not owed however the date reads.
+    const d = build([po({ ...unpaid, status: 'ปิดงานแล้ว', deliveredAt: '2026-09-20' })])!;
+    expect(d.owing).toEqual({ count: 0, amount: 0 });
+  });
+});

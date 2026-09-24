@@ -112,11 +112,16 @@ export type WsOrder = {
   customerId: number | null;
   status: string;
   /**
-   * วันที่ส่งของ — the date the sale is earned, set by issuing ใบส่งของ.
+   * วันที่ส่งของ — the date the sale is earned.
    *
-   * Empty means the goods have not gone out (or, on a PO from before
-   * migration 0045, that nobody wrote the date down). Wholesale sells on
-   * credit, so this and not the payment date is when the revenue belongs.
+   * Empty means the goods have not gone out. Wholesale sells on credit, so
+   * this and not the payment date is when the revenue belongs: it decides
+   * whether the PO shows in ค้างรับ on the dashboard and which month it falls
+   * in on รายงานรายได้.
+   *
+   * ออกใบส่งของ writes it, and so does the field on the form (ร้านขอ 24 ก.ย.
+   * 2569) — a PO moved straight to ค้างชำระ never went through the document
+   * and had no date at all, which left real money out of both reports.
    */
   deliveredAt?: string;
   /**

@@ -1326,6 +1326,36 @@ export function WholesaleDetail({
               เห็นเฉพาะในระบบ ไม่พิมพ์ลงเอกสารใด ๆ ที่ให้ลูกค้า
             </p>
           </div>
+          {/*
+            วันที่ส่งของ (ร้านขอ 24 ก.ย. 2569).
+
+            Wholesale earns the sale on DELIVERY, so this one date decides
+            whether the PO is in ค้างรับ on the dashboard and which month it
+            lands in on รายงานรายได้. It used to be written only by ออกใบส่งของ,
+            and a PO dragged straight to ค้างชำระ never got one — so the money
+            was owed on screen, counted in ลูกหนี้, and missing from both the
+            ค้างรับ card and the revenue report.
+
+            Typing it here does NOT move stock: taking goods off the shelf is
+            claimed by ออกใบส่งของ (0054), which is the step that knows what
+            physically left.
+          */}
+          <div className="mb-5">
+            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+              <i className="fa-solid fa-truck-fast mr-1.5"></i>วันที่ส่งของ
+            </label>
+            <ThaiDateInput
+              value={o.deliveredAt || ''}
+              onChange={(v) => field('deliveredAt', v)}
+              ariaLabel="วันที่ส่งของ"
+              className="field text-sm px-3 py-2 w-full"
+            />
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+              {o.deliveredAt
+                ? 'ของออกแล้วตามวันนี้ — PO ใบนี้เข้ายอดค้างรับบนแดชบอร์ด และเข้ารายงานรายได้ของเดือนนี้'
+                : 'เว้นว่าง = ยังไม่ได้ส่งของ PO ใบนี้จะยังไม่เข้ายอดค้างรับและยังไม่เข้ารายงานรายได้'}
+            </p>
+          </div>
           <div className="mb-5">
             <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
               <i className="fa-solid fa-calendar-check mr-1.5"></i>กำหนดชำระเงิน
