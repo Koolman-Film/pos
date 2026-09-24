@@ -17,6 +17,8 @@ import type {
   Ticket,
   TicketListRow,
 } from '@/components/tickets/types';
+import { CLAIM_VISIT, SERVICE_VISIT } from '@/components/tickets/types';
+import type { ServiceVisitKind } from '@/components/tickets/types';
 
 const OPTION_LISTS: OptionListName[] = [
   'booking_channels',
@@ -364,6 +366,7 @@ type DetailRow = {
 type ServiceVisitRow = {
   id: number;
   visit_no: number;
+  kind: string | null;
   plate: string;
   received_at: string | null;
   received_time: string;
@@ -397,7 +400,7 @@ async function loadServiceVisits(
   const { data } = await supabase
     .from('service_visits')
     .select(
-      'id, visit_no, plate, received_at, received_time, delivered_at, delivered_time, ' +
+      'id, visit_no, kind, plate, received_at, received_time, delivered_at, delivered_time, ' +
         'sales_by, qc_by, technicians, film_product, ' +
         'customer_waits, overall_ok, checks, notes, ' +
         'service_visit_points(seq, position, detail, note), ' +
@@ -408,6 +411,8 @@ async function loadServiceVisits(
 
   const visits = ((data ?? []) as unknown as ServiceVisitRow[]).map((v) => ({
     id: v.id,
+    // Rows written before 0067 have no kind of their own; they are all เซอร์วิส.
+    kind: (v.kind === CLAIM_VISIT ? CLAIM_VISIT : SERVICE_VISIT) as ServiceVisitKind,
     visitNo: v.visit_no,
     plate: v.plate,
     receivedAt: v.received_at ?? '',
@@ -439,13 +444,16 @@ async function loadServiceVisits(
 
   // A blank plate would count every other blank-plate ticket's visits as this
   // car's, so it reports only what this ticket carries.
-  let forPlate = visits.length;
+  // "รถคันนี้เซอร์วิสไปกี่ครั้ง" asks about SERVICES, so งานเคลมประกัน is left
+  // out of it (0067) — the same reason it does not count against the package.
+  let forPlate = visits.filter((v) => v.kind !== CLAIM_VISIT).length;
   if (plate.trim()) {
     const { count } = await supabase
       .from('service_visits')
       .select('id', { count: 'exact', head: true })
-      .eq('plate', plate);
-    forPlate = count ?? visits.length;
+      .eq('plate', plate)
+      .neq('kind', CLAIM_VISIT);
+    forPlate = count ?? forPlate;
   }
   return { visits, forPlate };
 }

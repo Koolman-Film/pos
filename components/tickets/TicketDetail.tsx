@@ -36,6 +36,7 @@ import { TechSection } from './detail/TechSection';
 import { VehicleInfoSection } from './detail/VehicleInfoSection';
 import { WrapOptionsSection } from './detail/WrapOptionsSection';
 import { WRAP_CATEGORY } from './wrapOptions';
+import { SERVICE_VISIT } from './types';
 import type {
   CarModel,
   CorporateBuyer,
@@ -499,6 +500,9 @@ export function TicketDetail({
       id: visit.id,
       ticketId: t.id,
       visit: {
+        // เซอร์วิส or เคลมประกัน (0067). The database defaults a missing kind to
+        // เซอร์วิส and refuses to change an existing visit's kind.
+        kind: visit.kind ?? SERVICE_VISIT,
         plate: t.plate,
         receivedAt: visit.receivedAt || null,
         receivedTime: visit.receivedTime,
@@ -1311,6 +1315,36 @@ export function TicketDetail({
                               onDelete={deleteInsurancePolicy}
                               onPrint={printInsuranceReceipt}
                               onPrintClaim={printInsuranceClaim}
+                            />
+                          )
+                    }
+                    claimVisits={
+                      /*
+                        งานเคลมประกัน (0067) — the way in that does not go through
+                        Service. A claim is not always part of a service and a
+                        car may hold cover with no Service package at all, so
+                        this sits under ประกัน, where the cover is.
+                      */
+                      isNew || !serviceVisitAction || carPolicies.length === 0
+                        ? undefined
+                        : () => (
+                            <ServiceVisitsSection
+                              t={t}
+                              claimOnly
+                              // Server-owned: from initialTicket, not the draft.
+                              visits={initialTicket.serviceVisits ?? []}
+                              visitsForPlate={initialTicket.serviceVisitsForPlate ?? 0}
+                              entitled={0}
+                              technicians={options.technicians}
+                              setTechnicians={opt('technicians')}
+                              currentUserName={currentUserName}
+                              filmProduct={initialTicket.serviceVisits?.[0]?.filmProduct ?? ''}
+                              assignedTechnicians={t.techByCategory?.['ฟิล์มกันรอย'] ?? []}
+                              canDelete={canDo('list.delete')}
+                              onSave={saveServiceVisit}
+                              onDelete={deleteServiceVisit}
+                              onPrint={printServiceSheet}
+                              policies={carPolicies}
                             />
                           )
                     }

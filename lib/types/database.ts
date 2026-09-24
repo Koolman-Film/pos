@@ -1174,6 +1174,7 @@ export type Database = {
           delivered_time: string
           film_product: string
           id: number
+          kind: string
           notes: string
           overall_ok: boolean | null
           plate: string
@@ -1194,6 +1195,7 @@ export type Database = {
           delivered_time?: string
           film_product?: string
           id?: never
+          kind?: string
           notes?: string
           overall_ok?: boolean | null
           plate?: string
@@ -1214,6 +1216,7 @@ export type Database = {
           delivered_time?: string
           film_product?: string
           id?: never
+          kind?: string
           notes?: string
           overall_ok?: boolean | null
           plate?: string
@@ -2099,7 +2102,7 @@ export type Database = {
       save_service_visit: {
         Args: {
           p_claim?: Json
-          p_id: number
+          p_id: number | null
           p_points: Json
           p_ticket_id: string
           p_visit: Json

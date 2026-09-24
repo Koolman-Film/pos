@@ -54,6 +54,10 @@ export type TicketExtra = {
 export type StatusHistoryEntry = { status: string; date: Date };
 
 /** One numbered row of จุดพิเศษลูกค้าต้องการแก้ไข on the service sheet. */
+export const SERVICE_VISIT = 'เซอร์วิส';
+export const CLAIM_VISIT = 'เคลมประกัน';
+export type ServiceVisitKind = typeof SERVICE_VISIT | typeof CLAIM_VISIT;
+
 export type ServiceVisitPoint = {
   seq: number;
   position: string;
@@ -72,7 +76,16 @@ export type ServiceVisitPoint = {
 export type ServiceVisit = {
   /** Absent until saved. */
   id?: number;
-  /** 1..N within the ticket, issued by the database. */
+  /**
+   * เซอร์วิส = ครั้งที่ลูกค้าซื้อไว้ · เคลมประกัน = มาเคลมอย่างเดียว (migration 0067).
+   *
+   * A เคลมประกัน visit is a real visit — who, when, which panel — but it is not
+   * one of the package's, so it does not count against ใช้ไป X / Y ครั้ง and is
+   * numbered in its own sequence. Absent means เซอร์วิส, which is what every
+   * visit recorded before 0067 was.
+   */
+  kind?: ServiceVisitKind;
+  /** 1..N within the ticket AND the kind, issued by the database. */
   visitNo: number;
   plate: string;
   receivedAt: string;

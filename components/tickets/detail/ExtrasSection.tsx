@@ -31,6 +31,7 @@ export function ExtrasSection({
   shareLink,
   insurance,
   serviceVisits,
+  claimVisits,
 }: {
   t: Ticket;
   extraOptions: string[];
@@ -51,6 +52,12 @@ export function ExtrasSection({
    * `serviceVisits`: a render prop keeps this component a pure form.
    */
   insurance?: () => React.ReactNode;
+  /**
+   * งานเคลมประกัน inside the ประกัน extra (0067) — a claim is not always part of
+   * a service, and a car may hold cover without ever having bought a Service
+   * package, so the way in cannot live only under Service.
+   */
+  claimVisits?: () => React.ReactNode;
   serviceVisits?: (args: {
     entitled: number;
     /** ชื่อสินค้าฟิล์มที่ขาย — the SKU name already states the thickness. */
@@ -120,6 +127,9 @@ export function ExtrasSection({
                 </button>
               </div>
               {ex.checked && name === 'ประกัน' && insurance && insurance()}
+              {ex.checked && name === 'ประกัน' && claimVisits && (
+                <div className="ml-6">{claimVisits()}</div>
+              )}
               {ex.checked && name === 'นอกสถานที่' && (
                 <div className="mt-2 ml-6 flex flex-col gap-2">
                   <input

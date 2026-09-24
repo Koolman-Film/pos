@@ -13,7 +13,14 @@ import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } fr
 
 import { ServiceScheduleList, type ServiceScheduleProps } from './ServiceScheduleList';
 
-import type { InsurancePolicy, ServiceVisit, ServiceVisitPoint, Ticket } from '../types';
+import { CLAIM_VISIT, SERVICE_VISIT } from '../types';
+import type {
+  InsurancePolicy,
+  ServiceVisit,
+  ServiceVisitKind,
+  ServiceVisitPoint,
+  Ticket,
+} from '../types';
 
 /**
  * ใบเซอร์วิส ลูกค้าหน้าร้าน — the record of visits the car actually made.
@@ -32,7 +39,9 @@ const empty = (
   currentUserName: string,
   filmProduct: string,
   assignedTechnicians: string[],
+  kind: ServiceVisitKind = SERVICE_VISIT,
 ): ServiceVisit => ({
+  kind,
   visitNo,
   plate: t.plate,
   receivedAt: dateInputValue(new Date()),
@@ -75,6 +84,7 @@ export function ServiceVisitsSection({
   onPrint,
   schedule,
   policies = [],
+  claimOnly = false,
 }: {
   t: Ticket;
   /**
@@ -103,8 +113,26 @@ export function ServiceVisitsSection({
   schedule?: ServiceScheduleProps;
   /** This car’s policies — what a visit may claim from (0059). */
   policies?: InsurancePolicy[];
+  /**
+   * งานเคลมประกันอย่างเดียว (0067) — for the ประกัน block, where there may be no
+   * Service package at all. Shows the claim visits and nothing else: no
+   * schedule, no entitlement, no way to start one that would eat a visit the
+   * customer paid for.
+   */
+  claimOnly?: boolean;
 }) {
-  const used = visits.length;
+  /*
+    งานเคลมประกันไม่กินสิทธิ์เซอร์วิส (ร้านขอ 24 ก.ย. 2569, migration 0067).
+
+    A claim is not always part of a service: the car may come in only to have a
+    claimed piece replaced. Counting that as one of the visits the customer
+    bought took their money. So the two kinds are counted, numbered and listed
+    separately, and only เซอร์วิส answers "ใช้ไปกี่ครั้ง".
+  */
+  const isClaim = (v: ServiceVisit) => v.kind === CLAIM_VISIT;
+  const serviceVisits = visits.filter((v) => !isClaim(v));
+  const claimVisits = visits.filter(isClaim);
+  const used = serviceVisits.length;
   const [draft, setDraft] = useState<ServiceVisit | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +140,28 @@ export function ServiceVisitsSection({
   function startNew() {
     setError(null);
     setDraft(empty(used + 1, t, currentUserName, filmProduct, assignedTechnicians));
+  }
+  /** A visit that only spends the cover — its own numbering, its own list. */
+  function startClaim() {
+    setError(null);
+    const blank = empty(
+      claimVisits.length + 1,
+      t,
+      currentUserName,
+      filmProduct,
+      assignedTechnicians,
+      CLAIM_VISIT,
+    );
+    // The claim IS the visit here, so the cover is picked already rather than
+    // asked for with a tickbox. The first policy that covers today; if none
+    // does, the form says why, as it does for a service visit.
+    const today = dateInputValue(new Date());
+    const cover = policies.find((p) => p.id && checkCover(p, today).ok);
+    setDraft(
+      cover?.id
+        ? { ...blank, claim: { policyId: cover.id, bigUsed: 0, smallUsed: 0, detail: '' } }
+        : blank,
+    );
   }
   function startEdit(v: ServiceVisit) {
     setError(null);
@@ -158,7 +208,8 @@ export function ServiceVisitsSection({
 
   async function remove(v: ServiceVisit) {
     if (!v.id) return;
-    if (!window.confirm(`ลบบันทึกการเซอร์วิสครั้งที่ ${v.visitNo}?\n\nลบแล้วกู้คืนไม่ได้`)) return;
+    const what = isClaim(v) ? 'งานเคลมประกัน' : 'บันทึกการเซอร์วิส';
+    if (!window.confirm(`ลบ${what}ครั้งที่ ${v.visitNo}?\n\nลบแล้วกู้คืนไม่ได้`)) return;
     const result = await onDelete(v.id);
     if (!result.ok) setError(result.error || 'ลบไม่สำเร็จ');
   }
@@ -183,10 +234,18 @@ export function ServiceVisitsSection({
     ? claimCover
       ? claimProblem(claimCover.check, claim.bigUsed, claim.smallUsed)
       : 'เลือกประกันที่ใช้เคลม'
-    : null;
+    : draft && isClaim(draft)
+      ? // Without it the record says nothing happened, and it is not a service
+        // either — the database refuses it for the same reason.
+        'งานเคลมประกันต้องระบุประกันที่ใช้เคลม'
+      : null;
 
   // นัดเข้า Service — present when the ticket sold visits with a start date.
-  const rows = schedule ? buildServiceSchedule(schedule.start, schedule.count, schedule.saved) : [];
+  // Never in the ประกัน block, which is about the cover and not the package.
+  const rows =
+    schedule && !claimOnly
+      ? buildServiceSchedule(schedule.start, schedule.count, schedule.saved)
+      : [];
   const scheduled = rows.length > 0;
 
   const card = (v: ServiceVisit) => (
@@ -197,7 +256,17 @@ export function ServiceVisitsSection({
     >
       <div className="min-w-0">
         <p className="text-xs font-semibold">
-          ครั้งที่ {v.visitNo}
+          {isClaim(v) ? 'งานเคลมครั้งที่' : 'ครั้งที่'} {v.visitNo}
+          {/* Said on the card, because the two are numbered separately and
+              "ครั้งที่ 1" twice on one ticket would otherwise read as a mistake. */}
+          {isClaim(v) && (
+            <span
+              className="ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-semibold"
+              style={{ background: '#EFE6F5', color: '#6B4C8A' }}
+            >
+              ไม่นับสิทธิ์เซอร์วิส
+            </span>
+          )}
           <span className="font-normal ml-1.5" style={{ color: 'var(--ink-soft)' }}>
             {v.receivedAt ? fmtThaiDate(new Date(v.receivedAt)) : 'ยังไม่ระบุวันที่'}
           </span>
@@ -216,7 +285,7 @@ export function ServiceVisitsSection({
         <button
           onClick={() => startEdit(v)}
           className="btn-outline text-xs px-2.5 py-1 rounded-lg"
-          aria-label={`แก้ไขการเซอร์วิสครั้งที่ ${v.visitNo}`}
+          aria-label={`แก้ไข${isClaim(v) ? 'งานเคลมประกัน' : 'การเซอร์วิส'}ครั้งที่ ${v.visitNo}`}
         >
           <i className="fa-solid fa-pen"></i>
         </button>
@@ -232,7 +301,7 @@ export function ServiceVisitsSection({
             onClick={() => remove(v)}
             className="text-xs px-2 rounded-lg"
             style={{ color: '#B23A48' }}
-            aria-label={`ลบการเซอร์วิสครั้งที่ ${v.visitNo}`}
+            aria-label={`ลบ${isClaim(v) ? 'งานเคลมประกัน' : 'การเซอร์วิส'}ครั้งที่ ${v.visitNo}`}
           >
             <i className="fa-solid fa-trash"></i>
           </button>
@@ -247,9 +316,12 @@ export function ServiceVisitsSection({
       style={{ background: '#fff', border: '1.5px solid var(--primary)' }}
     >
       <p className="text-xs font-bold mb-2.5">
-        {draft.id
-          ? `แก้ไขการเซอร์วิสครั้งที่ ${draft.visitNo}`
-          : `การเซอร์วิสครั้งที่ ${draft.visitNo}`}
+        {`${draft.id ? 'แก้ไข' : ''}${isClaim(draft) ? 'งานเคลมประกัน' : 'การเซอร์วิส'}ครั้งที่ ${draft.visitNo}`}
+        {isClaim(draft) && (
+          <span className="ml-1.5 font-normal" style={{ color: 'var(--ink-soft)' }}>
+            — ไม่นับเป็นสิทธิ์เซอร์วิสของลูกค้า
+          </span>
+        )}
       </p>
 
       <div className="grid grid-cols-2 gap-2 mb-2.5">
@@ -424,7 +496,7 @@ export function ServiceVisitsSection({
               )
             }
           />
-          ใช้ประกันเคลมในการเซอร์วิสครั้งนี้
+          {isClaim(draft) ? 'ประกันที่ใช้เคลม' : 'ใช้ประกันเคลมในการเซอร์วิสครั้งนี้'}
         </label>
         {!claim && !usableCover && (
           <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
@@ -580,7 +652,7 @@ export function ServiceVisitsSection({
           style={{ opacity: saving ? 0.7 : 1 }}
         >
           <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
-          {saving ? 'กำลังบันทึก...' : 'บันทึกการเซอร์วิส'}
+          {saving ? 'กำลังบันทึก...' : isClaim(draft) ? 'บันทึกงานเคลม' : 'บันทึกการเซอร์วิส'}
         </button>
       </div>
     </div>
@@ -589,7 +661,7 @@ export function ServiceVisitsSection({
   /** Under one date: the visit being written, the visit on record, or — for the next one due — the button to record it. */
   const slot = (no: number) => {
     if (draft?.visitNo === no) return form;
-    const recorded = visits.find((v) => v.visitNo === no);
+    const recorded = serviceVisits.find((v) => v.visitNo === no);
     if (recorded) return card(recorded);
     if (!draft && no === used + 1) {
       return (
@@ -608,12 +680,19 @@ export function ServiceVisitsSection({
     <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line)' }}>
       <div className="flex items-center justify-between gap-2 mb-2">
         <p className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
-          <i className="fa-solid fa-screwdriver-wrench mr-1.5"></i>ประวัติการเซอร์วิส
+          <i
+            className={`fa-solid ${claimOnly ? 'fa-shield-halved' : 'fa-screwdriver-wrench'} mr-1.5`}
+          ></i>
+          {claimOnly ? 'งานเคลมประกัน' : 'ประวัติการเซอร์วิส'}
           <span className="ml-1.5 font-normal" style={{ color: 'var(--ink-soft)' }}>
-            {entitled > 0 ? `ใช้ไป ${used} / ${entitled} ครั้ง` : `บันทึกแล้ว ${used} ครั้ง`}
+            {claimOnly
+              ? `บันทึกแล้ว ${claimVisits.length} ครั้ง`
+              : entitled > 0
+                ? `ใช้ไป ${used} / ${entitled} ครั้ง`
+                : `บันทึกแล้ว ${used} ครั้ง`}
           </span>
         </p>
-        {entitled > 0 && used >= entitled && (
+        {!claimOnly && entitled > 0 && used >= entitled && (
           <span
             className="text-xs px-2 py-0.5 rounded-full font-semibold"
             style={{ background: '#FBEAEC', color: '#B23A48' }}
@@ -623,7 +702,12 @@ export function ServiceVisitsSection({
         )}
       </div>
 
-      {!scheduled && visits.length === 0 && (
+      {claimOnly && claimVisits.length === 0 && (
+        <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
+          ยังไม่มีการเคลม — กดปุ่มข้างล่างเพื่อบันทึกการเคลม โดยไม่กินสิทธิ์เซอร์วิสของลูกค้า
+        </p>
+      )}
+      {!claimOnly && !scheduled && visits.length === 0 && (
         <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
           ยังไม่มีการเซอร์วิส
         </p>
@@ -639,11 +723,14 @@ export function ServiceVisitsSection({
           count={schedule.count}
           saved={schedule.saved}
           onChange={schedule.onChange}
-          recordedVisitNos={visits.map((v) => v.visitNo)}
+          recordedVisitNos={serviceVisits.map((v) => v.visitNo)}
           renderVisit={slot}
         />
       )}
-      {visits.filter((v) => !scheduled || v.visitNo > rows.length).map((v) => card(v))}
+      {(claimOnly
+        ? claimVisits
+        : visits.filter((v) => isClaim(v) || !scheduled || v.visitNo > rows.length)
+      ).map((v) => card(v))}
 
       {/* The car's own total, which is the question the shop actually asks. It
           differs from `used` whenever the plate has had more than one job. */}
@@ -665,13 +752,26 @@ export function ServiceVisitsSection({
       )}
 
       {!draft && (
-        <div className="flex gap-2">
-          {(!scheduled || used >= rows.length) && (
+        <div className="flex gap-2 flex-wrap">
+          {!claimOnly && (!scheduled || used >= rows.length) && (
             <button
               onClick={startNew}
               className="btn-outline flex-1 text-xs rounded-xl py-2 font-medium flex items-center justify-center gap-1.5"
             >
               <i className="fa-solid fa-plus"></i>บันทึกการเซอร์วิสครั้งใหม่
+            </button>
+          )}
+          {/*
+            งานเคลมประกัน (0067). Offered whenever the car has cover to spend,
+            whether or not it has a Service package and whether or not the
+            package is used up: a claim is the policy's, not the package's.
+          */}
+          {policies.length > 0 && (
+            <button
+              onClick={startClaim}
+              className="btn-outline flex-1 text-xs rounded-xl py-2 font-medium flex items-center justify-center gap-1.5"
+            >
+              <i className="fa-solid fa-shield-halved"></i>บันทึกงานเคลมประกัน
             </button>
           )}
           {/* Both ways of working, as asked: fill it in here, or take a blank
@@ -685,7 +785,7 @@ export function ServiceVisitsSection({
         </div>
       )}
 
-      {draft && (!scheduled || draft.visitNo > rows.length) && form}
+      {draft && (isClaim(draft) || !scheduled || draft.visitNo > rows.length) && form}
     </div>
   );
 }
