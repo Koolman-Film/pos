@@ -23,17 +23,24 @@ const REPORT: DailyReport = {
       {
         channel: 'ปลีก',
         total: 11500,
+        count: 3,
         categories: [
-          { name: 'ฟิล์มกรองแสง', amount: 7500 },
-          { name: 'เครื่องเสียง', amount: 4000 },
+          { name: 'ฟิล์มกรองแสง', amount: 7500, count: 2 },
+          { name: 'เครื่องเสียง', amount: 4000, count: 1 },
         ],
       },
-      { channel: 'ขายส่ง', total: 8000, categories: [{ name: 'ลำโพง', amount: 8000 }] },
+      {
+        channel: 'ขายส่ง',
+        total: 8000,
+        count: 1,
+        categories: [{ name: 'ลำโพง', amount: 8000, count: 1 }],
+      },
     ],
     total: 19500,
     previousTotal: 10000,
     held: 700,
     documents: 4,
+    outstanding: { count: 5, amount: 42300 },
   },
   inflow: {
     rows: [
@@ -83,6 +90,7 @@ function renderView() {
       shops={SHOPS}
       scopeName="ทุกสาขา"
       showShopColumn={false}
+      basePath="/daily-report"
     />,
   );
 }
@@ -93,17 +101,29 @@ describe('DailyReportView', () => {
   it('shows the four headline figures', () => {
     renderView();
     expect(screen.getAllByText('19,500.00').length).toBeGreaterThan(0);
-    expect(screen.getByText('▲ 95% จากเมื่อวาน')).toBeInTheDocument();
+    expect(screen.getByText('▲ 95% จากเมื่อวาน · 4 งาน')).toBeInTheDocument();
     expect(screen.getAllByText('+7,850.00').length).toBeGreaterThan(0);
   });
 
   it('splits sales into ขายปลีก and ขายส่ง, then by ชนิดสินค้า', () => {
     renderView();
-    const sales = screen.getByRole('heading', { name: /① ยอดขาย/ }).parentElement!;
+    const sales = screen
+      .getByRole('heading', { name: /① ยอดขาย/ })
+      .closest('.card')! as HTMLElement;
     expect(within(sales).getByText('ขายปลีก')).toBeInTheDocument();
     expect(within(sales).getByText('ขายส่ง')).toBeInTheDocument();
     expect(within(sales).getByText('ฟิล์มกรองแสง')).toBeInTheDocument();
     expect(within(sales).getByText(/เงินรอคืน Finnix 700.00/)).toBeInTheDocument();
+  });
+
+  it('shows how many jobs each line is, and the jobs still owed money', () => {
+    renderView();
+    const sales = screen.getByRole('heading', { name: /① ยอดขาย/ }).closest('.card') as HTMLElement;
+    const film = within(sales).getByText('ฟิล์มกรองแสง').closest('tr') as HTMLElement;
+    expect(within(film).getByText('2')).toBeInTheDocument();
+    const due = within(sales).getByText('งานขายค้างชำระ').closest('tr') as HTMLElement;
+    expect(within(due).getByText('5')).toBeInTheDocument();
+    expect(within(due).getByText('42,300.00')).toBeInTheDocument();
   });
 
   it('flags a label no account claims, and a negative balance', () => {

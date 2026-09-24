@@ -2,7 +2,14 @@ import { describe, it, expect } from 'vitest';
 
 import type { SalesReceipt } from '@/components/dashboard/cashSales';
 import type { MoneyAccount } from '@/components/dashboard/moneyFlow';
-import { buildDailyReport, nextDay, previousDay } from '@/components/dailyReport/buildDailyReport';
+import {
+  buildDailyReport,
+  nextDay,
+  outstandingOn,
+  previousDay,
+  statusOn,
+  type OutstandingJob,
+} from '@/components/dailyReport/buildDailyReport';
 
 /**
  * สรุปการเงินประจำวัน — what counts on the day, how it is grouped, and that the
@@ -90,18 +97,26 @@ describe('buildDailyReport', () => {
       {
         channel: 'ปลีก',
         total: 11500,
+        // JT-1 paid for film and audio, JT-2 for film: two jobs, not three lines.
+        count: 2,
         categories: [
-          { name: 'ฟิล์มกรองแสง', amount: 7500 },
-          { name: 'เครื่องเสียง', amount: 4000 },
+          { name: 'ฟิล์มกรองแสง', amount: 7500, count: 2 },
+          { name: 'เครื่องเสียง', amount: 4000, count: 1 },
         ],
       },
-      { channel: 'ขายส่ง', total: 8000, categories: [{ name: 'ฟิล์มกรองแสง', amount: 8000 }] },
+      {
+        channel: 'ขายส่ง',
+        total: 8000,
+        count: 1,
+        categories: [{ name: 'ฟิล์มกรองแสง', amount: 8000, count: 1 }],
+      },
     ]);
   });
 
   it('keeps เงินรอคืน Finnix out of ยอดขาย but reports it', () => {
     expect(report.sales.held).toBe(700);
-    expect(report.sales.documents).toBe(4);
+    // JT-1, JT-2, WS-1 — the รับแทน job is not a sale here.
+    expect(report.sales.documents).toBe(3);
   });
 
   it('carries yesterday for the comparison', () => {
@@ -165,5 +180,75 @@ describe('previousDay / nextDay', () => {
   it('crosses month and year ends', () => {
     expect(previousDay('2026-03-01')).toBe('2026-02-28');
     expect(nextDay('2026-12-31')).toBe('2027-01-01');
+  });
+});
+
+describe('งานขายค้างชำระ', () => {
+  const DUE = ['กำลัง QC ก่อนติดตั้ง', 'ออกใบงานแล้ว', 'กำลังติดตั้ง', 'รอส่งมอบ', 'ค้างชำระ'];
+  const job = (over: Partial<OutstandingJob>): OutstandingJob => ({
+    id: 'JT-1',
+    shop: 'cm',
+    held: false,
+    dropOff: '2026-09-20',
+    total: 10000,
+    payments: [],
+    history: [],
+    status: 'กำลังติดตั้ง',
+    ...over,
+  });
+
+  it('counts jobs in a due status that still owe money, by what was paid by the day', () => {
+    const r = outstandingOn(
+      [
+        job({ id: 'A', payments: [{ amount: 4000, on: '2026-09-21' }] }),
+        // Paid in full by the day.
+        job({ id: 'B', status: 'ค้างชำระ', payments: [{ amount: 10000, on: '2026-09-22' }] }),
+        // Paid in full, but only after the day — still owed on it.
+        job({ id: 'C', status: 'รอส่งมอบ', payments: [{ amount: 10000, on: '2026-09-24' }] }),
+        // Only booked, or already closed — not what the owners chase.
+        job({ id: 'D', status: 'จองแล้ว' }),
+        job({ id: 'E', status: 'ส่งมอบแล้ว' }),
+        // Booked after the day; collected for another shop.
+        job({ id: 'F', dropOff: '2026-09-24' }),
+        job({ id: 'G', held: true }),
+      ],
+      DUE,
+      '2026-09-23',
+      '2026-09-24',
+    );
+    expect(r).toEqual({ count: 2, amount: 16000 });
+  });
+
+  it('reads a past day from history, today from the job itself', () => {
+    const j = job({
+      status: 'ส่งมอบแล้ว',
+      history: [
+        { status: 'จองแล้ว', on: '2026-09-18' },
+        { status: 'กำลังติดตั้ง', on: '2026-09-20' },
+        { status: 'ส่งมอบแล้ว', on: '2026-09-24' },
+      ],
+    });
+    expect(statusOn(j, '2026-09-19', '2026-09-24')).toBe('จองแล้ว');
+    expect(statusOn(j, '2026-09-23', '2026-09-24')).toBe('กำลังติดตั้ง');
+    expect(statusOn(j, '2026-09-24', '2026-09-24')).toBe('ส่งมอบแล้ว');
+    // Before its first recorded status the job's status is unknown.
+    expect(statusOn(j, '2026-09-17', '2026-09-24')).toBeNull();
+    // No history at all: the current status is all there is.
+    expect(statusOn(job({ status: 'รอส่งมอบ' }), '2026-09-17', '2026-09-24')).toBe('รอส่งมอบ');
+  });
+
+  it('is scoped to the branches on the page', () => {
+    const r = buildDailyReport({
+      day: DAY,
+      shops: [shops[1]],
+      receipts: [],
+      accounts: [],
+      movements: [],
+      transfers: [],
+      jobs: [job({ shop: 'cm' }), job({ id: 'N', shop: 'north', total: 2500 })],
+      dueStatuses: DUE,
+      today: DAY,
+    });
+    expect(r.sales.outstanding).toEqual({ count: 1, amount: 2500 });
   });
 });

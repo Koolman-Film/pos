@@ -31,13 +31,81 @@ import {
 
 export type DailyShop = { id: string; name: string };
 
-export type CategoryAmount = { name: string; amount: number };
+/** `count` is how many ใบงาน / PO paid toward it — one job paying twice is one job. */
+export type CategoryAmount = { name: string; amount: number; count: number };
 
 export type ChannelSales = {
   channel: SalesReceipt['channel'];
   total: number;
+  count: number;
   categories: CategoryAmount[];
 };
+
+/**
+ * A retail job, as much of it as "is it still owed money on this day" needs.
+ *
+ * `history` is `ticket_status_history`, each change dated to the shop's day.
+ * `status` is the job's status now.
+ */
+export type OutstandingJob = {
+  id: string;
+  shop: string;
+  /** รับแทน Finnix — the money is another shop's, so it is not this one's debt. */
+  held: boolean;
+  /** วันที่รับงาน, `YYYY-MM-DD`. A job booked after the day did not exist yet. */
+  dropOff: string;
+  /** Items net of discount, plus ประกัน sold on the job by the day. */
+  total: number;
+  payments: { amount: number; on: string }[];
+  history: { status: string; on: string }[];
+  status: string;
+};
+
+export type Outstanding = { count: number; amount: number };
+
+/**
+ * สถานะของงาน ณ สิ้นวัน `day`.
+ *
+ * On the current day the job's own status is the answer. For a day in the past
+ * it is the last change recorded on or before it. The form that edits a whole
+ * ใบงาน saves a new status without writing history, so a past day can only be
+ * as right as the history is; a job with no history at all has only its
+ * current status to go on.
+ */
+export function statusOn(job: OutstandingJob, day: string, today: string): string | null {
+  if (day >= today) return job.status;
+  let found: string | null = null;
+  for (const h of job.history) if (h.on <= day) found = h.status;
+  if (found !== null) return found;
+  return job.history.length === 0 ? job.status : null;
+}
+
+/**
+ * งานขายค้างชำระ ณ สิ้นวัน — retail jobs still owed money that were, on that
+ * day, in one of `statuses`: work in hand or handed over unpaid. A job only
+ * booked, or already delivered and closed, is not what the owners chase.
+ */
+export function outstandingOn(
+  jobs: OutstandingJob[],
+  statuses: readonly string[],
+  day: string,
+  today: string,
+): Outstanding {
+  const wanted = new Set(statuses);
+  let count = 0;
+  let amount = 0;
+  for (const j of jobs) {
+    if (j.held || !j.dropOff || j.dropOff > day) continue;
+    const status = statusOn(j, day, today);
+    if (status === null || !wanted.has(status)) continue;
+    const paid = j.payments.filter((p) => p.on && p.on <= day).reduce((n, p) => n + p.amount, 0);
+    const due = satang(j.total - paid);
+    if (due <= 0) continue;
+    count += 1;
+    amount = satang(amount + due);
+  }
+  return { count, amount };
+}
 
 export type SourceRow = {
   /** `a<id>` for an account, `l<shop>:<label>` for a label nobody claims. */
@@ -71,8 +139,10 @@ export type DailyReport = {
     previousTotal: number;
     /** เงินรอคืน Finnix taken in today — in ② but never in ①. */
     held: number;
-    /** Distinct tickets / POs that paid today. */
+    /** Distinct tickets / POs whose payment today counts as sales. */
     documents: number;
+    /** งานขายค้างชำระ at the close of the day, in the statuses asked for. */
+    outstanding: Outstanding;
   };
   inflow: { rows: SourceRow[]; total: number };
   outflow: { rows: SourceRow[]; total: number };
@@ -99,14 +169,19 @@ export function nextDay(day: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+const jobsIn = (rows: SalesReceipt[]) => new Set(rows.map((r) => r.sourceId)).size;
+
 function salesFor(receipts: SalesReceipt[]): ChannelSales[] {
   return CHANNEL_ORDER.map((channel) => {
     const mine = receipts.filter((r) => r.channel === channel);
     const categories = [...new Set(mine.map((r) => r.category))]
-      .map((name) => ({ name, amount: sumReceipts(mine.filter((r) => r.category === name)) }))
+      .map((name) => {
+        const rows = mine.filter((r) => r.category === name);
+        return { name, amount: sumReceipts(rows), count: jobsIn(rows) };
+      })
       .filter((c) => c.amount !== 0)
       .sort((a, b) => b.amount - a.amount);
-    return { channel, total: sumReceipts(mine), categories };
+    return { channel, total: sumReceipts(mine), count: jobsIn(mine), categories };
   }).filter((c) => c.categories.length > 0);
 }
 
@@ -117,6 +192,12 @@ export function buildDailyReport(input: {
   accounts: MoneyAccount[];
   movements: MoneyMovement[];
   transfers: MoneyTransfer[];
+  /** Retail jobs for งานค้างชำระ; omitted, the line reads zero. */
+  jobs?: OutstandingJob[];
+  /** The statuses a job must be in, on the day, to count as ค้างชำระ. */
+  dueStatuses?: readonly string[];
+  /** The shop's today — past days read status from history. Defaults to `day`. */
+  today?: string;
 }): DailyReport {
   const { day, shops } = input;
   const inScope = new Set(shops.map((s) => s.id));
@@ -217,7 +298,13 @@ export function buildDailyReport(input: {
       total: sumReceipts(earned),
       previousTotal,
       held: sumReceipts(todays.filter((r) => r.held)),
-      documents: new Set(todays.map((r) => r.sourceId)).size,
+      documents: jobsIn(earned),
+      outstanding: outstandingOn(
+        (input.jobs ?? []).filter((j) => inScope.has(j.shop)),
+        input.dueStatuses ?? [],
+        day,
+        input.today ?? day,
+      ),
     },
     inflow: { rows: inflowRows, total: satang(inflowRows.reduce((n, r) => n + r.amount, 0)) },
     outflow: { rows: outflowRows, total: satang(outflowRows.reduce((n, r) => n + r.amount, 0)) },

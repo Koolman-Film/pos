@@ -50,6 +50,23 @@
   --change-before: #b23a48;
   --change-after: #3f6b33;
   --change-edit: #1e4fb8;
+  /* สรุปการเงินประจำวัน — one hue per question the page answers, taken from
+     what each already means in this app: blue is ยอดขาย (--revenue), green is
+     money received, violet is a แหล่งเงิน (--money-source), red is money owed.
+     ค่าใช้จ่าย takes a brick orange so it reads as money leaving without
+     borrowing the red that means a debt. Each ink clears AA on its own tint. */
+  --report-sales: #2563eb;
+  --report-sales-soft: #eef3fd;
+  --report-in: #2f7a4f;
+  --report-in-soft: #eaf4ee;
+  --report-out: #a24c22;
+  --report-out-soft: #fbefe8;
+  --report-bal: #5b2d7a;
+  --report-bal-soft: #f3edf7;
+  --report-net: #7a2333;
+  --report-net-soft: #f8eef0;
+  --report-due: #b23a48;
+  --report-due-soft: #fbeaec;
 }
 html[data-theme='dark'] {
   --primary: #b23a48;
@@ -81,6 +98,18 @@ html[data-theme='dark'] {
   --change-before: #f08a96;
   --change-after: #8fcb7a;
   --change-edit: #8db4ff;
+  --report-sales: #8db4ff;
+  --report-sales-soft: rgba(108, 155, 245, 0.12);
+  --report-in: #7cc79a;
+  --report-in-soft: rgba(124, 199, 154, 0.12);
+  --report-out: #e89a6f;
+  --report-out-soft: rgba(232, 154, 111, 0.12);
+  --report-bal: #b18ac9;
+  --report-bal-soft: rgba(177, 138, 201, 0.12);
+  --report-net: #e07a86;
+  --report-net-soft: rgba(224, 122, 134, 0.12);
+  --report-due: #f08a96;
+  --report-due-soft: rgba(240, 138, 150, 0.12);
 }
 * {
   box-sizing: border-box;
