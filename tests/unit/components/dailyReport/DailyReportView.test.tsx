@@ -11,7 +11,7 @@ import type { DailyReport } from '@/components/dailyReport/buildDailyReport';
 import { DailyReportView } from '@/components/dailyReport/DailyReportView';
 
 /**
- * สรุปการเงินประจำวัน — the screen. The arithmetic is pinned in
+ * รายงานการเงินรายวัน — the screen. The arithmetic is pinned in
  * buildDailyReport.test.ts; this pins that every section shows it, and that
  * the day and branch are URLs.
  */
@@ -90,7 +90,6 @@ function renderView() {
       shops={SHOPS}
       scopeName="ทุกสาขา"
       showShopColumn={false}
-      basePath="/daily-report"
     />,
   );
 }

@@ -50,6 +50,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
   */
   { id: 'revenue', label: 'รายได้', icon: 'fa-sack-dollar', href: '/revenue' },
   { id: 'money', label: 'การจัดการเงิน/บัญชี', icon: 'fa-vault', href: '/money' },
+  /*
+    รายงานการเงินรายวัน (migration 0066) — the owners' one-page daily brief.
+    Its own key so it can be given without the money register, and the money
+    register without it; แอดมิน and ผู้บริหาร by default.
+  */
+  {
+    id: 'dailyReport',
+    label: 'รายงานการเงินรายวัน',
+    icon: 'fa-file-invoice',
+    href: '/daily-report',
+  },
   { id: 'permissions', label: 'จัดการสิทธิ์', icon: 'fa-user-shield', href: '/permissions' },
   /*
     ประวัติการใช้งาน (migration 0061) — แอดมินเท่านั้น, as the shop decided on

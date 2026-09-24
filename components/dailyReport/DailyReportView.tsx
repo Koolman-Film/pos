@@ -17,7 +17,7 @@ import {
 } from './buildDailyReport';
 
 /**
- * สรุปการเงินประจำวัน — the screen and its printed page.
+ * รายงานการเงินรายวัน — the screen and its printed page.
  *
  * Everything is computed on the server (`buildDailyReport`); this only lays it
  * out and moves between days and branches by changing the URL. The printed copy
@@ -37,8 +37,7 @@ export function DailyReportView({
   shops,
   scopeName,
   showShopColumn,
-  basePath,
-  linksIntoPos = true,
+  linksToMoney = true,
 }: {
   report: DailyReport;
   today: string;
@@ -47,13 +46,12 @@ export function DailyReportView({
   scopeName: string;
   /** More than one branch on the page — name the branch beside each account. */
   showShopColumn: boolean;
-  /** The route this page is served at — moving between days stays on it. */
-  basePath: '/daily-report' | '/report';
   /**
-   * Whether the reader can go on into the POS from here. False on the
-   * standalone report, where every other path leads back to the report.
+   * Whether the reader may open การจัดการเงิน/บัญชี. The report has its own
+   * permission, so someone can see it without the money module; for them an
+   * account name is text, not a link to a page that would not open.
    */
-  linksIntoPos?: boolean;
+  linksToMoney?: boolean;
 }) {
   const router = useRouter();
   const mounted = useIsMounted();
@@ -61,7 +59,7 @@ export function DailyReportView({
 
   const go = (next: { d?: string; shop?: string }) => {
     const q = new URLSearchParams({ d: next.d ?? report.day, shop: next.shop ?? shopFilter });
-    router.push(`${basePath}?${q}`);
+    router.push(`/daily-report?${q}`);
   };
 
   const dateLabel = fmtThaiDateLong(new Date(`${report.day}T00:00:00+07:00`));
@@ -83,7 +81,7 @@ export function DailyReportView({
       {/* ------------------------------------------------------------ header -- */}
       <div className="flex items-end justify-between flex-wrap gap-3 mb-4">
         <div>
-          <h1 className="text-xl font-bold">สรุปการเงินประจำวัน</h1>
+          <h1 className="text-xl font-bold">รายงานการเงินรายวัน</h1>
           <p className="text-sm mt-0.5" style={muted}>
             {scopeName} · {dateLabel}
           </p>
@@ -192,12 +190,12 @@ export function DailyReportView({
         <div className="card p-3 mb-4 text-sm" style={{ borderLeft: '4px solid #B8860B' }}>
           <i className="fa-solid fa-triangle-exclamation mr-1.5" style={{ color: '#B8860B' }}></i>
           มีเงินที่บันทึกด้วยชื่อแหล่งเงินที่ยังไม่ได้ผูกกับบัญชีใด (ทำเครื่องหมาย ⚠) —{' '}
-          {linksIntoPos ? (
+          {linksToMoney ? (
             <Link href="/money" style={{ color: 'var(--primary)' }}>
               ไปผูกที่การจัดการเงิน/บัญชี
             </Link>
           ) : (
-            'ผูกได้ที่การจัดการเงิน/บัญชีในระบบ POS'
+            'ผู้ดูแลการจัดการเงิน/บัญชีผูกชื่อให้ได้'
           )}
         </div>
       )}
@@ -350,7 +348,7 @@ export function DailyReportView({
                     {b.accounts.map((a) => (
                       <tr key={a.accountId} style={{ borderBottom: '1px solid var(--line)' }}>
                         <td style={cell}>
-                          {linksIntoPos ? (
+                          {linksToMoney ? (
                             <Link href={`/money/${a.accountId}`} style={{ color: 'var(--ink)' }}>
                               {a.name}
                             </Link>
@@ -399,7 +397,7 @@ export function DailyReportView({
         createPortal(
           <div className="print-area">
             <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 2px' }}>
-              สรุปการเงินประจำวัน
+              รายงานการเงินรายวัน
             </h2>
             <p style={{ fontSize: 12, margin: '0 0 10px' }}>
               {scopeName} · {dateLabel}

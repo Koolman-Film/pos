@@ -204,7 +204,7 @@ export type DashboardProps = {
   canDo?: (capabilityKey: string) => boolean;
   /** `updateTicketStatus` Server Action; omitted renders the select read-only. */
   onUpdateTicketStatus?: (ticketId: string, newStatus: string) => Promise<void>;
-  /** Show the link to สรุปการเงินประจำวัน — gated on `money`, like the page. */
+  /** Show the link to รายงานการเงินรายวัน — gated on `dailyReport`, like the page. */
   canSeeDailyReport?: boolean;
 };
 
@@ -260,7 +260,7 @@ export function Dashboard({
             href="/daily-report"
             className="btn-outline text-xs px-3 py-2 rounded-lg font-medium"
           >
-            <i className="fa-solid fa-file-lines mr-1.5"></i>สรุปการเงินประจำวัน
+            <i className="fa-solid fa-file-lines mr-1.5"></i>รายงานการเงินรายวัน
           </Link>
         )}
       </div>

@@ -73,38 +73,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  /*
-    รายงานสำหรับผู้บริหาร on its own host (report.<domain>).
-
-    The owners asked for the daily report at a link of its own, apart from the
-    POS. It is the same deployment behind a second domain: sign-in stays here,
-    and every other page path is rewritten to /report — including /dashboard,
-    where sign-in lands — so nothing but the report can be reached from that
-    host. Static files (a dot in the last segment) pass through untouched.
-  */
-  if (isReportHost(request.headers.get('host')) && !isPublicPath) {
-    const last = pathname.split('/').pop() ?? '';
-    if (!pathname.startsWith('/report') && !last.includes('.')) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/report';
-      const rewritten = NextResponse.rewrite(url, { request });
-      // Keep whatever the session refresh above wrote, or the new token is lost
-      // — the cookies, and the no-store headers that must travel with them.
-      response.cookies.getAll().forEach((c) => rewritten.cookies.set(c));
-      for (const key of ['cache-control', 'expires', 'pragma']) {
-        const value = response.headers.get(key);
-        if (value) rewritten.headers.set(key, value);
-      }
-      return rewritten;
-    }
-  }
-
   return response;
-}
-
-/** `report.kool-man.com`, `report.localhost:3000` — any host whose first label is `report`. */
-export function isReportHost(host: string | null): boolean {
-  return (host ?? '').toLowerCase().startsWith('report.');
 }
 
 export const config = {

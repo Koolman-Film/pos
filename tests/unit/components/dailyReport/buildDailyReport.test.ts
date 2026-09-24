@@ -12,7 +12,7 @@ import {
 } from '@/components/dailyReport/buildDailyReport';
 
 /**
- * สรุปการเงินประจำวัน — what counts on the day, how it is grouped, and that the
+ * รายงานการเงินรายวัน — what counts on the day, how it is grouped, and that the
  * balance columns add up.
  */
 

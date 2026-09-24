@@ -8,7 +8,7 @@ import {
 } from '@/components/dashboard/moneyFlow';
 
 /**
- * สรุปการเงินประจำวัน — one day, one page, for the owners.
+ * รายงานการเงินรายวัน — one day, one page, for the owners.
  *
  * Four questions, each answered from rules that already exist elsewhere so the
  * page can never quote a figure another screen disagrees with:

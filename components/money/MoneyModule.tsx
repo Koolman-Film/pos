@@ -242,16 +242,11 @@ export function MoneyModule({
 
   return (
     <div className="fade-page">
-      <div className="mb-4 flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold">การจัดการเงิน/บัญชี</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--ink-soft)' }}>
-            แหล่งเงินของแต่ละสาขา ยอดตั้งต้น การโอนเงิน และการกระทบยอดกับเงินจริง
-          </p>
-        </div>
-        <Link href="/daily-report" className="btn-outline text-xs px-3 py-2 rounded-lg font-medium">
-          <i className="fa-solid fa-file-lines mr-1.5"></i>สรุปการเงินประจำวัน
-        </Link>
+      <div className="mb-4">
+        <h1 className="text-xl font-bold">การจัดการเงิน/บัญชี</h1>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--ink-soft)' }}>
+          แหล่งเงินของแต่ละสาขา ยอดตั้งต้น การโอนเงิน และการกระทบยอดกับเงินจริง
+        </p>
       </div>
 
       {shops.length > 1 && (

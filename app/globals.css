@@ -50,7 +50,7 @@
   --change-before: #b23a48;
   --change-after: #3f6b33;
   --change-edit: #1e4fb8;
-  /* สรุปการเงินประจำวัน — one hue per question the page answers, taken from
+  /* รายงานการเงินรายวัน — one hue per question the page answers, taken from
      what each already means in this app: blue is ยอดขาย (--revenue), green is
      money received, violet is a แหล่งเงิน (--money-source), red is money owed.
      ค่าใช้จ่าย takes a brick orange so it reads as money leaving without

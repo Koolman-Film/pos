@@ -17,14 +17,12 @@ import { createClient } from '@/lib/supabase/server';
 import { loadMoneyData } from '../money/data';
 
 /**
- * สรุปการเงินประจำวัน — everything the page shows, read and computed on the
- * server. Two routes render it: `/daily-report` inside the POS shell, and
- * `/report`, the same page on its own for the owners' report link.
+ * รายงานการเงินรายวัน — everything the page shows, read and computed on the
+ * server, for app/(app)/daily-report/page.tsx.
  *
- * Gated on `money`, not a nav key of its own: every figure after ① is a balance
- * or a movement from การจัดการเงิน/บัญชี, and a page that showed them to someone
- * the register is shut to would undo the reason that module has its own gate.
- * By default that is admin and exec — exactly who the report is for.
+ * Gated on its own nav key, `dailyReport` (migration 0066), granted to แอดมิน
+ * and ผู้บริหาร by default: it is the owners' page, and a shop can give it to a
+ * branch manager without also handing over the money register.
  *
  * The day and branch live in the URL (`?d=YYYY-MM-DD&shop=`) so a day's report
  * can be sent as a link and printed again later.
@@ -85,13 +83,13 @@ const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
  */
 const DUE_STATUS_LABELS = ['รอ QC', 'ออกใบงานแล้ว', 'กำลังติดตั้ง', 'รอส่งมอบ', 'ค้างชำระ'];
 
-export type DailyReportProps = Omit<ComponentProps<typeof DailyReportView>, 'basePath'>;
+export type DailyReportProps = ComponentProps<typeof DailyReportView>;
 
 export async function loadDailyReport(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<DailyReportProps> {
   const session = await getSessionContext();
-  if (!session.hasNav('money')) notFound();
+  if (!session.hasNav('dailyReport')) notFound();
 
   const one = (k: string) => {
     const v = sp[k];
@@ -315,5 +313,6 @@ export async function loadDailyReport(
     shops: accessibleShops,
     scopeName: shopFilter === 'all' ? 'ทุกสาขา' : (shops[0]?.name ?? ''),
     showShopColumn: shops.length > 1,
+    linksToMoney: session.hasNav('money'),
   };
 }
