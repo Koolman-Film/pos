@@ -440,7 +440,7 @@ export function TicketDetail({
   // Two ways to be refused, and the counter has to be told WHICH — "ออกไม่ได้"
   // with no reason is how a rule gets worked around.
   const taxBlockedReason = heldForFinnix
-    ? 'ใบงานนี้มีรายการที่เป็นเงินรับแทน Finnix ซึ่งไม่ใช่การขายของร้าน จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ หรือแยกรายการรับแทนไปเปิดใบงานของตัวเอง'
+    ? 'ใบงานนี้มีรายการที่เป็นรายได้ Finnix ซึ่งไม่ใช่การขายของร้าน จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ หรือแยกรายการของ Finnix ไปเปิดใบงานของตัวเอง'
     : `${shopName(t.shop)} ไม่ได้จดทะเบียนภาษีมูลค่าเพิ่ม จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ`;
 
   function changeDocType(dt: string) {

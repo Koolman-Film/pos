@@ -292,7 +292,7 @@ export function RevenueModule({
     // of the totals above.
     if (heldJobs.length) {
       groups.push({
-        sheetName: 'เงินรอคืน Finnix',
+        sheetName: 'รายได้ Finnix',
         rows: heldJobs.map((j) => ({
           วันที่ขาย: j.soldAt,
           ใบงาน: j.ticketId,
@@ -396,7 +396,7 @@ export function RevenueModule({
             it is a different pile, and the shop settles it separately. */}
         <div className="card p-4">
           <p className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-            เงินรอคืน Finnix
+            รายได้ Finnix
           </p>
           <p className="text-2xl font-extrabold" style={{ color: '#8A5A12' }}>
             {fmt(heldTotal)}
@@ -459,7 +459,7 @@ export function RevenueModule({
       {heldJobs.length > 0 && (
         <div className="card p-5 mb-4" style={{ borderLeft: '3px solid #8A5A12' }}>
           <div className="flex items-baseline justify-between gap-2 mb-1 flex-wrap">
-            <p className="text-sm font-semibold">เงินรอคืน Finnix ({heldJobs.length} ใบงาน)</p>
+            <p className="text-sm font-semibold">รายได้ Finnix ({heldJobs.length} ใบงาน)</p>
             <p className="text-lg font-extrabold" style={{ color: '#8A5A12' }}>
               {fmt(heldTotal)}
             </p>
@@ -510,7 +510,7 @@ export function RevenueModule({
               <tfoot>
                 <tr style={{ borderTop: '2px solid var(--line-strong)' }}>
                   <td className="py-2 text-xs font-semibold" colSpan={4}>
-                    รวมเงินรอคืน Finnix
+                    รวมรายได้ Finnix
                   </td>
                   <td
                     className="py-2 text-right font-extrabold whitespace-nowrap"
@@ -741,7 +741,7 @@ export function RevenueModule({
             </p>
             {heldJobs.length > 0 && (
               <p style={{ fontSize: 11 }}>
-                เงินรอคืน Finnix ในช่วงนี้ {heldJobs.length} ใบงาน รวม{' '}
+                รายได้ Finnix ในช่วงนี้ {heldJobs.length} ใบงาน รวม{' '}
                 {fmt(heldJobs.reduce((s, j) => s + j.amount, 0))} บาท — ไม่รวมในยอดข้างบน
               </p>
             )}

@@ -143,8 +143,8 @@ const COLUMNS: {
     // Its own group rather than sitting with ยอดค้าง: this one IS scoped to
     // the period, and the ค้าง columns deliberately are not.
     key: 'heldForFinnix',
-    label: 'รอคืน Finnix',
-    hint: 'รับเงินแทนร้านอื่นในช่วงนี้ ไม่นับเป็นยอดขายของสาขา',
+    label: 'รายได้ Finnix',
+    hint: 'รายได้ของ Finnix ที่รับเงินไว้ในช่วงนี้ ไม่นับเป็นยอดขายของสาขา',
     money: true,
     group: 'other',
   },

@@ -87,7 +87,7 @@ export function PaymentsSection({
           {(
             [
               ['รายได้', 'รายได้ของสาขา', 'fa-store'],
-              ['รับแทน', 'รับแทน Finnix', 'fa-hand-holding-dollar'],
+              ['รับแทน', 'รายได้ Finnix', 'fa-hand-holding-dollar'],
             ] as const
           ).map(([kind, label, icon]) => {
             // Neither is "on" while the lines disagree — pressing one then
@@ -116,11 +116,11 @@ export function PaymentsSection({
           {mixed ? (
             <>
               <i className="fa-solid fa-layer-group mr-1"></i>
-              ใบงานนี้แยกกัน — รายได้สาขา {fmt(ownTotal)} · รับแทน Finnix {fmt(heldTotal)}{' '}
+              ใบงานนี้แยกกัน — รายได้สาขา {fmt(ownTotal)} · รายได้ Finnix {fmt(heldTotal)}{' '}
               (ตั้งได้ทีละ รายการในหัวข้อ 2 · เงินที่รับมาจะถูกแบ่งตามสัดส่วนนี้)
             </>
           ) : held ? (
-            'ยอดนี้ไม่นับเป็นยอดขายของสาขา แต่จะขึ้นเป็น เงินรอคืน Finnix ในรายงานรายได้'
+            'ยอดนี้ไม่นับเป็นยอดขายของสาขา แต่จะขึ้นเป็น รายได้ Finnix ในรายงานรายได้'
           ) : (
             'นับรวมเป็นยอดขายของสาขาตามปกติ'
           )}

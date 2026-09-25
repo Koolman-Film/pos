@@ -436,7 +436,7 @@ export function ItemsSection({
                   )}
                 </div>
                 {/*
-                  รายการนี้เป็นรายได้ของสาขา หรือรับแทน Finnix (0068).
+                  รายการนี้เป็นรายได้ของสาขา หรือรายได้ Finnix (0068).
 
                   Under the price, because it is a question about this money:
                   one car can carry the branch's own film and another branch's
@@ -457,7 +457,7 @@ export function ItemsSection({
                       {(
                         [
                           ['รายได้', 'รายได้สาขา'],
-                          ['รับแทน', 'รับแทน Finnix'],
+                          ['รับแทน', 'รายได้ Finnix'],
                         ] as const
                       ).map(([kind, label]) => {
                         const on = (it.revenueKind ?? 'รายได้') === kind;

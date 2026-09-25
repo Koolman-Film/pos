@@ -591,7 +591,7 @@ describe('TicketDetail — รายได้ / รับแทน', () => {
     const saveAction = vi.fn(async () => ({ ok: true, id: 'JT-CM-00214' }));
     render(<TicketDetail {...baseProps(makeTicket())} saveAction={saveAction} />);
 
-    const held = screen.getByRole('button', { name: /รับแทน Finnix/ });
+    const held = screen.getByRole('button', { name: /รายได้ Finnix/ });
     const own = screen.getByRole('button', { name: /รายได้ของสาขา/ });
     expect(own).toHaveAttribute('aria-pressed', 'true');
     expect(held).toHaveAttribute('aria-pressed', 'false');
@@ -607,13 +607,13 @@ describe('TicketDetail — รายได้ / รับแทน', () => {
 });
 
 /**
- * ใบกำกับภาษีกับเงินที่รับแทน Finnix.
+ * ใบกำกับภาษีกับเงินที่รายได้ Finnix.
  *
  * A tax invoice asserts that THIS shop made the sale. A held ticket is another
  * Finnix shop's sale, so issuing one here would put a document into this shop's
  * tax position for money it never earned.
  */
-describe('TicketDetail — ล็อกใบกำกับภาษีเมื่อรับแทน Finnix', () => {
+describe('TicketDetail — ล็อกใบกำกับภาษีเมื่อรายได้ Finnix', () => {
   const TAX = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
 
   it('locks the tax invoice the moment the ticket becomes รับแทน', async () => {
@@ -622,7 +622,7 @@ describe('TicketDetail — ล็อกใบกำกับภาษีเม�
 
     expect(screen.getByRole('button', { name: TAX })).toBeEnabled();
 
-    await user.click(screen.getByRole('button', { name: /รับแทน Finnix/ }));
+    await user.click(screen.getByRole('button', { name: /รายได้ Finnix/ }));
     expect(screen.getByRole('button', { name: new RegExp(TAX) })).toBeDisabled();
     expect(screen.getByText(/จึงออกใบกำกับภาษีไม่ได้/)).toBeInTheDocument();
   });
@@ -633,7 +633,7 @@ describe('TicketDetail — ล็อกใบกำกับภาษีเม�
     render(<TicketDetail {...baseProps(makeTicket())} />);
 
     await user.click(screen.getByRole('button', { name: TAX }));
-    await user.click(screen.getByRole('button', { name: /รับแทน Finnix/ }));
+    await user.click(screen.getByRole('button', { name: /รายได้ Finnix/ }));
 
     expect(screen.getByRole('button', { name: /^ออก/ })).toHaveTextContent('ออกใบเสร็จรับเงิน');
   });
@@ -994,7 +994,7 @@ describe('TicketDetail — ข้อมูลของช่างหลัง�
 });
 
 /**
- * ใบงานเดียว มีทั้งรายได้สาขาและรับแทน Finnix (ร้านแจ้ง 25 ก.ย. 2569, migration 0068).
+ * ใบงานเดียว มีทั้งรายได้สาขาและรายได้ Finnix (ร้านแจ้ง 25 ก.ย. 2569, migration 0068).
  *
  * 0031 asked this once for the whole job. One car can carry the branch's own
  * film and another branch's wrap, so the answer belongs on the line — and the
@@ -1022,7 +1022,7 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
     const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
     render(<TicketDetail {...baseProps(twoItems())} saveAction={saveAction} />);
 
-    await user.click(screen.getByRole('button', { name: 'รับแทน Finnix รายการที่ 2' }));
+    await user.click(screen.getByRole('button', { name: 'รายได้ Finnix รายการที่ 2' }));
 
     // Neither whole-job button is on while the lines disagree, and the split is
     // spelled out rather than left for the report to reveal.
@@ -1031,7 +1031,7 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
       'false',
     );
     expect(screen.getByText(/ใบงานนี้แยกกัน/)).toHaveTextContent(
-      /รายได้สาขา 6,000.00 · รับแทน Finnix 4,000.00/,
+      /รายได้สาขา 6,000.00 · รายได้ Finnix 4,000.00/,
     );
 
     await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
@@ -1047,7 +1047,7 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
     const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
     render(<TicketDetail {...baseProps(twoItems())} saveAction={saveAction} />);
 
-    await user.click(screen.getByRole('button', { name: /รับแทน Finnix$/ }));
+    await user.click(screen.getByRole('button', { name: /รายได้ Finnix$/ }));
     await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
 
     const payload = saveAction.mock.calls[0][0];
@@ -1062,9 +1062,9 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
     render(<TicketDetail {...baseProps(twoItems())} />);
 
     expect(screen.getByRole('button', { name: 'ใบกำกับภาษี/ใบเสร็จรับเงิน' })).toBeEnabled();
-    await user.click(screen.getByRole('button', { name: 'รับแทน Finnix รายการที่ 2' }));
+    await user.click(screen.getByRole('button', { name: 'รายได้ Finnix รายการที่ 2' }));
     expect(screen.getByRole('button', { name: /ใบกำกับภาษี/ })).toBeDisabled();
-    expect(screen.getByText(/แยกรายการรับแทนไปเปิดใบงานของตัวเอง/)).toBeInTheDocument();
+    expect(screen.getByText(/แยกรายการของ Finnix ไปเปิดใบงานของตัวเอง/)).toBeInTheDocument();
   });
 
   it('รายการที่เพิ่มทีหลัง ตามฝั่งที่ใบงานตั้งไว้', async () => {
@@ -1075,7 +1075,7 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
     const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
     render(<TicketDetail {...baseProps(makeTicket())} saveAction={saveAction} />);
 
-    await user.click(screen.getByRole('button', { name: /รับแทน Finnix$/ }));
+    await user.click(screen.getByRole('button', { name: /รายได้ Finnix$/ }));
     await user.click(screen.getByRole('button', { name: /เพิ่มสินค้าในคันนี้/ }));
     await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
 

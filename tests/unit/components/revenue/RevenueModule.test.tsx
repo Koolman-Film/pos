@@ -180,14 +180,14 @@ describe('RevenueModule — กำไรขั้นต้น', () => {
 });
 
 /**
- * เงินรอคืน Finnix (migration 0031).
+ * รายได้ Finnix (migration 0031).
  *
  * Some jobs are taken here for another Finnix shop: the customer pays at this
  * counter, so the cash is real and on the ticket, but the takings are not this
  * branch's. Counting it as ยอดขาย overstates every figure on the page — and
  * disagrees with the dashboard, which leaves it out too.
  */
-describe('RevenueModule — เงินรอคืน Finnix', () => {
+describe('RevenueModule — รายได้ Finnix', () => {
   it('keeps held money out of ยอดขาย and reports it on its own', () => {
     renderModule([
       line({ amount: 30000 }),
@@ -204,7 +204,7 @@ describe('RevenueModule — เงินรอคืน Finnix', () => {
     const salesCard = screen.getByText('ยอดขายรวม').parentElement!;
     expect(within(salesCard).getByText('30,000.00')).toBeInTheDocument();
 
-    const heldCard = screen.getByText('เงินรอคืน Finnix').parentElement!;
+    const heldCard = screen.getByText('รายได้ Finnix').parentElement!;
     expect(within(heldCard).getByText('18,000.00')).toBeInTheDocument();
     expect(within(heldCard).getByText(/1 ใบงาน/)).toBeInTheDocument();
   });
@@ -220,7 +220,7 @@ describe('RevenueModule — เงินรอคืน Finnix', () => {
       }),
     ]);
 
-    const report = screen.getByText(/เงินรอคืน Finnix \(1 ใบงาน\)/).closest('div')!.parentElement!;
+    const report = screen.getByText(/รายได้ Finnix \(1 ใบงาน\)/).closest('div')!.parentElement!;
     expect(within(report).getByText('คุณ สมชาย')).toBeInTheDocument();
     expect(within(report).getByRole('link', { name: 'JT-CM-00301' })).toHaveAttribute(
       'href',
@@ -240,9 +240,9 @@ describe('RevenueModule — เงินรอคืน Finnix', () => {
 
   it('says nothing at all when the period holds none', () => {
     renderModule([line()]);
-    expect(screen.queryByText(/เงินรอคืน Finnix \(/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/รายได้ Finnix \(/)).not.toBeInTheDocument();
     // The card still shows, so the shop can see the figure is zero.
-    expect(screen.getByText('เงินรอคืน Finnix')).toBeInTheDocument();
+    expect(screen.getByText('รายได้ Finnix')).toBeInTheDocument();
     expect(screen.getByText('ไม่มีในช่วงนี้')).toBeInTheDocument();
   });
 });
