@@ -78,6 +78,7 @@ export function PaymentsSection({
     payments: (t.payments ?? []).map((p) => ({ amount: p.amount, method: p.method })),
     accounts: payAccounts,
     shop: t.shop,
+    ticketCreatedAt: t.createdAt,
   });
 
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
@@ -145,7 +146,7 @@ export function PaymentsSection({
         finished paying: before that the two sides cannot agree, and saying so
         on every deposit would be noise nobody reads.
       */}
-      {match.soldFinnix > 0 && match.settled && match.owedToFinnix !== 0 && (
+      {match.inScope && match.soldFinnix > 0 && match.settled && match.owedToFinnix !== 0 && (
         <div
           className="rounded-xl p-3 mb-3 text-xs"
           style={{ background: '#FBF1DA', color: '#8A5A12' }}

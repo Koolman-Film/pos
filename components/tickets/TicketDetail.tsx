@@ -426,21 +426,36 @@ export function TicketDetail({
    */
   const shopIsVatRegistered = !!shopInfo[t.shop]?.vatRegistered;
   /*
-    ANY held line blocks the tax invoice (0068).
+    ใบกำกับภาษีออกให้เฉพาะรายได้ของสาขา (ร้านแจ้ง 25 ก.ย. 2569).
 
-    Before, a job was all ours or all held, and a held one could not have a
-    ใบกำกับภาษี. A mixed job can now exist, and the document has no way to say
-    "these three lines are mine and that one is not" — issuing it would assert
-    a sale the shop did not make, which is the exact thing 0031 refused. So the
-    stricter reading wins, and the counter is told to split the job instead.
+    A tax invoice asserts that THIS shop made the sale and charged VAT on it,
+    so it carries the branch's lines and total only — Finnix's lines are simply
+    not on it (see the document itself in PrintJobSheet). A job with nothing of
+    the branch's on it has nothing to invoice at all, and that is the only case
+    the button is refused for. ใบเสร็จรับเงิน stays available for the whole
+    amount, because the customer really did pay it here.
   */
+  const branchTotal = t.items
+    .filter((i) => i.revenueKind !== 'รับแทน')
+    .reduce(
+      (n, i) =>
+        n +
+        itemNetPrice({
+          soldPrice: Number(i.soldPrice || 0),
+          discountType: i.discountType ?? undefined,
+          discountValue:
+            i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : undefined,
+        }),
+      0,
+    );
   const heldForFinnix =
-    t.revenueKind === 'รับแทน' || t.items.some((i) => i.revenueKind === 'รับแทน');
+    branchTotal <= 0 &&
+    (t.revenueKind === 'รับแทน' || t.items.some((i) => Number(i.soldPrice || 0) > 0));
   const taxDocBlocked = heldForFinnix || !shopIsVatRegistered;
   // Two ways to be refused, and the counter has to be told WHICH — "ออกไม่ได้"
   // with no reason is how a rule gets worked around.
   const taxBlockedReason = heldForFinnix
-    ? 'ใบงานนี้มีรายการที่เป็นรายได้ Finnix ซึ่งไม่ใช่การขายของร้าน จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ หรือแยกรายการของ Finnix ไปเปิดใบงานของตัวเอง'
+    ? 'ใบงานนี้ไม่มีรายการที่เป็นรายได้ของสาขา มีแต่รายได้ Finnix จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสร็จรับเงินได้ตามปกติ เต็มจำนวนที่ลูกค้าจ่าย'
     : `${shopName(t.shop)} ไม่ได้จดทะเบียนภาษีมูลค่าเพิ่ม จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ`;
 
   function changeDocType(dt: string) {

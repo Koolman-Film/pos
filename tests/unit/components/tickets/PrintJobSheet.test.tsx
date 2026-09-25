@@ -907,3 +907,52 @@ describe('ใบงานติดตั้ง — วันที่ของ�
     expect(document.body.textContent).toContain('วันที่รับงาน: 12 ส.ค. 2569');
   });
 });
+
+/**
+ * ใบกำกับภาษีออกให้เฉพาะรายได้ของสาขา (ร้านแจ้ง 25 ก.ย. 2569).
+ *
+ * A tax invoice asserts that THIS shop made the sale and charged VAT on it, so
+ * Finnix's lines are not on it and its total is the branch's. ใบเสร็จรับเงิน is
+ * the whole job — the customer really did hand that money over at this counter.
+ */
+describe('เอกสารการเงิน — รายได้สาขา กับ รายได้ Finnix', () => {
+  const mixed = makeTicket({
+    items: [
+      item({ category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม A', soldPrice: 6000, revenueKind: 'รายได้' }),
+      item({ category: 'ฟิล์มกันรอย', sold: 'TPU Finnix', soldPrice: 4000, revenueKind: 'รับแทน' }),
+    ],
+    payments: [{ type: 'ชำระเต็มจำนวน', method: 'เงินสด', amount: 10000, date: '2026-09-25' }],
+  });
+
+  const doc = (docType: string) =>
+    renderSheet(mixed, 'doc', { docType, total: 10000, paid: 10000, showCompanyInfo: true });
+
+  it('ใบกำกับภาษี พิมพ์เฉพาะรายการของสาขา และรวมยอดเฉพาะส่วนนั้น', () => {
+    doc('ใบกำกับภาษี/ใบเสร็จรับเงิน');
+    expect(screen.getByText('ฟิล์ม A')).toBeInTheDocument();
+    expect(screen.queryByText('TPU Finnix')).toBeNull();
+    // 6,000 — not the 10,000 the customer handed over.
+    expect(screen.getAllByText('6,000.00').length).toBeGreaterThan(0);
+    expect(screen.queryByText('10,000.00')).toBeNull();
+  });
+
+  it('ใบเสร็จรับเงิน พิมพ์ทั้งใบ เต็มจำนวนที่ลูกค้าจ่าย', () => {
+    doc('ใบเสร็จรับเงิน');
+    expect(screen.getByText('ฟิล์ม A')).toBeInTheDocument();
+    expect(screen.getByText('TPU Finnix')).toBeInTheDocument();
+    expect(screen.getAllByText('10,000.00').length).toBeGreaterThan(0);
+  });
+
+  it('ใบกำกับภาษีของใบงานที่เป็นของสาขาทั้งใบ ไม่เปลี่ยนไปจากเดิม', () => {
+    renderSheet(
+      makeTicket({
+        items: [item({ sold: 'ฟิล์ม A', soldPrice: 6000 })],
+        payments: [{ type: 'ชำระเต็มจำนวน', method: 'เงินสด', amount: 6000, date: '2026-09-25' }],
+      }),
+      'doc',
+      { docType: 'ใบกำกับภาษี/ใบเสร็จรับเงิน', total: 6000, paid: 6000, showCompanyInfo: true },
+    );
+    expect(screen.getByText('ฟิล์ม A')).toBeInTheDocument();
+    expect(screen.getAllByText('6,000.00').length).toBeGreaterThan(0);
+  });
+});

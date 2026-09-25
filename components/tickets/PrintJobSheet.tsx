@@ -116,6 +116,18 @@ function bi(th: string, en: string) {
 /** The one document that puts a sale into the shop’s tax position. */
 export const TAX_DOC_TYPE = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
 
+/** A ticket line in the shape `itemNetPrice` wants. */
+const numeric = (i: {
+  soldPrice: number | string;
+  discountType?: 'percent' | 'amount' | null;
+  discountValue?: number | string;
+}) => ({
+  soldPrice: Number(i.soldPrice || 0),
+  discountType: i.discountType ?? undefined,
+  discountValue:
+    i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : undefined,
+});
+
 export function docPrefixFor(docType: string): string {
   if (docType === 'ใบเสนอราคา') return 'QT';
   if (docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') return 'INV';
@@ -2083,12 +2095,36 @@ export function PrintJobSheet({
   } else if (printMode === 'doc') {
     // Every row's price BEFORE its discount, so "ส่วนลดรวม" has something to be
     // subtracted from — `total` is already net.
-    const grossTotal = t.items
+    const isTaxInvoice = docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+    /*
+      ใบกำกับภาษีออกให้เฉพาะรายได้ของสาขา (ร้านแจ้ง 25 ก.ย. 2569).
+
+      A tax invoice asserts that THIS shop made the sale and charged VAT on it,
+      so Finnix's lines have no business on it — the shop did not sell them and
+      cannot invoice tax for them. It carries the branch's lines and the
+      branch's total, and nothing else.
+
+      ใบเสร็จรับเงิน is the whole job: the customer really did hand that money
+      over at this counter, whoever ends up with it, and they are owed a receipt
+      for what they paid.
+    */
+    const docItems = isTaxInvoice ? t.items.filter((i) => i.revenueKind !== 'รับแทน') : t.items;
+    const docTotal = isTaxInvoice
+      ? docItems.filter((i) => i.sold).reduce((n, i) => n + itemNetPrice(numeric(i)), 0)
+      : total;
+    const grossTotal = docItems
       .filter((i) => i.sold)
       .reduce((s, i) => s + Number(i.soldPrice || 0), 0);
-    const totalDiscount = grossTotal - total;
-    const isTaxInvoice = docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
+    const totalDiscount = grossTotal - docTotal;
     const isQuotation = docType === 'ใบเสนอราคา';
+    /*
+      A tax invoice for 6,000 must not say 10,000 has been paid on it. The
+      customer's money buys a share of each line as it comes in — the same
+      proportional split the dashboard uses, and the only answer available when
+      one payment covers the whole car — so the branch's share of what has been
+      paid is what this document is settled by.
+    */
+    const docPaid = isTaxInvoice && total > 0 ? (paid * docTotal) / total : paid;
     const docPrefix = docPrefixFor(docType);
     // Only the channels money actually arrived by, in the order it arrived.
     // The shop's full list used to print with empty boxes beside the unused
@@ -2098,7 +2134,7 @@ export function PrintJobSheet({
     const usedChannels = [...new Set(receivedPayments.map((p) => p.method).filter(Boolean))];
 
     // One row per product, with the positions it covers folded into a quantity.
-    const lines = t.items
+    const lines = docItems
       .filter((i) => i.sold)
       .flatMap((i) => {
         if (i.positions && i.positions.length) {
@@ -2314,10 +2350,10 @@ export function PrintJobSheet({
               {totalDiscount > 0 && totalRow(bi('ยอดรวม', 'Subtotal'), fmt(grossTotal))}
               {totalDiscount > 0 && totalRow(bi('ส่วนลดรวม', 'Discount'), `-${fmt(totalDiscount)}`)}
               {isTaxInvoice &&
-                totalRow(bi('มูลค่าก่อนภาษี', 'Amount before VAT'), fmt(total / 1.07))}
+                totalRow(bi('มูลค่าก่อนภาษี', 'Amount before VAT'), fmt(docTotal / 1.07))}
               {isTaxInvoice &&
-                totalRow(bi('ภาษีมูลค่าเพิ่ม 7%', 'VAT 7%'), fmt(total - total / 1.07))}
-              {totalRow(bi('ยอดรวมสุทธิ', 'Grand Total'), fmt(total), true)}
+                totalRow(bi('ภาษีมูลค่าเพิ่ม 7%', 'VAT 7%'), fmt(docTotal - docTotal / 1.07))}
+              {totalRow(bi('ยอดรวมสุทธิ', 'Grand Total'), fmt(docTotal), true)}
               <p
                 style={{
                   margin: '4px 0 0',
@@ -2327,7 +2363,7 @@ export function PrintJobSheet({
                   paddingRight: 10,
                 }}
               >
-                ( {thaiBahtText(total)} )
+                ( {thaiBahtText(docTotal)} )
               </p>
             </div>
           </div>
@@ -2412,11 +2448,11 @@ export function PrintJobSheet({
                   </p>
                 ))}
                 <p style={{ margin: '5px 0 0', fontWeight: 'bold' }}>
-                  {total - paid <= 0 ? (
+                  {docTotal - docPaid <= 0 ? (
                     bi('ชำระครบแล้ว', 'Paid in full')
                   ) : (
                     <>
-                      {bi('คงเหลือ', 'Balance due')} {fmt(total - paid)} บาท
+                      {bi('คงเหลือ', 'Balance due')} {fmt(docTotal - docPaid)} บาท
                     </>
                   )}
                 </p>

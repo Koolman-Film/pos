@@ -833,16 +833,22 @@ export async function recordTicketDocument(input: {
       .eq('id', input.ticketId)
       .maybeSingle();
     /*
-      ANY held line refuses it (0068), not just a wholly-held job. The document
-      cannot say "these lines are mine and that one is not", so issuing it for
-      a mixed job would assert a sale this shop did not make — the exact thing
-      0031 refused. Read from the LINES, which is where the answer lives now.
+      ใบกำกับภาษีออกให้เฉพาะรายได้ของสาขา (ร้านแจ้ง 25 ก.ย. 2569).
+
+      The document itself carries the branch's lines and total only, so a MIXED
+      job is fine — Finnix's lines are simply not on it. What is refused is a
+      job with nothing of the branch's on it at all, which has nothing to
+      invoice. Read from the LINES, which is where the answer lives (0068).
     */
-    const heldLines = (ticket?.ticket_items ?? []).some((i) => i.revenue_kind === 'รับแทน');
-    if (ticket?.revenue_kind === 'รับแทน' || heldLines) {
+    const docLines = ticket?.ticket_items ?? [];
+    const nothingOfOurs =
+      docLines.length > 0
+        ? docLines.every((i) => i.revenue_kind === 'รับแทน')
+        : ticket?.revenue_kind === 'รับแทน';
+    if (nothingOfOurs) {
       return {
         ok: false,
-        error: 'ใบงานนี้มีรายการที่เป็นเงินรับแทน Finnix จึงออกใบกำกับภาษีไม่ได้',
+        error: 'ใบงานนี้ไม่มีรายการที่เป็นรายได้ของสาขา จึงออกใบกำกับภาษีไม่ได้',
       };
     }
 

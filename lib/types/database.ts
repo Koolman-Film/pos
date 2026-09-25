@@ -514,6 +514,7 @@ export type Database = {
           name: string
           opened_at: string
           owner: string
+          owner_set_at: string
           opening_balance: number
           shop_id: string
           sort_order: number
@@ -528,6 +529,7 @@ export type Database = {
           name: string
           opened_at?: string
           owner?: string
+          owner_set_at?: string
           opening_balance?: number
           shop_id: string
           sort_order?: number
@@ -542,6 +544,7 @@ export type Database = {
           name?: string
           opened_at?: string
           owner?: string
+          owner_set_at?: string
           opening_balance?: number
           shop_id?: string
           sort_order?: number

@@ -25,6 +25,12 @@ import { accountForLabel, ownerOf, FINNIX_OWNER, type PayAccount } from '@/lib/d
  * sides cannot match, and saying so would be noise on every deposit. The gap is
  * only meaningful once the money is all in — which `settled` reports, and the
  * screen uses to decide whether to say anything at all.
+ *
+ * ใบงานเดิมไม่ถูกนำมาจับคู่ (ร้านขอ 25 ก.ย. 2569, migration 0070). A job opened
+ * before the shop marked its Finnix accounts was recorded under rules that did
+ * not include this one, and its money was reconciled by hand at the time.
+ * Judging it now would put a red box on work nobody is going to redo —
+ * `inScope` is false for those, and the screen stays quiet.
  */
 
 export type MatchItem = {
@@ -51,6 +57,8 @@ export type FinnixMatch = {
   paidUnknown: number;
   /** The customer has paid the whole job. */
   settled: boolean;
+  /** The ticket is new enough for this question to be a fair one to ask. */
+  inScope: boolean;
   /**
    * เงินของ Finnix ที่อยู่ผิดที่ — positive when Finnix's money is sitting in a
    * branch account and has to go back, negative when the branch's money went
@@ -74,13 +82,26 @@ export function matchFinnixMoney({
   payments,
   accounts,
   shop,
+  ticketCreatedAt,
 }: {
   items: MatchItem[];
   payments: MatchPayment[];
   /** The branch's แหล่งเงิน, each carrying whose money it holds. */
   accounts: PayAccount[];
   shop: string;
+  /** `tickets.created_at`. Absent on an unsaved draft, which is as new as it gets. */
+  ticketCreatedAt?: string;
 }): FinnixMatch {
+  /*
+    The branch started answering "whose money is this account's?" on the day
+    its first account was stamped. A ticket opened before that predates the
+    question, so it is left alone.
+  */
+  const knownFrom = accounts
+    .filter((a) => a.shop === shop && a.ownerSetAt)
+    .map((a) => a.ownerSetAt!)
+    .sort()[0];
+  const inScope = !ticketCreatedAt || !knownFrom || ticketCreatedAt >= knownFrom;
   const priced = items.filter((i) => Number(i.soldPrice || 0) > 0);
   const soldFinnix = satang(
     priced.filter((i) => i.revenueKind === 'รับแทน').reduce((n, i) => n + money(i), 0),
@@ -111,6 +132,7 @@ export function matchFinnixMoney({
     paidFinnix: satang(paidFinnix),
     paidUnknown: satang(paidUnknown),
     settled: paidTotal >= satang(soldOwn + soldFinnix) && paidTotal > 0,
+    inScope,
     owedToFinnix: satang(soldFinnix - paidFinnix),
   };
 }

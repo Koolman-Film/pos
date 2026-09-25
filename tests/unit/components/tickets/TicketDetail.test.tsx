@@ -1055,16 +1055,26 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
     expect(payload.revenueKind).toBe('รับแทน');
   });
 
-  it('มีรายการรับแทนปนอยู่ ก็ออกใบกำกับภาษีไม่ได้', async () => {
-    // The document cannot say "these lines are mine and that one is not", so
-    // issuing it would assert a sale this shop did not make.
+  it('มีรายการ Finnix ปนอยู่ ยังออกใบกำกับภาษีได้ — เอกสารออกให้เฉพาะส่วนของสาขา', async () => {
+    // ร้านแจ้ง 25 ก.ย. 2569: a tax invoice is for what the branch sold. Finnix's
+    // lines are left off it rather than the whole document being refused.
     const user = userEvent.setup();
     render(<TicketDetail {...baseProps(twoItems())} />);
 
-    expect(screen.getByRole('button', { name: 'ใบกำกับภาษี/ใบเสร็จรับเงิน' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'รายได้ Finnix รายการที่ 2' }));
+    expect(screen.getByRole('button', { name: 'ใบกำกับภาษี/ใบเสร็จรับเงิน' })).toBeEnabled();
+  });
+
+  it('ไม่มีรายการของสาขาเลย จึงออกใบกำกับภาษีไม่ได้', async () => {
+    // Nothing of the branch's to invoice. The receipt is still available for
+    // the whole amount, because the customer did pay it here.
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(twoItems())} />);
+
+    await user.click(screen.getByRole('button', { name: /รายได้ Finnix$/ }));
     expect(screen.getByRole('button', { name: /ใบกำกับภาษี/ })).toBeDisabled();
-    expect(screen.getByText(/แยกรายการของ Finnix ไปเปิดใบงานของตัวเอง/)).toBeInTheDocument();
+    expect(screen.getByText(/ไม่มีรายการที่เป็นรายได้ของสาขา/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' })).toBeEnabled();
   });
 
   it('รายการที่เพิ่มทีหลัง ตามฝั่งที่ใบงานตั้งไว้', async () => {

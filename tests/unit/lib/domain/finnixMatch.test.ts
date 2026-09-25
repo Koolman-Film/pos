@@ -112,3 +112,51 @@ describe('matchFinnixMoney', () => {
     expect(m).toMatchObject({ soldFinnix: 0, owedToFinnix: 0, settled: true });
   });
 });
+
+/**
+ * ใบงานเดิมไม่ถูกนำมาจับคู่ (ร้านขอ 25 ก.ย. 2569, migration 0070).
+ *
+ * A job opened before the shop marked its Finnix accounts was recorded under
+ * rules that did not include this one, and its money was settled by hand at the
+ * time. Judging it now would put a red box on work nobody is going to redo.
+ */
+describe('matchFinnixMoney — เฉพาะใบงานที่เปิดหลังตั้งค่า', () => {
+  const stamped = accounts.map((a) => ({ ...a, ownerSetAt: '2026-09-25T00:00:00Z' }));
+  const wrongAccount = [{ amount: 10000, method: 'เงินสดหน้าร้าน' }];
+
+  const at = (ticketCreatedAt?: string) =>
+    matchFinnixMoney({
+      items: SOLD,
+      payments: wrongAccount,
+      accounts: stamped,
+      shop: 'cm',
+      ticketCreatedAt,
+    });
+
+  it('ใบงานที่เปิดก่อนวันตั้งค่า ไม่ถูกจับคู่', () => {
+    const m = at('2026-09-01T10:00:00Z');
+    expect(m.inScope).toBe(false);
+    // The numbers are still computed; the screen is what stays quiet.
+    expect(m.owedToFinnix).toBe(4000);
+  });
+
+  it('ใบงานที่เปิดหลังวันตั้งค่า ถูกจับคู่ตามปกติ', () => {
+    expect(at('2026-09-26T10:00:00Z').inScope).toBe(true);
+  });
+
+  it('ใบงานใหม่ที่ยังไม่ได้บันทึก ถือว่าใหม่ที่สุด', () => {
+    expect(at(undefined).inScope).toBe(true);
+  });
+
+  it('สาขาที่ยังไม่เคยตั้งค่าเจ้าของบัญชี ไม่ปิดกั้นใบงานไหน', () => {
+    // Nothing stamped means nothing to compare against, not "everything old".
+    const m = matchFinnixMoney({
+      items: SOLD,
+      payments: wrongAccount,
+      accounts,
+      shop: 'cm',
+      ticketCreatedAt: '2020-01-01T00:00:00Z',
+    });
+    expect(m.inScope).toBe(true);
+  });
+});

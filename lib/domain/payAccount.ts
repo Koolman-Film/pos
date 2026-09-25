@@ -27,6 +27,14 @@ export type PayAccount = {
   owner?: AccountOwner;
   /** ชื่ออื่นที่หมายถึงบัญชีนี้ — how an old payment's wording still finds it. */
   matchNames?: string[];
+  /**
+   * ตั้งแต่เมื่อไหร่ที่ระบบรู้ว่าเงินในบัญชีนี้เป็นของใคร (migration 0070).
+   *
+   * Before this moment nobody had been asked the question, so a job taken
+   * earlier was recorded under rules that did not include it and is not
+   * judged by it.
+   */
+  ownerSetAt?: string;
 };
 
 /**
