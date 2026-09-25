@@ -15,8 +15,10 @@ import { itemNetPrice } from '@/lib/domain/tickets';
  *   - a PO payment only once it is รับเงินแล้ว, on the day the money actually
  *     arrived (`cleared_at`, falling back to `paid_at` for rows from before
  *     0048) — again exactly as โมดูลการเงิน counts it;
- *   - a job the branch took money for on behalf of another Finnix shop
+ *   - work the branch took money for on behalf of another Finnix shop
  *     (`รับแทน`) is marked `held`: collected, but not this branch's sales.
+ *     That is asked of each LINE, not of the whole job (0068) — one car can
+ *     have the branch's own film on it and another branch's wrap.
  *
  * A payment carries no ชนิดสินค้า, so the breakdown under the headline splits
  * each payment across what it paid for, in proportion to value: the ticket's
@@ -24,6 +26,11 @@ import { itemNetPrice } from '@/lib/domain/tickets';
  * record, 0023, and its premium is taken as a payment on the ticket), and a
  * PO's goods by the ชนิดสินค้า the stock register gives them. The split adds up
  * to the payment to the satang, so the rows still add up to the headline.
+ *
+ * That same split answers "how much of this 4,000 baht was ours" on a mixed
+ * job: the share that bought the lines that were ours. There is no better
+ * answer available — the customer handed over one amount for the whole car —
+ * and it is the answer the ชนิดสินค้า breakdown has always used.
  */
 
 export const UNSPECIFIED_CATEGORY = 'ไม่ระบุชนิด';
@@ -42,40 +49,53 @@ export type SalesReceipt = {
   amount: number;
 };
 
-type Weighted = { category: string; weight: number };
+type Weighted = { category: string; held: boolean; weight: number };
 
 const satang = (n: number) => Math.round(n * 100) / 100;
 const dayOf = (v: string | null | undefined) => (v ?? '').slice(0, 10);
 
-/** `amount` shared out in proportion to `parts`; the last share takes the rounding. */
+/**
+ * `amount` shared out in proportion to `parts`; the last share takes the
+ * rounding, so the shares always add back to `amount` to the satang.
+ *
+ * Parts merge on ชนิดสินค้า AND on whose money it is: ฟิล์มกรองแสง the branch
+ * sold and ฟิล์มกรองแสง it is holding for another shop are two different sums
+ * that must not be added together (0068).
+ */
 export function splitByWeight(
   amount: number,
   parts: Weighted[],
-): { category: string; amount: number }[] {
-  const merged = new Map<string, number>();
+): { category: string; held: boolean; amount: number }[] {
+  const merged = new Map<string, { category: string; held: boolean; weight: number }>();
   for (const p of parts) {
     if (!(p.weight > 0)) continue;
     const category = p.category || UNSPECIFIED_CATEGORY;
-    merged.set(category, (merged.get(category) ?? 0) + p.weight);
+    const key = `${p.held ? 'held' : 'own'}|${category}`;
+    const at = merged.get(key);
+    if (at) at.weight += p.weight;
+    else merged.set(key, { category, held: p.held, weight: p.weight });
   }
-  const total = [...merged.values()].reduce((n, w) => n + w, 0);
-  if (!(total > 0)) return [{ category: UNSPECIFIED_CATEGORY, amount: satang(amount) }];
+  const entries = [...merged.values()];
+  const total = entries.reduce((n, e) => n + e.weight, 0);
+  if (!(total > 0)) {
+    return [{ category: UNSPECIFIED_CATEGORY, held: false, amount: satang(amount) }];
+  }
 
-  const entries = [...merged.entries()];
   let given = 0;
-  return entries.map(([category, weight], i) => {
+  return entries.map((e, i) => {
     const share =
-      i === entries.length - 1 ? satang(amount - given) : satang((amount * weight) / total);
+      i === entries.length - 1 ? satang(amount - given) : satang((amount * e.weight) / total);
     given = satang(given + share);
-    return { category, amount: share };
+    return { category: e.category, held: e.held, amount: share };
   });
 }
 
 export type ReceiptTicket = {
   id: string;
   shop: string;
+  /** Kept for a caller that has no per-line answer; each line may say otherwise. */
   held: boolean;
-  items: (Parameters<typeof itemNetPrice>[0] & { category?: string })[];
+  items: (Parameters<typeof itemNetPrice>[0] & { category?: string; held?: boolean })[];
   /** `on` is the payment's `paid_at`, `YYYY-MM-DD`. */
   payments: { amount: number; on: string }[];
 };
@@ -95,22 +115,23 @@ export function ticketReceipts(
   const lines: SalesReceipt[] = [];
   for (const t of tickets) {
     const weights: Weighted[] = [
-      ...t.items.map((i) => ({ category: i.category ?? '', weight: itemNetPrice(i) })),
-      { category: INSURANCE_CATEGORY, weight: insuranceByTicket.get(t.id) ?? 0 },
+      // A line with no answer of its own falls back to the ticket's, so a
+      // caller that has not been taught about per-line kinds still works.
+      ...t.items.map((i) => ({
+        category: i.category ?? '',
+        held: i.held ?? t.held,
+        weight: itemNetPrice(i),
+      })),
+      // ประกัน is sold by the branch that sold it, even on a held job — the
+      // same rule โมดูลรายได้ applies to the policy line.
+      { category: INSURANCE_CATEGORY, held: false, weight: insuranceByTicket.get(t.id) ?? 0 },
     ];
     for (const p of t.payments) {
       const on = dayOf(p.on);
       const amount = Number(p.amount || 0);
       if (!on || !amount) continue;
       for (const share of splitByWeight(amount, weights)) {
-        lines.push({
-          sourceId: t.id,
-          shop: t.shop,
-          on,
-          channel: 'ปลีก',
-          held: t.held,
-          ...share,
-        });
+        lines.push({ sourceId: t.id, shop: t.shop, on, channel: 'ปลีก', ...share });
       }
     }
   }
@@ -135,8 +156,10 @@ export function orderReceipts(
 ): SalesReceipt[] {
   const lines: SalesReceipt[] = [];
   for (const o of orders) {
+    // ขายส่งไม่มีการรับแทน: a PO is raised by the branch that sells it.
     const weights: Weighted[] = o.items.map((it) => ({
       category: categoryOf(it.name) || UNSPECIFIED_CATEGORY,
+      held: false,
       weight: Number(it.qty || 0) * Number(it.requestedPrice || 0),
     }));
     for (const p of o.payments) {
@@ -145,14 +168,7 @@ export function orderReceipts(
       const amount = Number(p.amount || 0);
       if (!on || !amount) continue;
       for (const share of splitByWeight(amount, weights)) {
-        lines.push({
-          sourceId: o.id,
-          shop: o.shop,
-          on,
-          channel: 'ขายส่ง',
-          held: false,
-          ...share,
-        });
+        lines.push({ sourceId: o.id, shop: o.shop, on, channel: 'ขายส่ง', ...share });
       }
     }
   }

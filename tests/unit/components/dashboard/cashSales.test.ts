@@ -135,11 +135,104 @@ describe('orderReceipts', () => {
 describe('splitByWeight', () => {
   it('adds up to the payment to the satang', () => {
     const shares = splitByWeight(100, [
-      { category: 'ก', weight: 1 },
-      { category: 'ข', weight: 1 },
-      { category: 'ค', weight: 1 },
+      { category: 'ก', held: false, weight: 1 },
+      { category: 'ข', held: false, weight: 1 },
+      { category: 'ค', held: false, weight: 1 },
     ]);
     expect(shares.map((s) => s.amount)).toEqual([33.33, 33.33, 33.34]);
     expect(sumReceipts(shares)).toBe(100);
+  });
+
+  it('keeps the branch’s money and the held money apart, even in one ชนิดสินค้า', () => {
+    // ฟิล์มกรองแสง the branch sold and ฟิล์มกรองแสง it is holding for another
+    // shop are two sums that must not merge into one (0068).
+    const shares = splitByWeight(1000, [
+      { category: 'ฟิล์มกรองแสง', held: false, weight: 600 },
+      { category: 'ฟิล์มกรองแสง', held: true, weight: 400 },
+    ]);
+    expect(shares).toEqual([
+      { category: 'ฟิล์มกรองแสง', held: false, amount: 600 },
+      { category: 'ฟิล์มกรองแสง', held: true, amount: 400 },
+    ]);
+    expect(sumReceipts(shares)).toBe(1000);
+  });
+});
+
+/**
+ * ใบงานเดียว มีทั้งของสาขาและของที่รับแทน (ร้านแจ้ง 25 ก.ย. 2569, migration 0068).
+ *
+ * One car carries the branch's own film and another branch's wrap, and the
+ * customer pays once for both. The flag used to sit on the whole job, so the
+ * shop had to call it all its own — overstating the takings — or all held,
+ * losing the part it really earned.
+ */
+describe('ticketReceipts — ใบงานที่เงินไม่ได้เป็นของสาขาทั้งใบ', () => {
+  const mixed = job({
+    items: [
+      { category: 'ฟิล์มกรองแสง', soldPrice: 6000, held: false },
+      { category: 'ฟิล์มกันรอย', soldPrice: 4000, held: true },
+    ],
+    payments: [{ amount: 10000, on: '2026-09-25' }],
+  });
+
+  it('แบ่งเงินที่รับมาตามสัดส่วนของรายการ ว่าส่วนไหนเป็นของสาขา', () => {
+    const lines = ticketReceipts([mixed], []);
+    expect(lines).toEqual([
+      {
+        sourceId: 'JT-CM-00214',
+        shop: 'cm',
+        on: '2026-09-25',
+        channel: 'ปลีก',
+        category: 'ฟิล์มกรองแสง',
+        held: false,
+        amount: 6000,
+      },
+      {
+        sourceId: 'JT-CM-00214',
+        shop: 'cm',
+        on: '2026-09-25',
+        channel: 'ปลีก',
+        category: 'ฟิล์มกันรอย',
+        held: true,
+        amount: 4000,
+      },
+    ]);
+    // ยอดขายของสาขา counts only its own share; the whole payment is still there.
+    expect(sumReceipts(lines.filter((l) => !l.held))).toBe(6000);
+    expect(sumReceipts(lines)).toBe(10000);
+  });
+
+  it('แบ่งตามสัดส่วนเดิม แม้ลูกค้าจ่ายมาบางส่วน', () => {
+    // A deposit buys a share of each line, not the whole of one of them.
+    const lines = ticketReceipts(
+      [job({ ...mixed, payments: [{ amount: 5000, on: '2026-09-25' }] })],
+      [],
+    );
+    expect(sumReceipts(lines.filter((l) => !l.held))).toBe(3000);
+    expect(sumReceipts(lines.filter((l) => l.held))).toBe(2000);
+  });
+
+  it('ประกันเป็นของสาขาที่ขาย แม้รายการอื่นในใบงานจะรับแทน', () => {
+    const lines = ticketReceipts(
+      [
+        job({
+          items: [{ category: 'ฟิล์มกันรอย', soldPrice: 4000, held: true }],
+          payments: [{ amount: 5000, on: '2026-09-25' }],
+        }),
+      ],
+      [{ ticketId: 'JT-CM-00214', price: 1000 }],
+    );
+    expect(lines.find((l) => l.category === 'ประกัน')).toMatchObject({ held: false, amount: 1000 });
+    expect(sumReceipts(lines.filter((l) => l.held))).toBe(4000);
+  });
+
+  it('ใบงานที่ไม่ได้บอกทีละรายการ ยังใช้คำตอบของทั้งใบเหมือนเดิม', () => {
+    // A caller from before 0068 sends no per-line flag; the job's own answer
+    // still decides, so nothing recorded earlier changes meaning.
+    const lines = ticketReceipts(
+      [job({ held: true, payments: [{ amount: 10000, on: '2026-09-25' }] })],
+      [],
+    );
+    expect(lines.every((l) => l.held)).toBe(true);
   });
 });

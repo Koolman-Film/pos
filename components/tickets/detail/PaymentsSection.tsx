@@ -2,6 +2,7 @@
 
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt } from '@/lib/domain/format';
+import { itemNetPrice } from '@/lib/domain/tickets';
 import { LEGACY_METHOD_SUFFIX } from '@/lib/domain/payAccount';
 
 import { AttachmentField } from './AttachmentField';
@@ -32,20 +33,48 @@ export function PaymentsSection({
   /** Drops the row entirely — see `removePayment` in TicketDetail for why. */
   removePayment?: (idx: number) => void;
   updatePayment: (idx: number, key: keyof TicketPayment, val: unknown) => void;
-  /** Sets ใบงานนี้เป็น รายได้ / รับแทน (migration 0031). */
+  /** Sets every line to รายได้ / รับแทน at once (0031, per-line since 0068). */
   setRevenueKind: (kind: 'รายได้' | 'รับแทน') => void;
   total: number;
   paid: number;
 }) {
-  const held = t.revenueKind === 'รับแทน';
+  /*
+    เงินก้อนนี้เป็นของใคร — สรุปจากรายการสินค้า (0068).
+
+    0031 asked this once for the whole job. One job sells several ชนิดสินค้า and
+    only some may belong to another branch (ร้านแจ้ง 25 ก.ย. 2569), so the answer
+    lives on each line now and this block reports what the lines add up to. The
+    two buttons stay because a wholly-held job is still the common case and
+    ticking five lines for it would be a step backwards — they set every line.
+  */
+  const priced = (t.items ?? []).filter((i) => Number(i.soldPrice || 0) > 0);
+  const moneyOf = (i: (typeof priced)[number]) =>
+    itemNetPrice({
+      soldPrice: Number(i.soldPrice || 0),
+      discountType: i.discountType ?? undefined,
+      discountValue: i.discountValue != null ? Number(i.discountValue) : undefined,
+    });
+  const heldTotal = priced
+    .filter((i) => i.revenueKind === 'รับแทน')
+    .reduce((n, i) => n + moneyOf(i), 0);
+  const ownTotal = priced
+    .filter((i) => i.revenueKind !== 'รับแทน')
+    .reduce((n, i) => n + moneyOf(i), 0);
+  const ticketHeld = t.revenueKind === 'รับแทน';
+  // Nothing priced yet: the job's own answer is all there is, and it is what
+  // the lines will inherit.
+  const allHeld = priced.length > 0 ? ownTotal === 0 : ticketHeld;
+  const allOwn = priced.length > 0 ? heldTotal === 0 : !ticketHeld;
+  const mixed = !allHeld && !allOwn;
+  const held = allHeld;
 
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
     <div>
       {/*
-        เงินก้อนนี้เป็นของใคร. Asked here, at the top of the money, because it is
-        the question that decides what every figure downstream means — and it is
-        one answer for the whole job, never per line.
+        Shown here, at the top of the money, because it is what decides what
+        every figure downstream means. Set per line in ส่วนที่ 2; these two
+        buttons answer for all of them at once.
       */}
       <div
         className="rounded-xl p-3 mb-3"
@@ -61,7 +90,9 @@ export function PaymentsSection({
               ['รับแทน', 'รับแทน Finnix', 'fa-hand-holding-dollar'],
             ] as const
           ).map(([kind, label, icon]) => {
-            const on = held === (kind === 'รับแทน');
+            // Neither is "on" while the lines disagree — pressing one then
+            // means "make the whole job this", which is what it does.
+            const on = !mixed && held === (kind === 'รับแทน');
             return (
               <button
                 key={kind}
@@ -78,10 +109,21 @@ export function PaymentsSection({
             );
           })}
         </div>
-        <p className="text-xs mt-2" style={{ color: held ? '#8A5A12' : 'var(--ink-faint)' }}>
-          {held
-            ? 'ยอดนี้ไม่นับเป็นยอดขายของสาขา แต่จะขึ้นเป็น เงินรอคืน Finnix ในรายงานรายได้'
-            : 'นับรวมเป็นยอดขายของสาขาตามปกติ'}
+        <p
+          className="text-xs mt-2"
+          style={{ color: mixed || held ? '#8A5A12' : 'var(--ink-faint)' }}
+        >
+          {mixed ? (
+            <>
+              <i className="fa-solid fa-layer-group mr-1"></i>
+              ใบงานนี้แยกกัน — รายได้สาขา {fmt(ownTotal)} · รับแทน Finnix {fmt(heldTotal)}{' '}
+              (ตั้งได้ทีละ รายการในหัวข้อ 2 · เงินที่รับมาจะถูกแบ่งตามสัดส่วนนี้)
+            </>
+          ) : held ? (
+            'ยอดนี้ไม่นับเป็นยอดขายของสาขา แต่จะขึ้นเป็น เงินรอคืน Finnix ในรายงานรายได้'
+          ) : (
+            'นับรวมเป็นยอดขายของสาขาตามปกติ'
+          )}
         </p>
       </div>
       {t.payments.map((p, idx) => (

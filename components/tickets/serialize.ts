@@ -87,6 +87,9 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
       // Recorded actual usage. This was previously dropped here, which meant the
       // technician's numbers never reached the server and no stock ever moved.
       // Blank/non-numeric entries are discarded rather than sent as NaN.
+      // รายได้สาขา / รับแทน ของรายการนี้ (0068). Anything but the held word
+      // is the branch's, so a draft from before the field existed reads right.
+      revenueKind: i.revenueKind === 'รับแทน' ? 'รับแทน' : 'รายได้',
       actualQty: Object.fromEntries(
         Object.entries(i.actualQtyMap ?? {})
           .map(([name, qty]) => [name, Number(qty)] as const)

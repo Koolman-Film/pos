@@ -6,6 +6,9 @@
 
 export type DiscountType = 'percent' | 'amount' | null;
 
+/** รายได้ = this branch earned it · รับแทน = collected here, owed to Finnix. */
+export type RevenueKind = 'รายได้' | 'รับแทน';
+
 export type TicketPosition = { position: string; product: string; price: number | string };
 
 export type TicketItem = {
@@ -21,6 +24,15 @@ export type TicketItem = {
   interestedPrice?: number | string;
   actualQtyMap?: Record<string, number | string>;
   autoInsurance?: boolean;
+  /**
+   * รายได้สาขา หรือ รับแทน Finnix — ทีละรายการ (migration 0068).
+   *
+   * 0031 asked this of the whole ticket, on the grounds that a job was either
+   * ours or held. One job sells several ชนิดสินค้า and only some of them may
+   * belong to another branch (ร้านแจ้ง 25 ก.ย. 2569), so the answer belongs on
+   * the line. Absent means รายได้, which is what every line was before.
+   */
+  revenueKind?: RevenueKind;
 };
 
 export type TicketPayment = {
@@ -438,6 +450,8 @@ export type TicketSavePayload = {
      * movement (see lib/stock/movements.ts).
      */
     actualQty: Record<string, number>;
+    /** รายได้สาขา / รับแทน Finnix สำหรับรายการนี้ (migration 0068). */
+    revenueKind: RevenueKind;
   }[];
   payments: {
     type: string;

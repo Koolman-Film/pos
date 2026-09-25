@@ -34,7 +34,7 @@ npx supabase db push                     # applies 0012 … 0037 only
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
 `supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 30 ในตารางข้างล่าง
-(`release-0019` … `release-0067` และ `repair-categories-and-services.sql`)
+(`release-0019` … `release-0068` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -103,7 +103,8 @@ it twice changes nothing, and each records its versions in
 | 46    | `supabase/release-0065.sql`                   | a normal connection                                 |
 | 47    | `supabase/release-0066.sql`                   | a normal connection                                 |
 | 48    | `supabase/release-0067.sql`                   | a normal connection                                 |
-| 49    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 49    | `supabase/release-0068.sql`                   | a normal connection                                 |
+| 50    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order

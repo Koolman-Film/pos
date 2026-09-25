@@ -435,6 +435,55 @@ export function ItemsSection({
                     />
                   )}
                 </div>
+                {/*
+                  รายการนี้เป็นรายได้ของสาขา หรือรับแทน Finnix (0068).
+
+                  Under the price, because it is a question about this money:
+                  one car can carry the branch's own film and another branch's
+                  wrap, and until now the whole job had to be called one or the
+                  other — overstating the takings or losing the part the branch
+                  really earned.
+
+                  Only shown once the line has a price. An empty row has no
+                  money to assign, and a toggle on it is a question about
+                  nothing.
+                */}
+                {Number(it.soldPrice || 0) > 0 && (
+                  <div className="flex items-center justify-between gap-2 mt-2">
+                    <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                      เงินรายการนี้
+                    </span>
+                    <div className="flex gap-1.5">
+                      {(
+                        [
+                          ['รายได้', 'รายได้สาขา'],
+                          ['รับแทน', 'รับแทน Finnix'],
+                        ] as const
+                      ).map(([kind, label]) => {
+                        const on = (it.revenueKind ?? 'รายได้') === kind;
+                        return (
+                          <button
+                            key={kind}
+                            type="button"
+                            onClick={() => updateItem(idx, 'revenueKind', kind)}
+                            aria-pressed={on}
+                            aria-label={`${label} รายการที่ ${idx + 1}`}
+                            className="text-xs px-2.5 py-1 rounded-full font-semibold"
+                            style={
+                              on
+                                ? kind === 'รับแทน'
+                                  ? { background: '#FBF1DA', color: '#8A5A12' }
+                                  : { background: '#EAF3EC', color: '#2F6B3F' }
+                                : { border: '1px solid var(--line)', color: 'var(--ink-faint)' }
+                            }
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {it.discountType && it.discountValue ? (
                   <div
                     className="flex justify-between text-sm font-bold mt-2"

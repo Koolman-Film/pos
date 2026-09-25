@@ -425,12 +425,22 @@ export function TicketDetail({
    * paperwork for it.
    */
   const shopIsVatRegistered = !!shopInfo[t.shop]?.vatRegistered;
-  const heldForFinnix = t.revenueKind === 'รับแทน';
+  /*
+    ANY held line blocks the tax invoice (0068).
+
+    Before, a job was all ours or all held, and a held one could not have a
+    ใบกำกับภาษี. A mixed job can now exist, and the document has no way to say
+    "these three lines are mine and that one is not" — issuing it would assert
+    a sale the shop did not make, which is the exact thing 0031 refused. So the
+    stricter reading wins, and the counter is told to split the job instead.
+  */
+  const heldForFinnix =
+    t.revenueKind === 'รับแทน' || t.items.some((i) => i.revenueKind === 'รับแทน');
   const taxDocBlocked = heldForFinnix || !shopIsVatRegistered;
   // Two ways to be refused, and the counter has to be told WHICH — "ออกไม่ได้"
   // with no reason is how a rule gets worked around.
   const taxBlockedReason = heldForFinnix
-    ? 'ใบงานนี้เป็นเงินรับแทน Finnix ไม่ใช่รายการขายของร้าน จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ'
+    ? 'ใบงานนี้มีรายการที่เป็นเงินรับแทน Finnix ซึ่งไม่ใช่การขายของร้าน จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ หรือแยกรายการรับแทนไปเปิดใบงานของตัวเอง'
     : `${shopName(t.shop)} ไม่ได้จดทะเบียนภาษีมูลค่าเพิ่ม จึงออกใบกำกับภาษีไม่ได้ — ออกใบเสนอราคาหรือใบเสร็จรับเงินได้ตามปกติ`;
 
   function changeDocType(dt: string) {
@@ -440,12 +450,24 @@ export function TicketDetail({
   }
 
   /**
-   * Switching a ticket to รับแทน has to take the tax invoice off the screen
-   * with it — leaving it selected would leave a button offering to issue the
-   * one document that is now refused.
+   * ตั้งทั้งใบงานทีเดียว — every line, plus the ticket's own summary flag.
+   *
+   * The flag lives on each line since 0068, but a wholly-held job is still the
+   * common case and ticking every line for it would be a step backwards. The
+   * ticket column is kept in step (รับแทน only when every line is) so the
+   * things that read it — the เงินรอคืน Finnix index, the server-side tax guard
+   * — keep answering the question they were asking.
+   *
+   * Switching to รับแทน has to take the tax invoice off the screen with it:
+   * leaving it selected would leave a button offering the one document that is
+   * now refused.
    */
   function setRevenueKind(kind: 'รายได้' | 'รับแทน') {
-    field('revenueKind', kind);
+    setT((prev) => ({
+      ...prev,
+      revenueKind: kind,
+      items: prev.items.map((i) => ({ ...i, revenueKind: kind })),
+    }));
     if (kind === 'รับแทน' && docType === TAX_DOC_TYPE) changeDocTypeTo('ใบเสร็จรับเงิน');
   }
   function changeDocTypeTo(dt: string) {
@@ -907,7 +929,20 @@ export function TicketDetail({
   function addItem() {
     setT({
       ...t,
-      items: [...t.items, { category: '', booked: '', bookedPrice: 0, sold: '', soldPrice: 0 }],
+      items: [
+        ...t.items,
+        {
+          category: '',
+          booked: '',
+          bookedPrice: 0,
+          sold: '',
+          soldPrice: 0,
+          // A new line joins whichever side the job is on (0068). Marking a
+          // job รับแทน and then adding what was sold must not quietly put that
+          // money back into the branch's takings.
+          revenueKind: t.revenueKind === 'รับแทน' ? 'รับแทน' : 'รายได้',
+        },
+      ],
     });
   }
   function updateItem(idx: number, key: keyof TicketItem, val: unknown) {

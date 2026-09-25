@@ -209,6 +209,22 @@ async function reverseTicketStock(
   }
 }
 
+/**
+ * รายได้ / รับแทน ของทั้งใบงาน, from its lines.
+ *
+ * A job with nothing priced on it yet is the branch's, which is what a blank
+ * ticket has always been. A mixed job is NOT รับแทน: it did earn the shop
+ * something, and calling the whole thing held would lose that — the per-line
+ * flags carry the real split (`ticket_items.revenue_kind`).
+ */
+function ticketRevenueKind(p: TicketSavePayload): 'รายได้' | 'รับแทน' {
+  const priced = p.items.filter((i) => Number(i.soldPrice || 0) > 0);
+  // Nothing priced: keep what the form says, which is the default the lines
+  // will inherit when somebody types them.
+  if (priced.length === 0) return p.revenueKind === 'รับแทน' ? 'รับแทน' : 'รายได้';
+  return priced.every((i) => i.revenueKind === 'รับแทน') ? 'รับแทน' : 'รายได้';
+}
+
 function ticketRow(p: TicketSavePayload, id: string, retailCustomerId: number | null) {
   return {
     id,
@@ -224,7 +240,10 @@ function ticketRow(p: TicketSavePayload, id: string, retailCustomerId: number | 
     service_type: p.serviceType,
     status: p.status,
     booking_channel: p.bookingChannel,
-    revenue_kind: p.revenueKind,
+    // สรุปจากรายการ (0068): รับแทน only when every priced line is held, so the
+    // things that read this column — the เงินรอคืน Finnix index, the report
+    // filters — keep meaning what they meant when it was asked once per job.
+    revenue_kind: ticketRevenueKind(p),
     tech_by_category: p.techByCategory,
     drop_off_date: p.dropOffDate,
     pickup_date: p.pickupDate,
@@ -810,13 +829,20 @@ export async function recordTicketDocument(input: {
   if (input.docType === 'ใบกำกับภาษี/ใบเสร็จรับเงิน') {
     const { data: ticket } = await supabase
       .from('tickets')
-      .select('revenue_kind, shop_id')
+      .select('revenue_kind, shop_id, ticket_items(revenue_kind)')
       .eq('id', input.ticketId)
       .maybeSingle();
-    if (ticket?.revenue_kind === 'รับแทน') {
+    /*
+      ANY held line refuses it (0068), not just a wholly-held job. The document
+      cannot say "these lines are mine and that one is not", so issuing it for
+      a mixed job would assert a sale this shop did not make — the exact thing
+      0031 refused. Read from the LINES, which is where the answer lives now.
+    */
+    const heldLines = (ticket?.ticket_items ?? []).some((i) => i.revenue_kind === 'รับแทน');
+    if (ticket?.revenue_kind === 'รับแทน' || heldLines) {
       return {
         ok: false,
-        error: 'ใบงานนี้เป็นเงินรับแทน Finnix จึงออกใบกำกับภาษีไม่ได้',
+        error: 'ใบงานนี้มีรายการที่เป็นเงินรับแทน Finnix จึงออกใบกำกับภาษีไม่ได้',
       };
     }
 

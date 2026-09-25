@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({
 import { TicketDetail } from '@/components/tickets/TicketDetail';
 import { fmt } from '@/lib/domain/format';
 import { itemNetPrice } from '@/lib/domain/tickets';
-import type { OptionListName, Ticket } from '@/components/tickets/types';
+import type { OptionListName, Ticket, TicketSavePayload } from '@/components/tickets/types';
 
 const OPTION_LISTS: OptionListName[] = [
   'booking_channels',
@@ -990,5 +990,95 @@ describe('TicketDetail — ข้อมูลของช่างหลัง�
     );
     expect(guards(container)).toBe(0);
     expect(screen.queryByRole('button', { name: /บันทึกข้อมูลของช่าง/ })).toBeNull();
+  });
+});
+
+/**
+ * ใบงานเดียว มีทั้งรายได้สาขาและรับแทน Finnix (ร้านแจ้ง 25 ก.ย. 2569, migration 0068).
+ *
+ * 0031 asked this once for the whole job. One car can carry the branch's own
+ * film and another branch's wrap, so the answer belongs on the line — and the
+ * two buttons at the top of การชำระเงิน now set every line at once, because a
+ * wholly-held job is still the common case.
+ */
+describe('TicketDetail — รายได้/รับแทน ทีละรายการ', () => {
+  const twoItems = () =>
+    makeTicket({
+      items: [
+        {
+          category: 'ฟิล์มกรองแสง',
+          booked: '',
+          bookedPrice: 0,
+          sold: 'ฟิล์ม A',
+          soldPrice: 6000,
+        },
+        { category: 'ฟิล์มกันรอย', booked: '', bookedPrice: 0, sold: 'TPU', soldPrice: 4000 },
+      ],
+    });
+
+  it('ตั้งรายการเดียวเป็นรับแทน แล้วบอกยอดที่แยกกันบนหน้าจอ', async () => {
+    const user = userEvent.setup();
+    // Typed through its argument, so `mock.calls[0][0]` is the payload.
+    const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
+    render(<TicketDetail {...baseProps(twoItems())} saveAction={saveAction} />);
+
+    await user.click(screen.getByRole('button', { name: 'รับแทน Finnix รายการที่ 2' }));
+
+    // Neither whole-job button is on while the lines disagree, and the split is
+    // spelled out rather than left for the report to reveal.
+    expect(screen.getByRole('button', { name: /รายได้ของสาขา/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(screen.getByText(/ใบงานนี้แยกกัน/)).toHaveTextContent(
+      /รายได้สาขา 6,000.00 · รับแทน Finnix 4,000.00/,
+    );
+
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    const payload = saveAction.mock.calls[0][0];
+    expect(payload.items.map((i) => i.revenueKind)).toEqual(['รายได้', 'รับแทน']);
+    // A mixed job is not held as a whole — it did earn the branch something.
+    expect(payload.revenueKind).toBe('รายได้');
+  });
+
+  it('ปุ่มด้านบนตั้งให้ทุกรายการพร้อมกัน', async () => {
+    const user = userEvent.setup();
+    // Typed through its argument, so `mock.calls[0][0]` is the payload.
+    const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
+    render(<TicketDetail {...baseProps(twoItems())} saveAction={saveAction} />);
+
+    await user.click(screen.getByRole('button', { name: /รับแทน Finnix$/ }));
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+
+    const payload = saveAction.mock.calls[0][0];
+    expect(payload.items.map((i) => i.revenueKind)).toEqual(['รับแทน', 'รับแทน']);
+    expect(payload.revenueKind).toBe('รับแทน');
+  });
+
+  it('มีรายการรับแทนปนอยู่ ก็ออกใบกำกับภาษีไม่ได้', async () => {
+    // The document cannot say "these lines are mine and that one is not", so
+    // issuing it would assert a sale this shop did not make.
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(twoItems())} />);
+
+    expect(screen.getByRole('button', { name: 'ใบกำกับภาษี/ใบเสร็จรับเงิน' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'รับแทน Finnix รายการที่ 2' }));
+    expect(screen.getByRole('button', { name: /ใบกำกับภาษี/ })).toBeDisabled();
+    expect(screen.getByText(/แยกรายการรับแทนไปเปิดใบงานของตัวเอง/)).toBeInTheDocument();
+  });
+
+  it('รายการที่เพิ่มทีหลัง ตามฝั่งที่ใบงานตั้งไว้', async () => {
+    // Marking a job รับแทน and then typing what was sold must not quietly put
+    // that money back into the branch's takings.
+    const user = userEvent.setup();
+    // Typed through its argument, so `mock.calls[0][0]` is the payload.
+    const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
+    render(<TicketDetail {...baseProps(makeTicket())} saveAction={saveAction} />);
+
+    await user.click(screen.getByRole('button', { name: /รับแทน Finnix$/ }));
+    await user.click(screen.getByRole('button', { name: /เพิ่มสินค้าในคันนี้/ }));
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+
+    expect(saveAction.mock.calls[0][0].items[0].revenueKind).toBe('รับแทน');
   });
 });

@@ -1499,6 +1499,7 @@ export type Database = {
           id: number
           interested: string
           interested_price: number
+          revenue_kind: string
           sold: string
           sold_price: number
           ticket_id: string
@@ -1513,6 +1514,7 @@ export type Database = {
           id?: never
           interested?: string
           interested_price?: number
+          revenue_kind?: string
           sold?: string
           sold_price?: number
           ticket_id: string
@@ -1527,6 +1529,7 @@ export type Database = {
           id?: never
           interested?: string
           interested_price?: number
+          revenue_kind?: string
           sold?: string
           sold_price?: number
           ticket_id?: string

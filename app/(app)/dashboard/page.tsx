@@ -100,7 +100,7 @@ export default async function DashboardPage({
         supabase
           .from('tickets')
           .select(
-            'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, interested, sold_price, discount_type, discount_value), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
+            'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, interested, sold_price, discount_type, discount_value, revenue_kind), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
           )
           // Soft-deleted tickets (migration 0013) are out of every figure on this
           // screen — revenue, job counts, the calendar and the bookings window.
@@ -265,6 +265,8 @@ export default async function DashboardPage({
     products: productLabels(t.ticket_items ?? []),
     items: (t.ticket_items ?? []).map((i) => ({
       category: i.category,
+      // ทีละรายการ (0068) — the ticket-level flag is only the fallback now.
+      held: i.revenue_kind === 'รับแทน',
       soldPrice: num(i.sold_price),
       discountType: (i.discount_type ?? undefined) as 'percent' | 'amount' | undefined,
       discountValue: i.discount_value == null ? undefined : num(i.discount_value),
