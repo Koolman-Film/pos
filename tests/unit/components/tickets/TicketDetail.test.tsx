@@ -1082,3 +1082,116 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
     expect(saveAction.mock.calls[0][0].items[0].revenueKind).toBe('รับแทน');
   });
 });
+
+/**
+ * จับคู่รายได้ Finnix กับบัญชีที่รับเงินไว้จริง (ร้านขอ 25 ก.ย. 2569, migration 0069).
+ *
+ * The lines say what was sold and whose it was; the account each payment names
+ * says where the money went. They are supposed to agree — and when they do not,
+ * somebody has to move money, which nobody could see before.
+ */
+describe('TicketDetail — เงินเข้าบัญชีตรงกับที่ขายไหม', () => {
+  const ACCOUNTS = [
+    { id: 1, shop: 'cm', name: 'เงินสดหน้าร้าน', kind: 'cash', accountNo: '', owner: 'สาขา' },
+    {
+      id: 2,
+      shop: 'cm',
+      name: 'เงิน FINNIX - Kbank',
+      kind: 'bank',
+      accountNo: '187-1-27068-2',
+      owner: 'Finnix',
+    },
+  ] as const;
+
+  const mixedTicket = (
+    payments: { type: string; method: string; amount: number; date: string }[],
+  ) =>
+    makeTicket({
+      items: [
+        {
+          category: 'ฟิล์มกรองแสง',
+          booked: '',
+          bookedPrice: 0,
+          sold: 'ฟิล์ม A',
+          soldPrice: 6000,
+          revenueKind: 'รายได้',
+        },
+        {
+          category: 'ฟิล์มกันรอย',
+          booked: '',
+          bookedPrice: 0,
+          sold: 'TPU',
+          soldPrice: 4000,
+          revenueKind: 'รับแทน',
+        },
+      ],
+      payments,
+    });
+
+  const paid = (method: string, amount: number) => ({
+    type: 'ชำระเต็มจำนวน',
+    method,
+    amount,
+    date: '2026-09-25',
+  });
+
+  it('เงียบเมื่อเงินเข้าถูกบัญชีทั้งสองฝั่ง', () => {
+    render(
+      <TicketDetail
+        {...baseProps(
+          mixedTicket([paid('เงินสดหน้าร้าน', 6000), paid('เงิน FINNIX - Kbank', 4000)]),
+        )}
+        payAccounts={[...ACCOUNTS]}
+      />,
+    );
+    expect(screen.queryByText(/เงินเข้าบัญชีไม่ตรงกับที่ขาย/)).toBeNull();
+  });
+
+  it('บอกยอดที่ต้องโอนคืน เมื่อเงินของ Finnix เข้าบัญชีสาขา', () => {
+    render(
+      <TicketDetail
+        {...baseProps(
+          mixedTicket([paid('เงินสดหน้าร้าน', 7000), paid('เงิน FINNIX - Kbank', 3000)]),
+        )}
+        payAccounts={[...ACCOUNTS]}
+      />,
+    );
+    expect(screen.getByText(/เงินเข้าบัญชีไม่ตรงกับที่ขาย/)).toBeInTheDocument();
+    expect(screen.getByText(/ต้องโอนคืน Finnix อีก 1,000.00/)).toBeInTheDocument();
+    // And it says out loud that the sales figure is not moving with it.
+    expect(screen.getByText(/ยอดขายของสาขายึดตามสินค้าที่ขาย/)).toBeInTheDocument();
+  });
+
+  it('ยังไม่พูดอะไรระหว่างที่ลูกค้ายังจ่ายไม่ครบ', () => {
+    render(
+      <TicketDetail
+        {...baseProps(mixedTicket([paid('เงินสดหน้าร้าน', 5000)]))}
+        payAccounts={[...ACCOUNTS]}
+      />,
+    );
+    expect(screen.queryByText(/เงินเข้าบัญชีไม่ตรงกับที่ขาย/)).toBeNull();
+  });
+
+  it('ใบงานที่ไม่มีรายการของ Finnix ไม่มีอะไรต้องจับคู่', () => {
+    render(
+      <TicketDetail
+        {...baseProps(
+          makeTicket({
+            items: [
+              {
+                category: 'ฟิล์มกรองแสง',
+                booked: '',
+                bookedPrice: 0,
+                sold: 'ฟิล์ม A',
+                soldPrice: 6000,
+              },
+            ],
+            payments: [paid('เงิน FINNIX - Kbank', 6000)],
+          }),
+        )}
+        payAccounts={[...ACCOUNTS]}
+      />,
+    );
+    expect(screen.queryByText(/เงินเข้าบัญชีไม่ตรงกับที่ขาย/)).toBeNull();
+  });
+});

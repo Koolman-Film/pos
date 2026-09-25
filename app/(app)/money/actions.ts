@@ -44,6 +44,8 @@ export type SaveAccountInput = {
   openedAt: string;
   /** Labels in `method` / `source` that mean this account. */
   matchNames: string[];
+  /** สาขา | Finnix — whose money this account holds (0069). */
+  owner?: string;
 };
 
 /**
@@ -73,6 +75,9 @@ export async function saveMoneyAccount(
     opening_balance: input.openingBalance,
     opened_at: input.openedAt,
     match_names: input.matchNames.map((m) => m.trim()).filter(Boolean),
+    // Anything but the Finnix word is the branch's, which is what every
+    // account was before 0069.
+    owner: input.owner === 'Finnix' ? 'Finnix' : 'สาขา',
   };
 
   /*

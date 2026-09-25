@@ -1447,6 +1447,7 @@ export function TicketDetail({
                 t={t}
                 shop={t.shop}
                 paymentMethods={paymentMethodOptions}
+                payAccounts={payAccounts}
                 attachmentUrlAction={attachmentUrlAction}
                 addPayment={addPayment}
                 removePayment={removePayment}

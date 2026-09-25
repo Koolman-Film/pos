@@ -1,4 +1,4 @@
-import type { PayAccount } from '@/lib/domain/payAccount';
+import { BRANCH_OWNER, FINNIX_OWNER, type PayAccount } from '@/lib/domain/payAccount';
 import type { createClient } from '@/lib/supabase/server';
 
 /**
@@ -14,7 +14,7 @@ export async function loadPayAccounts(
   if (shopIds.length === 0) return [];
   const { data } = await supabase
     .from('money_accounts')
-    .select('id, shop_id, name, kind, account_no')
+    .select('id, shop_id, name, kind, account_no, owner, match_names')
     .eq('active', true)
     .in('shop_id', shopIds)
     .order('shop_id')
@@ -26,5 +26,7 @@ export async function loadPayAccounts(
     name: a.name,
     kind: a.kind,
     accountNo: a.account_no ?? '',
+    owner: a.owner === FINNIX_OWNER ? FINNIX_OWNER : BRANCH_OWNER,
+    matchNames: a.match_names ?? [],
   }));
 }

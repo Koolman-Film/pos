@@ -156,7 +156,7 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
           supabase
             .from('money_accounts')
             .select(
-              'id, shop_id, name, kind, account_no, opening_balance, opened_at, match_names, sort_order',
+              'id, shop_id, name, kind, account_no, opening_balance, opened_at, match_names, owner, sort_order',
             )
             .eq('active', true)
             .order('sort_order')
@@ -245,6 +245,7 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
     openingBalance: num(a.opening_balance),
     openedAt: a.opened_at,
     matchNames: a.match_names ?? [],
+    owner: a.owner === 'Finnix' ? 'Finnix' : 'สาขา',
     sortOrder: a.sort_order,
   }));
 

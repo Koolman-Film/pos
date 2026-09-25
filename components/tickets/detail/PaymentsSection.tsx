@@ -3,7 +3,8 @@
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt } from '@/lib/domain/format';
 import { itemNetPrice } from '@/lib/domain/tickets';
-import { LEGACY_METHOD_SUFFIX } from '@/lib/domain/payAccount';
+import { LEGACY_METHOD_SUFFIX, type PayAccount } from '@/lib/domain/payAccount';
+import { matchFinnixMoney } from '@/lib/domain/finnixMatch';
 
 import { AttachmentField } from './AttachmentField';
 
@@ -14,6 +15,7 @@ export function PaymentsSection({
   t,
   shop,
   paymentMethods,
+  payAccounts = [],
   attachmentUrlAction,
   addPayment,
   removePayment,
@@ -29,6 +31,8 @@ export function PaymentsSection({
   attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
   /** The branch's แหล่งเงิน by name — the payment lands in the account picked (0064). */
   paymentMethods: string[];
+  /** The branch's แหล่งเงิน, each saying whose money it holds (0069). */
+  payAccounts?: PayAccount[];
   addPayment: () => void;
   /** Drops the row entirely — see `removePayment` in TicketDetail for why. */
   removePayment?: (idx: number) => void;
@@ -67,6 +71,14 @@ export function PaymentsSection({
   const allOwn = priced.length > 0 ? heldTotal === 0 : !ticketHeld;
   const mixed = !allHeld && !allOwn;
   const held = allHeld;
+
+  // เทียบสิ่งที่ขาย กับบัญชีที่เงินเข้าจริง (0069).
+  const match = matchFinnixMoney({
+    items: t.items ?? [],
+    payments: (t.payments ?? []).map((p) => ({ amount: p.amount, method: p.method })),
+    accounts: payAccounts,
+    shop: t.shop,
+  });
 
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
@@ -126,6 +138,38 @@ export function PaymentsSection({
           )}
         </p>
       </div>
+      {/*
+        จับคู่รายได้ Finnix กับบัญชีที่รับเงินจริง (0069).
+
+        Shown only when the job has Finnix money on it and the customer has
+        finished paying: before that the two sides cannot agree, and saying so
+        on every deposit would be noise nobody reads.
+      */}
+      {match.soldFinnix > 0 && match.settled && match.owedToFinnix !== 0 && (
+        <div
+          className="rounded-xl p-3 mb-3 text-xs"
+          style={{ background: '#FBF1DA', color: '#8A5A12' }}
+        >
+          <p className="font-semibold">
+            <i className="fa-solid fa-right-left mr-1.5"></i>
+            เงินเข้าบัญชีไม่ตรงกับที่ขาย
+          </p>
+          <p className="mt-1">
+            ขายจริง — สาขา {fmt(match.soldOwn)} · Finnix {fmt(match.soldFinnix)}
+            <br />
+            เงินเข้า — บัญชีสาขา {fmt(match.paidOwn)} · บัญชี Finnix {fmt(match.paidFinnix)}
+            {match.paidUnknown > 0 ? ` · ยังไม่รู้บัญชี ${fmt(match.paidUnknown)}` : ''}
+          </p>
+          <p className="mt-1 font-semibold">
+            {match.owedToFinnix > 0
+              ? `ต้องโอนคืน Finnix อีก ${fmt(match.owedToFinnix)}`
+              : `Finnix รับไว้เกิน ${fmt(-match.owedToFinnix)} — ต้องโอนกลับสาขา`}
+          </p>
+          <p className="mt-1" style={{ color: 'var(--ink-faint)' }}>
+            ยอดขายของสาขายึดตามสินค้าที่ขาย ไม่ขยับตามบัญชีที่เงินเข้า
+          </p>
+        </div>
+      )}
       {t.payments.map((p, idx) => (
         <div
           key={idx}

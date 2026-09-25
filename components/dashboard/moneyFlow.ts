@@ -111,6 +111,8 @@ export type MoneyAccount = {
   openedAt: string;
   /** Labels in `method` / `source` that mean this account. */
   matchNames: string[];
+  /** สาขา | Finnix — whose money it holds (0069). */
+  owner?: string;
   sortOrder: number;
 };
 

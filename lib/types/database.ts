@@ -513,6 +513,7 @@ export type Database = {
           match_names: string[]
           name: string
           opened_at: string
+          owner: string
           opening_balance: number
           shop_id: string
           sort_order: number
@@ -526,6 +527,7 @@ export type Database = {
           match_names?: string[]
           name: string
           opened_at?: string
+          owner?: string
           opening_balance?: number
           shop_id: string
           sort_order?: number
@@ -539,6 +541,7 @@ export type Database = {
           match_names?: string[]
           name?: string
           opened_at?: string
+          owner?: string
           opening_balance?: number
           shop_id?: string
           sort_order?: number

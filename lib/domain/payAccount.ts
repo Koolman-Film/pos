@@ -6,6 +6,10 @@
  * paper says and where the money is then expected to land are the same record.
  */
 
+export const BRANCH_OWNER = 'สาขา';
+export const FINNIX_OWNER = 'Finnix';
+export type AccountOwner = typeof BRANCH_OWNER | typeof FINNIX_OWNER;
+
 export type PayAccount = {
   id: number;
   shop: string;
@@ -13,7 +17,43 @@ export type PayAccount = {
   /** money_accounts.kind — bank / cash / edc / petty / credit. */
   kind: string;
   accountNo: string;
+  /**
+   * เงินในบัญชีนี้เป็นของใคร (migration 0069).
+   *
+   * NOT what decides revenue — the goods sold decide that. This says where the
+   * cash is, so รายได้ Finnix that landed in a branch account can be told apart
+   * from รายได้ Finnix that went straight where it belongs.
+   */
+  owner?: AccountOwner;
+  /** ชื่ออื่นที่หมายถึงบัญชีนี้ — how an old payment's wording still finds it. */
+  matchNames?: string[];
 };
+
+/**
+ * บัญชีที่รับเงินก้อนนี้ไว้ — resolved the way the balances resolve it.
+ *
+ * A payment stores the แหล่งเงิน as free text, so it is matched against each
+ * account's own name and its `match_names`, and the FIRST account in the
+ * branch that claims the label wins. That is exactly the rule
+ * `buildMoneySources` uses; a second rule here would let this screen and the
+ * money register disagree about where the same baht went.
+ */
+export function accountForLabel(
+  accounts: PayAccount[],
+  shop: string,
+  label: string,
+): PayAccount | null {
+  const wanted = (label ?? '').trim();
+  if (!wanted) return null;
+  return (
+    accounts.find((a) => a.shop === shop && [a.name, ...(a.matchNames ?? [])].includes(wanted)) ??
+    null
+  );
+}
+
+/** ใครเป็นเจ้าของเงินที่เข้าบัญชีนี้ — สาขา unless the shop said otherwise. */
+export const ownerOf = (a: Pick<PayAccount, 'owner'> | null | undefined): AccountOwner =>
+  a?.owner === FINNIX_OWNER ? FINNIX_OWNER : BRANCH_OWNER;
 
 /**
  * ประเภทที่ลูกค้าจ่ายเข้าไม่ได้ และเหตุผล.

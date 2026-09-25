@@ -75,10 +75,23 @@ const KINDS: { key: string; label: string }[] = [
   { key: 'credit', label: 'บัตรเครดิตของร้าน (ไว้จ่ายออก)' },
 ];
 
+/*
+  เงินในบัญชีนี้เป็นของใคร (0069).
+
+  Not what decides revenue — what was SOLD decides that. This is how the shop
+  tells รายได้ Finnix that went straight into a Finnix account apart from
+  รายได้ Finnix sitting in a branch account waiting to be sent back.
+*/
+const OWNERS: { key: string; label: string }[] = [
+  { key: 'สาขา', label: 'ของสาขานี้' },
+  { key: 'Finnix', label: 'ของ Finnix' },
+];
+
 const blankAccount = (shop: string): SaveAccountInput => ({
   shop,
   name: '',
   kind: 'bank',
+  owner: 'สาขา',
   accountNo: '',
   openingBalance: 0,
   openedAt: dateInputValue(new Date()),
@@ -529,6 +542,14 @@ export function MoneyModule({
                           and an option that is simply absent teaches nobody
                           anything (ร้านแจ้ง 24 ก.ย. 2569).
                         */}
+                        {source?.owner === 'Finnix' && (
+                          <span
+                            className="ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-semibold"
+                            style={{ background: '#EFE6F5', color: '#6B4C8A' }}
+                          >
+                            เงินของ Finnix
+                          </span>
+                        )}
                         {source && nonPayableReason(source) && (
                           <span
                             className="block text-xs mt-0.5"
@@ -579,6 +600,7 @@ export function MoneyModule({
                               name: source.name,
                               kind: source.kind,
                               accountNo: source.accountNo,
+                              owner: source.owner ?? 'สาขา',
                               openingBalance: source.openingBalance,
                               openedAt: source.openedAt,
                               matchNames: source.matchNames,
@@ -923,6 +945,26 @@ function AccountEditor({
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              เงินในบัญชีนี้เป็นของ
+            </label>
+            <select
+              aria-label="เจ้าของเงินในแหล่งเงิน"
+              value={draft.owner ?? 'สาขา'}
+              onChange={(e) => setDraft({ ...draft, owner: e.target.value })}
+              className={field}
+            >
+              {OWNERS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+              ใช้เทียบว่ารายได้ Finnix เข้าบัญชีถูกฝั่งไหม ไม่ได้เปลี่ยนว่าอะไรเป็นยอดขายของสาขา
+            </p>
           </div>
           <div>
             <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
