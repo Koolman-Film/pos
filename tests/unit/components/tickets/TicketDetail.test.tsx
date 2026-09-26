@@ -1282,3 +1282,122 @@ describe('TicketDetail — ค่าประกันรวมอยู่ใ�
     expect(screen.getByText(/ยอดสุทธิ 4,000.00/)).toBeInTheDocument();
   });
 });
+
+/**
+ * วันนัด Service ต้องบันทึกตัวเอง (ร้านแจ้ง 26 ก.ย. 2569).
+ *
+ * A ใบเซอร์วิส saves the moment it is recorded, so nothing on that screen
+ * suggests the appointment above it has not been saved too. It had not: the
+ * schedule reached the database only through บันทึกใบงาน, and since every
+ * unconfirmed row is rebuilt from the start date, a lost save took the real
+ * dates with it and put the plain six-month grid back — which is what the shop
+ * saw as "the service dates changed by themselves".
+ */
+describe('TicketDetail — วันนัด Service บันทึกทันที', () => {
+  const serviceTicket = () =>
+    makeTicket({
+      items: [
+        { category: 'ฟิล์มกันรอย', booked: '', bookedPrice: 0, sold: 'TPU', soldPrice: 4000 },
+      ],
+      extras: { Service: { checked: true, serviceDate: '2026-09-16', serviceCount: 3 } },
+    });
+
+  const props = () => ({
+    ...baseProps(serviceTicket()),
+    initialOptions: options({ extra_options: ['Service'] }),
+    // Typed through its argument, so  is the payload.
+    extrasAction: vi.fn(async (input: { ticketId: string; extras: Record<string, unknown> }) => ({
+      ok: true,
+      id: input.ticketId,
+    })),
+  });
+
+  it('พิมพ์วันนัดแล้วเขียนลงฐานข้อมูลเลย ไม่ต้องรอกดบันทึกใบงาน', async () => {
+    const p = props();
+    render(<TicketDetail {...p} />);
+
+    fireEvent.change(screen.getByLabelText('วันนัด Service ครั้งที่ 1'), {
+      target: { value: '2026-10-05' },
+    });
+
+    await vi.waitFor(() => expect(p.extrasAction).toHaveBeenCalled());
+    const saved = p.extrasAction.mock.calls[0][0];
+    expect(saved.ticketId).toBe('JT-CM-00214');
+    const service = saved.extras.Service as {
+      schedule?: { no: number; date: string; confirmed: boolean }[];
+    };
+    // The day the customer agreed, kept as agreed.
+    expect(service.schedule?.[0]).toEqual({
+      no: 1,
+      date: '2026-10-05',
+      confirmed: true,
+    });
+  });
+
+  it('ใบงานใหม่ที่ยังไม่เคยบันทึก ยังเก็บไว้ในร่างตามเดิม', async () => {
+    // Nothing to write to yet; the first บันทึกใบงาน carries it.
+    const p = { ...props(), isNew: true };
+    render(<TicketDetail {...p} />);
+    fireEvent.change(screen.getByLabelText('วันนัด Service ครั้งที่ 1'), {
+      target: { value: '2026-10-05' },
+    });
+    expect(p.extrasAction).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * คำเตือน "ยังไม่ได้บันทึก" ต้องหมายความตามนั้น (ร้านแจ้ง 26 ก.ย. 2569).
+ *
+ * Visits and policies are written by their own actions and come back through
+ * `router.refresh()`, which replaces `initialTicket` and leaves the draft
+ * alone. The dirty check compared the two wholesale, so recording one ใบเซอร์วิส
+ * left the ticket claiming unsaved changes for the rest of the session — and a
+ * warning that is always on is a warning nobody reads.
+ */
+describe('TicketDetail — มีข้อมูลที่ยังไม่ได้บันทึก', () => {
+  const visit = {
+    id: 9,
+    visitNo: 1,
+    plate: '250 กก',
+    receivedAt: '2026-09-16',
+    receivedTime: '',
+    deliveredAt: '',
+    deliveredTime: '',
+    salesBy: '',
+    qcBy: '',
+    technicians: [],
+    filmProduct: '',
+    customerWaits: null,
+    overallOk: null,
+    checks: {},
+    notes: '',
+    points: [],
+  };
+
+  /** Leaving the page asks first only when there is really something to lose. */
+  const leaveAsks = async (ticket: Ticket) => {
+    const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(ticket)} />);
+    await user.click(screen.getByRole('button', { name: /กลับไปรายการใบงาน/ }));
+    const asked = ask.mock.calls.length > 0;
+    ask.mockRestore();
+    return asked;
+  };
+
+  it('ใบงานที่เพิ่งบันทึกใบเซอร์วิสไป ไม่ถามว่ามีของค้าง', async () => {
+    // Same draft, server copy now carries the visit: not a change of the
+    // form's, and not something บันทึกใบงาน would send.
+    expect(await leaveAsks(makeTicket({ serviceVisits: [visit] }))).toBe(false);
+  });
+
+  it('แต่ถ้าแก้ของในฟอร์มจริง ๆ ยังถามเหมือนเดิม', async () => {
+    const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(makeTicket({ serviceVisits: [visit] }))} />);
+    await user.click(screen.getByRole('button', { name: /รายได้ Finnix$/ }));
+    await user.click(screen.getByRole('button', { name: /กลับไปรายการใบงาน/ }));
+    expect(ask).toHaveBeenCalled();
+    ask.mockRestore();
+  });
+});

@@ -32,6 +32,7 @@ export function ExtrasSection({
   insurance,
   serviceVisits,
   claimVisits,
+  saveExtraDetail,
 }: {
   t: Ticket;
   extraOptions: string[];
@@ -58,6 +59,18 @@ export function ExtrasSection({
    * package, so the way in cannot live only under Service.
    */
   claimVisits?: () => React.ReactNode;
+  /**
+   * Like `updateExtraDetail`, but writes it to the database there and then.
+   *
+   * Used for วันนัด Service (ร้านแจ้ง 26 ก.ย. 2569). A visit saves itself the
+   * moment it is recorded, so the counter has no reason to think the
+   * appointment beside it has not been saved too — but the schedule lived in
+   * the draft and only reached the database through บันทึกใบงาน. Anyone who
+   * typed the day the customer agreed, recorded the visit, and left, lost the
+   * date: every unconfirmed row is recomputed from the start, so they all
+   * snapped back to the plain six-month grid.
+   */
+  saveExtraDetail?: (name: string, key: string, val: unknown) => void;
   serviceVisits?: (args: {
     entitled: number;
     /** ชื่อสินค้าฟิล์มที่ขาย — the SKU name already states the thickness. */
@@ -403,7 +416,9 @@ export function ExtrasSection({
                           }
                           saved={ex.schedule}
                           recordedVisitNos={(t.serviceVisits ?? []).map((v) => v.visitNo)}
-                          onChange={(schedule) => updateExtraDetail(name, 'schedule', schedule)}
+                          onChange={(schedule) =>
+                            (saveExtraDetail ?? updateExtraDetail)(name, 'schedule', schedule)
+                          }
                         />
                       )}
                     </>
@@ -429,7 +444,8 @@ export function ExtrasSection({
                         start: (ex.serviceDate as string) || '',
                         count: (ex.serviceCount as string | number) ?? wrapStock?.serviceCount ?? 0,
                         saved: ex.schedule,
-                        onChange: (schedule) => updateExtraDetail(name, 'schedule', schedule),
+                        onChange: (schedule) =>
+                          (saveExtraDetail ?? updateExtraDetail)(name, 'schedule', schedule),
                       },
                     })}
                 </div>

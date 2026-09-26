@@ -73,6 +73,26 @@ export type SaveResult = {
 };
 
 /**
+ * The parts of a ticket this form edits — everything a save would send.
+ *
+ * What is left out is server-owned: written by its own action, refreshed from
+ * the server, and never carried in the form's payload.
+ */
+function formOwned(x: Ticket): Partial<Ticket> {
+  const rest: Partial<Ticket> = { ...x };
+  for (const key of [
+    'serviceVisits',
+    'serviceVisitsForPlate',
+    'insurancePolicies',
+    'insuranceForPlate',
+    'locked',
+  ] as const) {
+    delete rest[key];
+  }
+  return rest;
+}
+
+/**
  * The job-ticket detail / new-ticket form.
  * Ported from reference/v0.4/finnix-film.html:1310-2469, split into the source's
  * own sections under `detail/`. The prototype's local `updateTicket(t)` is
@@ -221,8 +241,21 @@ export function TicketDetail({
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket>(initialTicket);
+  /*
+    เทียบเฉพาะสิ่งที่ฟอร์มเป็นเจ้าของ (ร้านแจ้ง 26 ก.ย. 2569).
+
+    Visits, policies and the lock flag are written by their own actions and
+    come back through `router.refresh()`, which replaces `initialTicket` and
+    leaves the draft alone — the draft is seeded once, on purpose, so a refresh
+    cannot throw away what somebody is typing. The comparison did not know
+    that, so recording ONE ใบเซอร์วิส left the ticket claiming unsaved changes
+    for the rest of the session.
+
+    A warning that is always on is a warning nobody reads, and this one is what
+    stands between the counter and losing an edit.
+  */
   const isDirty = useMemo(
-    () => JSON.stringify(t) !== JSON.stringify(initialTicket),
+    () => JSON.stringify(formOwned(t)) !== JSON.stringify(formOwned(initialTicket)),
     [t, initialTicket],
   );
   useUnsavedChangesGuard(isDirty, 'มีข้อมูลในใบงานนี้ที่ยังไม่ได้บันทึก');
@@ -925,6 +958,37 @@ export function TicketDetail({
   function updateExtraDetail(name: string, key: string, val: unknown) {
     setT({ ...t, extras: { ...t.extras, [name]: { ...(t.extras?.[name] || {}), [key]: val } } });
   }
+
+  /**
+   * แก้แล้วบันทึกทันที — for the parts of ข้อมูลเพิ่มเติม that sit beside
+   * something which already saves itself (ร้านแจ้ง 26 ก.ย. 2569).
+   *
+   * วันนัด Service is the case: a ใบเซอร์วิส saves the moment it is recorded,
+   * so nothing on that screen suggests the appointment above it is still only
+   * in the browser. It was — the schedule reached the database through
+   * บันทึกใบงาน and nothing else — and since every unconfirmed row is rebuilt
+   * from the start date, a lost save took the real dates with it and put the
+   * plain six-month grid back.
+   *
+   * `save_ticket_extras` writes the whole extras column and is allowed on a
+   * closed ticket (0022), which is the same path บันทึกข้อมูลเพิ่มเติม uses. A
+   * brand-new ticket has no row to write to yet, so it keeps the draft
+   * behaviour until it is saved for the first time.
+   */
+  async function saveExtraDetail(name: string, key: string, val: unknown) {
+    const extras = { ...t.extras, [name]: { ...(t.extras?.[name] || {}), [key]: val } };
+    setT({ ...t, extras });
+    if (isNew || !extrasAction) return;
+    const result = await extrasAction({
+      ticketId: t.id,
+      extras: extras as Record<string, unknown>,
+    });
+    if (!result.ok) {
+      setSaveError(result.error || 'บันทึกวันนัดไม่สำเร็จ');
+      return;
+    }
+    setSaved('บันทึกวันนัดแล้ว');
+  }
   function setSlideType(st: string) {
     const current = t.extras?.['รถสไลด์'] || {};
     const legCount = st === 'Walk-in' ? 1 : st === 'Showroom' ? 2 : 0;
@@ -1365,6 +1429,7 @@ export function TicketDetail({
                     stock={stock}
                     toggleExtra={toggleExtra}
                     updateExtraDetail={updateExtraDetail}
+                    saveExtraDetail={saveExtraDetail}
                     setSlideType={setSlideType}
                     updateSlideLeg={updateSlideLeg}
                     shareLink={shareLink}
