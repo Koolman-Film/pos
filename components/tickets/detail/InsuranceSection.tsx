@@ -352,10 +352,18 @@ export function InsuranceSection({
               />
             </div>
           </div>
-          {/* Said plainly, because it is the whole reason this is not a ticket
-              line: the money lands on the day the policy was sold. */}
+          {/*
+            Two separate things, and running them together is what lost the
+            money (ร้านแจ้ง 26 ก.ย. 2569). The premium is REVENUE on the day the
+            policy was sold — that is why it is its own record and not a ticket
+            line — but it is still OWED on this ticket, by this customer, at
+            this counter. The caption used to say it did not affect the ticket
+            at all, and the total agreed with it, so คงเหลือ never asked for the
+            6,000 and nobody ever recorded receiving it.
+          */}
           <p className="text-xs mb-2.5" style={{ color: 'var(--ink-faint)' }}>
-            รายได้จะเข้าวันที่ขายนี้ ไม่กระทบยอดขายของใบงาน
+            นับเป็นรายได้ของวันที่ขายนี้ (ไม่ใช่วันรับรถ) · ยอดนี้รวมอยู่ใน ยอดสุทธิ ของใบงาน
+            ให้รับเงินในหัวข้อ การชำระเงิน
           </p>
 
           <div className="grid grid-cols-2 gap-2 mb-1">

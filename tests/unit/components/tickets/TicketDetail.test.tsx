@@ -1205,3 +1205,80 @@ describe('TicketDetail — เงินเข้าบัญชีตรงก�
     expect(screen.queryByText(/เงินเข้าบัญชีไม่ตรงกับที่ขาย/)).toBeNull();
   });
 });
+
+/**
+ * ค่าประกันต้องถูกเรียกเก็บบนใบงาน (ร้านแจ้ง 26 ก.ย. 2569).
+ *
+ * A policy is its own record and its revenue belongs to the day it was sold
+ * (0023) — but the ticket's total left it out entirely, so selling ประกัน 6,000
+ * moved nothing on screen. คงเหลือ never asked for the money, nobody recorded
+ * receiving it, and the premium never reached an account balance or the
+ * dashboard's ยอดขาย, which counts money actually received. The report on the
+ * other side counted it as revenue, so the two disagreed by every premium ever
+ * written.
+ */
+describe('TicketDetail — ค่าประกันรวมอยู่ในยอดของใบงาน', () => {
+  const policy = {
+    id: 5,
+    ticketId: 'JT-CM-00214',
+    plate: '250 กก',
+    planName: 'ประกันฟิล์มกันรอย 1 ปี',
+    price: 6000,
+    bigPieces: 3,
+    smallPieces: 20,
+    terms: '',
+    soldAt: '2026-09-24',
+    startsAt: '2026-09-24',
+    endsAt: '2027-09-24',
+    notes: '',
+    claims: [],
+  };
+
+  const withPolicy = () =>
+    makeTicket({
+      items: [
+        {
+          category: 'ฟิล์มกันรอย',
+          booked: '',
+          bookedPrice: 0,
+          sold: 'TPU',
+          soldPrice: 4000,
+        },
+      ],
+      payments: [{ type: 'ชำระเต็มจำนวน', method: 'เงินสด', amount: 4000, date: '2026-09-24' }],
+      insurancePolicies: [policy],
+      extras: { ประกัน: { checked: true } },
+    });
+
+  it('นับค่าประกันเข้ายอดสุทธิ และยังค้างอยู่จนกว่าจะรับเงิน', () => {
+    render(<TicketDetail {...baseProps(withPolicy())} />);
+    // 4,000 ของฟิล์ม + 6,000 ค่าประกัน — the ticket asks for all of it.
+    expect(screen.getByText(/ยอดสุทธิ 10,000.00/)).toBeInTheDocument();
+    expect(screen.getByText(/คงเหลือ 6,000.00/)).toBeInTheDocument();
+  });
+
+  it('ค่าประกันขึ้นเป็นบรรทัดหนึ่งในใบเสร็จรับเงิน', async () => {
+    const user = userEvent.setup();
+    render(<TicketDetail {...baseProps(withPolicy())} />);
+    await user.click(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' }));
+    await user.click(screen.getByRole('button', { name: /^ออก/ }));
+    // The premium is on the paper the customer is handed, or the total would
+    // not match the rows above it.
+    expect(screen.getAllByText('ประกันฟิล์มกันรอย 1 ปี').length).toBeGreaterThan(0);
+  });
+
+  it('ไม่มีประกัน ยอดก็เป็นของสินค้าอย่างเดียวเหมือนเดิม', () => {
+    render(
+      <TicketDetail
+        {...baseProps(
+          makeTicket({
+            items: [
+              { category: 'ฟิล์มกันรอย', booked: '', bookedPrice: 0, sold: 'TPU', soldPrice: 4000 },
+            ],
+          }),
+        )}
+      />,
+    );
+    expect(screen.getByText(/ยอดสุทธิ 4,000.00/)).toBeInTheDocument();
+  });
+});
