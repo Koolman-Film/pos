@@ -209,6 +209,18 @@ export type InsurancePolicy = {
   startsAt: string;
   endsAt: string;
   notes: string;
+  /**
+   * การรับเงินค่าประกัน — ของกรมธรรม์เอง ไม่ใช่ของใบงาน (migration 0071).
+   *
+   * A job is often delivered, paid in full and locked before the customer
+   * comes back for the cover, so the premium cannot be collected on the
+   * ticket: the lock refuses new payments on it. It is received here instead,
+   * on its own day, into its own แหล่งเงิน (ร้านแจ้ง 26 ก.ย. 2569).
+   */
+  paidAmount: number;
+  paidAt: string;
+  /** แหล่งเงินที่เงินเข้า — matched by name, like every other payment. */
+  paidMethod: string;
   claims: InsuranceClaim[];
 };
 

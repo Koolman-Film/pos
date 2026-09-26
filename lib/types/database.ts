@@ -452,6 +452,9 @@ export type Database = {
           ends_at: string | null
           id: number
           notes: string
+          paid_amount: number
+          paid_at: string | null
+          paid_method: string
           plan_name: string
           plate: string
           price: number
@@ -468,6 +471,9 @@ export type Database = {
           ends_at?: string | null
           id?: never
           notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          paid_method?: string
           plan_name?: string
           plate?: string
           price?: number
@@ -484,6 +490,9 @@ export type Database = {
           ends_at?: string | null
           id?: never
           notes?: string
+          paid_amount?: number
+          paid_at?: string | null
+          paid_method?: string
           plan_name?: string
           plate?: string
           price?: number

@@ -22,10 +22,15 @@ import { itemNetPrice } from '@/lib/domain/tickets';
  *
  * A payment carries no ชนิดสินค้า, so the breakdown under the headline splits
  * each payment across what it paid for, in proportion to value: the ticket's
- * lines by ชนิดสินค้า plus any ประกัน sold on that ticket (a policy is its own
- * record, 0023, and its premium is taken as a payment on the ticket), and a
- * PO's goods by the ชนิดสินค้า the stock register gives them. The split adds up
- * to the payment to the satang, so the rows still add up to the headline.
+ * lines by ชนิดสินค้า, and a PO's goods by the ชนิดสินค้า the stock register
+ * gives them. The split adds up to the payment to the satang, so the rows
+ * still add up to the headline.
+ *
+ * ค่าประกันไม่ได้อยู่ในนั้น (0071). A policy has its own payment, received on
+ * its own day into its own แหล่งเงิน — usually long after the job was paid for
+ * and closed — so it is a receipt of its own rather than a share of the
+ * ticket's. It used to be folded in as a weight, which reported premium sales
+ * nobody had paid for and understated the film in the same breath.
  *
  * That same split answers "how much of this 4,000 baht was ours" on a mixed
  * job: the share that bought the lines that were ours. There is no better
@@ -90,6 +95,15 @@ export function splitByWeight(
   });
 }
 
+/** ค่าประกันที่รับเงินมาแล้วหนึ่งก้อน (0071). */
+export type PolicyReceipt = {
+  ticketId: string;
+  shop: string;
+  /** วันที่รับเงิน, `YYYY-MM-DD` — not the day the policy was sold. */
+  on: string;
+  amount: number;
+};
+
 export type ReceiptTicket = {
   id: string;
   shop: string;
@@ -102,30 +116,18 @@ export type ReceiptTicket = {
 
 export function ticketReceipts(
   tickets: ReceiptTicket[],
-  policies: { ticketId: string; price: number }[],
+  /** ค่าประกันที่รับเงินแล้ว — each with the day and branch it arrived in. */
+  policies: PolicyReceipt[],
 ): SalesReceipt[] {
-  const insuranceByTicket = new Map<string, number>();
-  for (const p of policies) {
-    insuranceByTicket.set(
-      p.ticketId,
-      (insuranceByTicket.get(p.ticketId) ?? 0) + Number(p.price || 0),
-    );
-  }
-
   const lines: SalesReceipt[] = [];
   for (const t of tickets) {
-    const weights: Weighted[] = [
-      // A line with no answer of its own falls back to the ticket's, so a
-      // caller that has not been taught about per-line kinds still works.
-      ...t.items.map((i) => ({
-        category: i.category ?? '',
-        held: i.held ?? t.held,
-        weight: itemNetPrice(i),
-      })),
-      // ประกัน is sold by the branch that sold it, even on a held job — the
-      // same rule โมดูลรายได้ applies to the policy line.
-      { category: INSURANCE_CATEGORY, held: false, weight: insuranceByTicket.get(t.id) ?? 0 },
-    ];
+    // A line with no answer of its own falls back to the ticket's, so a
+    // caller that has not been taught about per-line kinds still works.
+    const weights: Weighted[] = t.items.map((i) => ({
+      category: i.category ?? '',
+      held: i.held ?? t.held,
+      weight: itemNetPrice(i),
+    }));
     for (const p of t.payments) {
       const on = dayOf(p.on);
       const amount = Number(p.amount || 0);
@@ -134,6 +136,26 @@ export function ticketReceipts(
         lines.push({ sourceId: t.id, shop: t.shop, on, channel: 'ปลีก', ...share });
       }
     }
+  }
+
+  /*
+    ค่าประกันเข้ายอดขายตามวันที่รับเงิน — และเป็นของสาขาที่ขายเสมอ, even on a
+    job whose goods belong to Finnix, which is the rule โมดูลรายได้ applies to
+    the policy line too.
+  */
+  for (const p of policies) {
+    const amount = Number(p.amount || 0);
+    const on = dayOf(p.on);
+    if (!on || !amount) continue;
+    lines.push({
+      sourceId: p.ticketId,
+      shop: p.shop,
+      on,
+      channel: 'ปลีก',
+      held: false,
+      category: INSURANCE_CATEGORY,
+      amount: satang(amount),
+    });
   }
   return lines;
 }

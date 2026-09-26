@@ -367,7 +367,6 @@ export function PrintJobSheet({
   shopInfo,
   stock,
   extraOptions,
-  policies = [],
   total,
   paid,
   docType,
@@ -389,11 +388,6 @@ export function PrintJobSheet({
   shopInfo: Record<string, ShopInfo>;
   stock: StockRow[];
   extraOptions: string[];
-  /**
-   * ประกันที่ขายบนใบงานนี้ (0023) — a policy is its own record, never a ticket
-   * line, but the customer is still billed for it here (ร้านแจ้ง 26 ก.ย. 2569).
-   */
-  policies?: { planName: string; price: number }[];
   total: number;
   paid: number;
   docType: string;
@@ -2115,23 +2109,12 @@ export function PrintJobSheet({
       for what they paid.
     */
     const docItems = isTaxInvoice ? t.items.filter((i) => i.revenueKind !== 'รับแทน') : t.items;
-    /*
-      ค่าประกันอยู่บนใบเสร็จ แต่ไม่อยู่บนใบกำกับภาษี.
-
-      The customer is billed for the premium here and must see it on the
-      receipt, or the total will not match the rows. It is left OFF the tax
-      invoice on purpose: putting a line there asserts VAT was charged on it,
-      and whether a warranty premium is VATable is the shop's accountant's
-      call, not this component's. Ask them before moving it.
-    */
-    const docPolicies = isTaxInvoice ? [] : policies.filter((p) => Number(p.price || 0) > 0);
-    const policyTotal = docPolicies.reduce((n, p) => n + Number(p.price || 0), 0);
     const docTotal = isTaxInvoice
       ? docItems.filter((i) => i.sold).reduce((n, i) => n + itemNetPrice(numeric(i)), 0)
       : total;
-    const grossTotal =
-      docItems.filter((i) => i.sold).reduce((s, i) => s + Number(i.soldPrice || 0), 0) +
-      policyTotal;
+    const grossTotal = docItems
+      .filter((i) => i.sold)
+      .reduce((s, i) => s + Number(i.soldPrice || 0), 0);
     const totalDiscount = grossTotal - docTotal;
     const isQuotation = docType === 'ใบเสนอราคา';
     /*
@@ -2178,16 +2161,7 @@ export function PrintJobSheet({
             amount: Number(i.soldPrice || 0),
           },
         ];
-      })
-      .concat(
-        docPolicies.map((p) => ({
-          qty: 1,
-          category: 'ประกัน',
-          product: p.planName || 'ประกัน',
-          detail: '',
-          amount: Number(p.price || 0),
-        })),
-      );
+      });
 
     const totalRow = (label: React.ReactNode, value: string, strong = false) => (
       <div

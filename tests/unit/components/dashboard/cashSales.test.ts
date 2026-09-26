@@ -67,10 +67,10 @@ describe('ticketReceipts', () => {
           payments: [{ amount: 10000, on: '2026-09-10' }],
         }),
       ],
-      [{ ticketId: 'JT-CM-00214', price: 2500 }],
+      [{ ticketId: 'JT-CM-00214', shop: 'cm', on: '2026-09-10', amount: 2500 }],
     );
     expect(lines.map((l) => [l.category, l.amount])).toEqual([
-      ['ฟิล์มกันรอย', 7500],
+      ['ฟิล์มกันรอย', 10000],
       ['ประกัน', 2500],
     ]);
   });
@@ -220,10 +220,12 @@ describe('ticketReceipts — ใบงานที่เงินไม่ได
           payments: [{ amount: 5000, on: '2026-09-25' }],
         }),
       ],
-      [{ ticketId: 'JT-CM-00214', price: 1000 }],
+      [{ ticketId: 'JT-CM-00214', shop: 'cm', on: '2026-09-25', amount: 1000 }],
     );
     expect(lines.find((l) => l.category === 'ประกัน')).toMatchObject({ held: false, amount: 1000 });
-    expect(sumReceipts(lines.filter((l) => l.held))).toBe(4000);
+    // The whole 5,000 paid on the ticket is the held work's; the premium is
+    // its own 1,000 on top (0071).
+    expect(sumReceipts(lines.filter((l) => l.held))).toBe(5000);
   });
 
   it('ใบงานที่ไม่ได้บอกทีละรายการ ยังใช้คำตอบของทั้งใบเหมือนเดิม', () => {
@@ -238,40 +240,60 @@ describe('ticketReceipts — ใบงานที่เงินไม่ได
 });
 
 /**
- * ค่าประกันเข้ายอดขายเมื่อรับเงินแล้ว (ร้านแจ้ง 26 ก.ย. 2569).
+ * ค่าประกันเข้ายอดขายตามวันที่รับเงินของมันเอง (migration 0071).
  *
- * The premium is a sale like any other, but the dashboard counts money
- * RECEIVED — so it reaches ยอดขาย through the ticket's payment, split across
- * what that payment bought. Until the ticket's total asked for the premium
- * nobody recorded the money, and these pin the behaviour that depends on it.
+ * A policy is usually bought after the job was delivered, paid in full and
+ * locked, so its money never goes through the ticket. It used to be folded
+ * into the ticket's split as a weight, which reported premium sales nobody had
+ * paid for and understated the film in the same breath.
  */
 describe('ticketReceipts — ค่าประกัน', () => {
-  const filmAndPolicy = job({
+  const film = job({
     items: [{ category: 'ฟิล์มกันรอย', soldPrice: 4000 }],
-    payments: [{ amount: 10000, on: '2026-09-24' }],
+    payments: [{ amount: 4000, on: '2026-09-24' }],
   });
-  const policy = [{ ticketId: 'JT-CM-00214', price: 6000 }];
+  const premium = {
+    ticketId: 'JT-CM-00214',
+    shop: 'cm',
+    on: '2026-10-20',
+    amount: 6000,
+  };
 
-  it('แยกเงินที่รับมาให้ค่าประกันตามราคาของมัน', () => {
-    const lines = ticketReceipts([filmAndPolicy], policy);
-    expect(lines.find((l) => l.category === 'ประกัน')?.amount).toBe(6000);
-    expect(lines.find((l) => l.category === 'ฟิล์มกันรอย')?.amount).toBe(4000);
+  it('นับค่าประกันเป็นใบเสร็จของตัวเอง ในวันที่รับเงิน', () => {
+    const lines = ticketReceipts([film], [premium]);
+    // The film's money stays the film's — not diluted by a premium paid a
+    // month later.
+    expect(lines.find((l) => l.category === 'ฟิล์มกันรอย')).toMatchObject({
+      amount: 4000,
+      on: '2026-09-24',
+    });
+    expect(lines.find((l) => l.category === 'ประกัน')).toMatchObject({
+      amount: 6000,
+      on: '2026-10-20',
+      held: false,
+    });
     expect(sumReceipts(lines)).toBe(10000);
   });
 
-  it('ยังไม่รับเงิน ก็ยังไม่เข้ายอดขาย', () => {
-    // The sale is real and the report counts it on its own date; this card
+  it('ยังไม่รับเงินค่าประกัน ก็ยังไม่เข้ายอดขาย', () => {
+    // The sale is real and โมดูลรายได้ counts it on its own date; this card
     // counts cash, and no cash has arrived.
-    const lines = ticketReceipts([job({ ...filmAndPolicy, payments: [] })], policy);
-    expect(lines).toEqual([]);
+    const lines = ticketReceipts([film], []);
+    expect(lines.every((l) => l.category !== 'ประกัน')).toBe(true);
   });
 
-  it('รับเงินมาบางส่วน แบ่งให้ทั้งสองฝั่งตามสัดส่วน', () => {
+  it('ค่าประกันเป็นของสาขาที่ขาย แม้งานในใบจะเป็นของ Finnix', () => {
     const lines = ticketReceipts(
-      [job({ ...filmAndPolicy, payments: [{ amount: 5000, on: '2026-09-24' }] })],
-      policy,
+      [job({ items: [{ category: 'ฟิล์มกันรอย', soldPrice: 4000, held: true }], payments: [] })],
+      [premium],
     );
-    expect(lines.find((l) => l.category === 'ประกัน')?.amount).toBe(3000);
-    expect(sumReceipts(lines)).toBe(5000);
+    expect(lines.find((l) => l.category === 'ประกัน')?.held).toBe(false);
+  });
+
+  it('ใบงานที่ปิดและชำระครบไปแล้ว ยังรับค่าประกันทีหลังได้', () => {
+    // The whole reason the premium has a payment of its own: nothing here
+    // touches the ticket, which may be locked.
+    const lines = ticketReceipts([job({ payments: [] })], [premium]);
+    expect(sumReceipts(lines)).toBe(6000);
   });
 });

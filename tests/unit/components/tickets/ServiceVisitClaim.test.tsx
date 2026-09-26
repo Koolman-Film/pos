@@ -34,6 +34,9 @@ const policy = (over: Partial<InsurancePolicy> = {}): InsurancePolicy => ({
   startsAt: '2026-08-01',
   endsAt: '2099-08-01',
   notes: '',
+  paidAmount: 0,
+  paidAt: '',
+  paidMethod: '',
   claims: [],
   ...over,
 });

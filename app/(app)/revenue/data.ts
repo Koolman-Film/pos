@@ -92,7 +92,9 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
             'ticket_payments(amount, method)',
         )
         .is('deleted_at', null),
-      supabase.from('insurance_policies').select('ticket_id, plan_name, price, sold_at'),
+      supabase
+        .from('insurance_policies')
+        .select('ticket_id, plan_name, price, sold_at, paid_amount'),
       supabase.from('ticket_documents').select('ticket_id, doc_type, doc_no, issued_at'),
       // What the materials cost. Consumption is negative in the ledger, so the
       // sum comes back negative and is flipped where it is read.
@@ -152,29 +154,25 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
   const byId = new Map(tickets.map((t) => [t.id, t]));
 
   /*
-    การชำระเงินของใบงาน — against everything the report sells on the ticket:
-    its lines AND any ประกัน sold on it. The premium is paid on the ticket
-    (cashSales does the same), so leaving it out of the total understated what
-    is owed by every unpaid premium.
+    การชำระเงินของใบงาน — ค่าสินค้าอย่างเดียว.
+
+    ค่าประกันไม่รวมอยู่ในนี้ (0071): it has its own payment, received on its own
+    day, because a policy is usually bought after the job was delivered, paid
+    in full and LOCKED — and a locked ticket refuses new payments. The policy
+    line below carries its own paid/due.
   */
-  const premiumOn = new Map<string, number>();
-  for (const p of policyRows ?? []) {
-    premiumOn.set(p.ticket_id, (premiumOn.get(p.ticket_id) ?? 0) + Number(p.price || 0));
-  }
   const paymentOf = new Map<string, PaymentSummary>();
   for (const t of tickets) {
-    const total =
-      (premiumOn.get(t.id) ?? 0) +
-      (t.ticket_items ?? []).reduce(
-        (s, i) =>
-          s +
-          itemNetPrice({
-            soldPrice: Number(i.sold_price || 0),
-            discountType: (i.discount_type as 'percent' | 'amount' | null) ?? undefined,
-            discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
-          }),
-        0,
-      );
+    const total = (t.ticket_items ?? []).reduce(
+      (s, i) =>
+        s +
+        itemNetPrice({
+          soldPrice: Number(i.sold_price || 0),
+          discountType: (i.discount_type as 'percent' | 'amount' | null) ?? undefined,
+          discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
+        }),
+      0,
+    );
     paymentOf.set(
       t.id,
       summarizePayments(
@@ -252,7 +250,14 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       channel: 'ปลีก',
       bookingChannel: t.booking_channel ?? '',
       car: carOf(t),
-      payment: paymentForLine(p.ticket_id),
+      /*
+        การชำระเงินของกรมธรรม์เอง (0071) — not the ticket's. It is bought as
+        often as not after the job was paid for and closed, so its money never
+        went through the ticket at all.
+      */
+      payment: summarizePayments(Number(p.price || 0), [
+        { amount: Number(p.paid_amount || 0), method: 'ค่าประกัน' },
+      ]),
     });
   }
 

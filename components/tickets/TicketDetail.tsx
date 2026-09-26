@@ -690,6 +690,12 @@ export function TicketDetail({
         startsAt: policy.startsAt || null,
         endsAt: policy.endsAt || null,
         notes: policy.notes,
+        // การรับเงินค่าประกัน (0071) — its own, on its own day, into its own
+        // แหล่งเงิน. A policy is often bought after the job closed, so this
+        // money never goes through the ticket.
+        paidAmount: policy.paidAmount || 0,
+        paidAt: policy.paidAt || null,
+        paidMethod: policy.paidMethod || '',
       },
       claims: policy.claims.map((c) => ({
         claimedAt: c.claimedAt || null,
@@ -1147,25 +1153,16 @@ export function TicketDetail({
   }
 
   /*
-    ยอดของใบงานนี้ รวมค่าประกันด้วย (ร้านแจ้ง 26 ก.ย. 2569).
+    ยอดของใบงาน = ค่าสินค้า. ค่าประกันมีการรับเงินของตัวเอง (0071).
 
-    A policy is its own record, not a ticket line (0023) — and this total left
-    it out, so selling ประกัน 6,000 moved nothing on screen. คงเหลือ never asked
-    for the money, so nobody recorded a payment for it, so the premium never
-    reached an account balance and never appeared in ยอดขาย on the dashboard,
-    which counts money actually received. The report on the other side DID
-    count it (it is revenue on the day it was sold), so the two disagreed by
-    the price of every policy ever written.
-
-    โมดูลรายได้ has added the premium to the ticket's total for a while
-    (app/(app)/revenue/data.ts) and cashSales splits payments across it too.
-    This was the one place still counting only the lines.
+    The premium is NOT added here, and that is deliberate (ร้านแจ้ง 26 ก.ย.
+    2569): a job is often delivered, paid in full and locked, and the customer
+    comes back weeks later to buy the cover. Putting it on the ticket would
+    reopen a balance on a closed record that the lock then refuses to let
+    anybody clear. The policy is received on its own day, into its own
+    แหล่งเงิน, in ข้อมูลเพิ่มเติม → ประกัน.
   */
-  const premiumTotal = (initialTicket.insurancePolicies ?? []).reduce(
-    (s, p) => s + Number(p.price || 0),
-    0,
-  );
-  const itemsTotal = t.items.reduce(
+  const total = t.items.reduce(
     (s, i) =>
       s +
       itemNetPrice({
@@ -1176,7 +1173,6 @@ export function TicketDetail({
       }),
     0,
   );
-  const total = itemsTotal + premiumTotal;
   const paid = t.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
   return (
@@ -1449,6 +1445,7 @@ export function TicketDetail({
                               onSave={saveInsurancePolicy}
                               onDelete={deleteInsurancePolicy}
                               onPrint={printInsuranceReceipt}
+                              payAccounts={payAccounts}
                               onPrintClaim={printInsuranceClaim}
                             />
                           )
@@ -1901,11 +1898,6 @@ export function TicketDetail({
 
         <PrintJobSheet
           t={t}
-          // Server-owned, like the section that lists them.
-          policies={(initialTicket.insurancePolicies ?? []).map((p) => ({
-            planName: p.planName,
-            price: Number(p.price || 0),
-          }))}
           printMode={printMode}
           currentUserName={currentUserName}
           shopName={shopName}

@@ -192,7 +192,7 @@ export default async function DashboardPage({
     // warning both have to read the policies themselves.
     supabase
       .from('insurance_policies')
-      .select('id, ticket_id, plate, plan_name, price, sold_at, ends_at')
+      .select('id, ticket_id, plate, plan_name, price, sold_at, ends_at, paid_amount, paid_at')
       .order('ends_at', { ascending: true }),
     // การเคลมที่มีวันนัด (migration 0041). Bounded like the visits above: a
     // claim is an appointment only while it is near, and the history lives on
@@ -375,6 +375,9 @@ export default async function DashboardPage({
     price: number;
     sold_at: string | null;
     ends_at: string | null;
+    /** การรับเงินค่าประกัน (0071) — its own, on its own day. */
+    paid_amount: number | null;
+    paid_at: string | null;
   };
   const policies = ((policyRows ?? []) as unknown as PolicyRow[]).filter((p) =>
     inShop(shopByTicketId.get(p.ticket_id) ?? ''),
@@ -409,10 +412,21 @@ export default async function DashboardPage({
         items: t.items,
         payments: t.payments.map((p) => ({ amount: p.amount, on: p.paidOn })),
       })),
-      ((policyRows ?? []) as unknown as PolicyRow[]).map((p) => ({
-        ticketId: p.ticket_id,
-        price: num(p.price),
-      })),
+      /*
+        ค่าประกันเข้ายอดขายตามวันที่รับเงิน (0071), not the day it was sold and
+        not as a share of the ticket's own payments — a policy is usually
+        bought after the job was paid for and closed, so its money never went
+        through the ticket at all.
+      */
+      ((policyRows ?? []) as unknown as PolicyRow[])
+        .filter((p) => p.paid_at && num(p.paid_amount) > 0)
+        .map((p) => ({
+          ticketId: p.ticket_id,
+          shop: shopByTicketId.get(p.ticket_id) ?? '',
+          on: (p.paid_at ?? '').slice(0, 10),
+          amount: num(p.paid_amount),
+        }))
+        .filter((p) => p.shop),
     ),
     ...orderReceipts(
       orders.map((o) => ({

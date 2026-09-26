@@ -283,15 +283,13 @@ export async function createTicket(p: TicketSavePayload): Promise<SaveResult> {
  * the resulting flag, which is the part that has to be un-walk-around-able.
  */
 /**
- * ใบงานนี้ชำระครบจนล็อกได้หรือยัง.
+ * ใบงานนี้ชำระครบจนล็อกได้หรือยัง — นับเฉพาะค่าสินค้า.
  *
- * `p_premium` is what the ticket's ประกัน costs, read from the stored policies
- * rather than the payload — a policy is its own record and the form does not
- * send it (0023). Left out, a ticket with an unpaid premium counted as paid in
- * full and locked itself, which is how the money stopped being asked for
- * (ร้านแจ้ง 26 ก.ย. 2569).
+ * ค่าประกันไม่นับ: it has its own payment (0071) and is often bought weeks
+ * after the job closed, so a ticket that was genuinely settled for its goods
+ * must still be able to close (ร้านแจ้ง 26 ก.ย. 2569).
  */
-function shouldLock(p: TicketSavePayload, premium: number): boolean {
+function shouldLock(p: TicketSavePayload): boolean {
   if (p.status !== 'ส่งมอบแล้ว') return false;
   const forTotals = {
     items: p.items.map((i) => ({
@@ -301,20 +299,8 @@ function shouldLock(p: TicketSavePayload, premium: number): boolean {
     })),
     payments: p.payments.map((pay) => ({ amount: pay.amount })),
   };
-  const total = ticketTotal(forTotals) + premium;
+  const total = ticketTotal(forTotals);
   return total > 0 && ticketPaid(forTotals) >= total;
-}
-
-/** ค่าประกันที่ขายบนใบงานนี้ — its own table since 0023. */
-async function premiumOnTicket(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  ticketId: string,
-): Promise<number> {
-  const { data } = await supabase
-    .from('insurance_policies')
-    .select('price')
-    .eq('ticket_id', ticketId);
-  return (data ?? []).reduce((n, r) => n + Number(r.price || 0), 0);
 }
 
 export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
@@ -338,7 +324,7 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
     // Closing the ticket is the LAST thing that happens, after the children are
     // written — `save_ticket_children` refuses to touch a locked ticket, so
     // setting the flag any earlier would block the same save that sets it.
-    if (shouldLock(p, await premiumOnTicket(supabase, p.id))) {
+    if (shouldLock(p)) {
       await supabase
         .from('tickets')
         .update({ locked: true } as unknown as TicketUpdate)

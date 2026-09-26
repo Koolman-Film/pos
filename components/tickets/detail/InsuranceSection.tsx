@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
-import { fmtThaiDate } from '@/lib/domain/format';
+import { fmt, fmtThaiDate } from '@/lib/domain/format';
+import { LEGACY_METHOD_SUFFIX, payableAccounts, type PayAccount } from '@/lib/domain/payAccount';
 import { dateInputValue } from '@/lib/domain/now';
 
 import type { InsuranceClaim, InsurancePlan, InsurancePolicy, Ticket } from '../types';
@@ -85,12 +86,19 @@ function emptyPolicy(t: Ticket, plan?: InsurancePlan): InsurancePolicy {
     startsAt: today,
     endsAt: plan ? addMonths(today, plan.months) : '',
     notes: '',
+    // Not received until somebody says it was. The premium has its own
+    // payment because a policy is often bought after the job was paid for and
+    // closed (0071).
+    paidAmount: 0,
+    paidAt: '',
+    paidMethod: '',
     claims: [],
   };
 }
 
 export function InsuranceSection({
   t,
+  payAccounts = [],
   policies,
   forPlate,
   plans,
@@ -101,6 +109,8 @@ export function InsuranceSection({
   onPrintClaim,
 }: {
   t: Ticket;
+  /** แหล่งเงินของสาขานี้ — where the premium is received (0071). */
+  payAccounts?: PayAccount[];
   /**
    * From the SERVER copy of the ticket, like the service visits: the form seeds
    * its draft from props once, so a policy saved through `router.refresh()`
@@ -128,6 +138,12 @@ export function InsuranceSection({
   const [error, setError] = useState<string | null>(null);
 
   const usable = plans.filter((p) => p.active);
+  // Received into one of this branch's แหล่งเงิน — the same list the ticket's
+  // own payment rows offer (0064).
+  const branchAccounts = payableAccounts(payAccounts, t.shop);
+  const premiumDue = draft
+    ? Math.max(Number(draft.price || 0) - Number(draft.paidAmount || 0), 0)
+    : 0;
 
   function startNew() {
     setError(null);
@@ -487,6 +503,78 @@ export function InsuranceSection({
             ))}
             <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
               เคลมประกันได้ที่การบันทึกการเซอร์วิส (บริการเสริม → Service)
+            </p>
+          </div>
+
+          {/*
+            การรับเงินค่าประกัน (0071).
+
+            Its own, not the ticket's. A job is often delivered, paid in full
+            and LOCKED before the customer comes back for the cover, and a
+            locked ticket refuses new payments — so collecting the premium
+            there would be impossible exactly when it is most often needed
+            (ร้านแจ้ง 26 ก.ย. 2569). Received here, on its own day, into its own
+            แหล่งเงิน, and the money reaches the branch's balance and ยอดขาย
+            from there.
+          */}
+          <div
+            className="rounded-lg p-2.5 mb-2.5"
+            style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}
+          >
+            <p className="text-xs font-semibold mb-1.5">
+              <i className="fa-solid fa-hand-holding-dollar mr-1.5"></i>การรับเงินค่าประกัน
+            </p>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  รับเงินแล้ว (บาท)
+                </label>
+                <input
+                  type="number"
+                  aria-label="ยอดรับเงินค่าประกัน"
+                  value={draft.paidAmount || ''}
+                  onChange={(e) => set('paidAmount', Number(e.target.value) || 0)}
+                  placeholder="0"
+                  className="field w-full text-xs px-2.5 py-1.5"
+                />
+              </div>
+              <div>
+                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  วันที่รับเงิน
+                </label>
+                <ThaiDateInput
+                  value={draft.paidAt}
+                  onChange={(v) => set('paidAt', v)}
+                  className="field w-full text-xs px-2.5 py-1.5"
+                  ariaLabel="วันที่รับเงินค่าประกัน"
+                />
+              </div>
+            </div>
+            <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+              แหล่งเงินที่เงินเข้า
+            </label>
+            <select
+              aria-label="แหล่งเงินค่าประกัน"
+              value={draft.paidMethod}
+              onChange={(e) => set('paidMethod', e.target.value)}
+              className="field w-full text-xs px-2.5 py-1.5 mb-1.5"
+            >
+              <option value="">เลือกแหล่งเงินที่เงินเข้า...</option>
+              {/* A method saved before the account was renamed stays pickable,
+                  so the record still reads as it was. */}
+              {draft.paidMethod && !branchAccounts.some((a) => a.name === draft.paidMethod) && (
+                <option value={draft.paidMethod}>{draft.paidMethod + LEGACY_METHOD_SUFFIX}</option>
+              )}
+              {branchAccounts.map((a) => (
+                <option key={a.id} value={a.name}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs" style={{ color: premiumDue > 0 ? '#8A5A12' : '#4C7A3E' }}>
+              {premiumDue > 0
+                ? `ยังค้างค่าประกัน ${fmt(premiumDue)} — ยอดที่รับแล้วจะเข้ายอดขายตามวันที่รับเงิน`
+                : 'รับเงินครบแล้ว'}
             </p>
           </div>
 

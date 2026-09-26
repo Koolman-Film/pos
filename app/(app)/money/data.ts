@@ -43,6 +43,17 @@ type TicketPaymentRow = {
   tickets: { shop_id: string; customer_name: string | null; plate: string | null } | null;
 };
 
+/** ค่าประกันที่รับเงินแล้ว — its own payment since 0071. */
+type PolicyPaymentRow = {
+  id: number;
+  ticket_id: string;
+  plan_name: string | null;
+  paid_amount: number | string | null;
+  paid_at: string | null;
+  paid_method: string | null;
+  tickets: { shop_id: string; customer_name: string | null; plate: string | null } | null;
+};
+
 type OrderPaymentRow = {
   id: number;
   order_id: string;
@@ -149,92 +160,117 @@ const joined = (...parts: (string | null | undefined)[]) =>
     .join(' · ');
 
 export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
-  const [accountRows, transferRows, reconRows, ticketPays, orderPays, expenseRows, pettyRows] =
-    await Promise.all([
-      fetchAllRows(
-        (from, to) =>
-          supabase
-            .from('money_accounts')
-            .select(
-              'id, shop_id, name, kind, account_no, opening_balance, opened_at, match_names, owner, sort_order',
-            )
-            .eq('active', true)
-            .order('sort_order')
-            .order('id')
-            .range(from, to),
-        'money_accounts',
-      ),
-      fetchAllRows(
-        (from, to) =>
-          supabase
-            .from('money_transfers')
-            .select('id, shop_id, from_account_id, to_account_id, amount, moved_at, note')
-            .order('moved_at', { ascending: false })
-            .order('id', { ascending: false })
-            .range(from, to) as unknown as Page<TransferRow>,
-        'money_transfers',
-      ),
-      fetchAllRows(
-        (from, to) =>
-          supabase
-            .from('money_reconciliations')
-            .select('id, account_id, counted_at, counted_balance, system_balance, note')
-            .order('counted_at', { ascending: false })
-            .order('id', { ascending: false })
-            .range(from, to) as unknown as Page<ReconciliationRow>,
-        'money_reconciliations',
-      ),
-      fetchAllRows(
-        (from, to) =>
-          supabase
-            .from('ticket_payments')
-            .select(
-              'id, ticket_id, type, method, amount, paid_at, tickets!inner(shop_id, customer_name, plate)',
-            )
-            .is('tickets.deleted_at', null)
-            .not('paid_at', 'is', null)
-            .order('id')
-            .range(from, to) as unknown as Page<TicketPaymentRow>,
-        'ticket_payments',
-      ),
-      fetchAllRows(
-        (from, to) =>
-          supabase
-            .from('order_payments')
-            .select(
-              'id, order_id, method, amount, paid_at, cleared_at, cheque_no, cheque_bank, orders!inner(shop_id, wholesale_customers(name))',
-            )
-            .is('orders.deleted_at', null)
-            .eq('status', 'รับเงินแล้ว')
-            .order('id')
-            .range(from, to) as unknown as Page<OrderPaymentRow>,
-        'order_payments',
-      ),
-      fetchAllRows(
-        (from, to) =>
-          supabase
-            .from('expenses')
-            .select(
-              'id, shop_id, doc_no, description, category, source, amount, paid_at, expense_kind, expense_attachments(file_name, storage_path)',
-            )
-            .eq('status', 'จ่ายแล้ว')
-            .not('paid_at', 'is', null)
-            .order('id')
-            .range(from, to) as unknown as Page<ExpenseRow>,
-        'expenses',
-      ),
-      fetchAllRows(
-        (from, to) =>
-          supabase
-            .from('petty_cash')
-            .select('id, shop_id, amount, entry_at, note, money_transfer_id, transfer_skipped_at')
-            .eq('type', 'เติมเงิน')
-            .gt('amount', 0)
-            .order('id')
-            .range(from, to) as unknown as Page<PettyTopupRow>,
-        'petty_cash',
-      ),
-    ]);
+  const [
+    accountRows,
+    transferRows,
+    reconRows,
+    ticketPays,
+    policyPays,
+    orderPays,
+    expenseRows,
+    pettyRows,
+  ] = await Promise.all([
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('money_accounts')
+          .select(
+            'id, shop_id, name, kind, account_no, opening_balance, opened_at, match_names, owner, sort_order',
+          )
+          .eq('active', true)
+          .order('sort_order')
+          .order('id')
+          .range(from, to),
+      'money_accounts',
+    ),
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('money_transfers')
+          .select('id, shop_id, from_account_id, to_account_id, amount, moved_at, note')
+          .order('moved_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to) as unknown as Page<TransferRow>,
+      'money_transfers',
+    ),
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('money_reconciliations')
+          .select('id, account_id, counted_at, counted_balance, system_balance, note')
+          .order('counted_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to) as unknown as Page<ReconciliationRow>,
+      'money_reconciliations',
+    ),
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('ticket_payments')
+          .select(
+            'id, ticket_id, type, method, amount, paid_at, tickets!inner(shop_id, customer_name, plate)',
+          )
+          .is('tickets.deleted_at', null)
+          .not('paid_at', 'is', null)
+          .order('id')
+          .range(from, to) as unknown as Page<TicketPaymentRow>,
+      'ticket_payments',
+    ),
+    // ค่าประกันที่รับเงินแล้ว (0071) — its own payment, on its own day. A
+    // policy is often bought after the job was paid for and closed, so this
+    // money never went through `ticket_payments`.
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('insurance_policies')
+          .select(
+            'id, ticket_id, plan_name, paid_amount, paid_at, paid_method, tickets!inner(shop_id, customer_name, plate)',
+          )
+          .is('tickets.deleted_at', null)
+          .not('paid_at', 'is', null)
+          .gt('paid_amount', 0)
+          .order('id')
+          .range(from, to) as unknown as Page<PolicyPaymentRow>,
+      'insurance_policies',
+    ),
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('order_payments')
+          .select(
+            'id, order_id, method, amount, paid_at, cleared_at, cheque_no, cheque_bank, orders!inner(shop_id, wholesale_customers(name))',
+          )
+          .is('orders.deleted_at', null)
+          .eq('status', 'รับเงินแล้ว')
+          .order('id')
+          .range(from, to) as unknown as Page<OrderPaymentRow>,
+      'order_payments',
+    ),
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('expenses')
+          .select(
+            'id, shop_id, doc_no, description, category, source, amount, paid_at, expense_kind, expense_attachments(file_name, storage_path)',
+          )
+          .eq('status', 'จ่ายแล้ว')
+          .not('paid_at', 'is', null)
+          .order('id')
+          .range(from, to) as unknown as Page<ExpenseRow>,
+      'expenses',
+    ),
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('petty_cash')
+          .select('id, shop_id, amount, entry_at, note, money_transfer_id, transfer_skipped_at')
+          .eq('type', 'เติมเงิน')
+          .gt('amount', 0)
+          .order('id')
+          .range(from, to) as unknown as Page<PettyTopupRow>,
+      'petty_cash',
+    ),
+  ]);
 
   const accounts: MoneyAccount[] = accountRows.map((a) => ({
     id: a.id,
@@ -263,6 +299,27 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
           docNo: p.ticket_id,
           title: p.tickets!.customer_name ?? '',
           detail: joined(p.tickets!.plate, p.type),
+        },
+      })),
+    /*
+      ค่าประกัน (0071). A policy is often bought weeks after the job was
+      delivered, paid in full and locked, so its money never went through
+      `ticket_payments` — it is received against the policy, on its own day,
+      into its own แหล่งเงิน. It reaches the branch's balance from here.
+    */
+    ...policyPays
+      .filter((p) => p.paid_method && p.tickets)
+      .map((p) => ({
+        shop: p.tickets!.shop_id,
+        source: p.paid_method!,
+        amount: num(p.paid_amount),
+        on: day(p.paid_at),
+        ref: {
+          kind: 'ticket' as const,
+          id: p.ticket_id,
+          docNo: p.ticket_id,
+          title: p.tickets!.customer_name ?? '',
+          detail: joined(p.tickets!.plate, `ค่าประกัน ${p.plan_name ?? ''}`.trim()),
         },
       })),
     ...orderPays

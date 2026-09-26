@@ -446,6 +446,9 @@ describe('TicketDetail — ใบเคลมประกัน ดึงข้�
     startsAt: '2026-08-26',
     endsAt: '2027-08-26',
     notes: '',
+    paidAmount: 0,
+    paidAt: '',
+    paidMethod: '',
     claims: [
       {
         id: 9,
@@ -1207,18 +1210,25 @@ describe('TicketDetail — เงินเข้าบัญชีตรงก�
 });
 
 /**
- * ค่าประกันต้องถูกเรียกเก็บบนใบงาน (ร้านแจ้ง 26 ก.ย. 2569).
+ * ค่าประกันมีการรับเงินของตัวเอง ไม่ใช่ของใบงาน (migration 0071).
  *
- * A policy is its own record and its revenue belongs to the day it was sold
- * (0023) — but the ticket's total left it out entirely, so selling ประกัน 6,000
- * moved nothing on screen. คงเหลือ never asked for the money, nobody recorded
- * receiving it, and the premium never reached an account balance or the
- * dashboard's ยอดขาย, which counts money actually received. The report on the
- * other side counted it as revenue, so the two disagreed by every premium ever
- * written.
+ * The obvious repair was to add the premium to what the ticket is owed and
+ * collect it with everything else. It is wrong for the reason the shop gave
+ * (26 ก.ย. 2569): a job is often delivered, paid in full and LOCKED, and the
+ * customer comes back weeks later for the cover. That would reopen a balance
+ * on a closed record — and the lock then refuses the payment that would clear
+ * it, because `ticket_payments` cannot be written on a locked ticket (0017).
+ *
+ * The policy stays attached to this ticket, so ประกัน and ประวัติการเซอร์วิส for
+ * the car are read in one place (ร้านยืนยัน 26 ก.ย. 2569) — it is the PAYMENT
+ * that is its own, not the record.
  */
-describe('TicketDetail — ค่าประกันรวมอยู่ในยอดของใบงาน', () => {
-  const policy = {
+describe('TicketDetail — ค่าประกันรับเงินของตัวเอง', () => {
+  const ACCOUNTS = [
+    { id: 1, shop: 'cm', name: 'เงินสดหน้าร้าน', kind: 'cash', accountNo: '', owner: 'สาขา' },
+  ] as const;
+
+  const policy = (over: Record<string, unknown> = {}) => ({
     id: 5,
     ticketId: 'JT-CM-00214',
     plate: '250 กก',
@@ -1231,43 +1241,65 @@ describe('TicketDetail — ค่าประกันรวมอยู่ใ�
     startsAt: '2026-09-24',
     endsAt: '2027-09-24',
     notes: '',
+    paidAmount: 0,
+    paidAt: '',
+    paidMethod: '',
     claims: [],
-  };
+    ...over,
+  });
 
-  const withPolicy = () =>
+  const settledTicket = (over: Record<string, unknown> = {}) =>
     makeTicket({
       items: [
-        {
-          category: 'ฟิล์มกันรอย',
-          booked: '',
-          bookedPrice: 0,
-          sold: 'TPU',
-          soldPrice: 4000,
-        },
+        { category: 'ฟิล์มกันรอย', booked: '', bookedPrice: 0, sold: 'TPU', soldPrice: 4000 },
       ],
       payments: [{ type: 'ชำระเต็มจำนวน', method: 'เงินสด', amount: 4000, date: '2026-09-24' }],
-      insurancePolicies: [policy],
       extras: { ประกัน: { checked: true } },
+      insurancePolicies: [policy()],
+      ...over,
     });
 
-  it('นับค่าประกันเข้ายอดสุทธิ และยังค้างอยู่จนกว่าจะรับเงิน', () => {
-    render(<TicketDetail {...baseProps(withPolicy())} />);
-    // 4,000 ของฟิล์ม + 6,000 ค่าประกัน — the ticket asks for all of it.
-    expect(screen.getByText(/ยอดสุทธิ 10,000.00/)).toBeInTheDocument();
-    expect(screen.getByText(/คงเหลือ 6,000.00/)).toBeInTheDocument();
+  it('ใบงานที่ชำระค่าสินค้าครบแล้ว ไม่ถูกเปิดยอดค้างขึ้นมาใหม่เพราะขายประกัน', () => {
+    // The point of the whole design: a closed, fully-paid job stays that way.
+    render(<TicketDetail {...baseProps(settledTicket())} payAccounts={[...ACCOUNTS]} />);
+    expect(screen.getByText(/ยอดสุทธิ 4,000.00/)).toBeInTheDocument();
+    expect(screen.getByText(/ชำระครบแล้ว/)).toBeInTheDocument();
   });
 
-  it('ค่าประกันขึ้นเป็นบรรทัดหนึ่งในใบเสร็จรับเงิน', async () => {
+  it('รับเงินค่าประกันในบล็อกประกัน ด้วยวันที่และแหล่งเงินของตัวเอง', async () => {
     const user = userEvent.setup();
-    render(<TicketDetail {...baseProps(withPolicy())} />);
-    await user.click(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' }));
-    await user.click(screen.getByRole('button', { name: /^ออก/ }));
-    // The premium is on the paper the customer is handed, or the total would
-    // not match the rows above it.
-    expect(screen.getAllByText('ประกันฟิล์มกันรอย 1 ปี').length).toBeGreaterThan(0);
-  });
+    const insuranceAction = vi.fn(
+      async (input: { ticketId: string; policy: Record<string, unknown> }) => ({
+        ok: true,
+        id: 5,
+        ticketId: input.ticketId,
+      }),
+    );
+    render(
+      <TicketDetail
+        {...baseProps(settledTicket())}
+        payAccounts={[...ACCOUNTS]}
+        initialOptions={options({ extra_options: ['ประกัน'] })}
+        insuranceAction={insuranceAction}
+      />,
+    );
 
-  it('ไม่มีประกัน ยอดก็เป็นของสินค้าอย่างเดียวเหมือนเดิม', () => {
+    await user.click(screen.getByRole('button', { name: /แก้ไขประกัน|แก้ไข/ }));
+    await user.type(screen.getByLabelText('ยอดรับเงินค่าประกัน'), '6000');
+    fireEvent.change(screen.getByLabelText('วันที่รับเงินค่าประกัน'), {
+      target: { value: '2026-10-20' },
+    });
+    await user.selectOptions(screen.getByLabelText('แหล่งเงินค่าประกัน'), 'เงินสดหน้าร้าน');
+    await user.click(screen.getByRole('button', { name: /^บันทึกประกัน/ }));
+
+    expect(insuranceAction).toHaveBeenCalled();
+    expect(insuranceAction.mock.calls[0][0].policy).toMatchObject({
+      paidAmount: 6000,
+      paidAt: '2026-10-20',
+      paidMethod: 'เงินสดหน้าร้าน',
+    });
+  });
+  it('ยอดของใบงานเป็นค่าสินค้าอย่างเดียวเสมอ', () => {
     render(
       <TicketDetail
         {...baseProps(
