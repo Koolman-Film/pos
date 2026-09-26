@@ -18,6 +18,7 @@ import { updateOptionListAction } from '../optionListActions';
 type TicketInsert = Database['pos']['Tables']['tickets']['Insert'];
 type TicketUpdate = Database['pos']['Tables']['tickets']['Update'];
 import type { OptionListName, TicketSavePayload } from '@/components/tickets/types';
+import { ticketRevenueKind } from '@/components/tickets/serialize';
 
 export type SaveResult = {
   ok: boolean;
@@ -209,22 +210,6 @@ async function reverseTicketStock(
   }
 }
 
-/**
- * รายได้ / รับแทน ของทั้งใบงาน, from its lines.
- *
- * A job with nothing priced on it yet is the branch's, which is what a blank
- * ticket has always been. A mixed job is NOT รับแทน: it did earn the shop
- * something, and calling the whole thing held would lose that — the per-line
- * flags carry the real split (`ticket_items.revenue_kind`).
- */
-function ticketRevenueKind(p: TicketSavePayload): 'รายได้' | 'รับแทน' {
-  const priced = p.items.filter((i) => Number(i.soldPrice || 0) > 0);
-  // Nothing priced: keep what the form says, which is the default the lines
-  // will inherit when somebody types them.
-  if (priced.length === 0) return p.revenueKind === 'รับแทน' ? 'รับแทน' : 'รายได้';
-  return priced.every((i) => i.revenueKind === 'รับแทน') ? 'รับแทน' : 'รายได้';
-}
-
 function ticketRow(p: TicketSavePayload, id: string, retailCustomerId: number | null) {
   return {
     id,
@@ -243,7 +228,9 @@ function ticketRow(p: TicketSavePayload, id: string, retailCustomerId: number | 
     // สรุปจากรายการ (0068): รับแทน only when every priced line is held, so the
     // things that read this column — the เงินรอคืน Finnix index, the report
     // filters — keep meaning what they meant when it was asked once per job.
-    revenue_kind: ticketRevenueKind(p),
+    // Recomputed here and not taken on trust: this is a plain POST, and the
+    // column is what the report filters and the tax guard read.
+    revenue_kind: ticketRevenueKind(p.items, p.revenueKind),
     finnix_doc_no: (p.finnixDocNo ?? '').trim(),
     tech_by_category: p.techByCategory,
     drop_off_date: p.dropOffDate,

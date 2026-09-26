@@ -21,6 +21,7 @@ const base: SaleLine = {
   held: false,
   taxInvoiceNo: '',
   finnixDocNo: '',
+  paidIntoFinnix: 0,
   documents: [],
   channel: 'ปลีก',
 };

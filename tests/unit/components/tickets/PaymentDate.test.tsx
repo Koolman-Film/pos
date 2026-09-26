@@ -28,7 +28,6 @@ function renderSection(payments: TicketPayment[]) {
       paymentMethods={['เงินสด', 'โอน']}
       addPayment={vi.fn()}
       updatePayment={updatePayment}
-      setRevenueKind={vi.fn()}
       total={6500}
       paid={6500}
     />,

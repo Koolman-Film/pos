@@ -23,6 +23,24 @@ const toISODate = (d: string) => (d ? dateInputValue(new Date(d + 'T00:00:00')) 
  * must not alter migration `0004`, these fields are carried inside the free-form
  * `extras` jsonb under a reserved `__meta` key and reconstructed on load.
  */
+/**
+ * รายได้ / รับแทน ของทั้งใบงาน, from its lines (0068).
+ *
+ * A job with nothing priced yet is the branch's — what a blank ticket has
+ * always been — unless the form says otherwise, which is the default its lines
+ * will inherit. A MIXED job is not รับแทน: it did earn the shop something, and
+ * calling the whole thing held would lose that. The per-line flags carry the
+ * real split.
+ */
+export function ticketRevenueKind(
+  items: { soldPrice: number | string; revenueKind?: string }[],
+  formAnswer?: string,
+): 'รายได้' | 'รับแทน' {
+  const priced = items.filter((i) => Number(i.soldPrice || 0) > 0);
+  if (priced.length === 0) return formAnswer === 'รับแทน' ? 'รับแทน' : 'รายได้';
+  return priced.every((i) => i.revenueKind === 'รับแทน') ? 'รับแทน' : 'รายได้';
+}
+
 export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
   const extras: Record<string, unknown> = { ...t.extras };
   extras.__meta = {
@@ -55,7 +73,7 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
     serviceType: t.serviceType,
     status: t.status,
     bookingChannel: t.bookingChannel,
-    revenueKind: t.revenueKind === 'รับแทน' ? 'รับแทน' : 'รายได้',
+    revenueKind: ticketRevenueKind(t.items, t.revenueKind),
     finnixDocNo: (t.finnixDocNo ?? '').trim(),
     techByCategory: t.techByCategory || {},
     dropOffDate:

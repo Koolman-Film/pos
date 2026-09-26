@@ -589,23 +589,34 @@ describe('TicketDetail — QC ผู้รับผิดชอบ', () => {
 });
 
 describe('TicketDetail — รายได้ / รับแทน', () => {
-  it('starts on รายได้ and switches the whole ticket to รับแทน', async () => {
+  it('เริ่มที่รายได้สาขา และเปลี่ยนเป็นรายได้ Finnix ได้ทีละรายการ', async () => {
     const user = userEvent.setup();
-    const saveAction = vi.fn(async () => ({ ok: true, id: 'JT-CM-00214' }));
-    render(<TicketDetail {...baseProps(makeTicket())} saveAction={saveAction} />);
+    const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
+    render(
+      <TicketDetail
+        {...baseProps(
+          makeTicket({
+            items: [
+              { category: 'ฟิล์มกันรอย', booked: '', bookedPrice: 0, sold: 'TPU', soldPrice: 4000 },
+            ],
+          }),
+        )}
+        saveAction={saveAction}
+      />,
+    );
 
-    const held = screen.getByRole('button', { name: /รายได้ Finnix/ });
-    const own = screen.getByRole('button', { name: /รายได้ของสาขา/ });
+    const own = screen.getByRole('button', { name: 'รายได้สาขา รายการที่ 1' });
+    const held = screen.getByRole('button', { name: 'รายได้ Finnix รายการที่ 1' });
     expect(own).toHaveAttribute('aria-pressed', 'true');
     expect(held).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(held);
     expect(held).toHaveAttribute('aria-pressed', 'true');
-    // The consequence is stated on screen, not left for the report to reveal.
-    expect(screen.getByText(/ไม่นับเป็นยอดขายของสาขา/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
-    expect(saveAction).toHaveBeenCalledWith(expect.objectContaining({ revenueKind: 'รับแทน' }));
+    // A wholly-Finnix job still reads as one at the ticket level, which is
+    // what the report filters and the server-side tax guard read.
+    expect(saveAction.mock.calls[0][0]).toMatchObject({ revenueKind: 'รับแทน' });
   });
 });
 
@@ -619,13 +630,20 @@ describe('TicketDetail — รายได้ / รับแทน', () => {
 describe('TicketDetail — ล็อกใบกำกับภาษีเมื่อรายได้ Finnix', () => {
   const TAX = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
 
-  it('locks the tax invoice the moment the ticket becomes รับแทน', async () => {
+  const oneItem = () =>
+    makeTicket({
+      items: [
+        { category: 'ฟิล์มกันรอย', booked: '', bookedPrice: 0, sold: 'TPU', soldPrice: 4000 },
+      ],
+    });
+
+  it('locks the tax invoice once nothing on the job is the branch’s', async () => {
     const user = userEvent.setup();
-    render(<TicketDetail {...baseProps(makeTicket())} />);
+    render(<TicketDetail {...baseProps(oneItem())} />);
 
     expect(screen.getByRole('button', { name: TAX })).toBeEnabled();
 
-    await user.click(screen.getByRole('button', { name: /รายได้ Finnix/ }));
+    await user.click(screen.getByRole('button', { name: 'รายได้ Finnix รายการที่ 1' }));
     expect(screen.getByRole('button', { name: new RegExp(TAX) })).toBeDisabled();
     expect(screen.getByText(/จึงออกใบกำกับภาษีไม่ได้/)).toBeInTheDocument();
   });
@@ -633,10 +651,10 @@ describe('TicketDetail — ล็อกใบกำกับภาษีเม�
   it('moves the selection off the tax invoice rather than leaving it selected', async () => {
     // Otherwise the ออก… button would still offer the one document now refused.
     const user = userEvent.setup();
-    render(<TicketDetail {...baseProps(makeTicket())} />);
+    render(<TicketDetail {...baseProps(oneItem())} />);
 
     await user.click(screen.getByRole('button', { name: TAX }));
-    await user.click(screen.getByRole('button', { name: /รายได้ Finnix/ }));
+    await user.click(screen.getByRole('button', { name: 'รายได้ Finnix รายการที่ 1' }));
 
     expect(screen.getByRole('button', { name: /^ออก/ })).toHaveTextContent('ออกใบเสร็จรับเงิน');
   });
@@ -1027,35 +1045,11 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
 
     await user.click(screen.getByRole('button', { name: 'รายได้ Finnix รายการที่ 2' }));
 
-    // Neither whole-job button is on while the lines disagree, and the split is
-    // spelled out rather than left for the report to reveal.
-    expect(screen.getByRole('button', { name: /รายได้ของสาขา/ })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
-    expect(screen.getByText(/ใบงานนี้แยกกัน/)).toHaveTextContent(
-      /รายได้สาขา 6,000.00 · รายได้ Finnix 4,000.00/,
-    );
-
     await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
     const payload = saveAction.mock.calls[0][0];
     expect(payload.items.map((i) => i.revenueKind)).toEqual(['รายได้', 'รับแทน']);
     // A mixed job is not held as a whole — it did earn the branch something.
     expect(payload.revenueKind).toBe('รายได้');
-  });
-
-  it('ปุ่มด้านบนตั้งให้ทุกรายการพร้อมกัน', async () => {
-    const user = userEvent.setup();
-    // Typed through its argument, so `mock.calls[0][0]` is the payload.
-    const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
-    render(<TicketDetail {...baseProps(twoItems())} saveAction={saveAction} />);
-
-    await user.click(screen.getByRole('button', { name: /รายได้ Finnix$/ }));
-    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
-
-    const payload = saveAction.mock.calls[0][0];
-    expect(payload.items.map((i) => i.revenueKind)).toEqual(['รับแทน', 'รับแทน']);
-    expect(payload.revenueKind).toBe('รับแทน');
   });
 
   it('มีรายการ Finnix ปนอยู่ ยังออกใบกำกับภาษีได้ — เอกสารออกให้เฉพาะส่วนของสาขา', async () => {
@@ -1074,7 +1068,9 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
     const user = userEvent.setup();
     render(<TicketDetail {...baseProps(twoItems())} />);
 
-    await user.click(screen.getByRole('button', { name: /รายได้ Finnix$/ }));
+    for (const n of [1, 2]) {
+      await user.click(screen.getByRole('button', { name: `รายได้ Finnix รายการที่ ${n}` }));
+    }
     expect(screen.getByRole('button', { name: /ใบกำกับภาษี/ })).toBeDisabled();
     expect(screen.getByText(/ไม่มีรายการที่เป็นรายได้ของสาขา/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'ใบเสร็จรับเงิน' })).toBeEnabled();
@@ -1086,126 +1082,17 @@ describe('TicketDetail — รายได้/รับแทน ทีละร
     const user = userEvent.setup();
     // Typed through its argument, so `mock.calls[0][0]` is the payload.
     const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
-    render(<TicketDetail {...baseProps(makeTicket())} saveAction={saveAction} />);
+    render(
+      <TicketDetail
+        {...baseProps(makeTicket({ revenueKind: 'รับแทน' }))}
+        saveAction={saveAction}
+      />,
+    );
 
-    await user.click(screen.getByRole('button', { name: /รายได้ Finnix$/ }));
     await user.click(screen.getByRole('button', { name: /เพิ่มสินค้าในคันนี้/ }));
     await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
 
     expect(saveAction.mock.calls[0][0].items[0].revenueKind).toBe('รับแทน');
-  });
-});
-
-/**
- * จับคู่รายได้ Finnix กับบัญชีที่รับเงินไว้จริง (ร้านขอ 25 ก.ย. 2569, migration 0069).
- *
- * The lines say what was sold and whose it was; the account each payment names
- * says where the money went. They are supposed to agree — and when they do not,
- * somebody has to move money, which nobody could see before.
- */
-describe('TicketDetail — เงินเข้าบัญชีตรงกับที่ขายไหม', () => {
-  const ACCOUNTS = [
-    { id: 1, shop: 'cm', name: 'เงินสดหน้าร้าน', kind: 'cash', accountNo: '', owner: 'สาขา' },
-    {
-      id: 2,
-      shop: 'cm',
-      name: 'เงิน FINNIX - Kbank',
-      kind: 'bank',
-      accountNo: '187-1-27068-2',
-      owner: 'Finnix',
-    },
-  ] as const;
-
-  const mixedTicket = (
-    payments: { type: string; method: string; amount: number; date: string }[],
-  ) =>
-    makeTicket({
-      items: [
-        {
-          category: 'ฟิล์มกรองแสง',
-          booked: '',
-          bookedPrice: 0,
-          sold: 'ฟิล์ม A',
-          soldPrice: 6000,
-          revenueKind: 'รายได้',
-        },
-        {
-          category: 'ฟิล์มกันรอย',
-          booked: '',
-          bookedPrice: 0,
-          sold: 'TPU',
-          soldPrice: 4000,
-          revenueKind: 'รับแทน',
-        },
-      ],
-      payments,
-    });
-
-  const paid = (method: string, amount: number) => ({
-    type: 'ชำระเต็มจำนวน',
-    method,
-    amount,
-    date: '2026-09-25',
-  });
-
-  it('เงียบเมื่อเงินเข้าถูกบัญชีทั้งสองฝั่ง', () => {
-    render(
-      <TicketDetail
-        {...baseProps(
-          mixedTicket([paid('เงินสดหน้าร้าน', 6000), paid('เงิน FINNIX - Kbank', 4000)]),
-        )}
-        payAccounts={[...ACCOUNTS]}
-      />,
-    );
-    expect(screen.queryByText(/เงินเข้าบัญชีไม่ตรงกับที่ขาย/)).toBeNull();
-  });
-
-  it('บอกยอดที่ต้องโอนคืน เมื่อเงินของ Finnix เข้าบัญชีสาขา', () => {
-    render(
-      <TicketDetail
-        {...baseProps(
-          mixedTicket([paid('เงินสดหน้าร้าน', 7000), paid('เงิน FINNIX - Kbank', 3000)]),
-        )}
-        payAccounts={[...ACCOUNTS]}
-      />,
-    );
-    expect(screen.getByText(/เงินเข้าบัญชีไม่ตรงกับที่ขาย/)).toBeInTheDocument();
-    expect(screen.getByText(/ต้องโอนคืน Finnix อีก 1,000.00/)).toBeInTheDocument();
-    // And it says out loud that the sales figure is not moving with it.
-    expect(screen.getByText(/ยอดขายของสาขายึดตามสินค้าที่ขาย/)).toBeInTheDocument();
-  });
-
-  it('ยังไม่พูดอะไรระหว่างที่ลูกค้ายังจ่ายไม่ครบ', () => {
-    render(
-      <TicketDetail
-        {...baseProps(mixedTicket([paid('เงินสดหน้าร้าน', 5000)]))}
-        payAccounts={[...ACCOUNTS]}
-      />,
-    );
-    expect(screen.queryByText(/เงินเข้าบัญชีไม่ตรงกับที่ขาย/)).toBeNull();
-  });
-
-  it('ใบงานที่ไม่มีรายการของ Finnix ไม่มีอะไรต้องจับคู่', () => {
-    render(
-      <TicketDetail
-        {...baseProps(
-          makeTicket({
-            items: [
-              {
-                category: 'ฟิล์มกรองแสง',
-                booked: '',
-                bookedPrice: 0,
-                sold: 'ฟิล์ม A',
-                soldPrice: 6000,
-              },
-            ],
-            payments: [paid('เงิน FINNIX - Kbank', 6000)],
-          }),
-        )}
-        payAccounts={[...ACCOUNTS]}
-      />,
-    );
-    expect(screen.queryByText(/เงินเข้าบัญชีไม่ตรงกับที่ขาย/)).toBeNull();
   });
 });
 
@@ -1427,7 +1314,7 @@ describe('TicketDetail — มีข้อมูลที่ยังไม่�
     const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const user = userEvent.setup();
     render(<TicketDetail {...baseProps(makeTicket({ serviceVisits: [visit] }))} />);
-    await user.click(screen.getByRole('button', { name: /รายได้ Finnix$/ }));
+    await user.click(screen.getByRole('button', { name: /เพิ่มสินค้าในคันนี้/ }));
     await user.click(screen.getByRole('button', { name: /กลับไปรายการใบงาน/ }));
     expect(ask).toHaveBeenCalled();
     ask.mockRestore();

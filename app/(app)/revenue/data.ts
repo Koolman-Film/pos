@@ -54,6 +54,14 @@ export type SaleLine = {
   taxInvoiceNo: string;
   /** เลขที่เอกสาร PEAK ของรายได้ Finnix บนใบงานนี้ (0072) — ว่างเมื่อยังไม่กรอก. */
   finnixDocNo: string;
+  /**
+   * ยอดที่เข้าบัญชีซึ่งเป็นของ Finnix จริง บนใบงานนี้ (0069 + 0071).
+   *
+   * Compared with what was SOLD as รายได้ Finnix, the difference is money
+   * sitting on the wrong side — which nobody could measure before an account
+   * could say whose it was.
+   */
+  paidIntoFinnix: number;
   /** Every document issued for the ticket, for the "เอกสาร" column. */
   documents: { docType: string; docNo: string; issuedAt: string }[];
   /**
@@ -84,27 +92,33 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
   const supabase = await createClient();
 
   // RLS scopes all three to the caller's shops.
-  const [{ data: ticketRows }, { data: policyRows }, { data: docRows }, { data: costRows }] =
-    await Promise.all([
-      supabase
-        .from('tickets')
-        .select(
-          'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, finnix_doc_no, ' +
-            'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind), ' +
-            'ticket_payments(amount, method)',
-        )
-        .is('deleted_at', null),
-      supabase
-        .from('insurance_policies')
-        .select('ticket_id, plan_name, price, sold_at, paid_amount'),
-      supabase.from('ticket_documents').select('ticket_id, doc_type, doc_no, issued_at'),
-      // What the materials cost. Consumption is negative in the ledger, so the
-      // sum comes back negative and is flipped where it is read.
-      supabase
-        .from('stock_movements')
-        .select('document_id, cost_total')
-        .in('kind', ['ใบงาน', 'ยกเลิกใบงาน', 'กู้คืนใบงาน']),
-    ]);
+  const [
+    { data: ticketRows },
+    { data: policyRows },
+    { data: docRows },
+    { data: accountRows },
+    { data: costRows },
+  ] = await Promise.all([
+    supabase
+      .from('tickets')
+      .select(
+        'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, finnix_doc_no, ' +
+          'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind), ' +
+          'ticket_payments(amount, method)',
+      )
+      .is('deleted_at', null),
+    supabase.from('insurance_policies').select('ticket_id, plan_name, price, sold_at, paid_amount'),
+    supabase.from('ticket_documents').select('ticket_id, doc_type, doc_no, issued_at'),
+    // แหล่งเงินที่เป็นของ Finnix — which account each payment landed in is
+    // what says whether the money went where it belonged (0069).
+    supabase.from('money_accounts').select('shop_id, name, match_names, owner'),
+    // What the materials cost. Consumption is negative in the ledger, so the
+    // sum comes back negative and is flipped where it is read.
+    supabase
+      .from('stock_movements')
+      .select('document_id, cost_total')
+      .in('kind', ['ใบงาน', 'ยกเลิกใบงาน', 'กู้คืนใบงาน']),
+  ]);
 
   type TicketRow = {
     id: string;
@@ -164,6 +178,35 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
     in full and LOCKED — and a locked ticket refuses new payments. The policy
     line below carries its own paid/due.
   */
+  /*
+    เงินที่เข้าบัญชีของ Finnix จริง ต่อใบงาน (0069).
+
+    A payment names its แหล่งเงิน as free text, so it is matched to an account
+    the way the balances match it: by the account's own name and its
+    `match_names`, first claim in the branch wins. A label nobody claims is
+    NOT assumed to be the branch's — it simply is not counted as Finnix's,
+    which is the honest answer and leaves the difference visible.
+  */
+  const finnixLabels = new Map<string, Set<string>>();
+  for (const a of accountRows ?? []) {
+    if (a.owner !== 'Finnix') continue;
+    const set = finnixLabels.get(a.shop_id) ?? new Set<string>();
+    for (const label of [a.name, ...(a.match_names ?? [])]) {
+      if (label) set.add(label);
+    }
+    finnixLabels.set(a.shop_id, set);
+  }
+  const finnixPaidOn = new Map<string, number>();
+  for (const t of tickets) {
+    const labels = finnixLabels.get(t.shop_id);
+    if (!labels) continue;
+    const into = (t.ticket_payments ?? []).reduce(
+      (n, p) => n + (labels.has((p.method ?? '').trim()) ? Number(p.amount || 0) : 0),
+      0,
+    );
+    if (into) finnixPaidOn.set(t.id, Math.round(into * 100) / 100);
+  }
+
   const paymentOf = new Map<string, PaymentSummary>();
   for (const t of tickets) {
     const total = (t.ticket_items ?? []).reduce(
@@ -222,6 +265,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
         held: i.revenue_kind === 'รับแทน',
         taxInvoiceNo: taxNo(t.id),
         finnixDocNo: t.finnix_doc_no ?? '',
+        paidIntoFinnix: finnixPaidOn.get(t.id) ?? 0,
         documents: docsByTicket.get(t.id) ?? [],
         channel: 'ปลีก',
         bookingChannel: t.booking_channel ?? '',
@@ -251,6 +295,8 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       held: false,
       taxInvoiceNo: taxNo(p.ticket_id),
       finnixDocNo: t.finnix_doc_no ?? '',
+      // A policy is the branch's revenue, so it is never on the Finnix side.
+      paidIntoFinnix: 0,
       documents: docsByTicket.get(p.ticket_id) ?? [],
       channel: 'ปลีก',
       bookingChannel: t.booking_channel ?? '',
@@ -407,6 +453,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       taxInvoiceNo: '',
       // ขายส่งไม่มีรายได้ Finnix — a PO is raised by the branch that sells it.
       finnixDocNo: '',
+      paidIntoFinnix: 0,
       documents: [],
       channel: 'ส่ง' as const,
       bookingChannel: '',

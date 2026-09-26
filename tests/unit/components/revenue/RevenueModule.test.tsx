@@ -30,6 +30,7 @@ const line = (over: Partial<SaleLine> = {}): SaleLine => ({
   channel: 'ปลีก',
   taxInvoiceNo: '',
   finnixDocNo: '',
+  paidIntoFinnix: 0,
   documents: [],
   ...over,
 });

@@ -72,6 +72,23 @@ export type SaveResult = {
   stockWarning?: string;
 };
 
+/** ยอดที่สาขาขายเอง — what a ใบกำกับภาษี from this branch could cover. */
+function branchSells(items: Ticket['items']): number {
+  return items
+    .filter((i) => i.revenueKind !== 'รับแทน')
+    .reduce(
+      (n, i) =>
+        n +
+        itemNetPrice({
+          soldPrice: Number(i.soldPrice || 0),
+          discountType: i.discountType ?? undefined,
+          discountValue:
+            i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : undefined,
+        }),
+      0,
+    );
+}
+
 /**
  * The parts of a ticket this form edits — everything a save would send.
  *
@@ -495,19 +512,7 @@ export function TicketDetail({
     the button is refused for. ใบเสร็จรับเงิน stays available for the whole
     amount, because the customer really did pay it here.
   */
-  const branchTotal = t.items
-    .filter((i) => i.revenueKind !== 'รับแทน')
-    .reduce(
-      (n, i) =>
-        n +
-        itemNetPrice({
-          soldPrice: Number(i.soldPrice || 0),
-          discountType: i.discountType ?? undefined,
-          discountValue:
-            i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : undefined,
-        }),
-      0,
-    );
+  const branchTotal = branchSells(t.items);
   const heldForFinnix =
     branchTotal <= 0 &&
     (t.revenueKind === 'รับแทน' || t.items.some((i) => Number(i.soldPrice || 0) > 0));
@@ -524,27 +529,6 @@ export function TicketDetail({
     setShowCompanyInfo(dt === TAX_DOC_TYPE);
   }
 
-  /**
-   * ตั้งทั้งใบงานทีเดียว — every line, plus the ticket's own summary flag.
-   *
-   * The flag lives on each line since 0068, but a wholly-held job is still the
-   * common case and ticking every line for it would be a step backwards. The
-   * ticket column is kept in step (รับแทน only when every line is) so the
-   * things that read it — the เงินรอคืน Finnix index, the server-side tax guard
-   * — keep answering the question they were asking.
-   *
-   * Switching to รับแทน has to take the tax invoice off the screen with it:
-   * leaving it selected would leave a button offering the one document that is
-   * now refused.
-   */
-  function setRevenueKind(kind: 'รายได้' | 'รับแทน') {
-    setT((prev) => ({
-      ...prev,
-      revenueKind: kind,
-      items: prev.items.map((i) => ({ ...i, revenueKind: kind })),
-    }));
-    if (kind === 'รับแทน' && docType === TAX_DOC_TYPE) changeDocTypeTo('ใบเสร็จรับเงิน');
-  }
   function changeDocTypeTo(dt: string) {
     setDocType(dt);
     setShowCompanyInfo(dt === TAX_DOC_TYPE);
@@ -1061,6 +1045,15 @@ export function TicketDetail({
     const items = [...t.items];
     items[idx] = { ...items[idx], [key]: val };
     setT({ ...t, items });
+    /*
+      The set-all buttons are gone (ร้านแจ้ง 26 ก.ย. 2569) but the guard they
+      carried is not: marking the LAST branch line as Finnix leaves nothing
+      for a ใบกำกับภาษี to cover, and leaving it selected would leave the ออก…
+      button offering the one document that is now refused.
+    */
+    if (key === 'revenueKind' && docType === TAX_DOC_TYPE && branchSells(items) <= 0) {
+      changeDocTypeTo('ใบเสร็จรับเงิน');
+    }
   }
   function updateItemFields(idx: number, fields: Partial<TicketItem>) {
     const items = [...t.items];
@@ -1571,13 +1564,11 @@ export function TicketDetail({
                 t={t}
                 shop={t.shop}
                 paymentMethods={paymentMethodOptions}
-                payAccounts={payAccounts}
                 setFinnixDocNo={isNew || !finnixDocAction ? undefined : saveFinnixDocNo}
                 attachmentUrlAction={attachmentUrlAction}
                 addPayment={addPayment}
                 removePayment={removePayment}
                 updatePayment={updatePayment}
-                setRevenueKind={setRevenueKind}
                 total={total}
                 paid={paid}
               />

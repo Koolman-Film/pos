@@ -56,6 +56,8 @@ type HeldJob = {
   payment?: SaleLine['payment'];
   /** เลขที่เอกสาร PEAK — what this row is reconciled against (0072). */
   finnixDocNo: string;
+  /** ยอดที่เข้าบัญชีของ Finnix จริง บนใบงานนี้ (0069). */
+  paidIntoFinnix: number;
   products: string[];
   amount: number;
 };
@@ -160,6 +162,7 @@ export function RevenueModule({
           // The first line carries the ticket's amounts; that is the one kept.
           payment: l.payment,
           finnixDocNo: l.finnixDocNo ?? '',
+          paidIntoFinnix: l.paidIntoFinnix ?? 0,
           products: [] as string[],
           amount: 0,
         };
@@ -305,6 +308,8 @@ export function RevenueModule({
           'ยี่ห้อ/รุ่น': j.car,
           จองผ่าน: j.bookingChannel,
           'เอกสาร PEAK': j.finnixDocNo || 'ยังไม่กรอก',
+          'เข้าบัญชี Finnix': j.paidIntoFinnix,
+          ส่วนต่าง: Math.round((j.amount - j.paidIntoFinnix) * 100) / 100,
           สินค้า: j.products.join(', '),
           วิธีชำระ: j.payment?.methods ?? '',
           สถานะชำระ: j.payment?.status ?? '',
