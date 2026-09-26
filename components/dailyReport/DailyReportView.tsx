@@ -167,6 +167,26 @@ export function DailyReportView({
           label="เงินรับเข้า"
           value={inflow.total}
           note={`${inflow.rows.reduce((n, r) => n + r.count, 0)} รายการ`}
+          detail={
+            /*
+              Where the money came from. It differs from ยอดขาย by exactly the
+              money taken in for another Finnix shop, so saying so here is what
+              lets the two cards be read side by side.
+            */
+            sales.held > 0 ? (
+              <>
+                <div className="flex justify-between gap-2">
+                  <span>ยอดขาย</span>
+                  <span>{fmt(sales.total)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span>เงินรอคืน Finnix</span>
+                  <span>{fmt(sales.held)}</span>
+                </div>
+                <div className="mt-0.5">รับเงินไว้แทนสาขาอื่น จึงไม่นับเป็นยอดขาย</div>
+              </>
+            ) : undefined
+          }
         />
         <Tile
           tone="out"
@@ -277,12 +297,6 @@ export function DailyReportView({
                 <OutstandingRow outstanding={sales.outstanding} cell={cell} numCell={numCell} />
               </tbody>
             </table>
-          )}
-          {sales.held > 0 && (
-            <p className="text-xs mt-3" style={muted}>
-              เงินรอคืน Finnix {fmt(sales.held)} บาท — รับเงินไว้แทนสาขาอื่น จึงไม่นับเป็นยอดขาย
-              แต่รวมอยู่ในเงินรับเข้า ②
-            </p>
           )}
         </div>
       </div>
@@ -412,7 +426,14 @@ export function DailyReportView({
                 </tr>
                 <tr>
                   <td>{fmt(sales.total)}</td>
-                  <td>{fmt(inflow.total)}</td>
+                  <td>
+                    {fmt(inflow.total)}
+                    {sales.held > 0 && (
+                      <div style={{ fontSize: 9 }}>
+                        ยอดขาย {fmt(sales.total)} + เงินรอคืน Finnix {fmt(sales.held)}
+                      </div>
+                    )}
+                  </td>
                   <td>{fmt(outflow.total)}</td>
                   <td>{fmt(net)}</td>
                 </tr>
@@ -462,11 +483,6 @@ export function DailyReportView({
                 </tr>
               </tbody>
             </table>
-            {sales.held > 0 && (
-              <p style={{ fontSize: 10, margin: '-6px 0 10px' }}>
-                เงินรอคืน Finnix {fmt(sales.held)} บาท (ไม่นับเป็นยอดขาย รวมอยู่ในเงินรับเข้า)
-              </p>
-            )}
 
             <table className="compact-table" style={{ marginBottom: 10 }}>
               <thead>
@@ -556,6 +572,7 @@ function Tile({
   label,
   value,
   note,
+  detail,
   valueColor,
   signed,
 }: {
@@ -564,6 +581,8 @@ function Tile({
   label: string;
   value: number;
   note: string;
+  /** A breakdown under the figure, set off by a rule. */
+  detail?: React.ReactNode;
   valueColor?: string;
   signed?: boolean;
 }) {
@@ -582,6 +601,14 @@ function Tile({
       <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
         {note}
       </p>
+      {detail && (
+        <div
+          className="text-xs mt-2 pt-2 tabular-nums"
+          style={{ color: 'var(--ink-soft)', borderTop: `1px solid ${ink(tone)}33` }}
+        >
+          {detail}
+        </div>
+      )}
     </div>
   );
 }

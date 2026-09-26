@@ -99,6 +99,10 @@ describe('DailyReportView', () => {
 
   it('shows the four headline figures', () => {
     renderView();
+    // เงินรับเข้า explains itself: ยอดขาย plus the money held for another shop.
+    const inflowTile = screen.getAllByText('เงินรับเข้า')[0].closest('.card') as HTMLElement;
+    expect(within(inflowTile).getByText('เงินรอคืน Finnix')).toBeInTheDocument();
+    expect(within(inflowTile).getByText('700.00')).toBeInTheDocument();
     expect(screen.getAllByText('19,500.00').length).toBeGreaterThan(0);
     expect(screen.getByText('▲ 95% จากเมื่อวาน · 4 งาน')).toBeInTheDocument();
     expect(screen.getAllByText('+7,850.00').length).toBeGreaterThan(0);
@@ -112,7 +116,7 @@ describe('DailyReportView', () => {
     expect(within(sales).getByText('ขายปลีก')).toBeInTheDocument();
     expect(within(sales).getByText('ขายส่ง')).toBeInTheDocument();
     expect(within(sales).getByText('ฟิล์มกรองแสง')).toBeInTheDocument();
-    expect(within(sales).getByText(/เงินรอคืน Finnix 700.00/)).toBeInTheDocument();
+    expect(within(sales).queryByText(/เงินรอคืน Finnix/)).toBeNull();
   });
 
   it('shows how many jobs each line is, and the jobs still owed money', () => {
