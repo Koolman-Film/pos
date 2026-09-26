@@ -1433,3 +1433,73 @@ describe('TicketDetail — มีข้อมูลที่ยังไม่�
     ask.mockRestore();
   });
 });
+
+/**
+ * เลขที่เอกสารจาก PEAK สำหรับรายได้ Finnix (ร้านขอ 26 ก.ย. 2569, migration 0072).
+ *
+ * รายได้ Finnix collected at the counter is reconciled against a document in
+ * PEAK, and the person doing that is the one who opened this ticket. They had
+ * nowhere to write the number down, so it lived in somebody's memory. It is
+ * saved on its own because the number arrives from the accounts days later —
+ * by which time the ticket has usually locked itself.
+ */
+describe('TicketDetail — เลขที่เอกสาร PEAK', () => {
+  const finnixItem = (kind: 'รายได้' | 'รับแทน') => ({
+    category: 'ฟิล์มกันรอย',
+    booked: '',
+    bookedPrice: 0,
+    sold: 'TPU',
+    soldPrice: 4000,
+    revenueKind: kind,
+  });
+
+  const props = (kind: 'รายได้' | 'รับแทน', over: Record<string, unknown> = {}) => ({
+    ...baseProps(makeTicket({ items: [finnixItem(kind)], ...over })),
+    finnixDocAction: vi.fn(async () => ({ ok: true })),
+  });
+
+  it('ไม่มีรายการของ Finnix ก็ไม่ถามถึงเอกสาร PEAK', () => {
+    render(<TicketDetail {...props('รายได้')} />);
+    expect(screen.queryByLabelText('เลขที่เอกสารจาก PEAK')).toBeNull();
+  });
+
+  it('มีรายได้ Finnix จึงขึ้นช่องให้กรอก', () => {
+    render(<TicketDetail {...props('รับแทน')} />);
+    expect(screen.getByLabelText('เลขที่เอกสารจาก PEAK')).toBeInTheDocument();
+  });
+
+  it('พิมพ์แล้วบันทึกเองเมื่อออกจากช่อง ไม่ต้องกดบันทึกใบงาน', async () => {
+    const p = props('รับแทน');
+    render(<TicketDetail {...p} />);
+
+    const field = screen.getByLabelText('เลขที่เอกสารจาก PEAK');
+    fireEvent.change(field, { target: { value: 'IV6809-0042' } });
+    fireEvent.blur(field);
+
+    await vi.waitFor(() => expect(p.finnixDocAction).toHaveBeenCalled());
+    expect(p.finnixDocAction).toHaveBeenCalledWith({
+      ticketId: 'JT-CM-00214',
+      docNo: 'IV6809-0042',
+    });
+  });
+
+  it('ออกจากช่องโดยไม่ได้แก้อะไร ไม่เขียนซ้ำ', async () => {
+    // Blur fires whenever focus moves; writing on every one of those would put
+    // a row in ประวัติการแก้ไข for doing nothing.
+    const p = props('รับแทน', { finnixDocNo: 'IV6809-0042' });
+    render(<TicketDetail {...p} />);
+    fireEvent.blur(screen.getByLabelText('เลขที่เอกสารจาก PEAK'));
+    expect(p.finnixDocAction).not.toHaveBeenCalled();
+  });
+
+  it('ใบงานที่ปิดแล้วก็ยังกรอกเลขเอกสารได้', async () => {
+    // The whole reason it saves on its own: by the time the number arrives the
+    // ticket has locked itself and บันทึกใบงาน is not on screen at all.
+    const p = props('รับแทน', { locked: true, status: 'ส่งมอบแล้ว' });
+    render(<TicketDetail {...p} />);
+    const field = screen.getByLabelText('เลขที่เอกสารจาก PEAK');
+    fireEvent.change(field, { target: { value: 'IV6809-0099' } });
+    fireEvent.blur(field);
+    await vi.waitFor(() => expect(p.finnixDocAction).toHaveBeenCalled());
+  });
+});

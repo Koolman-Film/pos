@@ -293,6 +293,14 @@ export type Ticket = {
    */
   revenueKind?: 'รายได้' | 'รับแทน';
   /**
+   * เลขที่เอกสารใน PEAK ของรายได้ Finnix บนใบงานนี้ (migration 0072).
+   *
+   * One number per job, not per line: the lines say which money is Finnix's,
+   * and the document covers what was settled with them for this car — one
+   * transaction however many lines it came from.
+   */
+  finnixDocNo?: string;
+  /**
    * บัญชีรับชำระ printed on the ใบเสนอราคา (migration 0062). Saved on its own
    * the moment it is picked — see `setTicketPayAccount` — not with the form.
    */
@@ -440,6 +448,8 @@ export type TicketSavePayload = {
   status: string;
   bookingChannel: string;
   revenueKind: 'รายได้' | 'รับแทน';
+  /** เลขที่เอกสาร PEAK ของรายได้ Finnix บนใบงานนี้ (migration 0072). */
+  finnixDocNo: string;
   techByCategory: Record<string, string[]>;
   dropOffDate: string;
   pickupDate: string;

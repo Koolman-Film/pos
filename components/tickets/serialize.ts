@@ -56,6 +56,7 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
     status: t.status,
     bookingChannel: t.bookingChannel,
     revenueKind: t.revenueKind === 'รับแทน' ? 'รับแทน' : 'รายได้',
+    finnixDocNo: (t.finnixDocNo ?? '').trim(),
     techByCategory: t.techByCategory || {},
     dropOffDate:
       t.dropOffDateObj instanceof Date

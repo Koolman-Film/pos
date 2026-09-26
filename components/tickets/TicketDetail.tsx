@@ -126,6 +126,7 @@ export function TicketDetail({
   carModelAction,
   extrasAction,
   techAction,
+  finnixDocAction,
   payAccounts = [],
   payAccountAction,
   serviceVisitAction,
@@ -199,6 +200,11 @@ export function TicketDetail({
     techByCategory: Record<string, string[]>;
     actualQty: Record<string, number>[];
   }) => Promise<SaveResult>;
+  /** เลขที่เอกสาร PEAK ของรายได้ Finnix — its own write, allowed on a closed ticket (0072). */
+  finnixDocAction?: (input: {
+    ticketId: string;
+    docNo: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
   /** แหล่งเงินของสาขาที่ผู้ใช้เข้าถึงได้ — บัญชีรับชำระบนใบเสนอราคา (0062). */
   payAccounts?: PayAccount[];
   /** Saves the บัญชีรับชำระ on its own, the moment it is picked. */
@@ -384,6 +390,27 @@ export function TicketDetail({
     if (result.stockWarning) setSaveError(result.stockWarning);
     setTechSaved(true);
     router.refresh();
+  }
+
+  /**
+   * เลขที่เอกสาร PEAK — เขียนลงฐานข้อมูลทันที (0072).
+   *
+   * Its own write, like the บัญชีรับชำระ picker: the number arrives from the
+   * accounts long after the car has gone, and by then the ticket has usually
+   * locked itself and บันทึกใบงาน is not on screen at all.
+   */
+  async function saveFinnixDocNo(docNo: string) {
+    if (!finnixDocAction) return;
+    const next = docNo.trim();
+    if (next === (t.finnixDocNo ?? '').trim()) return;
+    setT((prev) => ({ ...prev, finnixDocNo: next }));
+    setSaveError(null);
+    const result = await finnixDocAction({ ticketId: t.id, docNo: next });
+    if (!result.ok) {
+      setSaveError(result.error || 'บันทึกเลขที่เอกสาร PEAK ไม่สำเร็จ');
+      return;
+    }
+    setSaved('บันทึกเลขที่เอกสาร PEAK แล้ว');
   }
 
   async function unlock() {
@@ -1545,6 +1572,7 @@ export function TicketDetail({
                 shop={t.shop}
                 paymentMethods={paymentMethodOptions}
                 payAccounts={payAccounts}
+                setFinnixDocNo={isNew || !finnixDocAction ? undefined : saveFinnixDocNo}
                 attachmentUrlAction={attachmentUrlAction}
                 addPayment={addPayment}
                 removePayment={removePayment}

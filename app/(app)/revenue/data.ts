@@ -52,6 +52,8 @@ export type SaleLine = {
   held: boolean;
   /** เลขที่ใบกำกับภาษี if one was issued for this ticket, else ''. */
   taxInvoiceNo: string;
+  /** เลขที่เอกสาร PEAK ของรายได้ Finnix บนใบงานนี้ (0072) — ว่างเมื่อยังไม่กรอก. */
+  finnixDocNo: string;
   /** Every document issued for the ticket, for the "เอกสาร" column. */
   documents: { docType: string; docNo: string; issuedAt: string }[];
   /**
@@ -87,7 +89,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       supabase
         .from('tickets')
         .select(
-          'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, ' +
+          'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, finnix_doc_no, ' +
             'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind), ' +
             'ticket_payments(amount, method)',
         )
@@ -111,6 +113,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
     plate: string;
     drop_off_date: string | null;
     revenue_kind: string;
+    finnix_doc_no: string | null;
     brand: string | null;
     model: string | null;
     booking_channel: string | null;
@@ -218,6 +221,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
         // work alongside another branch’s, and the report has a line for each.
         held: i.revenue_kind === 'รับแทน',
         taxInvoiceNo: taxNo(t.id),
+        finnixDocNo: t.finnix_doc_no ?? '',
         documents: docsByTicket.get(t.id) ?? [],
         channel: 'ปลีก',
         bookingChannel: t.booking_channel ?? '',
@@ -246,6 +250,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       // A policy is sold by the branch that sold it, even on a held job.
       held: false,
       taxInvoiceNo: taxNo(p.ticket_id),
+      finnixDocNo: t.finnix_doc_no ?? '',
       documents: docsByTicket.get(p.ticket_id) ?? [],
       channel: 'ปลีก',
       bookingChannel: t.booking_channel ?? '',
@@ -400,6 +405,8 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       cost,
       held: false,
       taxInvoiceNo: '',
+      // ขายส่งไม่มีรายได้ Finnix — a PO is raised by the branch that sells it.
+      finnixDocNo: '',
       documents: [],
       channel: 'ส่ง' as const,
       bookingChannel: '',

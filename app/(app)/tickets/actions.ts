@@ -244,6 +244,7 @@ function ticketRow(p: TicketSavePayload, id: string, retailCustomerId: number | 
     // things that read this column — the เงินรอคืน Finnix index, the report
     // filters — keep meaning what they meant when it was asked once per job.
     revenue_kind: ticketRevenueKind(p),
+    finnix_doc_no: (p.finnixDocNo ?? '').trim(),
     tech_by_category: p.techByCategory,
     drop_off_date: p.dropOffDate,
     pickup_date: p.pickupDate,
@@ -499,6 +500,32 @@ export async function saveTicketTech(input: {
   revalidatePath(`/tickets/${input.ticketId}`);
   revalidatePath('/stock');
   return { ok: true, id: input.ticketId, stockWarning: stockWarningFor(unmatched) };
+}
+
+/**
+ * เลขที่เอกสาร PEAK ของรายได้ Finnix — บันทึกทันทีที่พิมพ์ (migration 0072).
+ *
+ * Its own action, and allowed on a CLOSED ticket, because the number arrives
+ * from the accounts days after the car has gone and the ticket has locked
+ * itself. `save_ticket_finnix_doc` can reach that one column and nothing
+ * else, so this only decides WHO may call it.
+ */
+export async function saveTicketFinnixDoc(input: {
+  ticketId: string;
+  docNo: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขใบงาน' };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('save_ticket_finnix_doc', {
+    p_ticket_id: input.ticketId,
+    p_doc_no: input.docNo,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/tickets');
+  revalidatePath(`/tickets/${input.ticketId}`);
+  revalidatePath('/revenue');
+  return { ok: true };
 }
 
 /**

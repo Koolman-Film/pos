@@ -378,8 +378,8 @@ export function InsuranceSection({
             6,000 and nobody ever recorded receiving it.
           */}
           <p className="text-xs mb-2.5" style={{ color: 'var(--ink-faint)' }}>
-            นับเป็นรายได้ของวันที่ขายนี้ (ไม่ใช่วันรับรถ) · ยอดนี้รวมอยู่ใน ยอดสุทธิ ของใบงาน
-            ให้รับเงินในหัวข้อ การชำระเงิน
+            นับเป็นรายได้ของวันที่ขายนี้ (ไม่ใช่วันรับรถ) · ไม่รวมในยอดสุทธิของใบงาน
+            เพราะค่าประกันรับเงินแยกของตัวเองข้างล่าง
           </p>
 
           <div className="grid grid-cols-2 gap-2 mb-1">

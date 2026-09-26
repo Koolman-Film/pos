@@ -21,6 +21,7 @@ export function PaymentsSection({
   removePayment,
   updatePayment,
   setRevenueKind,
+  setFinnixDocNo,
   total,
   paid,
 }: {
@@ -39,6 +40,8 @@ export function PaymentsSection({
   updatePayment: (idx: number, key: keyof TicketPayment, val: unknown) => void;
   /** Sets every line to รายได้ / รับแทน at once (0031, per-line since 0068). */
   setRevenueKind: (kind: 'รายได้' | 'รับแทน') => void;
+  /** เลขที่เอกสาร PEAK — saved on its own, works on a closed ticket (0072). */
+  setFinnixDocNo?: (docNo: string) => void;
   total: number;
   paid: number;
 }) {
@@ -112,9 +115,22 @@ export function PaymentsSection({
                 type="button"
                 onClick={() => setRevenueKind(kind)}
                 aria-pressed={on}
-                className={`text-xs px-3 py-2 rounded-lg font-semibold flex items-center gap-1.5 flex-1 justify-center ${
-                  on ? 'btn-primary' : 'btn-outline'
-                }`}
+                className="text-xs px-3 py-2 rounded-lg font-semibold flex items-center gap-1.5 flex-1 justify-center"
+                /*
+                  Same pair as the per-line buttons, and this one sets EVERY
+                  line at once — a wrong press here is not obvious afterwards:
+                  the ticket still looks finished, just with the branch's
+                  takings missing (ร้านขอ 26 ก.ย. 2569).
+                */
+                style={
+                  kind === 'รับแทน'
+                    ? on
+                      ? { background: '#B23A48', color: '#fff' }
+                      : { border: '1px solid #E4A9B0', color: '#B23A48' }
+                    : on
+                      ? { background: '#2F6B3F', color: '#fff' }
+                      : { border: '1px solid #A8CDB2', color: '#2F6B3F' }
+                }
               >
                 <i className={`fa-solid ${icon}`}></i>
                 {label}
@@ -139,6 +155,45 @@ export function PaymentsSection({
           )}
         </p>
       </div>
+      {/*
+        เลขที่เอกสารจาก PEAK (ร้านขอ 26 ก.ย. 2569).
+
+        รายได้ Finnix collected at the counter has to be reconciled against a
+        document in PEAK, and the person who does that is the one who opened
+        this ticket — they had nowhere to write the number down, so it lived
+        in somebody's memory or was dug out of PEAK afterwards.
+
+        One number for the job, not one per line: the lines say which money is
+        Finnix's, the document covers what was settled with them for this car.
+        Saved on its own, so it can be filled in after the ticket has closed —
+        which is usually when the number arrives.
+      */}
+      {(allHeld || mixed) && setFinnixDocNo && (
+        <div
+          className="rounded-xl p-3 mb-3"
+          style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}
+        >
+          <label
+            className="text-xs font-medium block mb-1"
+            style={{ color: 'var(--ink-soft)' }}
+            htmlFor="ticket-finnix-doc"
+          >
+            <i className="fa-solid fa-file-invoice mr-1.5"></i>เลขที่เอกสารจาก PEAK
+          </label>
+          <input
+            id="ticket-finnix-doc"
+            aria-label="เลขที่เอกสารจาก PEAK"
+            defaultValue={t.finnixDocNo ?? ''}
+            onBlur={(e) => setFinnixDocNo(e.target.value)}
+            placeholder="เช่น IV6809-0042"
+            className="field w-full text-sm px-3 py-2"
+          />
+          <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+            ใช้กระทบยอดรายได้ Finnix กับ PEAK · บันทึกเองเมื่อออกจากช่อง
+            กรอกทีหลังได้แม้ใบงานปิดแล้ว
+          </p>
+        </div>
+      )}
       {/*
         จับคู่รายได้ Finnix กับบัญชีที่รับเงินจริง (0069).
 

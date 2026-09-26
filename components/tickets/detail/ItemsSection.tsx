@@ -470,11 +470,13 @@ export function ItemsSection({
                             aria-label={`${label} รายการที่ ${idx + 1}`}
                             className="text-xs px-2.5 py-1 rounded-full font-semibold"
                             style={
-                              on
-                                ? kind === 'รับแทน'
-                                  ? { background: '#FBF1DA', color: '#8A5A12' }
-                                  : { background: '#EAF3EC', color: '#2F6B3F' }
-                                : { border: '1px solid var(--line)', color: 'var(--ink-faint)' }
+                              kind === 'รับแทน'
+                                ? on
+                                  ? { background: '#B23A48', color: '#fff' }
+                                  : { border: '1px solid #E4A9B0', color: '#B23A48' }
+                                : on
+                                  ? { background: '#2F6B3F', color: '#fff' }
+                                  : { border: '1px solid #A8CDB2', color: '#2F6B3F' }
                             }
                           >
                             {label}

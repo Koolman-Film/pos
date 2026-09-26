@@ -1644,6 +1644,7 @@ export type Database = {
           locked: boolean
           drop_off_date: string
           extras: Json
+          finnix_doc_no: string
           id: string
           model: string
           phone: string
@@ -1669,6 +1670,7 @@ export type Database = {
           locked?: boolean
           drop_off_date: string
           extras?: Json
+          finnix_doc_no?: string
           id: string
           model?: string
           phone?: string
@@ -1694,6 +1696,7 @@ export type Database = {
           locked?: boolean
           drop_off_date?: string
           extras?: Json
+          finnix_doc_no?: string
           id?: string
           model?: string
           phone?: string
@@ -2146,6 +2149,10 @@ export type Database = {
       save_insurance_policy: {
         Args: { p_claims: Json; p_id: number; p_policy: Json; p_ticket_id: string }
         Returns: number
+      }
+      save_ticket_finnix_doc: {
+        Args: { p_doc_no: string; p_ticket_id: string }
+        Returns: undefined
       }
       save_ticket_extras: {
         Args: { p_extras: Json; p_ticket_id: string }

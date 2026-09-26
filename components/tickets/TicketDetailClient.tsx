@@ -51,6 +51,7 @@ export function TicketDetailClient({
   carModelAction,
   extrasAction,
   techAction,
+  finnixDocAction,
   payAccounts = [],
   payAccountAction,
   serviceVisitAction,
@@ -106,6 +107,10 @@ export function TicketDetailClient({
     techByCategory: Record<string, string[]>;
     actualQty: Record<string, number>[];
   }) => Promise<SaveResult>;
+  finnixDocAction?: (input: {
+    ticketId: string;
+    docNo: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
   payAccounts?: PayAccount[];
   payAccountAction?: (input: {
     ticketId: string;
@@ -165,6 +170,7 @@ export function TicketDetailClient({
       carModelAction={carModelAction}
       extrasAction={extrasAction}
       techAction={techAction}
+      finnixDocAction={finnixDocAction}
       payAccounts={payAccounts}
       payAccountAction={payAccountAction}
       serviceVisitAction={serviceVisitAction}

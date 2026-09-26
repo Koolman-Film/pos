@@ -20,6 +20,7 @@ const base: SaleLine = {
   cost: 0,
   held: false,
   taxInvoiceNo: '',
+  finnixDocNo: '',
   documents: [],
   channel: 'ปลีก',
 };
