@@ -74,7 +74,6 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
     status: t.status,
     bookingChannel: t.bookingChannel,
     revenueKind: ticketRevenueKind(t.items, t.revenueKind),
-    finnixDocNo: (t.finnixDocNo ?? '').trim(),
     techByCategory: t.techByCategory || {},
     dropOffDate:
       t.dropOffDateObj instanceof Date
@@ -109,6 +108,7 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
       // รายได้สาขา / รับแทน ของรายการนี้ (0068). Anything but the held word
       // is the branch's, so a draft from before the field existed reads right.
       revenueKind: i.revenueKind === 'รับแทน' ? 'รับแทน' : 'รายได้',
+      finnixDocNo: (i.finnixDocNo ?? '').trim(),
       actualQty: Object.fromEntries(
         Object.entries(i.actualQtyMap ?? {})
           .map(([name, qty]) => [name, Number(qty)] as const)

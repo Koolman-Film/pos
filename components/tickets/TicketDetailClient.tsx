@@ -109,7 +109,7 @@ export function TicketDetailClient({
   }) => Promise<SaveResult>;
   finnixDocAction?: (input: {
     ticketId: string;
-    docNo: string;
+    docNos: string[];
   }) => Promise<{ ok: boolean; error?: string }>;
   payAccounts?: PayAccount[];
   payAccountAction?: (input: {

@@ -1322,71 +1322,101 @@ describe('TicketDetail — มีข้อมูลที่ยังไม่�
 });
 
 /**
- * เลขที่เอกสารจาก PEAK สำหรับรายได้ Finnix (ร้านขอ 26 ก.ย. 2569, migration 0072).
+ * เลขที่เอกสารจาก PEAK ทีละรายการ (ร้านขอ 26 ก.ย. 2569, migration 0073).
  *
  * รายได้ Finnix collected at the counter is reconciled against a document in
- * PEAK, and the person doing that is the one who opened this ticket. They had
- * nowhere to write the number down, so it lived in somebody's memory. It is
- * saved on its own because the number arrives from the accounts days later —
- * by which time the ticket has usually locked itself.
+ * PEAK, and the person doing that is the one who opened this ticket. The field
+ * sits under the รายได้ Finnix button that made the line Finnix's, and there is
+ * one per LINE: Finnix issues its documents by ชนิดสินค้า, so a job with two of
+ * their products carries two numbers. It is saved on its own because the number
+ * arrives from the accounts days later — by which time the ticket has usually
+ * locked itself.
  */
-describe('TicketDetail — เลขที่เอกสาร PEAK', () => {
-  const finnixItem = (kind: 'รายได้' | 'รับแทน') => ({
+describe('TicketDetail — เลขที่เอกสาร PEAK ทีละรายการ', () => {
+  const item = (kind: 'รายได้' | 'รับแทน', over: Record<string, unknown> = {}) => ({
     category: 'ฟิล์มกันรอย',
     booked: '',
     bookedPrice: 0,
     sold: 'TPU',
     soldPrice: 4000,
     revenueKind: kind,
+    ...over,
   });
 
-  const props = (kind: 'รายได้' | 'รับแทน', over: Record<string, unknown> = {}) => ({
-    ...baseProps(makeTicket({ items: [finnixItem(kind)], ...over })),
+  const props = (items: ReturnType<typeof item>[], over: Partial<Ticket> = {}) => ({
+    ...baseProps(makeTicket({ items, ...over })),
     finnixDocAction: vi.fn(async () => ({ ok: true })),
   });
 
-  it('ไม่มีรายการของ Finnix ก็ไม่ถามถึงเอกสาร PEAK', () => {
-    render(<TicketDetail {...props('รายได้')} />);
-    expect(screen.queryByLabelText('เลขที่เอกสารจาก PEAK')).toBeNull();
+  const field = (n: number) => screen.getByLabelText(`เลขที่เอกสารจาก PEAK รายการที่ ${n}`);
+
+  it('รายการที่เป็นรายได้สาขา ไม่ถามถึงเอกสาร PEAK', () => {
+    render(<TicketDetail {...props([item('รายได้')])} />);
+    expect(screen.queryByLabelText(/เลขที่เอกสารจาก PEAK/)).toBeNull();
   });
 
-  it('มีรายได้ Finnix จึงขึ้นช่องให้กรอก', () => {
-    render(<TicketDetail {...props('รับแทน')} />);
-    expect(screen.getByLabelText('เลขที่เอกสารจาก PEAK')).toBeInTheDocument();
+  it('รายการที่เป็นรายได้ Finnix จึงขึ้นช่องให้กรอก', () => {
+    render(<TicketDetail {...props([item('รับแทน')])} />);
+    expect(field(1)).toBeInTheDocument();
   });
 
   it('พิมพ์แล้วบันทึกเองเมื่อออกจากช่อง ไม่ต้องกดบันทึกใบงาน', async () => {
-    const p = props('รับแทน');
+    const p = props([item('รับแทน')]);
     render(<TicketDetail {...p} />);
 
-    const field = screen.getByLabelText('เลขที่เอกสารจาก PEAK');
-    fireEvent.change(field, { target: { value: 'IV6809-0042' } });
-    fireEvent.blur(field);
+    fireEvent.change(field(1), { target: { value: 'IV6809-0042' } });
+    fireEvent.blur(field(1));
 
     await vi.waitFor(() => expect(p.finnixDocAction).toHaveBeenCalled());
     expect(p.finnixDocAction).toHaveBeenCalledWith({
       ticketId: 'JT-CM-00214',
-      docNo: 'IV6809-0042',
+      docNos: ['IV6809-0042'],
     });
+  });
+
+  it('ของ Finnix สองรายการ เก็บคนละเลข และส่งไปครบทุกแถวตามลำดับ', async () => {
+    // The whole reason the field moved onto the line: one job, two documents.
+    // The branch's own line has no number and must still occupy its position,
+    // because the database matches these by position.
+    const p = props([
+      item('รายได้', { category: 'ฟิล์มกรองแสง', sold: 'ฟิล์ม A', soldPrice: 6000 }),
+      item('รับแทน'),
+      item('รับแทน', { category: 'เครื่องเสียง', sold: 'ลำโพง', soldPrice: 3000 }),
+    ]);
+    render(<TicketDetail {...p} />);
+
+    expect(screen.queryByLabelText('เลขที่เอกสารจาก PEAK รายการที่ 1')).toBeNull();
+
+    fireEvent.change(field(2), { target: { value: 'IV-A' } });
+    fireEvent.blur(field(2));
+    fireEvent.change(field(3), { target: { value: 'IV-B' } });
+    fireEvent.blur(field(3));
+
+    await vi.waitFor(() => expect(p.finnixDocAction).toHaveBeenCalledTimes(2));
+    expect(p.finnixDocAction).toHaveBeenLastCalledWith({
+      ticketId: 'JT-CM-00214',
+      docNos: ['', 'IV-A', 'IV-B'],
+    });
+    expect(field(2)).toHaveValue('IV-A');
+    expect(field(3)).toHaveValue('IV-B');
   });
 
   it('ออกจากช่องโดยไม่ได้แก้อะไร ไม่เขียนซ้ำ', async () => {
     // Blur fires whenever focus moves; writing on every one of those would put
     // a row in ประวัติการแก้ไข for doing nothing.
-    const p = props('รับแทน', { finnixDocNo: 'IV6809-0042' });
+    const p = props([item('รับแทน', { finnixDocNo: 'IV6809-0042' })]);
     render(<TicketDetail {...p} />);
-    fireEvent.blur(screen.getByLabelText('เลขที่เอกสารจาก PEAK'));
+    fireEvent.blur(field(1));
     expect(p.finnixDocAction).not.toHaveBeenCalled();
   });
 
   it('ใบงานที่ปิดแล้วก็ยังกรอกเลขเอกสารได้', async () => {
     // The whole reason it saves on its own: by the time the number arrives the
     // ticket has locked itself and บันทึกใบงาน is not on screen at all.
-    const p = props('รับแทน', { locked: true, status: 'ส่งมอบแล้ว' });
+    const p = props([item('รับแทน')], { locked: true, status: 'ส่งมอบแล้ว' });
     render(<TicketDetail {...p} />);
-    const field = screen.getByLabelText('เลขที่เอกสารจาก PEAK');
-    fireEvent.change(field, { target: { value: 'IV6809-0099' } });
-    fireEvent.blur(field);
+    fireEvent.change(field(1), { target: { value: 'IV6809-0099' } });
+    fireEvent.blur(field(1));
     await vi.waitFor(() => expect(p.finnixDocAction).toHaveBeenCalled());
   });
 });

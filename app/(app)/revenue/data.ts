@@ -103,7 +103,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       .from('tickets')
       .select(
         'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, finnix_doc_no, ' +
-          'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind), ' +
+          'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind, finnix_doc_no), ' +
           'ticket_payments(amount, method)',
       )
       .is('deleted_at', null),
@@ -137,6 +137,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       sold: string;
       sold_price: number;
       revenue_kind: string | null;
+      finnix_doc_no: string | null;
       discount_type: string | null;
       discount_value: number | null;
     }[];
@@ -264,7 +265,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
         // work alongside another branch’s, and the report has a line for each.
         held: i.revenue_kind === 'รับแทน',
         taxInvoiceNo: taxNo(t.id),
-        finnixDocNo: t.finnix_doc_no ?? '',
+        finnixDocNo: i.finnix_doc_no ?? '',
         paidIntoFinnix: finnixPaidOn.get(t.id) ?? 0,
         documents: docsByTicket.get(t.id) ?? [],
         channel: 'ปลีก',
@@ -294,7 +295,8 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       // A policy is sold by the branch that sold it, even on a held job.
       held: false,
       taxInvoiceNo: taxNo(p.ticket_id),
-      finnixDocNo: t.finnix_doc_no ?? '',
+      // ประกันเป็นรายได้ของสาขาเสมอ จึงไม่มีเอกสาร Finnix
+      finnixDocNo: '',
       // A policy is the branch's revenue, so it is never on the Finnix side.
       paidIntoFinnix: 0,
       documents: docsByTicket.get(p.ticket_id) ?? [],

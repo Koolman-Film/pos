@@ -217,10 +217,10 @@ export function TicketDetail({
     techByCategory: Record<string, string[]>;
     actualQty: Record<string, number>[];
   }) => Promise<SaveResult>;
-  /** เลขที่เอกสาร PEAK ของรายได้ Finnix — its own write, allowed on a closed ticket (0072). */
+  /** เลขที่เอกสาร PEAK ของแต่ละรายการ — its own write, allowed on a closed ticket (0073). */
   finnixDocAction?: (input: {
     ticketId: string;
-    docNo: string;
+    docNos: string[];
   }) => Promise<{ ok: boolean; error?: string }>;
   /** แหล่งเงินของสาขาที่ผู้ใช้เข้าถึงได้ — บัญชีรับชำระบนใบเสนอราคา (0062). */
   payAccounts?: PayAccount[];
@@ -410,19 +410,25 @@ export function TicketDetail({
   }
 
   /**
-   * เลขที่เอกสาร PEAK — เขียนลงฐานข้อมูลทันที (0072).
+   * เลขที่เอกสาร PEAK ของทุกรายการ — เขียนลงฐานข้อมูลทันที (0073).
    *
    * Its own write, like the บัญชีรับชำระ picker: the number arrives from the
    * accounts long after the car has gone, and by then the ticket has usually
    * locked itself and บันทึกใบงาน is not on screen at all.
+   *
+   * All the lines go together rather than the one just typed — the database
+   * matches them by position and checks the count, which is what stops a
+   * stale form writing a number onto the wrong row.
    */
-  async function saveFinnixDocNo(docNo: string) {
-    if (!finnixDocAction) return;
-    const next = docNo.trim();
-    if (next === (t.finnixDocNo ?? '').trim()) return;
-    setT((prev) => ({ ...prev, finnixDocNo: next }));
+  async function saveFinnixDocs() {
+    if (isNew || !finnixDocAction) return;
+    const docNos = t.items.map((i) => (i.finnixDocNo ?? '').trim());
+    const stored = (initialTicket.items ?? []).map((i) => (i.finnixDocNo ?? '').trim());
+    // Blur fires whenever focus moves; writing on every one of those would put
+    // a row in ประวัติการแก้ไข for doing nothing.
+    if (docNos.length === stored.length && docNos.every((d, i) => d === stored[i])) return;
     setSaveError(null);
-    const result = await finnixDocAction({ ticketId: t.id, docNo: next });
+    const result = await finnixDocAction({ ticketId: t.id, docNos });
     if (!result.ok) {
       setSaveError(result.error || 'บันทึกเลขที่เอกสาร PEAK ไม่สำเร็จ');
       return;
@@ -1393,6 +1399,7 @@ export function TicketDetail({
                 addItem={addItem}
                 removeItem={removeItem}
                 updateItem={updateItem}
+                saveFinnixDocs={saveFinnixDocs}
                 updateItemFields={updateItemFields}
                 updateFilmPositions={updateFilmPositions}
                 lookupPrice={lookupPrice}
@@ -1564,7 +1571,6 @@ export function TicketDetail({
                 t={t}
                 shop={t.shop}
                 paymentMethods={paymentMethodOptions}
-                setFinnixDocNo={isNew || !finnixDocAction ? undefined : saveFinnixDocNo}
                 attachmentUrlAction={attachmentUrlAction}
                 addPayment={addPayment}
                 removePayment={removePayment}

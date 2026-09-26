@@ -231,7 +231,6 @@ function ticketRow(p: TicketSavePayload, id: string, retailCustomerId: number | 
     // Recomputed here and not taken on trust: this is a plain POST, and the
     // column is what the report filters and the tax guard read.
     revenue_kind: ticketRevenueKind(p.items, p.revenueKind),
-    finnix_doc_no: (p.finnixDocNo ?? '').trim(),
     tech_by_category: p.techByCategory,
     drop_off_date: p.dropOffDate,
     pickup_date: p.pickupDate,
@@ -490,23 +489,24 @@ export async function saveTicketTech(input: {
 }
 
 /**
- * เลขที่เอกสาร PEAK ของรายได้ Finnix — บันทึกทันทีที่พิมพ์ (migration 0072).
+ * เลขที่เอกสาร PEAK ของแต่ละรายการ — บันทึกทันทีที่พิมพ์ (migration 0073).
  *
  * Its own action, and allowed on a CLOSED ticket, because the number arrives
  * from the accounts days after the car has gone and the ticket has locked
- * itself. `save_ticket_finnix_doc` can reach that one column and nothing
- * else, so this only decides WHO may call it.
+ * itself. `save_ticket_item_finnix_docs` can reach that one column on the
+ * ticket's own lines and nothing else, so this only decides WHO may call it.
  */
-export async function saveTicketFinnixDoc(input: {
+export async function saveTicketItemFinnixDocs(input: {
   ticketId: string;
-  docNo: string;
+  /** One per ticket item, in the order the form loaded them. */
+  docNos: string[];
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await getSessionContext(); // C2: authenticate before mutating
   if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์แก้ไขใบงาน' };
   const supabase = await createClient();
-  const { error } = await supabase.rpc('save_ticket_finnix_doc', {
+  const { error } = await supabase.rpc('save_ticket_item_finnix_docs', {
     p_ticket_id: input.ticketId,
-    p_doc_no: input.docNo,
+    p_docs: input.docNos as unknown as Json,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath('/tickets');

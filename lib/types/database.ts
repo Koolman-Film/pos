@@ -1514,6 +1514,7 @@ export type Database = {
           id: number
           interested: string
           interested_price: number
+          finnix_doc_no: string
           revenue_kind: string
           sold: string
           sold_price: number
@@ -1529,6 +1530,7 @@ export type Database = {
           id?: never
           interested?: string
           interested_price?: number
+          finnix_doc_no?: string
           revenue_kind?: string
           sold?: string
           sold_price?: number
@@ -1544,6 +1546,7 @@ export type Database = {
           id?: never
           interested?: string
           interested_price?: number
+          finnix_doc_no?: string
           revenue_kind?: string
           sold?: string
           sold_price?: number
@@ -1644,7 +1647,6 @@ export type Database = {
           locked: boolean
           drop_off_date: string
           extras: Json
-          finnix_doc_no: string
           id: string
           model: string
           phone: string
@@ -1670,7 +1672,6 @@ export type Database = {
           locked?: boolean
           drop_off_date: string
           extras?: Json
-          finnix_doc_no?: string
           id: string
           model?: string
           phone?: string
@@ -1696,7 +1697,6 @@ export type Database = {
           locked?: boolean
           drop_off_date?: string
           extras?: Json
-          finnix_doc_no?: string
           id?: string
           model?: string
           phone?: string
@@ -2150,8 +2150,8 @@ export type Database = {
         Args: { p_claims: Json; p_id: number; p_policy: Json; p_ticket_id: string }
         Returns: number
       }
-      save_ticket_finnix_doc: {
-        Args: { p_doc_no: string; p_ticket_id: string }
+      save_ticket_item_finnix_docs: {
+        Args: { p_docs: Json; p_ticket_id: string }
         Returns: undefined
       }
       save_ticket_extras: {

@@ -33,6 +33,13 @@ export type TicketItem = {
    * the line. Absent means รายได้, which is what every line was before.
    */
   revenueKind?: RevenueKind;
+  /**
+   * เลขที่เอกสารใน PEAK ของรายการนี้ เมื่อเป็นรายได้ Finnix (migration 0073).
+   *
+   * Per line, not per job: Finnix issues its documents by ชนิดสินค้า, so a job
+   * with two of their products has two numbers (ร้านเลือก 26 ก.ย. 2569).
+   */
+  finnixDocNo?: string;
 };
 
 export type TicketPayment = {
@@ -293,14 +300,6 @@ export type Ticket = {
    */
   revenueKind?: 'รายได้' | 'รับแทน';
   /**
-   * เลขที่เอกสารใน PEAK ของรายได้ Finnix บนใบงานนี้ (migration 0072).
-   *
-   * One number per job, not per line: the lines say which money is Finnix's,
-   * and the document covers what was settled with them for this car — one
-   * transaction however many lines it came from.
-   */
-  finnixDocNo?: string;
-  /**
    * บัญชีรับชำระ printed on the ใบเสนอราคา (migration 0062). Saved on its own
    * the moment it is picked — see `setTicketPayAccount` — not with the form.
    */
@@ -448,8 +447,6 @@ export type TicketSavePayload = {
   status: string;
   bookingChannel: string;
   revenueKind: 'รายได้' | 'รับแทน';
-  /** เลขที่เอกสาร PEAK ของรายได้ Finnix บนใบงานนี้ (migration 0072). */
-  finnixDocNo: string;
   techByCategory: Record<string, string[]>;
   dropOffDate: string;
   pickupDate: string;
@@ -474,6 +471,8 @@ export type TicketSavePayload = {
     actualQty: Record<string, number>;
     /** รายได้สาขา / รับแทน Finnix สำหรับรายการนี้ (migration 0068). */
     revenueKind: RevenueKind;
+    /** เลขที่เอกสาร PEAK ของรายการนี้ (migration 0073). */
+    finnixDocNo: string;
   }[];
   payments: {
     type: string;

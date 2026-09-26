@@ -23,6 +23,7 @@ export function ItemsSection({
   removeItem,
   updateItem,
   updateItemFields,
+  saveFinnixDocs,
   updateFilmPositions,
   lookupPrice,
   lookupFilmPrice,
@@ -39,6 +40,14 @@ export function ItemsSection({
   removeItem: (idx: number) => void;
   updateItem: (idx: number, key: keyof TicketItem, val: unknown) => void;
   updateItemFields: (idx: number, fields: Partial<TicketItem>) => void;
+  /**
+   * Writes the lines' PEAK numbers on their own (0073).
+   *
+   * Its own save because the number arrives from the accounts days after the
+   * car has gone, by which time the ticket has usually locked itself and
+   * บันทึกใบงาน is not on screen at all.
+   */
+  saveFinnixDocs?: () => void;
   updateFilmPositions: (idx: number, positions: TicketPosition[]) => void;
   lookupPrice: (product: string, fallback: number) => number;
   lookupFilmPrice: (
@@ -484,6 +493,35 @@ export function ItemsSection({
                         );
                       })}
                     </div>
+                  </div>
+                )}
+                {/*
+                  เลขที่เอกสาร PEAK ของรายการนี้ (0073).
+
+                  Under the button that made it Finnix's, because that is where
+                  the decision was made and where the eye already is
+                  (ร้านขอ 26 ก.ย. 2569). One number per LINE: Finnix issues its
+                  documents by ชนิดสินค้า, so a job with two of their products
+                  has two of these.
+                */}
+                {it.revenueKind === 'รับแทน' && (
+                  <div className="mt-2">
+                    <label
+                      className="text-xs block mb-1"
+                      style={{ color: 'var(--ink-soft)' }}
+                      htmlFor={`item-peak-${idx}`}
+                    >
+                      <i className="fa-solid fa-file-invoice mr-1"></i>เลขที่เอกสารจาก PEAK
+                    </label>
+                    <input
+                      id={`item-peak-${idx}`}
+                      aria-label={`เลขที่เอกสารจาก PEAK รายการที่ ${idx + 1}`}
+                      value={it.finnixDocNo ?? ''}
+                      onChange={(e) => updateItem(idx, 'finnixDocNo', e.target.value)}
+                      onBlur={() => saveFinnixDocs?.()}
+                      placeholder="เช่น IV6809-0042"
+                      className="field text-xs px-2.5 py-1.5 w-full"
+                    />
                   </div>
                 )}
                 {it.discountType && it.discountValue ? (

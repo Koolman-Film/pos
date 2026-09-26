@@ -17,7 +17,6 @@ export function PaymentsSection({
   addPayment,
   removePayment,
   updatePayment,
-  setFinnixDocNo,
   total,
   paid,
 }: {
@@ -32,65 +31,13 @@ export function PaymentsSection({
   /** Drops the row entirely — see `removePayment` in TicketDetail for why. */
   removePayment?: (idx: number) => void;
   updatePayment: (idx: number, key: keyof TicketPayment, val: unknown) => void;
-  /** เลขที่เอกสาร PEAK — saved on its own, works on a closed ticket (0072). */
-  setFinnixDocNo?: (docNo: string) => void;
   total: number;
   paid: number;
 }) {
-  /*
-    ใบงานนี้มีรายได้ Finnix อยู่ไหม — the only thing this section still needs to
-    know about it, and only so it knows whether to ask for the PEAK number.
-
-    Which lines are Finnix's is set per line in ส่วนที่ 2, beside the products.
-    The block that asked it again here, above the payment rows, is gone
-    (ร้านแจ้ง 26 ก.ย. 2569): each row already names the แหล่งเงิน the money went
-    into, and that is the same question answered with the real thing.
-  */
-  const hasFinnixRevenue =
-    (t.items ?? []).some((i) => i.revenueKind === 'รับแทน') || t.revenueKind === 'รับแทน';
 
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
     <div>
-      {/*
-        เลขที่เอกสารจาก PEAK (ร้านขอ 26 ก.ย. 2569).
-
-        รายได้ Finnix collected at the counter has to be reconciled against a
-        document in PEAK, and the person who does that is the one who opened
-        this ticket — they had nowhere to write the number down, so it lived
-        in somebody's memory or was dug out of PEAK afterwards.
-
-        One number for the job, not one per line: the lines say which money is
-        Finnix's, the document covers what was settled with them for this car.
-        Saved on its own, so it can be filled in after the ticket has closed —
-        which is usually when the number arrives.
-      */}
-      {hasFinnixRevenue && setFinnixDocNo && (
-        <div
-          className="rounded-xl p-3 mb-3"
-          style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}
-        >
-          <label
-            className="text-xs font-medium block mb-1"
-            style={{ color: 'var(--ink-soft)' }}
-            htmlFor="ticket-finnix-doc"
-          >
-            <i className="fa-solid fa-file-invoice mr-1.5"></i>เลขที่เอกสารจาก PEAK
-          </label>
-          <input
-            id="ticket-finnix-doc"
-            aria-label="เลขที่เอกสารจาก PEAK"
-            defaultValue={t.finnixDocNo ?? ''}
-            onBlur={(e) => setFinnixDocNo(e.target.value)}
-            placeholder="เช่น IV6809-0042"
-            className="field w-full text-sm px-3 py-2"
-          />
-          <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-            ใช้กระทบยอดรายได้ Finnix กับ PEAK · บันทึกเองเมื่อออกจากช่อง
-            กรอกทีหลังได้แม้ใบงานปิดแล้ว
-          </p>
-        </div>
-      )}
       {t.payments.map((p, idx) => (
         <div
           key={idx}
