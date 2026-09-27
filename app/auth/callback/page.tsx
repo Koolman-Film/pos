@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
+import { safeNextPath } from '@/lib/auth/safeNext';
 import { createClient } from '@/lib/supabase/client';
 
 /**
@@ -33,7 +34,8 @@ function CallbackInner() {
   useEffect(() => {
     async function handle() {
       const supabase = createClient();
-      const next = search.get('next') ?? '/dashboard';
+      // Only a path on this site — `next` comes from a URL anyone can craft.
+      const next = safeNextPath(search.get('next'));
 
       // Supabase-side errors first (expired / malformed / wrong project).
       const supabaseErr = search.get('error_description') ?? search.get('error');
