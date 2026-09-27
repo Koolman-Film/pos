@@ -459,7 +459,7 @@ export async function decideWithdrawalAction(input: {
   // Deciding twice would return the stock twice. The first decision stands.
   if (row.status !== 'รออนุมัติ') throw new Error('ใบเบิกนี้ตัดสินไปแล้ว');
 
-  const { error: upErr } = await supabase
+  const { data: decided, error: upErr } = await supabase
     .from('withdrawals')
     .update({
       status: input.approve ? 'อนุมัติแล้ว' : 'ไม่อนุมัติ',
@@ -469,8 +469,13 @@ export async function decideWithdrawalAction(input: {
     .eq('id', row.id)
     // Re-checked in the WHERE as well as above: two managers pressing at once
     // must not both get through.
-    .eq('status', 'รออนุมัติ');
+    .eq('status', 'รออนุมัติ')
+    .select('id');
   if (upErr) throw upErr;
+  // …and the WHERE only helps if somebody looks at what it matched. Both
+  // requests pass the check above; only the one whose UPDATE changed the row
+  // may go on to move stock, or a rejection returns the goods twice.
+  if ((decided ?? []).length === 0) throw new Error('ใบเบิกนี้ตัดสินไปแล้ว');
 
   if (!input.approve && row.stock_id) {
     const { error: moveErr } = await supabase.rpc('move_stock', {
