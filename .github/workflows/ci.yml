@@ -3,9 +3,14 @@ name: CI
 # Until this existed, all 300-odd checks in this repo ran only when somebody
 # remembered to run them. That is the difference between having tests and being
 # defended by them.
+#
+# main is protected (2026-09-27): every change arrives through a pull request,
+# and the PR run is the one that has to pass before merging. Pushes to other
+# branches therefore don't run CI on their own — they would only repeat the PR
+# run. A push to main (the merge itself) still runs, as the record of main.
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
