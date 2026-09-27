@@ -28,8 +28,8 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
   - Done when: unit test proves `javascript:`, `//evil.com`, `/\evil.com`, `https://…` all land
     on `/dashboard`, and `/auth/accept` still works (invite flow).
 
-- [ ] **0.2 Make CI actually block** · S · none
-  - ⏳ Needs the owner — repo side is ready (CI already runs everything). Enabling protection is a GitHub setting that changes how the developer works (D7); the exact command is in the 2026-09-27 hand-over. The CI push-trigger change is deliberately NOT made yet: the developer pushes branches without PRs, so limiting CI to `main` would remove their coverage until protection is on.
+- [x] **0.2 Make CI actually block** · S · none
+  - ✅ Done 2026-09-27 — owner chose to enable: `main` requires a PR with both CI checks passing (strict, 0 approvals, admins may bypass in an emergency). CI push trigger narrowed to `main` in PR #4 since PRs now carry the run. The developer must work through PRs from now on.
   - Evidence: `.github/workflows/ci.yml` runs the full suite on every push, but `main` has **no
     branch protection** (GitHub API: "Branch not protected"). The developer branch was red on
     11 Sep and 21–22 Sep with nobody acting on it; the popup and seed breakages would have
@@ -78,8 +78,8 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
   - Done when: integration test — two expenses share a file, delete one, the other's file
     still opens.
 
-- [ ] **0.7 Upgrade vulnerable dependencies** · S · none
-  - ◐ Partly done 2026-09-27 · `8feaac6` — next 16.2.11 → **16.3.6**, eslint-config-next to match, nanoid via `npm audit fix`; `npm audit --omit=dev` down from 5 advisories (1 critical) to 1. **xlsx remains (D9):** npm 12 refuses non-registry tarballs by default (`EALLOWREMOTE`) and SheetJS only ships fixes from cdn.sheetjs.com.
+- [x] **0.7 Upgrade vulnerable dependencies** · S · none
+  - ✅ Done 2026-09-27 · PR #4 — next 16.3.6 (`8feaac6`); xlsx 0.20.3 vendored from cdn.sheetjs.com as `vendor/xlsx-0.20.3.tgz` (sha256 `8dc73fc3…9fe8`, Apache-2.0, no install scripts), installed via `file:`; `tests/unit/lib/xlsxContract.test.ts` pins every call the app makes. `npm audit --omit=dev`: 0.
   - Evidence: `npm audit --omit=dev` — `next 16.2.11` critical (image-optimizer AVIF RCE,
     GHSA-2xp9; low real exposure: no `next/image`, runs on Vercel). `xlsx 0.18.5` prototype
     pollution + ReDoS, no npm fix; used for exports and one in-browser import
@@ -114,7 +114,8 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
 
 ## Phase 1 — Before fixed deadlines
 
-- [ ] **1.1 Reads silently capped at 1,000 rows** · S · fix · **deadline ≈ November**
+- [x] **1.1 Reads silently capped at 1,000 rows** · S · fix · **deadline ≈ November**
+  - ✅ Done 2026-09-27 · PR #6 — `pagedData()` over every read of a growing table (customers, tickets + trash, ticket-form lookups, expenses, petty cash, dashboard visits/policies/claims, revenue retail + wholesale, withdrawals, film prices, POs + trash, wholesale customers, role permissions), each with a unique tie-breaker order; the remaining 21 reads are bounded by a filter. `tests/integration/pagedReads.test.ts` proves the cap on a real DB (1,000 of 1,150) and the fix (all 1,150).
   - Evidence: PostgREST `max_rows = 1000` (`supabase/config.toml:19`; hosted default is the
     same). Unpaged reads return an arbitrary 1,000 with no error:
     - `customers/data.ts` (both queries) and `retail_customers` in `tickets/data.ts:235` —
@@ -128,7 +129,8 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
   - Fix: `fetchAllRows` (`lib/supabase/fetchAll.ts`) with a stable `order`.
   - Done when: an integration test seeds > 1,000 rows for one list and gets all of them.
 
-- [ ] **1.2 Ticket numbers collide past 1,000 per branch** · S–M · none · **deadline ≈ late Jan 2027**
+- [x] **1.2 Ticket numbers collide past 1,000 per branch** · S–M · none · **deadline ≈ late Jan 2027**
+  - ✅ Done 2026-09-27 · PR #6 — migration/release **0076**: BEFORE INSERT trigger + per-branch advisory lock, as 0036 does for POs; same `JT-XX-00000` format. On production the next numbers continued exactly (cm 00347, lp 00063, lpg 00090, py 00051). `tests/integration/ticketNumbering.test.ts`: past 1,100 tickets and 6 simultaneous creates.
   - Evidence: `nextTicketId` (`tickets/actions.ts:55-67`) reads existing ids unpaged and
     unordered. Chiang Mai has 319 tickets in 58 days (~5.5/day). Past 1,000 the max is taken
     from an arbitrary subset → duplicate key → ticket creation fails. Two simultaneous creates
@@ -137,7 +139,8 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
     (migration 0036, `next_order_id`). Same `JT-XX-00000` format.
   - Done when: integration test creates tickets concurrently and past 1,000 without collision.
 
-- [ ] **1.3 Production error reporting** · S–M · none
+- [x] **1.3 Production error reporting** · S–M · none
+  - ✅ Done 2026-09-27 · PR #6 — `instrumentation.ts` `onRequestError` → `[request-error] <kind> <method> <route> digest=…`; `reportActionError()` → `[action-error] <action> user=…` in the catch blocks that used to swallow. Verified: a forced failure on /revenue appeared in the server log with its digest. Expected rejections (permissions, DB rules) are deliberately not logged.
   - Evidence: one `console.error` in the codebase (`lib/alerts/load.ts:31`); 138 server-action
     paths return `{ ok:false }` silently; 55 reads ignore `error` (a failed read renders as
     zero); no `instrumentation.ts`, no error tracker, no health route.
@@ -146,6 +149,9 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
     optional Sentry; log (don't render) read errors.
   - Done when: a forced failure in a server action appears in Vercel logs with action name and
     user id.
+
+- [x] **1.4 Revenue report showed no retail sales after 0073** · S · fix _(found 2026-09-27 during 1.1)_
+  - ✅ Done 2026-09-27 · PR #5 (hotfix, deployed ~22:45) — the report still selected `tickets.finnix_doc_no`, which 0073 dropped; PostgREST answered 42703, the code read only `data`, and retail revenue silently showed as nothing from the 0073 deploy (~17:00). Fixed the select, made the report's reads throw on error, and added `/revenue` `/money` `/customers` `/activity` `/daily-report` to the route smoke test (h1-checked). Proven: a bad column now fails CI at "/revenue should not error"; on production the old select returns 400 and the new one 200. **Any revenue export taken between ~17:00 and ~22:45 on 27 Sep should be re-run.**
 
 ---
 
@@ -249,6 +255,7 @@ the API cannot skip it. **Every rule needs a test proving the real screen path s
   - Move the hand-added 0038/0039 stamp block (≈ GO-LIVE:2898-2909, 5b85677) into
     `release-0038-0039.sql`; build from the ordered list in `docs/RELEASE-post-trial-fixes.md`.
 - [ ] **3.3 CI: migration number collisions** · S
+  - ◐ Partly done 2026-09-27 — `tests/unit/migrations/conventions.test.ts` fails on two migrations with the same number (and on a migration after 0000 that does not set `search_path`). Still open: refusing a new migration numbered at or below `main`'s newest.
   - Fail on duplicate numbers, or a new migration not above `main`'s newest.
 - [ ] **3.4 Schema fingerprint script** · M
   - Commit the prod-vs-local md5 comparison of functions / triggers / policies as
@@ -408,16 +415,18 @@ When data grows (≈ 10k tickets):
       **activity history retention** period.
 - [ ] **D6 Preview deploys:** separate staging Supabase project (cost) or previews off / behind
       Vercel Authentication.
-- [ ] **D7 Branch protection workflow** — the developer works through PRs (needed for 0.2).
+- [x] **D7 Branch protection workflow** — the developer works through PRs (needed for 0.2).
+  - Decided 2026-09-27: yes — protection is on (see 0.2).
 - [ ] **D8 "จำนวนครั้ง Service" field** is collected in the add-product form (`StockModule.tsx:424,1575`),
       the import parser (`:519`) and the template (`:488`), but no action sends it and no column
       stores it. Wire it up or remove it.
-- [ ] **D9 Where to get a fixed SheetJS (`xlsx`).** npm has no fix for 0.18.5 (prototype pollution + ReDoS;
+- [x] **D9 Where to get a fixed SheetJS (`xlsx`).** npm has no fix for 0.18.5 (prototype pollution + ReDoS;
       exports only write, one in-browser import of the user's own file). Options: (a) install
       `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` with npm's `--allow-remote` opt-in (CI and
       Vercel builds need the same); (b) vendor that tarball into the repo (`vendor/`, `file:` dependency —
       no remote fetch at build time); (c) accept the current exposure. Needs a yes because it downloads
       from outside the npm registry.
+  - Decided 2026-09-27: (b) vendor the tarball (see 0.7).
 
 ---
 
