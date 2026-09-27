@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { fetchAllRows } from '@/lib/supabase/fetchAll';
+import { fetchAllRows, pagedData } from '@/lib/supabase/fetchAll';
 import { loadPayAccounts } from '@/lib/money/payAccounts';
 import type { PayAccount } from '@/lib/domain/payAccount';
 import type { SessionContext } from '@/lib/auth/session';
@@ -177,10 +177,16 @@ async function loadShops(session: SessionContext): Promise<Shop[]> {
 
 async function loadCustomers(): Promise<WsCustomer[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('wholesale_customers')
-    .select('id, name, phone, address')
-    .order('name');
+  const { data } = await pagedData(
+    (from, to) =>
+      supabase
+        .from('wholesale_customers')
+        .select('id, name, phone, address')
+        .order('name')
+        .order('id')
+        .range(from, to),
+    'wholesale_customers',
+  );
   return (data ?? []).map((c) => ({
     id: c.id,
     name: c.name,
@@ -216,12 +222,18 @@ export async function loadDeletedOrders(session: SessionContext): Promise<{
 }> {
   const supabase = await createClient();
   const [ordersRes, usersRes, customers, shops] = await Promise.all([
-    supabase
-      .from('orders')
-      .select(`${ORDER_SELECT}, deleted_at, deleted_by`)
-      .in('shop_id', session.accessibleShopIds)
-      .not('deleted_at', 'is', null)
-      .order('deleted_at', { ascending: false }),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('orders')
+          .select(`${ORDER_SELECT}, deleted_at, deleted_by`)
+          .in('shop_id', session.accessibleShopIds)
+          .not('deleted_at', 'is', null)
+          .order('deleted_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      'deleted orders',
+    ),
     supabase.from('app_users').select('id, name'),
     loadCustomers(),
     loadShops(session),
@@ -250,13 +262,19 @@ export async function loadWholesaleListData(session: SessionContext): Promise<{
 }> {
   const supabase = await createClient();
   const [ordersRes, customers, wsStatuses, shops] = await Promise.all([
-    supabase
-      .from('orders')
-      .select(ORDER_SELECT)
-      .in('shop_id', session.accessibleShopIds)
-      // Deleted POs (migration 0040) are out of the list and out of every
-      // figure derived from it. The bin below is the only place they surface.
-      .is('deleted_at', null),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('orders')
+          .select(ORDER_SELECT)
+          .in('shop_id', session.accessibleShopIds)
+          // Deleted POs (migration 0040) are out of the list and out of every
+          // figure derived from it. The bin below is the only place they surface.
+          .is('deleted_at', null)
+          .order('id')
+          .range(from, to),
+      'orders',
+    ),
     loadCustomers(),
     loadWsStatuses(),
     loadShops(session),

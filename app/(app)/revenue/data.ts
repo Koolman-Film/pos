@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { fetchAllRows } from '@/lib/supabase/fetchAll';
+import { fetchAllRows, pagedData } from '@/lib/supabase/fetchAll';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { summarizePayments, type PaymentSummary } from '@/lib/domain/docPayment';
 import { isReceived, orderTotal } from '@/lib/domain/orders';
@@ -93,25 +93,53 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
 
   // RLS scopes all three to the caller's shops.
   const [ticketRes, policyRes, docRes, accountRes, costRes] = await Promise.all([
-    supabase
-      .from('tickets')
-      .select(
-        'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, ' +
-          'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind, finnix_doc_no), ' +
-          'ticket_payments(amount, method)',
-      )
-      .is('deleted_at', null),
-    supabase.from('insurance_policies').select('ticket_id, plan_name, price, sold_at, paid_amount'),
-    supabase.from('ticket_documents').select('ticket_id, doc_type, doc_no, issued_at'),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('tickets')
+          .select(
+            'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, ' +
+              'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind, finnix_doc_no), ' +
+              'ticket_payments(amount, method)',
+          )
+          .is('deleted_at', null)
+          .order('id')
+          .range(from, to),
+      'tickets',
+    ),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('insurance_policies')
+          .select('ticket_id, plan_name, price, sold_at, paid_amount')
+          .order('id')
+          .range(from, to),
+      'insurance_policies',
+    ),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('ticket_documents')
+          .select('ticket_id, doc_type, doc_no, issued_at')
+          .order('id')
+          .range(from, to),
+      'ticket_documents',
+    ),
     // แหล่งเงินที่เป็นของ Finnix — which account each payment landed in is
     // what says whether the money went where it belonged (0069).
     supabase.from('money_accounts').select('shop_id, name, match_names, owner'),
     // What the materials cost. Consumption is negative in the ledger, so the
     // sum comes back negative and is flipped where it is read.
-    supabase
-      .from('stock_movements')
-      .select('document_id, cost_total')
-      .in('kind', ['ใบงาน', 'ยกเลิกใบงาน', 'กู้คืนใบงาน']),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('stock_movements')
+          .select('document_id, cost_total')
+          .in('kind', ['ใบงาน', 'ยกเลิกใบงาน', 'กู้คืนใบงาน'])
+          .order('id')
+          .range(from, to),
+      'stock_movements',
+    ),
   ]);
 
   /*
@@ -353,27 +381,45 @@ async function wholesaleLines(): Promise<SaleLine[]> {
 
   const [{ data: orderRows }, { data: customerRows }, stockRows, { data: costRows }] =
     await Promise.all([
-      supabase
-        .from('orders')
-        .select(
-          'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, status)',
-        )
-        .is('deleted_at', null)
-        .not('delivered_at', 'is', null),
-      supabase.from('wholesale_customers').select('id, name'),
+      pagedData(
+        (from, to) =>
+          supabase
+            .from('orders')
+            .select(
+              'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, status)',
+            )
+            .is('deleted_at', null)
+            .not('delivered_at', 'is', null)
+            .order('id')
+            .range(from, to),
+        'orders',
+      ),
+      pagedData(
+        (from, to) =>
+          supabase.from('wholesale_customers').select('id, name').order('id').range(from, to),
+        'wholesale_customers',
+      ),
       // ชนิดสินค้าของขายส่ง มาจากทะเบียนสินค้า so a roll of film reads under the
       // same ชนิดสินค้า whether it was sold over the counter or by the case.
       //
       // Paged, because a truncated read here does not fail — it quietly files
       // real sales under ไม่ระบุชนิด.
       fetchAllRows<{ name: string; category: string }>(
-        (from, to) => supabase.from('stock').select('name, category').order('name').range(from, to),
+        // `id` breaks ties: one product name exists in several branches.
+        (from, to) =>
+          supabase.from('stock').select('name, category').order('name').order('id').range(from, to),
         'stock',
       ),
-      supabase
-        .from('stock_movements')
-        .select('document_id, cost_total')
-        .in('kind', ['ขายส่ง', 'ลบ PO ขายส่ง', 'กู้คืน PO ขายส่ง']),
+      pagedData(
+        (from, to) =>
+          supabase
+            .from('stock_movements')
+            .select('document_id, cost_total')
+            .in('kind', ['ขายส่ง', 'ลบ PO ขายส่ง', 'กู้คืน PO ขายส่ง'])
+            .order('id')
+            .range(from, to),
+        'stock_movements',
+      ),
     ]);
 
   const customerName = new Map((customerRows ?? []).map((c) => [c.id, c.name]));

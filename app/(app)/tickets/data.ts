@@ -1,6 +1,6 @@
 import { daysFromNow } from '@/lib/domain/format';
 import { createClient } from '@/lib/supabase/server';
-import { fetchAllRows } from '@/lib/supabase/fetchAll';
+import { fetchAllRows, pagedData } from '@/lib/supabase/fetchAll';
 import type { StatusConfig } from '@/components/ui/Badge';
 import type {
   CarModel,
@@ -93,13 +93,19 @@ const LIST_SELECT =
 export async function loadTicketList(): Promise<TicketListRow[]> {
   const supabase = await createClient();
   // RLS scopes rows to the caller's shops — this is the real backstop.
-  const { data } = await supabase
-    .from('tickets')
-    .select(LIST_SELECT)
-    // Soft-deleted tickets (migration 0013) live on in the table but are gone
-    // from every list; the bin below is the only place they surface.
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false });
+  const { data } = await pagedData(
+    (from, to) =>
+      supabase
+        .from('tickets')
+        .select(LIST_SELECT)
+        // Soft-deleted tickets (migration 0013) live on in the table but are gone
+        // from every list; the bin below is the only place they surface.
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .order('id')
+        .range(from, to),
+    'tickets',
+  );
 
   return ((data ?? []) as unknown as ListRow[]).map((t) => ({
     id: t.id,
@@ -138,11 +144,17 @@ export async function loadTicketList(): Promise<TicketListRow[]> {
 export async function loadDeletedTicketList(): Promise<TicketListRow[]> {
   const supabase = await createClient();
   const [{ data }, { data: users }] = await Promise.all([
-    supabase
-      .from('tickets')
-      .select(LIST_SELECT)
-      .not('deleted_at', 'is', null)
-      .order('deleted_at', { ascending: false }),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('tickets')
+          .select(LIST_SELECT)
+          .not('deleted_at', 'is', null)
+          .order('deleted_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      'deleted tickets',
+    ),
     supabase.from('app_users').select('id, name'),
   ]);
   const nameById = new Map((users ?? []).map((u) => [u.id, u.name]));
@@ -200,11 +212,17 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
     buyersRes,
     shopInfoRes,
   ] = await Promise.all([
-    supabase
-      .from('option_lists')
-      .select('list_key, value, sort_order')
-      .is('shop_id', null)
-      .order('sort_order'),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('option_lists')
+          .select('list_key, value, sort_order')
+          .is('shop_id', null)
+          .order('sort_order')
+          .order('id')
+          .range(from, to),
+      'option_lists',
+    ),
     // ทุกแถว ไม่ใช่พันแถวแรก — PostgREST caps at `max_rows` (1000) in silence,
     // and an unordered query answers with an arbitrary thousand. That is how the
     // ขายส่ง picker came to offer a branch products it does not carry; this is
@@ -229,13 +247,44 @@ export async function loadDetailRegistries(): Promise<DetailRegistries> {
           .range(from, to),
       'stock',
     ),
-    supabase.from('car_models').select('model, brand, car_type'),
-    supabase.from('price_matrix').select('car_type, product, price'),
-    supabase
-      .from('film_price_matrix')
-      .select('category, product, position, car_type, price, shop_id'),
-    supabase.from('retail_customers').select('id, name, phone'),
-    supabase.from('corporate_buyers').select('name, address, tax_id'),
+    // Every lookup list the form offers, whole — each grows with the business.
+    pagedData(
+      (from, to) =>
+        supabase.from('car_models').select('model, brand, car_type').order('id').range(from, to),
+      'car_models',
+    ),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('price_matrix')
+          .select('car_type, product, price')
+          .order('id')
+          .range(from, to),
+      'price_matrix',
+    ),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('film_price_matrix')
+          .select('category, product, position, car_type, price, shop_id')
+          .order('id')
+          .range(from, to),
+      'film_price_matrix',
+    ),
+    pagedData(
+      (from, to) =>
+        supabase.from('retail_customers').select('id, name, phone').order('id').range(from, to),
+      'retail_customers',
+    ),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('corporate_buyers')
+          .select('name, address, tax_id')
+          .order('id')
+          .range(from, to),
+      'corporate_buyers',
+    ),
     supabase
       .from('shop_info')
       .select('shop_id, company_name, address, phone, tax_id, payment_channels, vat_registered'),
