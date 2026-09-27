@@ -71,20 +71,6 @@ function threwWhileMoving(delta: QtyMap, ticketId: string, e: unknown): StockMov
 // The list of valid option-list keys moved to lib/domain/optionLists.ts — it is
 // shared with สต็อกสินค้า, บัญชี and ขายส่ง now, which have their own lists.
 
-async function nextTicketId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  shop: string,
-): Promise<string> {
-  const prefix = `JT-${shop.toUpperCase()}-`;
-  const { data } = await supabase.from('tickets').select('id').like('id', `${prefix}%`);
-  let max = 0;
-  for (const row of data ?? []) {
-    const n = Number(String(row.id).slice(prefix.length));
-    if (Number.isFinite(n) && n > max) max = n;
-  }
-  return `${prefix}${String(max + 1).padStart(5, '0')}`;
-}
-
 async function resolveRetailCustomerId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   name: string,
@@ -262,12 +248,17 @@ export async function createTicket(p: TicketSavePayload): Promise<SaveResult> {
   if (!session.canDo('list.createNew')) return { ok: false, error: 'ไม่มีสิทธิ์สร้างใบงานใหม่' };
   const supabase = await createClient();
   try {
-    const id = await nextTicketId(supabase, p.shop);
     const retailId = await resolveRetailCustomerId(supabase, p.customer, p.phone);
-    const { error } = await supabase
+    // The number is the database's to give (migration 0076): an empty id asks
+    // the insert trigger for the next JT-<SHOP>-00000 under a per-branch lock,
+    // counted over every ticket rather than a page of them.
+    const { data: created, error } = await supabase
       .from('tickets')
-      .insert(ticketRow(p, id, retailId) as unknown as TicketInsert);
+      .insert(ticketRow(p, '', retailId) as unknown as TicketInsert)
+      .select('id')
+      .single();
     if (error) throw new Error(error.message);
+    const id = created.id;
     await writeTicketChildren(supabase, id, p);
     await supabase.from('ticket_status_history').insert({ ticket_id: id, status: p.status });
     // A new ticket has no stored quantities, so everything recorded is consumed.
