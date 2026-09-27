@@ -217,6 +217,15 @@ the API cannot skip it. **Every rule needs a test proving the real screen path s
   - Fix: re-raise those with `22023` / `P0001` (→ HTTP 400, message kept); new migration only.
   - Done when: an RLS test asserts the Thai message for each, on the local 14.x stack.
 
+- [ ] **2.13 Activity history misses the per-line columns added after 0061** · S · none _(found 2026-09-27)_
+  - `activity_collection('ticket', …)` (0061) snapshots a fixed list of `ticket_items` fields;
+    `revenue_kind` (0068) and `finnix_doc_no` (0073) are not on it, so switching a line between
+    รายได้/รับแทน or entering a PEAK number leaves no row in ประวัติการใช้งาน. Seen in
+    production: 0068's backfill of 18 lines logged nothing.
+  - Fix: add both fields to the snapshot (new migration; re-seed `activity_snapshots` for
+    tickets with `on conflict do update`). Any future column on a logged child table needs the
+    same.
+
 ---
 
 ## Phase 3 — Release process and operations
