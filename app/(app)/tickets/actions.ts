@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { getSessionContext } from '@/lib/auth/session';
+import { reportActionError } from '@/lib/observability/reportError';
 import { createClient } from '@/lib/supabase/server';
 import { cleanPhones, samePhones } from '@/lib/domain/phone';
 import {
@@ -267,6 +268,7 @@ export async function createTicket(p: TicketSavePayload): Promise<SaveResult> {
     revalidatePath(`/tickets/${id}`);
     return { ok: true, id, stockWarning: stockWarningFor(moved) };
   } catch (e) {
+    reportActionError('tickets.createTicket', e, session.userId);
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
 }
@@ -331,6 +333,7 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
     revalidatePath(`/tickets/${p.id}`);
     return { ok: true, id: p.id, stockWarning: stockWarningFor(moved) };
   } catch (e) {
+    reportActionError('tickets.updateTicket', e, session.userId);
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
 }
@@ -653,6 +656,7 @@ export async function saveCorporateBuyer(input: {
     revalidatePath('/tickets');
     return { ok: true };
   } catch (e) {
+    reportActionError('tickets.saveCorporateBuyer', e, session.userId);
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
 }
@@ -694,6 +698,7 @@ export async function saveCarModel(input: {
     revalidatePath('/tickets');
     return { ok: true };
   } catch (e) {
+    reportActionError('tickets.saveCarModel', e, session.userId);
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
 }
@@ -749,6 +754,7 @@ export async function saveServiceVisit(input: {
     revalidatePath('/dashboard');
     return { ok: true, id: (data as number) ?? undefined };
   } catch (e) {
+    reportActionError('tickets.saveServiceVisit', e, session.userId);
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
 }
@@ -804,6 +810,7 @@ export async function saveInsurancePolicy(input: {
     revalidatePath('/dashboard');
     return { ok: true, id: (data as number) ?? undefined };
   } catch (e) {
+    reportActionError('tickets.saveInsurancePolicy', e, session.userId);
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกประกันไม่สำเร็จ' };
   }
 }

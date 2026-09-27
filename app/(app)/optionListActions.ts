@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { getSessionContext } from '@/lib/auth/session';
+import { reportActionError } from '@/lib/observability/reportError';
 import { createClient } from '@/lib/supabase/server';
 import { OPTION_LIST_PATHS, isOptionListKey } from '@/lib/domain/optionLists';
 
@@ -55,6 +56,7 @@ export async function updateOptionListAction(
     for (const path of OPTION_LIST_PATHS) revalidatePath(path);
     return { ok: true };
   } catch (e) {
+    reportActionError('options.updateOptionListAction', e, session.userId);
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
 }
