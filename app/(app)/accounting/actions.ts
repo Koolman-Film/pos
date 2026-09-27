@@ -109,6 +109,30 @@ export async function addExpenseAttachments(
   return { ok: true };
 }
 
+/**
+ * Delete stored receipts that no attachment row refers to any more.
+ *
+ * One upload is shared: every line of a multi-line expense gets its own
+ * attachment row pointing at the same object (see `addExpense`). Deleting the
+ * object with the first row that goes left the other lines pointing at nothing,
+ * so an object is removed only once the LAST row referring to it has been
+ * deleted. Call it after the rows are gone.
+ */
+async function removeUnreferencedReceipts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  paths: string[],
+): Promise<void> {
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (unique.length === 0) return;
+  const { data: stillUsed } = await supabase
+    .from('expense_attachments')
+    .select('storage_path')
+    .in('storage_path', unique);
+  const keep = new Set((stillUsed ?? []).map((r) => r.storage_path));
+  const orphaned = unique.filter((p) => !keep.has(p));
+  if (orphaned.length > 0) await supabase.storage.from('expense-attachments').remove(orphaned);
+}
+
 /** Remove one receipt — the row AND the object, so nothing is left orphaned. */
 export async function deleteExpenseAttachment(
   attachmentId: number,
@@ -125,9 +149,7 @@ export async function deleteExpenseAttachment(
 
   const { error } = await supabase.from('expense_attachments').delete().eq('id', attachmentId);
   if (error) return { ok: false, error: error.message };
-  if (row?.storage_path) {
-    await supabase.storage.from('expense-attachments').remove([row.storage_path]);
-  }
+  if (row?.storage_path) await removeUnreferencedReceipts(supabase, [row.storage_path]);
   revalidatePath('/accounting');
   return { ok: true };
 }
@@ -229,11 +251,9 @@ export async function deleteExpense(id: number): Promise<void> {
   const { error } = await supabase.from('expenses').delete().eq('id', id);
   if (error) throw error;
 
-  if (paths.length > 0) {
-    // A failure here leaves an orphaned object, not a broken expense list, so it
-    // must not undo the delete the user asked for.
-    await supabase.storage.from('expense-attachments').remove(paths);
-  }
+  // A failure here leaves an orphaned object, not a broken expense list, so it
+  // must not undo the delete the user asked for.
+  await removeUnreferencedReceipts(supabase, paths);
 
   revalidatePath('/accounting');
 }
