@@ -27,6 +27,13 @@ const ROUTES = [
   { path: '/commission', marker: 'คอมมิชชั่น' },
   { path: '/accounting', marker: 'ค่าใช้จ่าย' },
   { path: '/permissions', marker: 'สิทธิ์' },
+  // Checked by their <h1>: the sidebar carries links with the same words, so a
+  // text marker would be found even on a page that failed to render.
+  { path: '/revenue', heading: 'รายได้' },
+  { path: '/money', heading: 'การจัดการเงิน/บัญชี' },
+  { path: '/customers', heading: 'ทะเบียนลูกค้า' },
+  { path: '/activity', heading: 'ประวัติการใช้งาน' },
+  { path: '/daily-report', heading: 'รายงานการเงินรายวัน' },
 ];
 
 test('every route renders for an admin with no errors', async ({ page }) => {
@@ -49,10 +56,11 @@ test('every route renders for an admin with no errors', async ({ page }) => {
     expect(response?.status(), `${route.path} should not error`).toBeLessThan(400);
     // A rendered marker proves the page produced its own content rather than an
     // error boundary that happens to return 200.
-    await expect(
-      page.locator('.app-shell').getByText(route.marker, { exact: false }).first(),
-      `${route.path} should render its content`,
-    ).toBeVisible();
+    const content =
+      'heading' in route
+        ? page.getByRole('heading', { level: 1, name: route.heading, exact: true })
+        : page.locator('.app-shell').getByText(route.marker, { exact: false }).first();
+    await expect(content, `${route.path} should render its content`).toBeVisible();
   }
 
   expect(problems, problems.join('\n')).toEqual([]);

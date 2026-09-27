@@ -92,17 +92,11 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
   const supabase = await createClient();
 
   // RLS scopes all three to the caller's shops.
-  const [
-    { data: ticketRows },
-    { data: policyRows },
-    { data: docRows },
-    { data: accountRows },
-    { data: costRows },
-  ] = await Promise.all([
+  const [ticketRes, policyRes, docRes, accountRes, costRes] = await Promise.all([
     supabase
       .from('tickets')
       .select(
-        'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, finnix_doc_no, ' +
+        'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, ' +
           'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind, finnix_doc_no), ' +
           'ticket_payments(amount, method)',
       )
@@ -120,6 +114,29 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       .in('kind', ['ใบงาน', 'ยกเลิกใบงาน', 'กู้คืนใบงาน']),
   ]);
 
+  /*
+    A read that fails must fail the report, not shrink it. These results used
+    to be destructured as `{ data }` alone, so when 0073 dropped
+    `tickets.finnix_doc_no` (moved to the lines) while the select above still
+    named it, PostgREST answered 42703, `data` was null, and the report quietly
+    showed no retail sales at all. An error now stops the page, where the
+    route smoke test and the server log both see it.
+  */
+  for (const [label, res] of [
+    ['tickets', ticketRes],
+    ['insurance_policies', policyRes],
+    ['ticket_documents', docRes],
+    ['money_accounts', accountRes],
+    ['stock_movements', costRes],
+  ] as const) {
+    if (res.error) throw new Error(`revenue ${label}: ${res.error.message}`);
+  }
+  const ticketRows = ticketRes.data;
+  const policyRows = policyRes.data;
+  const docRows = docRes.data;
+  const accountRows = accountRes.data;
+  const costRows = costRes.data;
+
   type TicketRow = {
     id: string;
     shop_id: string;
@@ -127,7 +144,6 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
     plate: string;
     drop_off_date: string | null;
     revenue_kind: string;
-    finnix_doc_no: string | null;
     brand: string | null;
     model: string | null;
     booking_channel: string | null;
