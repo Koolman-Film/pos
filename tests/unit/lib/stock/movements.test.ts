@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import { applyStockMovements, diffQtyMaps, sumQtyMaps } from '@/lib/stock/movements';
 
@@ -210,5 +210,81 @@ describe('applyStockMovements', () => {
     expect(result.unmatched).toEqual([]);
     expect(rpcCalls).toHaveLength(0);
     expect(inserted).toHaveLength(0);
+  });
+});
+
+/**
+ * Supabase returns errors instead of throwing them, so a failed stock move used
+ * to look exactly like a successful one: the ticket or PO said "saved", nothing
+ * moved, and the shelf drifted from the system with nobody told. Both database
+ * calls are now checked; a failure is logged and every product is reported back
+ * as not moved, which is the truth — `move_stock` is one all-or-nothing call.
+ */
+describe('applyStockMovements — database failures', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  function failingSupabase(opts: { lookupError?: boolean; rpcError?: boolean }) {
+    const rows = [
+      { id: 7, name: 'ฟิล์ม A', qty: 10 },
+      { id: 8, name: 'ฟิล์ม B', qty: 5 },
+    ];
+    const q = {
+      select: () => q,
+      eq: () => q,
+      in: () => q,
+      order: () =>
+        Promise.resolve(
+          opts.lookupError
+            ? { data: null, error: { message: 'lookup timed out' } }
+            : { data: rows, error: null },
+        ),
+    };
+    return {
+      from: () => q,
+      rpc: () =>
+        Promise.resolve({
+          error: opts.rpcError ? { message: 'permission denied for move_stock' } : null,
+        }),
+    };
+  }
+
+  const source = { kind: 'ใบงาน', documentId: 'JT-CM-00216', by: 'ผู้ทดสอบ', shopId: 'cm' };
+
+  it('reports every product as not moved, and logs, when move_stock fails', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await applyStockMovements(
+      failingSupabase({ rpcError: true }) as never,
+      { 'ฟิล์ม A': 2, 'ฟิล์ม B': 1 },
+      source,
+    );
+    expect(result.failed).toBe(true);
+    expect(result.unmatched.sort()).toEqual(['ฟิล์ม A', 'ฟิล์ม B']);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(String(log.mock.calls[0].join(' '))).toContain('JT-CM-00216');
+    expect(String(log.mock.calls[0].join(' '))).toContain('permission denied for move_stock');
+  });
+
+  it('does not pretend a failed product lookup found nothing to deduct', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await applyStockMovements(
+      failingSupabase({ lookupError: true }) as never,
+      { 'ฟิล์ม A': 2 },
+      source,
+    );
+    expect(result.failed).toBe(true);
+    expect(result.unmatched).toEqual(['ฟิล์ม A']);
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays quiet when everything works', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await applyStockMovements(
+      failingSupabase({}) as never,
+      { 'ฟิล์ม A': 2 },
+      source,
+    );
+    expect(result.failed).toBe(false);
+    expect(result.unmatched).toEqual([]);
+    expect(log).not.toHaveBeenCalled();
   });
 });

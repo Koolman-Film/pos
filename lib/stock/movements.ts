@@ -29,8 +29,13 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
  * product renamed after the ticket recorded its usage. The movement is still
  * logged, but the quantity could not be deducted, and the caller is expected to
  * tell somebody rather than let it pass.
+ *
+ * `failed` means the database refused or errored, so NOTHING moved and every
+ * product is in `unmatched` — `move_stock` is one all-or-nothing call. Supabase
+ * returns errors instead of throwing them, which is how a failed move used to
+ * look exactly like a successful one.
  */
-export type StockMovementResult = { unmatched: string[] };
+export type StockMovementResult = { unmatched: string[]; failed: boolean };
 
 /** Product name -> quantity. The shape of `ticket_items.actual_qty`. */
 export type QtyMap = Record<string, number>;
@@ -98,10 +103,10 @@ export async function applyStockMovements(
   source: StockMovementSource,
 ): Promise<StockMovementResult> {
   const entries = Object.entries(delta).filter(([, d]) => d !== 0);
-  if (entries.length === 0) return { unmatched: [] };
+  if (entries.length === 0) return { unmatched: [], failed: false };
 
   const names = entries.map(([name]) => name);
-  const { data: rows } = await supabase
+  const { data: rows, error: lookupError } = await supabase
     .from('stock')
     .select('id, name, qty')
     .eq('shop_id', source.shopId)
@@ -110,6 +115,7 @@ export async function applyStockMovements(
     // oldest wins, every time. Migration 0025 adds a unique index so this can
     // only matter on data that predates it.
     .order('id', { ascending: true });
+  if (lookupError) return notMoved(names, source, 'stock lookup', lookupError.message);
 
   const byName = new Map<string, { id: number; name: string; qty: number }>();
   for (const r of rows ?? []) if (!byName.has(r.name)) byName.set(r.name, r);
@@ -129,16 +135,35 @@ export async function applyStockMovements(
     .filter((c): c is { id: number; change: number } => typeof c.id === 'number');
 
   if (changes.length > 0) {
-    await supabase.rpc('move_stock', {
+    const { error: moveError } = await supabase.rpc('move_stock', {
       p_changes: changes as unknown as Json,
       p_kind: source.kind,
       p_document_id: source.documentId,
       p_by_name: source.by,
       p_note: '',
     });
+    if (moveError) return notMoved(names, source, 'move_stock', moveError.message);
   }
   // Names with no product at this shop. Nothing moved, so there is nothing to put
   // in the ledger; the caller has to SAY so instead — silently skipping is how a
   // renamed product stops being deducted without anyone noticing.
-  return { unmatched: names.filter((n) => !byName.has(n)) };
+  return { unmatched: names.filter((n) => !byName.has(n)), failed: false };
+}
+
+/**
+ * The database said no. Nothing moved, so every product is reported back, and
+ * the error goes to the server log — Vercel's runtime logs — where somebody can
+ * find it, because the caller's message to staff is necessarily short.
+ */
+function notMoved(
+  names: string[],
+  source: StockMovementSource,
+  step: string,
+  message: string,
+): StockMovementResult {
+  console.error(
+    `[stock] ${step} failed for ${source.kind} ${source.documentId} (shop ${source.shopId}): ${message}`,
+    { products: names },
+  );
+  return { unmatched: names, failed: true };
 }

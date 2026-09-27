@@ -297,8 +297,13 @@ async function moveOrderStock(
       by: 'ระบบ (ขายส่ง)',
       shopId,
     });
-  } catch {
-    // Swallowed on purpose — see the doc comment above.
+  } catch (e) {
+    // Non-fatal on purpose — see the doc comment above — but logged, so a
+    // failed return to stock can be found in the server log.
+    console.error(
+      `[stock] ${sign === -1 ? 'ลบ' : 'กู้คืน'} PO ${orderId} threw while moving stock:`,
+      e,
+    );
   }
 }
 
@@ -409,7 +414,8 @@ export async function recordOrderDelivery(
             shopId,
           });
           unmatched = result.unmatched;
-        } catch {
+        } catch (e) {
+          console.error(`[stock] delivery of ${orderId} threw while deducting stock:`, e);
           unmatched = Object.keys(delta);
         }
       }
@@ -693,7 +699,8 @@ export async function confirmOrderReturn(
             shopId: order.shop_id,
           });
           unmatched = result.unmatched;
-        } catch {
+        } catch (e) {
+          console.error(`[stock] return on ${orderId} threw while restocking:`, e);
           unmatched = Object.keys(delta);
         }
       }

@@ -5,7 +5,13 @@ import { revalidatePath } from 'next/cache';
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 import { cleanPhones, samePhones } from '@/lib/domain/phone';
-import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
+import {
+  applyStockMovements,
+  diffQtyMaps,
+  sumQtyMaps,
+  type QtyMap,
+  type StockMovementResult,
+} from '@/lib/stock/movements';
 import { ticketPaid, ticketTotal } from '@/lib/domain/tickets';
 import type { Database, Json } from '@/lib/types/database';
 
@@ -33,9 +39,21 @@ export type SaveResult = {
   stockWarning?: string;
 };
 
-function stockWarningFor(unmatched: string[]): string | undefined {
+function stockWarningFor(result: StockMovementResult): string | undefined {
+  const { unmatched, failed } = result;
   if (unmatched.length === 0) return undefined;
-  return `บันทึกใบงานแล้ว แต่ตัดสต็อกไม่ได้ ${unmatched.length} รายการ (ไม่พบสินค้าในสาขานี้): ${unmatched.join(', ')}`;
+  // `failed`: the database refused, so nothing moved — not a missing product.
+  // The detail is in the server log (lib/stock/movements.ts).
+  const why = failed ? 'ระบบตัดสต็อกขัดข้อง กรุณาแจ้งผู้ดูแลระบบ' : 'ไม่พบสินค้าในสาขานี้';
+  return `บันทึกใบงานแล้ว แต่ตัดสต็อกไม่ได้ ${unmatched.length} รายการ (${why}): ${unmatched.join(', ')}`;
+}
+
+const NOTHING_MOVED: StockMovementResult = { unmatched: [], failed: false };
+
+/** A stock sync that threw rather than returning an error: nothing is known to have moved. */
+function threwWhileMoving(delta: QtyMap, ticketId: string, e: unknown): StockMovementResult {
+  console.error(`[stock] sync threw for ใบงาน ${ticketId}:`, e);
+  return { unmatched: Object.keys(delta), failed: true };
 }
 
 /**
@@ -156,21 +174,20 @@ async function syncTicketStock(
   p: TicketSavePayload,
   before: QtyMap,
   userName: string,
-): Promise<string[]> {
+): Promise<StockMovementResult> {
   const after = sumQtyMaps(p.items.map((it) => it.actualQty));
   const delta = diffQtyMaps(before, after);
-  if (Object.keys(delta).length === 0) return [];
+  if (Object.keys(delta).length === 0) return NOTHING_MOVED;
   try {
-    const result = await applyStockMovements(supabase, delta, {
+    return await applyStockMovements(supabase, delta, {
       kind: 'ใบงาน',
       documentId: ticketId,
       by: userName || 'ระบบ (ใบงาน)',
       shopId: p.shop,
     });
-    return result.unmatched;
-  } catch {
-    // Intentionally non-fatal; see the note above.
-    return [];
+  } catch (e) {
+    // Non-fatal — see the note above — but never silent.
+    return threwWhileMoving(delta, ticketId, e);
   }
 }
 
@@ -205,8 +222,10 @@ async function reverseTicketStock(
       by: userName || 'ระบบ (ใบงาน)',
       shopId,
     });
-  } catch {
-    // Intentionally non-fatal; see syncTicketStock.
+  } catch (e) {
+    // Intentionally non-fatal; see syncTicketStock. Logged, not shown: the
+    // delete or restore has no save result to carry a warning in.
+    threwWhileMoving(delta, ticketId, e);
   }
 }
 
@@ -252,10 +271,10 @@ export async function createTicket(p: TicketSavePayload): Promise<SaveResult> {
     await writeTicketChildren(supabase, id, p);
     await supabase.from('ticket_status_history').insert({ ticket_id: id, status: p.status });
     // A new ticket has no stored quantities, so everything recorded is consumed.
-    const unmatched = await syncTicketStock(supabase, id, p, {}, session.name);
+    const moved = await syncTicketStock(supabase, id, p, {}, session.name);
     revalidatePath('/tickets');
     revalidatePath(`/tickets/${id}`);
-    return { ok: true, id, stockWarning: stockWarningFor(unmatched) };
+    return { ok: true, id, stockWarning: stockWarningFor(moved) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
@@ -307,7 +326,7 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
       .eq('id', id);
     if (error) throw new Error(error.message);
     await writeTicketChildren(supabase, p.id, p);
-    const unmatched = await syncTicketStock(supabase, p.id, p, before, session.name);
+    const moved = await syncTicketStock(supabase, p.id, p, before, session.name);
     // Closing the ticket is the LAST thing that happens, after the children are
     // written — `save_ticket_children` refuses to touch a locked ticket, so
     // setting the flag any earlier would block the same save that sets it.
@@ -319,7 +338,7 @@ export async function updateTicket(p: TicketSavePayload): Promise<SaveResult> {
     }
     revalidatePath('/tickets');
     revalidatePath(`/tickets/${p.id}`);
-    return { ok: true, id: p.id, stockWarning: stockWarningFor(unmatched) };
+    return { ok: true, id: p.id, stockWarning: stockWarningFor(moved) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ' };
   }
@@ -465,27 +484,27 @@ export async function saveTicketTech(input: {
   });
   if (error) return { ok: false, error: error.message };
 
-  let unmatched: string[] = [];
+  let moved: StockMovementResult = NOTHING_MOVED;
   const delta = diffQtyMaps(before, sumQtyMaps(input.actualQty));
   if (Object.keys(delta).length > 0) {
     try {
-      const result = await applyStockMovements(supabase, delta, {
+      moved = await applyStockMovements(supabase, delta, {
         kind: 'ใบงาน',
         documentId: input.ticketId,
         by: session.name || 'ระบบ (ใบงาน)',
         shopId: input.shop,
       });
-      unmatched = result.unmatched;
-    } catch {
+    } catch (e) {
       // Non-fatal, for the reason syncTicketStock gives: the technician's work
       // is already saved and losing it would be the worse outcome.
+      moved = threwWhileMoving(delta, input.ticketId, e);
     }
   }
 
   revalidatePath('/tickets');
   revalidatePath(`/tickets/${input.ticketId}`);
   revalidatePath('/stock');
-  return { ok: true, id: input.ticketId, stockWarning: stockWarningFor(unmatched) };
+  return { ok: true, id: input.ticketId, stockWarning: stockWarningFor(moved) };
 }
 
 /**
