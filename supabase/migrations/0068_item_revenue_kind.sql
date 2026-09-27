@@ -53,6 +53,14 @@ end $$;
 comment on column ticket_items.revenue_kind is
   'รายได้ = ยอดขายของสาขานี้; รับแทน = เงินรอคืน Finnix ไม่นับเป็นยอดขาย (0068). ทีละรายการ ไม่ใช่ทั้งใบงาน';
 
+-- สร้าง index ก่อนเติมย้อนหลัง: การ update ข้างล่างทำให้ trigger ประวัติการใช้งาน
+-- (0061, deferred) ค้างอยู่ใน transaction และ Postgres ไม่ยอมสร้าง index บนตาราง
+-- ที่มี trigger event ค้าง — บนข้อมูลจริงที่มีใบงานรับแทน ไฟล์นี้จึงล้มถ้าสลับลำดับ
+-- รายงานเงินรอคืน Finnix อ่านจากรายการที่ถือไว้ ซึ่งเป็นส่วนน้อย.
+create index if not exists ticket_items_held_idx
+  on ticket_items (ticket_id)
+  where revenue_kind = 'รับแทน';
+
 -- เติมย้อนหลังจากใบงานของตัวเอง — ของเดิมนับเหมือนเดิมทุกใบ.
 update ticket_items i
    set revenue_kind = t.revenue_kind
@@ -60,11 +68,6 @@ update ticket_items i
  where t.id = i.ticket_id
    and i.revenue_kind = 'รายได้'
    and t.revenue_kind = 'รับแทน';
-
--- รายงานเงินรอคืน Finnix อ่านจากรายการที่ถือไว้ ซึ่งเป็นส่วนน้อย.
-create index if not exists ticket_items_held_idx
-  on ticket_items (ticket_id)
-  where revenue_kind = 'รับแทน';
 
 /*
   `save_ticket_children` carries the new field.
