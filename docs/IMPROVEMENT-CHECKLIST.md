@@ -16,7 +16,8 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
 
 ## Phase 0 — Fix this week
 
-- [ ] **0.1 Script injection / open redirect in the auth callback** · S · none
+- [x] **0.1 Script injection / open redirect in the auth callback** · S · none
+  - ✅ Done 2026-09-27 · `99705b5` — `lib/auth/safeNext.ts` (WHATWG-URL same-origin check), 13 unit cases; verified in a browser (javascript:/`//evil` → /dashboard, `/auth/accept` still works) and in the production bundle.
   - Evidence: `app/auth/callback/page.tsx:36` reads `?next=` unchecked; `:61`, `:66`, `:91`,
     `:98` pass it to `window.location.replace()`. A logged-in user opening
     `/auth/callback?next=javascript:…` runs attacker code as themselves; `?next=https://evil…`
@@ -28,6 +29,7 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
     on `/dashboard`, and `/auth/accept` still works (invite flow).
 
 - [ ] **0.2 Make CI actually block** · S · none
+  - ⏳ Needs the owner — repo side is ready (CI already runs everything). Enabling protection is a GitHub setting that changes how the developer works (D7); the exact command is in the 2026-09-27 hand-over. The CI push-trigger change is deliberately NOT made yet: the developer pushes branches without PRs, so limiting CI to `main` would remove their coverage until protection is on.
   - Evidence: `.github/workflows/ci.yml` runs the full suite on every push, but `main` has **no
     branch protection** (GitHub API: "Branch not protected"). The developer branch was red on
     11 Sep and 21–22 Sep with nobody acting on it; the popup and seed breakages would have
@@ -38,7 +40,8 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
   - Needs: the developer's agreement to work through PRs.
   - Done when: a direct push to `main` is refused and a red PR cannot be merged.
 
-- [ ] **0.3 Run tests in the shop's time zone** · S · none
+- [x] **0.3 Run tests in the shop's time zone** · S · none
+  - ✅ Done 2026-09-27 · `2d4ecd1` — vitest pinned to Asia/Bangkok (+ Playwright `timezoneId`), guard test `tests/unit/timezone.test.ts`; suite green under UTC, Bangkok and New York clocks. Running the browser on Bangkok time against a UTC server then exposed a live hydration bug — see 0.10.
   - Evidence: CI runners use UTC. `WholesaleDetail.test.tsx:1163` compares against the Bangkok
     date while `todayValue()` (`lib/domain/now.ts:22`) uses the process time zone, so the test
     fails every day 00:00–07:00 Bangkok. `main` run of 3cc33a9 is red for this reason only.
@@ -46,7 +49,8 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
   - Done when: `TZ=UTC` and `TZ=Asia/Bangkok` runs both pass at 06:00 Bangkok, and CI on
     `main` is green.
 
-- [ ] **0.4 Stop swallowing stock-movement failures** · S · none (server log only)
+- [x] **0.4 Stop swallowing stock-movement failures** · S · none (server log only)
+  - ✅ Done 2026-09-27 · `9fda0f5` — both DB calls checked; failures logged (`[stock] …` in Vercel logs) and reported as not moved (`failed: true`). D2 decided: staff see a distinct 'ระบบตัดสต็อกขัดข้อง' warning.
   - Evidence: `lib/stock/movements.ts:131` ignores the `move_stock` result; `:104` ignores the
     product-lookup error. Supabase returns errors instead of throwing, so the callers' `catch`
     never fires (`tickets/actions.ts:170,207`, `wholesale/actions.ts:297`). A failed move
@@ -58,13 +62,15 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
   - Done when: unit test in `tests/unit/lib/stock/movements.test.ts` where `rpc` returns
     `{ error }` asserts the error is logged and surfaced to the caller.
 
-- [ ] **0.5 Rejecting a withdrawal twice returns stock twice** · S · fix
+- [x] **0.5 Rejecting a withdrawal twice returns stock twice** · S · fix
+  - ✅ Done 2026-09-27 · `daeaf47` — `.select('id')` after the guarded UPDATE; proven on a real DB as a signed-in user (first decision 1 row, second 0).
   - Evidence: `stock/actions.ts:472` guards with `.eq('status','รออนุมัติ')` but never checks
     whether a row was updated; two managers pressing at once both return the stock.
   - Fix: `.select('id')` on the update and stop if nothing came back.
   - Done when: an integration test that calls `decideWithdrawal` twice moves stock once.
 
-- [ ] **0.6 Deleting one expense deletes a receipt other expenses share** · S · fix
+- [x] **0.6 Deleting one expense deletes a receipt other expenses share** · S · fix
+  - ✅ Done 2026-09-27 · `7058632` — `removeUnreferencedReceipts()` used by both delete paths; 4 unit cases.
   - Evidence: one uploaded file is linked to every line of a multi-line expense
     (`accounting/actions.ts:67`); deleting an expense (`:235`) or one attachment (`:129`)
     removes the storage object unconditionally.
@@ -73,6 +79,7 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
     still opens.
 
 - [ ] **0.7 Upgrade vulnerable dependencies** · S · none
+  - ◐ Partly done 2026-09-27 · `8feaac6` — next 16.2.11 → **16.3.6**, eslint-config-next to match, nanoid via `npm audit fix`; `npm audit --omit=dev` down from 5 advisories (1 critical) to 1. **xlsx remains (D9):** npm 12 refuses non-registry tarballs by default (`EALLOWREMOTE`) and SheetJS only ships fixes from cdn.sheetjs.com.
   - Evidence: `npm audit --omit=dev` — `next 16.2.11` critical (image-optimizer AVIF RCE,
     GHSA-2xp9; low real exposure: no `next/image`, runs on Vercel). `xlsx 0.18.5` prototype
     pollution + ReDoS, no npm fix; used for exports and one in-browser import
@@ -82,7 +89,8 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
   - Done when: `npm audit --omit=dev` clean; full suite green; one export and the stock bulk
     import tried by hand.
 
-- [ ] **0.8 Security headers** · S · none
+- [x] **0.8 Security headers** · S · none
+  - ✅ Done 2026-09-27 · `6620fd5` — verified live on finnixpos.kool-man.com (`curl -I`).
   - Evidence: `next.config.ts` sets no headers — the app can be framed (clickjacking of admin
     buttons), no nosniff, no referrer policy.
   - Fix: `headers()` with `Content-Security-Policy: frame-ancestors 'none'`,
@@ -91,12 +99,16 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
     needs a nonce).
   - Done when: `curl -I` on production shows the headers; e2e suite green.
 
-- [ ] **0.9 Pin `search_path` on `current_user_sees_all_shops`** · S · none
+- [x] **0.9 Pin `search_path` on `current_user_sees_all_shops`** · S · none
+  - ✅ Done 2026-09-27 · `969e793` + `992736c` — migration/release **0075** applied to production; guard in the migration fails if any SECURITY DEFINER function in `pos` lacks a pinned search_path (none do).
   - Evidence: re-created in `0008:26-27` without `set search_path`, which dropped 0007's
     setting. Every other SECURITY DEFINER function pins it.
   - Fix: migration `alter function pos.current_user_sees_all_shops() set search_path = pos;`
     (+ release file).
   - Done when: `pg_proc.proconfig` shows the setting on production.
+
+- [x] **0.10 Ticket dates rendered differently on the server and in the browser** · S · none _(found 2026-09-27 by 0.3)_
+  - ✅ Done 2026-09-27 · `6d26a62` — `components/ui/DateTimeField.tsx` read the day/time from the process's local zone: Vercel (UTC) rendered a 00:30-Bangkok delivery as the 28th, the browser as the 29th, React threw hydration error #418 on the ticket page and discarded the server render. Now read with `shopDayKey`/`hhmm` and written back with `+07:00`; `hhmm` uses `hourCycle: 'h23'`. Verified: UTC server + Bangkok browser, no console errors; CI e2e 29/29 in exactly that split.
 
 ---
 
@@ -383,7 +395,8 @@ When data grows (≈ 10k tickets):
       `save_order_children` keeps status by uid, takes amount from the form). Options: lock the
       amount once confirmed, or reset to pending when it changes. No-change alternative: an
       `activity_log` report of edited confirmed rows.
-- [ ] **D2 Show stock-movement failures to staff?** (0.4 only logs them.)
+- [x] **D2 Show stock-movement failures to staff?** (0.4 only logs them.)
+  - Decided 2026-09-27 (Phase 0 full-auto): **yes** — a failed stock move shows its own warning; it only appears when stock really did not move (0.4).
 - [ ] **D3 Round money comparisons to satang.** `shouldLock` (`tickets/actions.ts:277`) and
       receivables (`receivables.ts:48`) compare raw decimals; some price/discount combinations
       leave ~1e-11 unpaid, so the ticket never locks and shows a phantom receivable. Tickets that
@@ -399,6 +412,12 @@ When data grows (≈ 10k tickets):
 - [ ] **D8 "จำนวนครั้ง Service" field** is collected in the add-product form (`StockModule.tsx:424,1575`),
       the import parser (`:519`) and the template (`:488`), but no action sends it and no column
       stores it. Wire it up or remove it.
+- [ ] **D9 Where to get a fixed SheetJS (`xlsx`).** npm has no fix for 0.18.5 (prototype pollution + ReDoS;
+      exports only write, one in-browser import of the user's own file). Options: (a) install
+      `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` with npm's `--allow-remote` opt-in (CI and
+      Vercel builds need the same); (b) vendor that tarball into the repo (`vendor/`, `file:` dependency —
+      no remote fetch at build time); (c) accept the current exposure. Needs a yes because it downloads
+      from outside the npm registry.
 
 ---
 
