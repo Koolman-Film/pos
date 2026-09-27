@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { reportActionError } from '@/lib/observability/reportError';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/types/database';
 import {
@@ -67,8 +68,9 @@ function done(): ActionResult {
 // assignable to result types that add fields to the success case, e.g.
 // `AddUserResult`.
 function fail(error: unknown): { ok: false; error: string } {
-  const message = error instanceof Error ? error.message : String(error);
-  return { ok: false, error: message };
+  // User management failing (invite, link, profile write) is never an expected
+  // answer, so every one reaches the server log as well as the screen.
+  return { ok: false, error: reportActionError('permissions', error) };
 }
 
 // ---------- permission matrix (nav / dashboard_widget / module_capability) ----------
