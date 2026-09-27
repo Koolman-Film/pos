@@ -34,7 +34,6 @@ export function PaymentsSection({
   total: number;
   paid: number;
 }) {
-
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
     <div>

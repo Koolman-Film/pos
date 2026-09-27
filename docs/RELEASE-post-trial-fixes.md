@@ -33,8 +33,8 @@ npx supabase db push                     # applies 0012 … 0037 only
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
-`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 55 ในตารางข้างล่าง
-(`release-0019` … `release-0073` และ `repair-categories-and-services.sql`)
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 56 ในตารางข้างล่าง
+(`release-0019` … `release-0074` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -109,7 +109,8 @@ it twice changes nothing, and each records its versions in
 | 52    | `supabase/release-0071.sql`                   | a normal connection                                 |
 | 53    | `supabase/release-0072.sql`                   | a normal connection                                 |
 | 54    | `supabase/release-0073.sql`                   | a normal connection                                 |
-| 55    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 55    | `supabase/release-0074.sql`                   | a normal connection                                 |
+| 56    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -192,6 +193,7 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0063_order_customer_note`            | **หมายเหตุ 2 แบบบน PO** — `customer_note` ใหม่ พิมพ์ลงเอกสารลูกค้าทุกใบ ส่วน `note` เดิมเป็นหมายเหตุสำหรับร้าน ไม่พิมพ์                                                                                                                                                                                                                                                                                                                                        | ต่ำ. ไม่แก้ข้อมูลเดิม หมายเหตุที่มีอยู่ยังเป็นของร้านเหมือนเดิม                                                                                                                                                                                                   |
 | `0064_one_money_list`                 | **การชำระเงิน / แหล่งเงิน เป็นรายการเดียว** — ชื่อแหล่งเงินห้ามซ้ำในสาขา, เปลี่ยนชื่อแล้วเก็บชื่อเดิมเป็นชื่อจับคู่อัตโนมัติ, เช็คในขายส่งเป็นช่อง `is_cheque` ของตัวเอง หน้าจอทุกโมดูลเลือกวิธีชำระ/จ่ายจากจากแหล่งเงินของสาขา                                                                                                                                                                                                                                | ปานกลาง. **ถ้ามีแหล่งเงินชื่อซ้ำในสาขาเดียวกัน ไฟล์จะหยุดและบอกชื่อ** ต้องแก้ชื่อก่อน รายการเดิมไม่ถูกแก้ ควรตั้งชื่อแหล่งเงินให้อ่านรู้เรื่องก่อนใช้ เพราะพนักงานเลือกทุกวันและพิมพ์บนใบเสร็จ                                                                    |
 | `0065_legacy_stock_stamps`            | **ของเก่าที่ 0054 ตกหล่น** — PO ที่ระบบเก่าตัดสต๊อกไปแล้ว (รวมสถานะสุดท้ายที่ร้านตั้งชื่อเอง เช่น เสร็จสิ้น) ถูกบันทึกว่าตัดแล้ว และการรับคืนเก่าได้ uid ของตัวเอง                                                                                                                                                                                                                                                                                             | ต่ำ. แตะเฉพาะแถวที่ยังไม่ได้ตั้ง ไม่แก้จำนวนหรือสต๊อก ถ้าไม่รันไฟล์นี้ PO ที่ปิดแล้วจะตัดสต๊อกซ้ำเมื่อย้อนกลับไปจัดส่งแล้ว และการรับคืนเก่าจะค้างยืนยันไม่ได้                                                                                                     |
+| `0074_daily_report_module`            | **โมดูลรายงานการเงินรายวัน** — สิทธิ์เมนูใหม่ `dailyReport` สำหรับหน้า รายงานการเงินรายวัน (ยอดขายที่เก็บเงินได้ แยกปลีก/ส่งและชนิดสินค้า, เงินรับเข้าและค่าใช้จ่ายแยกแหล่งเงิน, งานค้างชำระ, ยอดคงเหลือ) เปิดให้ แอดมิน และ ผู้บริหาร                                                                                                                                                                                                                         | ต่ำ. เพิ่มสิทธิ์ใหม่อย่างเดียว ไม่แตะข้อมูล ถ้ายังไม่รันไฟล์นี้ แอดมินยังเห็นเมนู แต่ผู้บริหารจะไม่เห็นจนกว่าจะรัน                                                                                                                                                |
 
 ### Storage policies for 0014 and 0018 — depends which path you take
 

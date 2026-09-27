@@ -40,6 +40,7 @@ describe('Sidebar', () => {
       'accounting',
       'revenue',
       'money',
+      'dailyReport',
       'permissions',
       'activity',
     ]);

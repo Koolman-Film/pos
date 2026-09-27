@@ -830,6 +830,7 @@ export default async function DashboardPage({
   return (
     <Dashboard
       hasDashboardWidget={session.hasDashboardWidget}
+      canSeeDailyReport={session.hasNav('dailyReport')}
       revenue={revenue}
       retailRevenue={retailRevenue}
       wholesaleRevenue={wholesaleRevenue}
