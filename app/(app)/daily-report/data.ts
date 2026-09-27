@@ -37,6 +37,16 @@ type ItemRow = {
   sold_price: number | string | null;
   discount_type: string | null;
   discount_value: number | string | null;
+  /** รายได้ / รับแทน ทีละรายการ (0068). */
+  revenue_kind?: string | null;
+};
+
+/** ค่าประกันที่รับเงินแล้ว (0071) — its own payment, on its own day. */
+type PolicyPayRow = {
+  ticket_id: string;
+  paid_amount: number | string | null;
+  paid_at: string | null;
+  tickets: { shop_id: string } | null;
 };
 
 type TicketPayRow = {
@@ -119,7 +129,7 @@ export async function loadDailyReport(
         supabase
           .from('ticket_payments')
           .select(
-            'id, ticket_id, amount, paid_at, tickets!inner(shop_id, revenue_kind, ticket_items(category, sold_price, discount_type, discount_value))',
+            'id, ticket_id, amount, paid_at, tickets!inner(shop_id, revenue_kind, ticket_items(category, sold_price, discount_type, discount_value, revenue_kind))',
           )
           .is('tickets.deleted_at', null)
           .in('paid_at', [yesterday, day])
@@ -160,17 +170,21 @@ export async function loadDailyReport(
           .range(from, to) as unknown as Page<JobRow>,
       'tickets',
     ),
+    /*
+      ค่าประกันที่รับเงินในสองวันนี้ (0071). A premium is paid on the policy,
+      not as a ticket payment — usually weeks after the job closed — so it
+      reaches เงินรับเข้า on the day it was received, as on the dashboard.
+    */
     fetchAllRows(
       (from, to) =>
         supabase
           .from('insurance_policies')
-          .select('id, ticket_id, price, sold_at')
+          .select('id, ticket_id, paid_amount, paid_at, tickets!inner(shop_id)')
+          .is('tickets.deleted_at', null)
+          .in('paid_at', [yesterday, day])
+          .gt('paid_amount', 0)
           .order('id')
-          .range(from, to) as unknown as Page<{
-          ticket_id: string;
-          price: number | string | null;
-          sold_at: string | null;
-        }>,
+          .range(from, to) as unknown as Page<PolicyPayRow>,
       'insurance_policies',
     ),
   ]);
@@ -202,6 +216,8 @@ export async function loadDailyReport(
       held: p.tickets.revenue_kind === 'รับแทน',
       items: (p.tickets.ticket_items ?? []).map((i) => ({
         category: i.category ?? '',
+        // ทีละรายการ (0068) — the ticket-level flag is only the fallback now.
+        held: i.revenue_kind === 'รับแทน',
         soldPrice: num(i.sold_price),
         discountType: (i.discount_type ?? undefined) as 'percent' | 'amount' | undefined,
         discountValue: i.discount_value == null ? undefined : num(i.discount_value),
@@ -249,19 +265,20 @@ export async function loadDailyReport(
     ...ticketReceipts(
       [...tickets.values()],
       policyRows
-        .filter((p) => tickets.has(p.ticket_id))
-        .map((p) => ({ ticketId: p.ticket_id, price: num(p.price) })),
+        .filter((p) => p.tickets && p.paid_at)
+        .map((p) => ({
+          ticketId: p.ticket_id,
+          shop: p.tickets!.shop_id,
+          on: (p.paid_at ?? '').slice(0, 10),
+          amount: num(p.paid_amount),
+        })),
     ),
     ...orderReceipts([...orders.values()], (name) => categoryOf.get(name) ?? ''),
   ];
 
   // ---- งานค้างชำระ ------------------------------------------------------------
-  // ประกัน counts toward what a job owes from the day it was sold (0023).
-  const premiumBy = new Map<string, number>();
-  for (const p of policyRows) {
-    if ((p.sold_at ?? '').slice(0, 10) > day) continue;
-    premiumBy.set(p.ticket_id, (premiumBy.get(p.ticket_id) ?? 0) + num(p.price));
-  }
+  // ยอดของใบงาน = ค่าสินค้า. ค่าประกันไม่นับเป็นยอดค้างของใบงาน — มีการรับเงินของ
+  // ตัวเอง (0071), same as the ticket screen's คงเหลือ.
   const dueStatuses = [
     ...DUE_STATUS_LABELS,
     ...(statusRows ?? [])
@@ -273,16 +290,14 @@ export async function loadDailyReport(
     shop: t.shop_id,
     held: t.revenue_kind === 'รับแทน',
     dropOff: (t.drop_off_date ?? '').slice(0, 10),
-    total:
-      (premiumBy.get(t.id) ?? 0) +
-      ticketTotal({
-        items: (t.ticket_items ?? []).map((i) => ({
-          soldPrice: num(i.sold_price),
-          discountType: (i.discount_type ?? undefined) as 'percent' | 'amount' | undefined,
-          discountValue: i.discount_value == null ? undefined : num(i.discount_value),
-        })),
-        payments: [],
-      }),
+    total: ticketTotal({
+      items: (t.ticket_items ?? []).map((i) => ({
+        soldPrice: num(i.sold_price),
+        discountType: (i.discount_type ?? undefined) as 'percent' | 'amount' | undefined,
+        discountValue: i.discount_value == null ? undefined : num(i.discount_value),
+      })),
+      payments: [],
+    }),
     payments: (t.ticket_payments ?? []).map((p) => ({
       amount: num(p.amount),
       on: (p.paid_at ?? '').slice(0, 10),
