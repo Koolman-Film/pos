@@ -83,3 +83,34 @@ describe('DateTimeField', () => {
     expect(times).toHaveLength(11);
   });
 });
+
+/*
+  Read and written on the SHOP's clock, not the process's.
+
+  The day and time used to come from the Date's local getters, i.e. whatever
+  zone the code ran in. The page renders twice — on Vercel (UTC) and in the
+  browser (Bangkok) — so a delivery at 00:30 Bangkok read the 28th in the server
+  HTML and the 29th in the browser: React threw a hydration error on the ticket
+  page and discarded the server's render. The e2e run catches that directly
+  (UTC server, Bangkok browser); these pin the conversion itself.
+*/
+describe('DateTimeField — shop clock', () => {
+  // 00:30 on 29 Sep in Bangkok — still 28 Sep in UTC.
+  const justAfterMidnight = new Date('2026-09-28T17:30:00Z');
+
+  it('shows the Bangkok day and time', () => {
+    render(<DateTimeField value={justAfterMidnight} onChange={() => {}} label="วันที่ส่งงาน" />);
+    expect(screen.getByLabelText('วันที่ส่งงาน — วันที่')).toHaveValue('2026-09-29');
+    expect(screen.getByText('29 ก.ย. 2569')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveValue('00:30');
+  });
+
+  it('writes a changed day back as that day in Bangkok, keeping the time', () => {
+    const onChange = vi.fn();
+    render(<DateTimeField value={justAfterMidnight} onChange={onChange} label="วันที่ส่งงาน" />);
+    fireEvent.change(screen.getByLabelText('วันที่ส่งงาน — วันที่'), {
+      target: { value: '2026-10-01' },
+    });
+    expect((onChange.mock.calls[0][0] as Date).toISOString()).toBe('2026-09-30T17:30:00.000Z');
+  });
+});

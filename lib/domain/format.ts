@@ -51,7 +51,9 @@ const clockFmt = new Intl.DateTimeFormat('en-GB', {
   timeZone: SHOP_TIME_ZONE,
   hour: '2-digit',
   minute: '2-digit',
-  hour12: false,
+  // h23, not `hour12: false`: some engines read the latter as h24 and print
+  // midnight as 24:00.
+  hourCycle: 'h23',
 });
 
 /** `YYYY-MM-DD` on the shop's calendar — the key to group a day by. */
