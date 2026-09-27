@@ -9241,6 +9241,8 @@ insert into supabase_migrations.schema_migrations(version, name) values ('0074',
 --
 -- ไม่เปลี่ยนการทำงานของฟังก์ชัน เปลี่ยนเฉพาะการตั้งค่า search_path ที่หายไปตั้งแต่ 0008
 
+set search_path = pos, public, extensions;
+
 alter function pos.current_user_sees_all_shops() set search_path = pos;
 
 -- Every SECURITY DEFINER function in pos must pin its search_path. Fails the

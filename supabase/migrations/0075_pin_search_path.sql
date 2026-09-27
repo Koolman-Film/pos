@@ -14,6 +14,8 @@
 -- `alter function … set` changes only the configuration, not the body, so the
 -- function behaves exactly as it did.
 
+set search_path = pos, public, extensions;
+
 alter function pos.current_user_sees_all_shops() set search_path = pos;
 
 -- Every SECURITY DEFINER function in pos must pin its search_path. Fails the
