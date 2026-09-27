@@ -5,6 +5,7 @@ import {
 } from '@/components/accounting/AccountingModule';
 import { getSessionContext } from '@/lib/auth/session';
 import { fmtThaiDate } from '@/lib/domain/format';
+import { pagedData } from '@/lib/supabase/fetchAll';
 import { createClient } from '@/lib/supabase/server';
 
 import { updateOptionListAction } from '../optionListActions';
@@ -59,14 +60,27 @@ export default async function AccountingPage() {
     { data: accountRows },
   ] = await Promise.all([
     supabase.from('shops').select('id, name').order('sort_order'),
-    supabase
-      .from('expenses')
-      .select(
-        'id, doc_no, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at, ' +
-          'expense_attachments(id, file_name, storage_path, mime_type)',
-      )
-      .order('id', { ascending: false }),
-    supabase.from('petty_cash').select('id, shop_id, type, amount, note, entry_at'),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('expenses')
+          .select(
+            'id, doc_no, shop_id, description, category, source, amount, status, expense_kind, paid_at, due_at, ' +
+              'expense_attachments(id, file_name, storage_path, mime_type)',
+          )
+          .order('id', { ascending: false })
+          .range(from, to),
+      'expenses',
+    ),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('petty_cash')
+          .select('id, shop_id, type, amount, note, entry_at')
+          .order('id')
+          .range(from, to),
+      'petty_cash',
+    ),
     supabase
       .from('option_lists')
       .select('list_key, value, sort_order')

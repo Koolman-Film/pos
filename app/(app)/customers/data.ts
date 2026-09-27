@@ -1,3 +1,4 @@
+import { pagedData } from '@/lib/supabase/fetchAll';
 import { createClient } from '@/lib/supabase/server';
 import { ticketTotal } from '@/lib/domain/tickets';
 import type { CustomerRow, CustomerVehicle } from '@/components/customers/types';
@@ -39,15 +40,30 @@ type CustomerTicketRow = {
 export async function loadCustomers(): Promise<CustomerRow[]> {
   const supabase = await createClient();
   const [{ data: customerRows }, { data: ticketRows }] = await Promise.all([
-    supabase.from('retail_customers').select('id, name, phone').order('name'),
-    supabase
-      .from('tickets')
-      .select(
-        'id, shop_id, retail_customer_id, customer_name, phone, plate, brand, model, car_type, status, drop_off_date, ' +
-          'ticket_items(sold_price, discount_type, discount_value), ticket_payments(amount)',
-      )
-      .is('deleted_at', null)
-      .order('drop_off_date', { ascending: false }),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('retail_customers')
+          .select('id, name, phone')
+          .order('name')
+          .order('id')
+          .range(from, to),
+      'retail_customers',
+    ),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('tickets')
+          .select(
+            'id, shop_id, retail_customer_id, customer_name, phone, plate, brand, model, car_type, status, drop_off_date, ' +
+              'ticket_items(sold_price, discount_type, discount_value), ticket_payments(amount)',
+          )
+          .is('deleted_at', null)
+          .order('drop_off_date', { ascending: false })
+          .order('id')
+          .range(from, to),
+      'tickets',
+    ),
   ]);
 
   // A ticket links to the registry by id, but tickets created before that link

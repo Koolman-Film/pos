@@ -4,7 +4,7 @@ import { daysAgoValue } from '@/lib/domain/now';
 
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
-import { fetchAllRows } from '@/lib/supabase/fetchAll';
+import { fetchAllRows, pagedData } from '@/lib/supabase/fetchAll';
 import { ticketTotal } from '@/lib/domain/tickets';
 import { needsPriceApproval } from '@/lib/domain/orders';
 import { buildWholesaleOverview } from '@/components/dashboard/buildWholesaleOverview';
@@ -157,16 +157,23 @@ export default async function DashboardPage({
     ),
     // เซอร์วิสที่บันทึกไว้ — each recorded visit is its own appointment, with
     // its own dates, and belongs on the 7-day card beside the bookings.
-    supabase
-      .from('service_visits')
-      .select('ticket_id, visit_no, received_at, received_time, delivered_at, delivered_time')
-      // Bounded, unlike the ticket read beside it: visits accumulate several
-      // per job and this page loads on every visit to the app. A year either
-      // side covers the calendar anyone actually pages to; older visits stay
-      // on their ticket and on the ใบเซอร์วิส, they just do not paint a
-      // calendar month nobody is looking at.
-      .gte('received_at', daysAgoValue(365))
-      .order('visit_no', { ascending: false }),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('service_visits')
+          .select('ticket_id, visit_no, received_at, received_time, delivered_at, delivered_time')
+          // Bounded, unlike the ticket read beside it: visits accumulate several
+          // per job and this page loads on every visit to the app. A year either
+          // side covers the calendar anyone actually pages to; older visits stay
+          // on their ticket and on the ใบเซอร์วิส, they just do not paint a
+          // calendar month nobody is looking at. Still paged: a year of visits
+          // passes 1,000 at the current rate.
+          .gte('received_at', daysAgoValue(365))
+          .order('visit_no', { ascending: false })
+          .order('id')
+          .range(from, to),
+      'service_visits',
+    ),
     // `name` is here for the ขายส่ง breakdown: a PO stores the product
     // NAME, and the stock register is where that name has a ชนิดสินค้า.
     //
@@ -190,20 +197,32 @@ export default async function DashboardPage({
       .order('sort_order'),
     // ประกัน is not on any ticket (migration 0023), so revenue and the expiry
     // warning both have to read the policies themselves.
-    supabase
-      .from('insurance_policies')
-      .select('id, ticket_id, plate, plan_name, price, sold_at, ends_at, paid_amount, paid_at')
-      .order('ends_at', { ascending: true }),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('insurance_policies')
+          .select('id, ticket_id, plate, plan_name, price, sold_at, ends_at, paid_amount, paid_at')
+          .order('ends_at', { ascending: true })
+          .order('id')
+          .range(from, to),
+      'insurance_policies',
+    ),
     // การเคลมที่มีวันนัด (migration 0041). Bounded like the visits above: a
     // claim is an appointment only while it is near, and the history lives on
     // its policy.
-    supabase
-      .from('insurance_claims')
-      .select(
-        'policy_id, service_visit_id, received_at, received_time, delivered_at, delivered_time, detail',
-      )
-      .not('received_at', 'is', null)
-      .gte('received_at', daysAgoValue(365)),
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('insurance_claims')
+          .select(
+            'policy_id, service_visit_id, received_at, received_time, delivered_at, delivered_time, detail',
+          )
+          .not('received_at', 'is', null)
+          .gte('received_at', daysAgoValue(365))
+          .order('id')
+          .range(from, to),
+      'insurance_claims',
+    ),
   ]);
 
   // ---- Shop options for the filter (names + access) ----

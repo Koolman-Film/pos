@@ -58,3 +58,25 @@ export async function fetchAllRows<T>(
     }
   }
 }
+
+/**
+ * `fetchAllRows`, shaped like a single Supabase response — `{ data }` — so a
+ * read inside an existing `Promise.all([...])` destructure can be paged without
+ * reshaping the code around it. The builder MUST end in `.range(from, to)` and
+ * carry an order with a unique tie-breaker (usually `.order('id')`), or rows can
+ * shift between pages.
+ *
+ * Why every growing list goes through this: PostgREST returns at most 1,000
+ * rows per request and says nothing when it stops (`max_rows`). An unpaged read
+ * of a table that grows with the business — tickets, customers, stock movements
+ * — is correct until the day it quietly is not.
+ */
+export async function pagedData<T>(
+  build: (from: number, to: number) => PromiseLike<PageResult<T>>,
+  label: string,
+): Promise<{ data: T[]; error: null }> {
+  // `fetchAllRows` throws on the first failed page, so a result always has
+  // every row and never an error — `error` is here only so code that checks it
+  // keeps compiling when a read is switched over.
+  return { data: await fetchAllRows(build, label), error: null };
+}

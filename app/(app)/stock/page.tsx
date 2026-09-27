@@ -1,6 +1,6 @@
 import { getSessionContext } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
-import { fetchAllRows } from '@/lib/supabase/fetchAll';
+import { fetchAllRows, pagedData } from '@/lib/supabase/fetchAll';
 import { fmtThaiDate } from '@/lib/domain/format';
 import {
   StockModule,
@@ -128,10 +128,16 @@ export default async function StockPage({
     return item;
   });
 
-  const { data: wdRows } = await supabase
-    .from('withdrawals')
-    .select('id, item, shop_id, qty, type, status, withdrawn_by, withdrawn_at')
-    .order('withdrawn_at', { ascending: false });
+  const { data: wdRows } = await pagedData(
+    (from, to) =>
+      supabase
+        .from('withdrawals')
+        .select('id, item, shop_id, qty, type, status, withdrawn_by, withdrawn_at')
+        .order('withdrawn_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to),
+    'withdrawals',
+  );
   const withdrawals: Withdrawal[] = (wdRows ?? []).map((w) => ({
     id: w.id,
     item: w.item,
@@ -153,9 +159,15 @@ export default async function StockPage({
   // Film price matrix only matters to the admin pricing panel.
   let filmPriceMatrix: FilmPriceEntry[] = [];
   if (isAdmin) {
-    const { data: fp } = await supabase
-      .from('film_price_matrix')
-      .select('category, product, position, car_type, price, shop_id');
+    const { data: fp } = await pagedData(
+      (from, to) =>
+        supabase
+          .from('film_price_matrix')
+          .select('category, product, position, car_type, price, shop_id')
+          .order('id')
+          .range(from, to),
+      'film_price_matrix',
+    );
     filmPriceMatrix = (fp ?? []).map((e) => ({
       category: e.category,
       product: e.product,

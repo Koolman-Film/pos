@@ -11,6 +11,7 @@ import type {
   WsStatusRow,
 } from '@/components/permissions/permissionMeta';
 import { getSessionContext } from '@/lib/auth/session';
+import { pagedData } from '@/lib/supabase/fetchAll';
 import { createClient } from '@/lib/supabase/server';
 
 import {
@@ -64,7 +65,19 @@ export default async function PermissionsPage() {
     { data: userRows },
   ] = await Promise.all([
     supabase.from('roles').select('id, name, icon').order('id'),
-    supabase.from('role_permissions').select('role_id, permission_type, permission_key, allowed'),
+    // Paged: every custom role adds its own ~50 rows, and a silently cut matrix
+    // would show a permission as off that is actually on.
+    pagedData(
+      (from, to) =>
+        supabase
+          .from('role_permissions')
+          .select('role_id, permission_type, permission_key, allowed')
+          .order('role_id')
+          .order('permission_type')
+          .order('permission_key')
+          .range(from, to),
+      'role_permissions',
+    ),
     supabase.from('statuses').select('key, short, bg, text_color, dot').order('sort_order'),
     supabase.from('ws_statuses').select('key, bg, text_color, dot').order('sort_order'),
     supabase.from('shops').select('id, name').order('sort_order'),
