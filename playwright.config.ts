@@ -49,6 +49,8 @@ export default defineConfig({
   reporter: isCI ? [['github'], ['list']] : [['list']],
   use: {
     baseURL: `http://localhost:${PORT}`,
+    // Staff devices run in Bangkok; the browser does too, whatever the CI clock says.
+    timezoneId: 'Asia/Bangkok',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
