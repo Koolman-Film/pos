@@ -100,3 +100,70 @@ describe('wholesaleRevenueLines — ปรับราคาที่รออ�
     expect(lines.reduce((n, l) => n + l.amount, 0)).toBe(12000);
   });
 });
+
+/**
+ * ส่งหลายรอบ = ขายหลายครั้ง (migration 0077).
+ *
+ * PO ที่ส่ง 80 ม้วนกันยายน และอีก 120 ม้วนตุลาคม เคยลงเดือนกันยายนทั้ง 200 ม้วน
+ * ซึ่งผิดทั้งสองเดือน — กันยายนบวมและตุลาคมว่าง ทั้งที่ยอดรวมถูก
+ */
+describe('wholesaleRevenueLines — ส่งหลายรอบ', () => {
+  const twoRounds = order({
+    deliveredAt: '2026-09-10',
+    items: [
+      { name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 200, requestedPrice: 1200, uid: 'u1' },
+      { name: 'ลำโพง 6 นิ้ว', qty: 10, requestedPrice: 450, uid: 'u2' },
+    ],
+    deliveries: [
+      { date: '2026-09-10', items: [{ itemUid: 'u1', name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 80 }] },
+      {
+        date: '2026-10-02',
+        items: [
+          { itemUid: 'u1', name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 120 },
+          { itemUid: 'u2', name: 'ลำโพง 6 นิ้ว', qty: 10 },
+        ],
+      },
+    ],
+  });
+
+  it('แต่ละรอบลงเดือนของตัวเอง', () => {
+    const lines = wholesaleRevenueLines([twoRounds]);
+    const byMonth = (m: string) =>
+      lines.filter((l) => l.on.startsWith(m)).reduce((n, l) => n + l.amount, 0);
+    expect(byMonth('2026-09')).toBe(96000);
+    expect(byMonth('2026-10')).toBe(120 * 1200 + 10 * 450);
+    // ยอดรวมยังเท่าทั้งใบ — สิ่งที่เปลี่ยนคือมันอยู่เดือนไหน
+    expect(lines.reduce((n, l) => n + l.amount, 0)).toBe(200 * 1200 + 10 * 450);
+  });
+
+  it('ส่งไปแค่รอบเดียว รายได้มีแค่ของที่ออกไป', () => {
+    const partial = order({
+      deliveredAt: '2026-09-10',
+      items: [{ name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 200, requestedPrice: 1200, uid: 'u1' }],
+      deliveries: [
+        { date: '2026-09-10', items: [{ itemUid: 'u1', name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 80 }] },
+      ],
+    });
+    // ของที่ยังอยู่ในคลัง ยังไม่ได้ขาย — เคยนับไปแล้วทั้ง 240,000
+    expect(wholesaleRevenueLines([partial]).reduce((n, l) => n + l.amount, 0)).toBe(96000);
+  });
+
+  it('ราคาต่อหน่วยมาจากบรรทัดของมันเอง ไม่ใช่บรรทัดที่ชื่อตรงกันบรรทัดแรก', () => {
+    const sameName = order({
+      deliveredAt: '2026-09-10',
+      items: [
+        { name: 'ฟิล์มใส', qty: 5, requestedPrice: 900, uid: 'a' },
+        { name: 'ฟิล์มใส', qty: 5, requestedPrice: 700, uid: 'b' },
+      ],
+      deliveries: [{ date: '2026-09-10', items: [{ itemUid: 'b', name: 'ฟิล์มใส', qty: 5 }] }],
+    });
+    expect(wholesaleRevenueLines([sameName])[0].amount).toBe(3500);
+  });
+
+  it('PO เก่าที่ไม่ได้โหลดรอบมาด้วย ยังนับแบบเดิม', () => {
+    // ไม่ใช่ความเข้ากันได้เฉย ๆ — ถ้าเงียบเป็นศูนย์ ยอดขายที่เคยรายงานไปแล้วจะหาย
+    const lines = wholesaleRevenueLines([order({ deliveries: [] })]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ on: '2026-03-10', amount: 12000 });
+  });
+});
