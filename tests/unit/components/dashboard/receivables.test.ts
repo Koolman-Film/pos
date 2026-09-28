@@ -37,6 +37,62 @@ describe('computeReceivables', () => {
     expect(result[0].amount).toBe(5000);
   });
 
+  /*
+    ลูกหนี้ขายส่ง คิดจากของที่ส่งไปแล้ว (0077).
+
+    กติกาเดียวกับการ์ด ค้างรับ ของโมดูลขายส่ง — ของที่ยังไม่ได้ส่งอยู่บนชั้นของ
+    ร้าน ไม่ใช่หนี้ของลูกค้า และสองหน้าจอที่ตอบคำถามเดียวกันด้วยตัวเลขคนละตัว
+    คือสิ่งที่ทำให้คนเลิกเชื่อทั้งคู่
+  */
+  it('นับเฉพาะของที่ส่งไปแล้ว เมื่อ PO แบ่งส่งหลายรอบ', () => {
+    const orders = [
+      {
+        id: 'WS-1',
+        shop: 'cm',
+        customerId: 1,
+        items: [{ name: 'ฟิล์ม', qty: 200, requestedPrice: 1200, uid: 'u1' }],
+        returns: [],
+        adjustments: [],
+        payments: [],
+        deliveries: [{ items: [{ itemUid: 'u1', qty: 80 }] }],
+      },
+    ];
+    const result = computeReceivables([], orders, [{ id: 1, name: 'ร้านทดสอบ' }], 'all');
+    expect(result[0].amount).toBe(96000);
+  });
+
+  it('ส่งแล้วเก็บเงินครบ ไม่อยู่ในลูกหนี้ แม้ยังส่งไม่หมด', () => {
+    const orders = [
+      {
+        id: 'WS-1',
+        shop: 'cm',
+        customerId: 1,
+        items: [{ name: 'ฟิล์ม', qty: 200, requestedPrice: 1200, uid: 'u1' }],
+        returns: [],
+        adjustments: [],
+        payments: [{ amount: 96000 }],
+        deliveries: [{ items: [{ itemUid: 'u1', qty: 80 }] }],
+      },
+    ];
+    expect(computeReceivables([], orders, [], 'all')).toHaveLength(0);
+  });
+
+  it('PO ที่ไม่ได้โหลดรอบส่งของมาด้วย ยังนับทั้งใบ', () => {
+    // ผู้เรียกที่ยังไม่ได้อัปเดต ต้องไม่ทำให้ยอดลูกหนี้หายไปเงียบ ๆ
+    const orders = [
+      {
+        id: 'WS-1',
+        shop: 'cm',
+        customerId: 1,
+        items: [{ name: 'ฟิล์ม', qty: 200, requestedPrice: 1200, uid: 'u1' }],
+        returns: [],
+        adjustments: [],
+        payments: [],
+      },
+    ];
+    expect(computeReceivables([], orders, [], 'all')[0].amount).toBe(240000);
+  });
+
   it('excludes a fully-paid ticket', () => {
     const tickets = [
       {
