@@ -110,6 +110,13 @@ export type WsAdjustment = {
 export type WsPayment = {
   amount: number;
   method: string;
+  /**
+   * เงินก้อนนี้ตัดเข้างวดไหน (migration 0078).
+   *
+   * ว่าง = ยังไม่ได้ระบุ ซึ่งเกิดเป็นปกติ — เงินที่ไม่ได้ระบุงวดจะถูกไล่ลงงวดที่
+   * เก่าที่สุดที่ยังค้าง ไม่อย่างนั้นระบบจะทวงงวดที่เก็บเงินไปแล้ว
+   */
+  installmentUid?: string;
   /** วันที่รับชำระ — `order_payments.paid_at`. */
   date: string;
   /**
@@ -137,6 +144,22 @@ export type WsPayment = {
   bouncedAt?: string;
   bounceNote?: string;
   attachments: string[];
+};
+
+/**
+ * งวดชำระหนึ่งงวด (migration 0078).
+ *
+ * มัดจำ 30% วันเปิด PO ที่เหลืออีก 30 วัน — สองงวดนี้มีชะตากรรมคนละอย่าง และ
+ * กำหนดชำระวันเดียวต่อใบ (0050) พูดเรื่องนี้ไม่ได้
+ */
+export type WsInstallment = {
+  /** คีย์ที่การรับเงินชี้มา และอยู่รอดข้ามการบันทึก. */
+  uid: string;
+  /** งวดที่ — ลำดับที่ลูกค้าเห็นบนใบแจ้งหนี้. */
+  seq?: number;
+  dueAt: string;
+  amount: number;
+  note?: string;
 };
 
 export type WsOrder = {
@@ -221,6 +244,14 @@ export type WsOrder = {
    * (migration 0063). `note` stays the shop's own and never prints.
    */
   customerNote?: string;
+  /**
+   * ตารางงวดชำระที่ตกลงกับลูกค้า (migration 0078).
+   *
+   * ว่าง = ยังไม่ได้ตกลงเป็นงวด ซึ่งคือ PO ทุกใบก่อนหน้านี้ และยังใช้ `dueAt`
+   * ทั้งใบเหมือนเดิม มีเมื่อไหร่ ตารางเป็นตัวตัดสินการเตือนและสิ่งที่พิมพ์ลงใบ
+   * แจ้งหนี้
+   */
+  installments?: WsInstallment[];
   items: WsItem[];
   /**
    * รอบส่งของทั้งหมดของ PO ใบนี้ เรียงตามวันที่ (migration 0077).

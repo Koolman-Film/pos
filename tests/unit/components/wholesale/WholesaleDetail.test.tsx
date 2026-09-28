@@ -546,7 +546,9 @@ describe('WholesaleDetail — เอกสารขายส่ง', () => {
     it('ส่งบางส่วนได้ และส่งไปเฉพาะบรรทัดที่มีจำนวน', async () => {
       const user = userEvent.setup();
       // Typed through its argument, so `mock.calls[0][0]` is the round.
-      const onSaveDelivery = vi.fn(async (_input: DeliveryInput) => ({ ok: true }));
+      const onSaveDelivery = vi.fn<(input: DeliveryInput) => Promise<{ ok: boolean }>>(
+        async () => ({ ok: true }),
+      );
       render(
         <WholesaleDetail order={bigOrder} canDo={() => true} onSaveDelivery={onSaveDelivery} />,
       );
@@ -1535,5 +1537,171 @@ describe('WholesaleDetail — วิธีชำระจากแหล่ง�
     );
     expect(screen.getByRole('checkbox', { name: 'ชำระด้วยเช็ค' })).toBeChecked();
     expect(screen.getByLabelText('เงินเข้าแหล่งเงิน')).toHaveValue('เช็คธนาคารกสิกร');
+  });
+});
+
+/**
+ * แบ่งชำระเป็นงวด (migration 0078).
+ *
+ * มัดจำ 30% วันเปิด PO ที่เหลืออีก 30 วัน — ระบบเดิมเก็บกำหนดชำระได้วันเดียว
+ * ต่อใบ จึงพูดไม่ได้ว่างวดไหนค้าง และใบแจ้งหนี้ก็ไม่มีตารางให้ลูกค้ายึด
+ */
+describe('WholesaleDetail — งวดชำระ', () => {
+  const withSchedule = {
+    ...order,
+    items: [
+      { name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 10, listPrice: 1000, requestedPrice: 1000, uid: 'u1' },
+    ],
+    returns: [],
+    adjustments: [],
+    payments: [],
+    dueAt: '2026-10-01',
+    installments: [
+      { uid: 'i1', seq: 1, dueAt: '2026-09-01', amount: 3000, note: 'มัดจำ' },
+      { uid: 'i2', seq: 2, dueAt: '2026-10-01', amount: 7000, note: '' },
+    ],
+  } as unknown as WsOrder;
+
+  it('PO ที่ไม่ได้แบ่งงวด บอกว่าใช้กำหนดชำระทั้งใบ', () => {
+    render(<WholesaleDetail order={order} canDo={() => true} />);
+    expect(screen.getByText(/ไม่ได้แบ่งงวด/)).toBeInTheDocument();
+  });
+
+  it('เพิ่มงวดแล้วบันทึก ตารางงวดไปกับ payload', async () => {
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn();
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...order,
+            items: [{ name: 'ฟิล์ม', qty: 10, listPrice: 1000, requestedPrice: 1000, uid: 'u1' }],
+            payments: [],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /เพิ่มงวดชำระ/ }));
+    const amount = screen.getByLabelText('จำนวนเงินงวดที่ 1');
+    await user.clear(amount);
+    await user.type(amount, '3000');
+    await user.click(screen.getByRole('button', { name: /^บันทึก PO/ }));
+
+    const sent = onSaveOrder.mock.calls[0][0] as WsOrder;
+    expect(sent.installments).toHaveLength(1);
+    expect(sent.installments![0]).toMatchObject({ amount: '3000' });
+    // งวดแรกตั้งต้นที่ยอดทั้งใบ แล้วค่อยแก้ลง — ไม่ใช่ศูนย์ให้พิมพ์เองทุกครั้ง
+    expect(sent.installments![0].uid).toBeTruthy();
+  });
+
+  it('บอกว่าแต่ละงวดเก็บไปแล้วเท่าไหร่ ยังค้างเท่าไหร่', () => {
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...withSchedule,
+            payments: [
+              {
+                amount: 3000,
+                method: 'เงินสด',
+                date: '2026-09-01',
+                uid: 'p1',
+                status: 'รับเงินแล้ว',
+                installmentUid: 'i1',
+                attachments: [],
+              },
+            ],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+      />,
+    );
+    expect(screen.getByText(/รับครบแล้ว/)).toBeInTheDocument();
+    expect(screen.getByText(/ค้าง 7,000/)).toBeInTheDocument();
+  });
+
+  it('เตือนเมื่อรวมทุกงวดไม่เท่ายอดสุทธิ แต่ยังบันทึกได้', async () => {
+    // ไม่ใช่ด่าน: การปรับราคาหลังส่งของทำให้ยอดขยับได้เสมอ
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn();
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...withSchedule,
+            installments: [{ uid: 'i1', seq: 1, dueAt: '2026-09-01', amount: 3000 }],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    expect(screen.getByText(/ไม่เท่ายอดสุทธิ/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^บันทึก PO/ }));
+    expect(onSaveOrder).toHaveBeenCalled();
+  });
+
+  it('รายการรับเงินเลือกงวดได้ เมื่อ PO แบ่งงวดไว้', async () => {
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn();
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...withSchedule,
+            payments: [
+              {
+                amount: 3000,
+                method: 'เงินสด',
+                date: '2026-09-01',
+                uid: 'p1',
+                status: 'แจ้งแล้ว',
+                attachments: [],
+              },
+            ],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    const picker = screen.getByLabelText('ตัดเข้างวด รายการรับเงินที่ 1');
+    await user.selectOptions(picker, 'i2');
+    await user.click(screen.getByRole('button', { name: /^บันทึก PO/ }));
+    expect((onSaveOrder.mock.calls[0][0] as WsOrder).payments[0].installmentUid).toBe('i2');
+  });
+
+  it('ลบงวดแล้ว การรับเงินที่จิ้มงวดนั้นไว้ ไม่ค้างชี้ไปที่งวดที่ไม่มี', async () => {
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn();
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...withSchedule,
+            payments: [
+              {
+                amount: 3000,
+                method: 'เงินสด',
+                date: '2026-09-01',
+                uid: 'p1',
+                status: 'รับเงินแล้ว',
+                installmentUid: 'i1',
+                attachments: [],
+              },
+            ],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+        onSaveOrder={onSaveOrder}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'ลบงวดที่ 1' }));
+    await user.click(screen.getByRole('button', { name: /^บันทึก PO/ }));
+    const sent = onSaveOrder.mock.calls[0][0] as WsOrder;
+    expect(sent.installments).toHaveLength(1);
+    expect(sent.payments[0].installmentUid).toBe('');
   });
 });

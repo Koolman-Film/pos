@@ -836,6 +836,44 @@ export type Database = {
           },
         ]
       }
+      order_installments: {
+        Row: {
+          amount: number
+          due_at: string
+          id: number
+          note: string
+          order_id: string
+          seq: number
+          uid: string
+        }
+        Insert: {
+          amount?: number
+          due_at: string
+          id?: never
+          note?: string
+          order_id: string
+          seq?: number
+          uid?: string
+        }
+        Update: {
+          amount?: number
+          due_at?: string
+          id?: never
+          note?: string
+          order_id?: string
+          seq?: number
+          uid?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_installments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           id: number
@@ -879,6 +917,7 @@ export type Database = {
       }
       order_payments: {
         Row: {
+          installment_uid: string
           is_cheque: boolean
           bounce_note: string
           bounced_at: string | null
@@ -898,6 +937,7 @@ export type Database = {
           paid_at: string
         }
         Insert: {
+          installment_uid?: string
           is_cheque?: boolean
           bounce_note?: string
           bounced_at?: string | null
@@ -917,6 +957,7 @@ export type Database = {
           paid_at: string
         }
         Update: {
+          installment_uid?: string
           is_cheque?: boolean
           bounce_note?: string
           bounced_at?: string | null
@@ -2202,6 +2243,10 @@ export type Database = {
       save_order_delivery: {
         Args: { p_delivery: Json; p_order_id: string }
         Returns: number
+      }
+      save_order_installments: {
+        Args: { p_installments: Json; p_order_id: string }
+        Returns: undefined
       }
       delete_order_delivery: {
         Args: { p_delivery_id: number }

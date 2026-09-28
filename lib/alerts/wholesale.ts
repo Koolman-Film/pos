@@ -7,6 +7,11 @@ import {
   isOpenOrderStatus,
   type OrderForTotals,
 } from '@/lib/domain/orders';
+import {
+  dueSoonInstallments,
+  overdueInstallments,
+  type Installment,
+} from '@/lib/domain/installments';
 
 /**
  * What these questions need to know about a PO — and no more, so the
@@ -15,8 +20,27 @@ import {
 export type BillOrder = OrderForTotals & {
   status: string;
   dueAt?: string;
-  payments: Parameters<typeof orderPaid>[0]['payments'];
+  /**
+   * ตารางงวดที่ตกลงกับลูกค้า (migration 0078).
+   *
+   * มีเมื่อไหร่ มันเป็นตัวตัดสินแทน `dueAt` — งวดที่ 1 เลยกำหนดแล้วแต่งวดที่ 2
+   * ยังไม่ถึง คือคำตอบที่กำหนดชำระวันเดียวต่อใบให้ไม่ได้. ไม่มี = PO ที่ยังไม่
+   * ได้ตั้งตาราง ซึ่งคือ PO ทุกใบก่อน 0078 และยังใช้กติกาเดิมทุกประการ
+   */
+  installments?: Installment[];
+  /**
+   * ต้องรู้จัก `installmentUid` ด้วย เพราะเมื่อมีตารางงวด คำถามเรื่องเลยกำหนด
+   * ไม่ใช่ "ค้างอยู่เท่าไหร่" แต่เป็น "งวดไหนที่ยังไม่ครบ" — และเงินแต่ละก้อน
+   * ตอบคำถามนั้นได้ก็ต่อเมื่อมันบอกได้ว่าตัวเองอยู่งวดไหน
+   */
+  payments: (Parameters<typeof orderPaid>[0]['payments'][number] & {
+    installmentUid?: string;
+  })[];
 };
+
+/** งวดที่เลยกำหนดแล้วและยังเก็บไม่ครบ — ว่างเปล่าเมื่อ PO ไม่มีตารางงวด. */
+export const overdueParts = (o: BillOrder, today: string) =>
+  overdueInstallments(o.installments ?? [], o.payments, today);
 
 /**
  * คำถามที่การแจ้งเตือนขายส่งถาม — and the same questions the wholesale list
@@ -69,17 +93,19 @@ export function hasReturnAwaitingReceipt(o: WsOrder): boolean {
 }
 
 export function isOverdue(o: BillOrder, today: string): boolean {
-  return open(o) && !!o.dueAt && o.dueAt < today && outstanding(o) > OWES;
+  if (!open(o)) return false;
+  // มีตารางงวด = ตารางเป็นตัวตัดสิน ยอดค้างทั้งก้อนกับวันเดียวตอบคำถามนี้ไม่ได้
+  if ((o.installments ?? []).length > 0) return overdueParts(o, today).length > 0;
+  return !!o.dueAt && o.dueAt < today && outstanding(o) > OWES;
 }
 
 export function isDueSoon(o: BillOrder, today: string): boolean {
-  return (
-    open(o) &&
-    !!o.dueAt &&
-    o.dueAt >= today &&
-    o.dueAt <= shiftDay(today, DUE_SOON_DAYS) &&
-    outstanding(o) > OWES
-  );
+  if (!open(o)) return false;
+  const horizon = shiftDay(today, DUE_SOON_DAYS);
+  if ((o.installments ?? []).length > 0) {
+    return dueSoonInstallments(o.installments ?? [], o.payments, today, horizon).length > 0;
+  }
+  return !!o.dueAt && o.dueAt >= today && o.dueAt <= horizon && outstanding(o) > OWES;
 }
 
 /** The `?flag=` values the wholesale list accepts. */

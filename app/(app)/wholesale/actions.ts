@@ -125,6 +125,20 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
   //
   // `adjusted_at` / `paid_at` are NOT NULL dates and the prototype only kept a
   // free-text Thai display string ("วันนี้"), so the save date is persisted.
+  /*
+    ตารางงวดชำระ — เขียนของมันเอง (migration 0078).
+
+    ไม่ได้ยัดเข้า `save_order_children` เพราะการเพิ่มพารามิเตอร์คือการสร้าง
+    ฟังก์ชันใหม่อีกตัว แล้วต้องเลือกระหว่างทิ้งตัวเก่าทันที (แอปรุ่นที่ยังรันอยู่
+    ระหว่างดีพลอยจะบันทึก PO ไม่ได้) กับเก็บไว้ทั้งคู่ (ตัวเก่าจะลบตารางงวดทิ้ง
+    ทุกครั้งที่ถูกเรียก) — สองการเขียนในคำสั่งเดียวของผู้ใช้ ดีกว่าทั้งสองทาง
+  */
+  const { error: scheduleErr } = await supabase.rpc('save_order_installments', {
+    p_order_id: orderId,
+    p_installments: (input.installments ?? []) as unknown as Json,
+  });
+  if (scheduleErr) throw new Error(scheduleErr.message);
+
   const savedOn = new Date().toISOString().slice(0, 10);
   const { error: childErr } = await supabase.rpc('save_order_children', {
     p_order_id: orderId,
