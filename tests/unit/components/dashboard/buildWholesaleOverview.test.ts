@@ -189,3 +189,123 @@ describe('buildWholesaleOverview — ค้างรับ ตามวันท
     expect(d.owing).toEqual({ count: 0, amount: 0 });
   });
 });
+
+/**
+ * ค้างรับ = มูลค่าของที่ส่งไปแล้ว หักเงินที่รับมาแล้ว (ร้านยืนยัน 28 ก.ย. 2569).
+ *
+ * ตั้งแต่ PO ส่งของได้หลายรอบ (0077) การนับยอดทั้งใบเป็น "เงินที่รอรับ" ทำให้
+ * ตัวเลขลูกหนี้บวมกว่าความจริงทุกครั้งที่แบ่งส่ง — ของที่ยังไม่ได้ส่งอยู่บนชั้น
+ * ของร้าน ไม่ใช่หนี้ของลูกค้า
+ */
+describe('buildWholesaleOverview — ค้างรับคิดจากของที่ส่งแล้ว', () => {
+  const bigPo = (over: Partial<OverviewOrder> = {}): OverviewOrder =>
+    po({
+      items: [
+        { name: 'ฟิล์ม', qty: 200, requestedPrice: 1200, uid: 'u1' },
+        { name: 'ลำโพง', qty: 10, requestedPrice: 450, uid: 'u2' },
+      ],
+      ...over,
+    });
+
+  const round = (lines: [string, number][]) => ({
+    items: lines.map(([itemUid, qty]) => ({ itemUid, qty })),
+  });
+
+  it('ส่งไป 80 จาก 200 ค้างรับเท่าของที่ส่ง ไม่ใช่ทั้งใบ', () => {
+    const d = build([bigPo({ deliveries: [round([['u1', 80]])] })])!;
+    // 80 × 1200 = 96,000 — ไม่ใช่ 240,000 + 4,500 ของทั้งใบ
+    expect(d.owing).toEqual({ count: 1, amount: 96000 });
+  });
+
+  it('ของที่ส่งไปแล้ว เก็บเงินครบ ก็ไม่ค้างรับ แม้ยังส่งไม่หมด', () => {
+    const d = build([
+      bigPo({
+        deliveries: [round([['u1', 80]])],
+        payments: [{ amount: 96000, status: 'รับเงินแล้ว' }],
+      }),
+    ])!;
+    expect(d.owing).toEqual({ count: 0, amount: 0 });
+  });
+
+  it('รับเงินล่วงหน้ามากกว่าของที่ส่ง ไม่กลายเป็นค้างรับติดลบ', () => {
+    const d = build([
+      bigPo({
+        deliveries: [round([['u1', 80]])],
+        payments: [{ amount: 150000, status: 'รับเงินแล้ว' }],
+      }),
+    ])!;
+    expect(d.owing).toEqual({ count: 0, amount: 0 });
+  });
+
+  it('การคืนของหักออกจากค้างรับด้วย', () => {
+    const d = build([
+      bigPo({
+        deliveries: [round([['u1', 80]])],
+        returns: [{ item: 'ฟิล์ม', qty: 10 }],
+      }),
+    ])!;
+    // ส่งไป 96,000 คืนมา 10 ม้วน = 12,000
+    expect(d.owing).toEqual({ count: 1, amount: 84000 });
+  });
+
+  it('ส่งครบทั้งใบ ค้างรับเท่ายอดทั้งใบเหมือนเดิม', () => {
+    const d = build([
+      bigPo({
+        deliveries: [
+          round([
+            ['u1', 200],
+            ['u2', 10],
+          ]),
+        ],
+      }),
+    ])!;
+    expect(d.owing).toEqual({ count: 1, amount: 200 * 1200 + 10 * 450 });
+  });
+
+  it('PO ที่ไม่ได้โหลดรอบส่งของมาด้วย ยังนับทั้งใบ ไม่หล่นเป็นศูนย์', () => {
+    // ผู้เรียกที่ไม่ได้ select รอบมา ต้องไม่ทำให้ยอดลูกหนี้หายไปเงียบ ๆ
+    const d = build([bigPo()])!;
+    expect(d.owing).toEqual({ count: 1, amount: 200 * 1200 + 10 * 450 });
+  });
+
+  it('ยอดต่อพนักงานขาย ใช้กติกาเดียวกัน', () => {
+    const d = build([bigPo({ deliveries: [round([['u1', 80]])], salesBy: 'โหน่ง' })])!;
+    expect(d.byRep[0]).toMatchObject({ name: 'โหน่ง', owing: 96000 });
+  });
+});
+
+/**
+ * ยอดที่เลยกำหนด นับเฉพาะงวดนั้น (0078).
+ *
+ * PO ที่ค้างเฉพาะงวดแรก ไม่ได้เลยกำหนดทั้งใบ — การ์ดที่บอกยอดทั้งใบทำให้คนอ่าน
+ * ไปทวงผิดจำนวน
+ */
+describe('buildWholesaleOverview — ยอดเลยกำหนดตามงวด', () => {
+  const scheduled = po({
+    dueAt: '2026-10-01',
+    installments: [
+      { uid: 'i1', seq: 1, dueAt: '2026-09-01', amount: 3000 },
+      { uid: 'i2', seq: 2, dueAt: '2026-10-01', amount: 7000 },
+    ],
+  });
+
+  it('ค้างงวดแรก ยอดที่เลยกำหนดคือ 3,000 ไม่ใช่ 10,000', () => {
+    const d = build([scheduled])!;
+    expect(d.overdue).toEqual({ count: 1, amount: 3000 });
+  });
+
+  it('ใกล้ถึงกำหนด ก็นับเฉพาะงวดที่ใกล้ถึง', () => {
+    const d = buildWholesaleOverview({
+      orders: [scheduled],
+      customers,
+      revenueLines: [],
+      today: '2026-09-29',
+    })!;
+    expect(d.dueSoon).toEqual({ count: 1, amount: 7000 });
+  });
+
+  it('PO ที่ไม่ได้แบ่งงวด ยังบอกยอดค้างทั้งก้อนเหมือนเดิม', () => {
+    const d = build([po({ dueAt: '2026-09-01' })])!;
+    expect(d.overdue).toEqual({ count: 1, amount: 10000 });
+  });
+});

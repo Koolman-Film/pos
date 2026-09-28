@@ -1,7 +1,15 @@
 // Ported behavior-for-behavior from reference/v0.4/finnix-film.html:331-337.
 // Returns are priced off the first order item whose `name` matches `return.item`.
 
-export type OrderItem = { name: string; qty: number; requestedPrice: number };
+import { deliveredValue, type DeliveryRound } from './deliveries';
+
+export type OrderItem = {
+  name: string;
+  qty: number;
+  requestedPrice: number;
+  /** คีย์ประจำรายการ (migration 0077) — รอบส่งของชี้มาที่คีย์นี้. */
+  uid?: string;
+};
 export type OrderReturn = { item: string; qty: number };
 
 /**
@@ -168,4 +176,42 @@ export function poOpenedAt(
   if (!openedOn || !SHOP_DAY.test(openedOn)) return null;
   if (stored ? openedOn === stored.day : openedOn === today) return null;
   return `${openedOn}T12:00:00+07:00`;
+}
+
+export type OrderForCollectible = OrderForTotals & {
+  /** รอบส่งของ (migration 0077). ไม่มี = ผู้เรียกที่ไม่ได้โหลดรอบมาด้วย. */
+  deliveries?: DeliveryRound[];
+  payments: { amount: number; status?: string }[];
+};
+
+/**
+ * ยอดที่เรียกเก็บได้จริงตอนนี้ — มูลค่าของที่ส่งไปแล้ว หักเงินที่รับมาแล้ว
+ * (ร้านยืนยัน 28 ก.ย. 2569).
+ *
+ * ตั้งแต่ PO ส่งของได้หลายรอบ (0077) "ค้างรับ" ที่นับยอดทั้งใบกลายเป็นคำตอบที่
+ * ผิด: ลูกค้าสั่ง 200 ม้วน รับไปแล้ว 80 — ของอีก 120 ม้วนยังอยู่บนชั้นของร้าน
+ * และยังเรียกเก็บเงินไม่ได้ การนับมันเป็นเงินที่รอรับ ทำให้ยอดลูกหนี้บวมกว่า
+ * ความจริงทุกครั้งที่มีการแบ่งส่ง
+ *
+ * อยู่ที่นี่ ไม่ใช่ในไฟล์ของการ์ดใบใดใบหนึ่ง เพราะทั้งการ์ดค้างรับของขายส่ง
+ * รายชื่อลูกหนี้ และตารางเทียบสาขา ต่างก็ตอบคำถามเดียวกัน — และสองหน้าจอที่
+ * ตอบคำถามเดียวกันด้วยตัวเลขคนละตัว คือสิ่งที่ทำให้คนเลิกเชื่อทั้งคู่
+ *
+ * การคืนของและการปรับราคาที่อนุมัติแล้ว หักออกด้วย เพราะเป็นส่วนลดของทั้งบิล
+ * ไม่ได้ผูกกับรอบใดรอบหนึ่ง แล้วกันไม่ให้ติดลบ: รับเงินล่วงหน้ามากกว่าของที่ส่ง
+ * ไม่ใช่หนี้ที่ติดลบ
+ *
+ * ไม่มีรอบส่งของมาด้วย = ยอดทั้งใบเหมือนเดิม เพื่อไม่ให้ตัวเลขที่เคยถูกอยู่แล้ว
+ * หล่นเป็นศูนย์เงียบ ๆ ที่ผู้เรียกที่ยังไม่ได้อัปเดต
+ */
+export function orderCollectible(o: OrderForCollectible): number {
+  const rounds = o.deliveries ?? [];
+  const itemsTotal = o.items.reduce(
+    (s, i) => s + Number(i.qty || 0) * Number(i.requestedPrice || 0),
+    0,
+  );
+  const shipped = rounds.length > 0 ? deliveredValue(o.items, rounds) : itemsTotal;
+  // itemsTotal - orderTotal = ส่วนที่การคืนของและการปรับราคาหักไปจากบิล
+  const reductions = itemsTotal - orderTotal(o);
+  return Math.max(0, shipped - reductions - orderPaid(o));
 }

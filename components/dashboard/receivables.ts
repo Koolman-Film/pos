@@ -16,7 +16,8 @@
 
 import { ticketTotal, ticketPaid, type TicketForTotals } from '@/lib/domain/tickets';
 import { fmtThaiDayMonth } from '@/lib/domain/format';
-import { orderTotal, orderPaid, type OrderForTotals } from '@/lib/domain/orders';
+import { orderCollectible, type OrderForTotals } from '@/lib/domain/orders';
+import type { DeliveryRound } from '@/lib/domain/deliveries';
 
 export type ARItem = {
   id: string;
@@ -39,7 +40,9 @@ export function computeReceivables(
     id: string;
     shop: string;
     customerId: number;
-    payments: { amount: number }[];
+    /** รอบส่งของ (0077) — ลูกหนี้ขายส่งคิดจากของที่ออกไปจริง. */
+    deliveries?: DeliveryRound[];
+    payments: { amount: number; status?: string }[];
   })[],
   customers: { id: number; name: string }[],
   shopFilter: string,
@@ -54,15 +57,22 @@ export function computeReceivables(
       source: 'ใบงานติดตั้ง' as const,
     }));
 
+  /*
+    ลูกหนี้ขายส่ง = มูลค่าของที่ส่งไปแล้ว หักเงินที่รับมาแล้ว (0077).
+
+    กติกาเดียวกับการ์ด ค้างรับ ของโมดูลขายส่ง และมาจากฟังก์ชันตัวเดียวกัน:
+    สองหน้าจอที่ตอบคำถามเดียวกันด้วยตัวเลขคนละตัว คือสิ่งที่ทำให้คนเลิกเชื่อ
+    ทั้งคู่ ของที่ยังไม่ได้ส่งอยู่บนชั้นของร้าน ไม่ใช่หนี้ของลูกค้า
+  */
   const wsVisible = orders.filter((o) => shopFilter === 'all' || o.shop === shopFilter);
   const arFromOrders: ARItem[] = wsVisible
-    .filter((o) => orderTotal(o) > orderPaid(o))
     .map((o) => ({
       id: o.id,
       name: `${customers.find((c) => c.id === o.customerId)?.name ?? 'ยังไม่ระบุลูกค้า'} (${o.id})`,
-      amount: orderTotal(o) - orderPaid(o),
+      amount: orderCollectible(o),
       source: 'ขายส่ง' as const,
-    }));
+    }))
+    .filter((ar) => ar.amount > 0);
 
   return [...arFromTickets, ...arFromOrders].sort((a, b) => b.amount - a.amount);
 }

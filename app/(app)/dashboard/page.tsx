@@ -115,7 +115,7 @@ export default async function DashboardPage({
         supabase
           .from('orders')
           .select(
-            'id, shop_id, customer_id, status, delivered_at, created_at, due_at, sales_by, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_installments(uid, seq, due_at, amount), order_payments(amount, method, paid_at, status, cleared_at, installment_uid)',
+            'id, shop_id, customer_id, status, delivered_at, created_at, due_at, sales_by, order_items(name, qty, list_price, requested_price, uid), order_deliveries(order_delivery_items(item_uid, qty)), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_installments(uid, seq, due_at, amount), order_payments(amount, method, paid_at, status, cleared_at, installment_uid)',
           )
           // Deleted POs (migration 0040) are out of the wholesale figures here for
           // the same reason deleted tickets are out of the ticket ones above.
@@ -326,6 +326,14 @@ export default async function DashboardPage({
       qty: num(i.qty),
       listPrice: num(i.list_price),
       requestedPrice: num(i.requested_price),
+      uid: i.uid ?? '',
+    })),
+    // รอบส่งของ (0077) — ค้างรับคิดจากของที่ออกไปจริง ไม่ใช่ยอดทั้งใบ
+    deliveries: (o.order_deliveries ?? []).map((d) => ({
+      items: (d.order_delivery_items ?? []).map((li) => ({
+        itemUid: li.item_uid ?? '',
+        qty: num(li.qty),
+      })),
     })),
     returns: (o.order_returns ?? []).map((r) => ({
       item: r.item_name,
