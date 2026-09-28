@@ -1,5 +1,6 @@
 import type { WsOrder } from '@/components/wholesale/types';
 import {
+  orderCollectible,
   orderPaid,
   orderTotal,
   PAYMENT_BOUNCED,
@@ -12,6 +13,7 @@ import {
   overdueInstallments,
   type Installment,
 } from '@/lib/domain/installments';
+import { type DeliveryRound } from '@/lib/domain/deliveries';
 
 /**
  * What these questions need to know about a PO — and no more, so the
@@ -29,6 +31,12 @@ export type BillOrder = OrderForTotals & {
    */
   installments?: Installment[];
   /**
+   * รอบส่งของ (migration 0077) — มีเมื่อไหร่ "ค้างรับ" คิดจากของที่ออกไปจริง.
+   *
+   * ไม่มี = ผู้เรียกที่ไม่ได้โหลดรอบมาด้วย ซึ่งยังได้คำตอบแบบเดิมคือทั้งใบ
+   */
+  deliveries?: DeliveryRound[];
+  /**
    * ต้องรู้จัก `installmentUid` ด้วย เพราะเมื่อมีตารางงวด คำถามเรื่องเลยกำหนด
    * ไม่ใช่ "ค้างอยู่เท่าไหร่" แต่เป็น "งวดไหนที่ยังไม่ครบ" — และเงินแต่ละก้อน
    * ตอบคำถามนั้นได้ก็ต่อเมื่อมันบอกได้ว่าตัวเองอยู่งวดไหน
@@ -41,6 +49,10 @@ export type BillOrder = OrderForTotals & {
 /** งวดที่เลยกำหนดแล้วและยังเก็บไม่ครบ — ว่างเปล่าเมื่อ PO ไม่มีตารางงวด. */
 export const overdueParts = (o: BillOrder, today: string) =>
   overdueInstallments(o.installments ?? [], o.payments, today);
+
+/** งวดที่ใกล้ถึงกำหนดและยังเก็บไม่ครบ. */
+export const dueSoonParts = (o: BillOrder, today: string) =>
+  dueSoonInstallments(o.installments ?? [], o.payments, today, shiftDay(today, DUE_SOON_DAYS));
 
 /**
  * คำถามที่การแจ้งเตือนขายส่งถาม — and the same questions the wholesale list
@@ -70,6 +82,23 @@ export function shiftDay(day: string, days: number): string {
 }
 
 export const outstanding = (o: BillOrder) => orderTotal(o) - orderPaid(o);
+
+/**
+ * ยอดที่เรียกเก็บได้จริงตอนนี้ — มูลค่าของที่ส่งไปแล้ว หักเงินที่รับมาแล้ว
+ * (ร้านยืนยัน 28 ก.ย. 2569).
+ *
+ * ตั้งแต่ PO ส่งของได้หลายรอบ (0077) "ค้างรับ" ที่นับยอดทั้งใบกลายเป็นคำตอบที่
+ * ผิด: ลูกค้าสั่ง 200 ม้วน รับไปแล้ว 80 — ของอีก 120 ม้วนยังอยู่บนชั้นของร้าน
+ * และยังเรียกเก็บเงินไม่ได้ การนับมันเป็นเงินที่รอรับ ทำให้ตัวเลขลูกหนี้บวมกว่า
+ * ความจริงทุกครั้งที่มีการแบ่งส่ง
+ *
+ * การคืนของและการปรับราคาที่อนุมัติแล้ว หักออกด้วย — เป็นส่วนลดของทั้งบิล ไม่ได้
+ * ผูกกับรอบใดรอบหนึ่ง จึงหักจากยอดที่ส่งไปแล้วตรง ๆ แล้วกันไม่ให้ติดลบ
+ *
+ * ไม่มีรอบส่งของมาด้วย (ผู้เรียกที่ไม่ได้โหลด หรือ PO ที่ยังไม่มีรอบ) = ยอดทั้งใบ
+ * เหมือนเดิม เพื่อไม่ให้ตัวเลขที่เคยถูกอยู่แล้วหล่นเป็นศูนย์เงียบ ๆ
+ */
+export const collectible = (o: BillOrder) => orderCollectible(o);
 
 const open = (o: BillOrder) => isOpenOrderStatus(o.status);
 
