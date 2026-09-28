@@ -10,6 +10,7 @@ import { shopDayKey } from '@/lib/domain/format';
 import { poOpenedAt } from '@/lib/domain/orders';
 import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
 
+import type { Json } from '@/lib/types/database';
 import type { SaveOrderInput } from '@/components/wholesale/types';
 
 /**
@@ -308,6 +309,201 @@ async function moveOrderStock(
 }
 
 /**
+ * ตัดสต๊อกของรอบส่งของหนึ่งรอบ (migration 0077).
+ *
+ * The claim comes first: flipping `stock_deducted_at` from null is what makes
+ * this idempotent, so a retried request or a double-clicked button cannot take
+ * the same boxes off the shelf twice. Only the call that wins the claim moves
+ * anything.
+ *
+ * Non-fatal on failure, as everywhere else stock is touched — losing the
+ * delivery record over a stock lookup is the worse outcome — but the shop is
+ * TOLD which products did not move, because silently skipping is how a renamed
+ * product stops being deducted with nobody the wiser until a stocktake.
+ */
+async function deductDeliveryStock(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  deliveryId: number,
+  shopId: string,
+  orderId: string,
+): Promise<string[]> {
+  const { data: claimed } = await supabase
+    .from('order_deliveries')
+    .update({ stock_deducted_at: new Date().toISOString() })
+    .eq('id', deliveryId)
+    .is('stock_deducted_at', null)
+    .select('id');
+  if ((claimed ?? []).length === 0) return [];
+
+  const { data: lines } = await supabase
+    .from('order_delivery_items')
+    .select('item_name, qty')
+    .eq('delivery_id', deliveryId);
+  const delta = toQtyMap(
+    (lines ?? []).map((l) => ({ name: l.item_name ?? '', qty: Number(l.qty) || 0 })),
+  );
+  if (Object.keys(delta).length === 0) return [];
+
+  try {
+    const result = await applyStockMovements(supabase, delta, {
+      kind: 'ขายส่ง',
+      documentId: orderId,
+      by: 'ระบบ (ส่งของ)',
+      shopId,
+    });
+    return result.unmatched;
+  } catch (e) {
+    console.error(`[stock] delivery ${deliveryId} of ${orderId} threw while deducting stock:`, e);
+    return Object.keys(delta);
+  }
+}
+
+/** ข้อความเตือนตอนตัดสต๊อกไม่สำเร็จ — เก็บถ้อยคำเดิมไว้ที่เดียว. */
+const stockWarning = (unmatched: string[], what: string) =>
+  unmatched.length > 0
+    ? `${what} แต่ตัดสต็อกไม่สำเร็จ: ${unmatched.join(', ')} — ตรวจว่าสินค้ายังอยู่ในทะเบียนของสาขานี้ แล้วปรับสต็อกเอง`
+    : undefined;
+
+/** รายการที่รอบส่งของหนึ่งรอบหอบไป. */
+export type DeliveryLineInput = { uid: string; name: string; qty: number };
+
+/**
+ * บันทึกรอบส่งของหนึ่งรอบ (migration 0077).
+ *
+ * PO ใบเดียวส่งหลายรอบได้ — ลูกค้าสั่ง 200 ม้วน รับไปก่อน 80 (ร้านแจ้ง 28 ก.ย.
+ * 2569). Each round carries its own date, its own evidence and its own
+ * quantities: the sale is earned on the day the goods go out, so a PO that
+ * straddles two months must not book all of it in the first.
+ *
+ * ด่านจริงอยู่ที่ `save_order_delivery` — ส่งเกินจำนวนที่สั่ง และหลักฐานที่
+ * หายไป ถูกปฏิเสธในฐานข้อมูล เพราะ action นี้เป็น POST ธรรมดาที่ใครก็ยิงได้ (C2).
+ * What is checked here as well is only so the person gets a sentence they can
+ * act on instead of a database error.
+ */
+export async function saveOrderDelivery(input: {
+  orderId: string;
+  /** Client-generated key — a double-clicked button must not send twice. */
+  uid: string;
+  date: string;
+  note: string;
+  attachments: string[];
+  items: DeliveryLineInput[];
+}): Promise<{ ok: boolean; deliveryId?: number; error?: string }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  if (!session.hasNav('wholesale')) return { ok: false, error: 'ไม่มีสิทธิ์ในโมดูลขายส่ง' };
+  if (!input.date) return { ok: false, error: 'ต้องระบุวันที่ส่งของ' };
+  if (!input.note.trim()) {
+    return { ok: false, error: 'ต้องกรอกข้อมูลการจัดส่ง (ขนส่ง/เลขพัสดุ/ผู้รับ)' };
+  }
+  if (input.attachments.length === 0) {
+    return { ok: false, error: 'ต้องแนบหลักฐานการจัดส่งอย่างน้อยหนึ่งไฟล์' };
+  }
+  const lines = input.items.filter((l) => Number(l.qty) > 0);
+  if (lines.length === 0) return { ok: false, error: 'ต้องระบุจำนวนที่ส่งอย่างน้อยหนึ่งรายการ' };
+
+  const supabase = await createClient();
+  const { data: order } = await supabase
+    .from('orders')
+    .select('shop_id')
+    .eq('id', input.orderId)
+    .maybeSingle();
+  if (!order) return { ok: false, error: 'ไม่พบ PO นี้' };
+
+  const { data: deliveryId, error } = await supabase.rpc('save_order_delivery', {
+    p_order_id: input.orderId,
+    p_delivery: {
+      uid: input.uid,
+      date: input.date,
+      note: input.note.trim(),
+      attachments: input.attachments,
+      items: lines.map((l) => ({ uid: l.uid, name: l.name, qty: Number(l.qty) })),
+    } as unknown as Json,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  const unmatched = await deductDeliveryStock(
+    supabase,
+    Number(deliveryId),
+    order.shop_id,
+    input.orderId,
+  );
+
+  revalidatePath('/wholesale');
+  revalidatePath(`/wholesale/${input.orderId}`);
+  revalidatePath('/dashboard');
+  revalidatePath('/stock');
+  revalidatePath('/revenue');
+  return {
+    ok: true,
+    deliveryId: Number(deliveryId),
+    error: stockWarning(unmatched, 'บันทึกรอบส่งของแล้ว'),
+  };
+}
+
+/**
+ * ลบรอบส่งของที่บันทึกผิด (migration 0077).
+ *
+ * ต้องมีสิทธิ์ `wholesale.updateStatus` ทั้งที่นี่และในฐานข้อมูล: การบันทึกส่ง
+ * ของใครก็ทำได้ แต่การลบทิ้งคือการเอาของกลับขึ้นชั้นและเปิด PO ที่ปิดไปแล้วกลับมา
+ *
+ * Stock goes back only when that round had actually taken it out — the function
+ * says which, because only the database knows whether the claim had been made.
+ */
+export async function deleteOrderDelivery(
+  deliveryId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  if (!session.canDo('wholesale.updateStatus')) {
+    return { ok: false, error: 'ไม่มีสิทธิ์ลบรอบส่งของ' };
+  }
+  const supabase = await createClient();
+
+  const { data: order } = await supabase
+    .from('order_deliveries')
+    .select('orders(shop_id)')
+    .eq('id', deliveryId)
+    .maybeSingle();
+  const shopId = (order?.orders as { shop_id: string } | null)?.shop_id ?? '';
+
+  const { data: removed, error } = await supabase.rpc('delete_order_delivery', {
+    p_delivery_id: deliveryId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  const result = (removed ?? {}) as {
+    orderId?: string;
+    stockDeducted?: boolean;
+    items?: { name: string; qty: number }[];
+  };
+  let unmatched: string[] = [];
+  if (result.stockDeducted && shopId) {
+    // ติดลบ = ของกลับขึ้นชั้น (`applyStockMovements` ใช้ `-d`)
+    const delta = toQtyMap(
+      (result.items ?? []).map((l) => ({ name: l.name, qty: -(Number(l.qty) || 0) })),
+    );
+    try {
+      const moved = await applyStockMovements(supabase, delta, {
+        kind: 'ขายส่ง',
+        documentId: result.orderId ?? '',
+        by: 'ระบบ (ลบรอบส่งของ)',
+        shopId,
+      });
+      unmatched = moved.unmatched;
+    } catch (e) {
+      console.error(`[stock] deleting delivery ${deliveryId} threw while restoring stock:`, e);
+      unmatched = Object.keys(delta);
+    }
+  }
+
+  revalidatePath('/wholesale');
+  if (result.orderId) revalidatePath(`/wholesale/${result.orderId}`);
+  revalidatePath('/dashboard');
+  revalidatePath('/stock');
+  revalidatePath('/revenue');
+  return { ok: true, error: stockWarning(unmatched, 'ลบรอบส่งของแล้ว') };
+}
+
+/**
  * บันทึกวันส่งของ — called when ใบส่งของ is issued (migration 0045).
  *
  * Wholesale sells on credit: the goods go out and the money follows weeks
@@ -315,19 +511,13 @@ async function moveOrderStock(
  * wholesale figure will be attributed to, which is why issuing the document
  * writes it rather than leaving it to somebody to remember.
  *
- * THE DATE is written once. A second ใบส่งของ is a reprint — the customer lost
- * theirs — and silently re-dating the sale because a page was printed again
- * would move revenue between months with nobody deciding to. A date already on
- * the PO also stands: the form carries วันที่ส่งของ of its own (ร้านขอ 24 ก.ย.
- * 2569), and what the shop typed there is its own statement of when the goods
- * went out. Changing a wrong date is a deliberate edit on the form.
+ * ตั้งแต่ 0077 นี่คือ "ส่งของที่ยังค้างอยู่ทั้งหมดในรอบเดียว" — เส้นทางเดิมของ
+ * ปุ่มออกใบส่งของ ที่ยังเป็นกรณีที่พบบ่อยที่สุด ส่วนการแบ่งส่งใช้
+ * `saveOrderDelivery` ซึ่งเป็นโค้ดชุดเดียวกัน
  *
- * THE EVIDENCE is written every time. It used to ride along with the date in
- * one guarded update, so issuing a ใบส่งของ for a PO that already had a date
- * saved nothing at all — no ข้อมูลการจัดส่ง, no attachment, and the status left
- * where it was — and said ok.
- *
- * Moves the PO to จัดส่งแล้ว at the same time, since that is what has happened.
+ * THE DATE is written once, by the first round. A second ใบส่งของ is a reprint
+ * — the customer lost theirs — and silently re-dating the sale because a page
+ * was printed again would move revenue between months with nobody deciding to.
  */
 export async function recordOrderDelivery(
   orderId: string,
@@ -338,100 +528,45 @@ export async function recordOrderDelivery(
   const session = await getSessionContext();
   if (!session.hasNav('wholesale')) return { ok: false, error: 'ไม่มีสิทธิ์ในโมดูลขายส่ง' };
 
-  /*
-    หลักฐานการจัดส่ง บังคับที่นี่และที่ฐานข้อมูล (migration 0055).
-
-    Checked here so the person gets a sentence they can act on, and again by
-    the trigger because this action is a plain POST — the form is not the
-    gate. Wholesale ships before it is paid, so the window between the goods
-    leaving and the money arriving is the riskiest stretch the shop has, and
-    a date alone settles nothing when a customer says it never came.
-  */
-  if (!deliveryNote.trim()) {
-    return { ok: false, error: 'ต้องกรอกข้อมูลการจัดส่ง (ขนส่ง/เลขพัสดุ/ผู้รับ)' };
-  }
-  if (attachments.length === 0) {
-    return { ok: false, error: 'ต้องแนบหลักฐานการจัดส่งอย่างน้อยหนึ่งไฟล์' };
-  }
-
   const supabase = await createClient();
+  const [{ data: items }, { data: rounds }] = await Promise.all([
+    supabase.from('order_items').select('uid, name, qty').eq('order_id', orderId),
+    supabase
+      .from('order_deliveries')
+      .select('order_delivery_items(item_uid, qty)')
+      .eq('order_id', orderId),
+  ]);
 
-  const { data: current, error: readError } = await supabase
-    .from('orders')
-    .select('shop_id, delivered_at')
-    .eq('id', orderId)
-    .maybeSingle();
-  if (readError) return { ok: false, error: readError.message };
-  if (!current) return { ok: false, error: 'ไม่พบ PO นี้' };
-
-  const { error } = await supabase
-    .from('orders')
-    .update({
-      // The first date stands, whether it came from an earlier ใบส่งของ or
-      // from the field on the form.
-      ...(current.delivered_at ? {} : { delivered_at: deliveredAt }),
-      status: 'จัดส่งแล้ว',
-      delivery_note: deliveryNote.trim(),
-      delivery_attachments: attachments,
-    })
-    .eq('id', orderId);
-  if (error) return { ok: false, error: error.message };
-
-  /*
-    ของออกจากคลังตรงนี้ ไม่ใช่ตอนบันทึก PO (migration 0054).
-
-    Claimed through `stock_deducted_at` before anything moves: re-issuing a
-    ใบส่งของ is a reprint, and a reprint must not take the goods off the shelf
-    a second time. The update is the claim — only the call that flips it from
-    null goes on to move stock.
-
-    Non-fatal on failure, as it was on save (losing the delivery record over a
-    stock lookup is the worse outcome) but the shop is TOLD which products did
-    not move: silently skipping is how a renamed product stops being deducted
-    with nobody the wiser until a stocktake.
-  */
-  let unmatched: string[] = [];
-  {
-    const shopId = current.shop_id;
-    const { data: claimed } = await supabase
-      .from('orders')
-      .update({ stock_deducted_at: new Date().toISOString() })
-      .eq('id', orderId)
-      .is('stock_deducted_at', null)
-      .select('id');
-    if ((claimed ?? []).length > 0) {
-      const { data: items } = await supabase
-        .from('order_items')
-        .select('name, qty')
-        .eq('order_id', orderId);
-      const delta = toQtyMap((items ?? []).map((i) => ({ name: i.name, qty: Number(i.qty) || 0 })));
-      if (Object.keys(delta).length > 0) {
-        try {
-          const result = await applyStockMovements(supabase, delta, {
-            kind: 'ขายส่ง',
-            documentId: orderId,
-            by: 'ระบบ (ส่งของ)',
-            shopId,
-          });
-          unmatched = result.unmatched;
-        } catch (e) {
-          console.error(`[stock] delivery of ${orderId} threw while deducting stock:`, e);
-          unmatched = Object.keys(delta);
-        }
-      }
+  const sent = new Map<string, number>();
+  for (const r of rounds ?? []) {
+    for (const li of r.order_delivery_items ?? []) {
+      const uid = li.item_uid ?? '';
+      sent.set(uid, (sent.get(uid) ?? 0) + (Number(li.qty) || 0));
     }
   }
-  revalidatePath('/wholesale');
-  revalidatePath(`/wholesale/${orderId}`);
-  revalidatePath('/dashboard');
-  revalidatePath('/stock');
-  return {
-    ok: true,
-    error:
-      unmatched.length > 0
-        ? `ส่งของแล้ว แต่ตัดสต็อกไม่สำเร็จ: ${unmatched.join(', ')} — ตรวจว่าสินค้ายังอยู่ในทะเบียนของสาขานี้ แล้วปรับสต็อกเอง`
-        : undefined,
-  };
+  const remaining = (items ?? [])
+    .map((it) => ({
+      uid: it.uid ?? '',
+      name: it.name,
+      qty: (Number(it.qty) || 0) - (sent.get(it.uid ?? '') ?? 0),
+    }))
+    .filter((l) => l.qty > 0);
+
+  if (remaining.length === 0) {
+    return { ok: false, error: 'ส่งครบทุกรายการแล้ว — ไม่มีของที่ยังค้างส่ง' };
+  }
+
+  const result = await saveOrderDelivery({
+    orderId,
+    // เกิดจากเอกสาร ไม่ใช่จากปุ่มในฟอร์ม จึงผูก uid กับวันที่: กดออกใบส่งของ
+    // ซ้ำในวันเดียวกันคือการพิมพ์ซ้ำ ไม่ใช่การส่งรอบใหม่
+    uid: `doc-${deliveredAt}`,
+    date: deliveredAt,
+    note: deliveryNote,
+    attachments,
+    items: remaining,
+  });
+  return { ok: result.ok, error: result.error };
 }
 
 /**

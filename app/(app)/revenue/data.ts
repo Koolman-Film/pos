@@ -386,7 +386,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
           supabase
             .from('orders')
             .select(
-              'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, status)',
+              'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price, uid), order_deliveries(delivered_at, order_delivery_items(item_uid, item_name, qty)), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, status)',
             )
             .is('deleted_at', null)
             .not('delivered_at', 'is', null)
@@ -450,10 +450,20 @@ async function wholesaleLines(): Promise<SaleLine[]> {
     id: o.id,
     shop: o.shop_id,
     deliveredAt: o.delivered_at,
+    // ส่งหลายรอบ = ขายหลายครั้ง ตามวันของรอบนั้น (0077)
+    deliveries: (o.order_deliveries ?? []).map((d) => ({
+      date: d.delivered_at,
+      items: (d.order_delivery_items ?? []).map((li) => ({
+        itemUid: li.item_uid ?? '',
+        name: li.item_name ?? '',
+        qty: Number(li.qty || 0),
+      })),
+    })),
     items: (o.order_items ?? []).map((i) => ({
       name: i.name,
       qty: Number(i.qty || 0),
       requestedPrice: Number(i.requested_price || 0),
+      uid: i.uid ?? '',
     })),
     returns: (o.order_returns ?? []).map((r) => ({
       item: r.item_name,

@@ -29,7 +29,8 @@ export const ORDER_SELECT = `
   id, shop_id, customer_id, status, created_at, delivered_at, due_at, sales_by, created_by,
   pay_to_account_id, customer_note,
   price_decision, price_decided_at, price_decided_by, note, delivery_note, delivery_attachments,
-  order_items(name, qty, list_price, requested_price, reason),
+  order_items(name, qty, list_price, requested_price, reason, uid),
+  order_deliveries(id, uid, delivered_at, note, attachments, stock_deducted_at, order_delivery_items(item_uid, item_name, qty)),
   order_returns(item_name, qty, reason, returned_at, uid, received_at),
   order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
   order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, is_cheque, cleared_at, bounced_at, bounce_note)
@@ -53,6 +54,18 @@ export type OrderRow = {
   note: string | null;
   delivery_note: string | null;
   delivery_attachments: string[] | null;
+  order_deliveries:
+    | {
+        id: number;
+        uid: string | null;
+        delivered_at: string;
+        note: string | null;
+        attachments: string[] | null;
+        stock_deducted_at: string | null;
+        order_delivery_items:
+          { item_uid: string | null; item_name: string | null; qty: number }[] | null;
+      }[]
+    | null;
   order_items:
     | {
         name: string;
@@ -60,6 +73,7 @@ export type OrderRow = {
         list_price: number;
         requested_price: number;
         reason: string;
+        uid: string | null;
       }[]
     | null;
   order_returns:
@@ -126,7 +140,24 @@ export function mapOrder(row: OrderRow): WsOrder {
       listPrice: it.list_price,
       requestedPrice: it.requested_price,
       reason: it.reason ?? '',
+      uid: it.uid ?? '',
     })),
+    // เรียงตามวันที่ส่ง แล้วค่อย id — สองรอบที่ส่งวันเดียวกันยังเรียงตามที่บันทึก
+    deliveries: [...(row.order_deliveries ?? [])]
+      .sort((a, b) => a.delivered_at.localeCompare(b.delivered_at) || a.id - b.id)
+      .map((d) => ({
+        id: d.id,
+        uid: d.uid ?? '',
+        date: d.delivered_at,
+        note: d.note ?? '',
+        attachments: d.attachments ?? [],
+        stockDeductedAt: d.stock_deducted_at ?? '',
+        items: (d.order_delivery_items ?? []).map((li) => ({
+          itemUid: li.item_uid ?? '',
+          name: li.item_name ?? '',
+          qty: li.qty,
+        })),
+      })),
     returns: (row.order_returns ?? []).map((r) => ({
       item: r.item_name,
       qty: r.qty,

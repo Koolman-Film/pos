@@ -12,6 +12,8 @@ import {
   confirmOrderReturn,
   deleteOrder,
   recordOrderDelivery,
+  saveOrderDelivery,
+  deleteOrderDelivery,
   markOrderBadDebt,
   rejectOrderAdjustment,
   rejectOrderPrice,
@@ -72,6 +74,8 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       onMarkBadDebt={markOrderBadDebt}
       onDeleteOrder={deleteOrder}
       onRecordDelivery={recordOrderDelivery}
+      onSaveDelivery={saveOrderDelivery}
+      onDeleteDelivery={deleteOrderDelivery}
       onConfirmPayment={confirmOrderPayment}
       onConfirmReturn={confirmOrderReturn}
       onApproveAdjustment={approveOrderAdjustment}
