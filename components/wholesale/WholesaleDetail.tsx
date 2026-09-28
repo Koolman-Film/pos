@@ -31,6 +31,7 @@ import {
 } from '@/lib/domain/orders';
 import { dateInputValue, todayValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
+import { deliveryProgress, fullyDelivered } from '@/lib/domain/deliveries';
 import {
   defaultPayMethod,
   LEGACY_METHOD_SUFFIX,
@@ -50,6 +51,7 @@ import {
   type Shop,
   type SalesPerson,
   type WsCustomer,
+  type WsDelivery,
   type WsOrder,
   type WsPayment,
   type WsShopInfo,
@@ -158,6 +160,8 @@ export function WholesaleDetail({
   onMarkBadDebt,
   onDeleteOrder,
   onRecordDelivery,
+  onSaveDelivery,
+  onDeleteDelivery,
   onConfirmPayment,
   onConfirmReturn,
   onBouncePayment,
@@ -215,6 +219,23 @@ export function WholesaleDetail({
     deliveryNote: string,
     attachments: string[],
   ) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * บันทึกรอบส่งของ พร้อมจำนวนที่ส่งจริงของแต่ละรายการ (migration 0077).
+   *
+   * ใช้แทน `onRecordDelivery` เมื่อมี — PO ใบเดียวส่งหลายรอบได้ และแต่ละรอบมี
+   * วันที่ หลักฐาน และจำนวนของตัวเอง. `onRecordDelivery` ยังอยู่สำหรับผู้เรียก
+   * ที่ยังส่งครั้งเดียวจบ (และชุดทดสอบเดิม)
+   */
+  onSaveDelivery?: (input: {
+    orderId: string;
+    uid: string;
+    date: string;
+    note: string;
+    attachments: string[];
+    items: { uid: string; name: string; qty: number }[];
+  }) => Promise<{ ok: boolean; error?: string }>;
+  /** ลบรอบส่งของที่บันทึกผิด — gated by `wholesale.updateStatus` (0077). */
+  onDeleteDelivery?: (deliveryId: number) => Promise<{ ok: boolean; error?: string }>;
   /**
    * ยืนยันว่าเงินเข้าจริง — gated by `wholesale.confirmPayment` (migration 0048).
    *
@@ -428,9 +449,23 @@ export function WholesaleDetail({
   function addItem() {
     setO({
       ...o,
-      items: [...o.items, { name: '', qty: 1, listPrice: 0, requestedPrice: 0, reason: '' }],
+      items: [
+        ...o.items,
+        // uid ตั้งแต่ตอนเพิ่ม ไม่ใช่ตอนบันทึก — รอบส่งของชี้มาที่คีย์นี้ (0077)
+        { name: '', qty: 1, listPrice: 0, requestedPrice: 0, reason: '', uid: newPaymentUid() },
+      ],
     });
   }
+  /*
+    ส่งไปแล้วเท่าไหร่ ต่อรายการ (0077).
+
+    The rule lives in `lib/domain/deliveries.ts` because the database enforces
+    the same one — this side only decides what to offer and what to show.
+  */
+  const progress = deliveryProgress(o.items, o.deliveries ?? []);
+  const progressOf = (idx: number) => progress[idx];
+  const stillOwed = progress.some((p) => p.remaining > 0);
+
   function updateItem(idx: number, k: keyof WsOrder['items'][number], v: string | number) {
     const items = [...o.items];
     items[idx] = { ...items[idx], [k]: v };
@@ -836,6 +871,27 @@ export function WholesaleDetail({
       qty: Number(it.qty) || 0,
       unit: Number(it.requestedPrice) || 0,
     }));
+    /*
+      ใบส่งของ พิมพ์ของรอบล่าสุด ไม่ใช่ทั้ง PO (0077).
+
+      ส่ง 80 จาก 200 แล้วพิมพ์ใบที่บอกว่า 200 คือเอกสารที่ลูกค้าเซ็นรับของที่
+      ยังไม่ได้รับ — PO ที่ส่งรอบเดียวจบยังพิมพ์เหมือนเดิมทุกประการ เพราะรอบนั้น
+      มีของครบทั้งใบอยู่แล้ว
+    */
+    const lastRound = (o.deliveries ?? [])[(o.deliveries ?? []).length - 1];
+    const deliveryRows = lastRound
+      ? lastRound.items.map((li) => ({
+          name: li.name || o.items.find((it) => it.uid === li.itemUid)?.name || '',
+          qty: Number(li.qty) || 0,
+          unit:
+            Number(
+              (
+                o.items.find((it) => it.uid && it.uid === li.itemUid) ??
+                o.items.find((it) => it.name === li.name)
+              )?.requestedPrice,
+            ) || 0,
+        }))
+      : itemRows;
     // A returned line is priced at what it was SOLD for, not at list price:
     // the credit has to undo the sale, and the sale may have been discounted.
     const returnRows = o.returns.map((r) => ({
@@ -849,13 +905,15 @@ export function WholesaleDetail({
         return {
           prefix: 'DO',
           title: 'ใบส่งของ',
-          rows: itemRows,
+          rows: deliveryRows,
           // Same sheet as the ใบแจ้งหนี้, money included: the customer checks
           // the goods against the amount they are being billed, and a delivery
           // note without values makes them fetch the invoice to do it.
           showTotals: true,
           signatures: ['ผู้ส่งของ', 'ผู้รับของ'],
-          dateText: fmtThaiDayString(o.deliveredAt || dateInputValue(new Date())),
+          dateText: fmtThaiDayString(
+            lastRound?.date || o.deliveredAt || dateInputValue(new Date()),
+          ),
           /*
             อ้างอิงใบแจ้งหนี้.
 
@@ -920,9 +978,16 @@ export function WholesaleDetail({
       document prints only once the server has accepted it. Re-printing a
       delivery note for a PO already sent asks for nothing.
     */
-    if (mode === 'delivery' && !o.deliveredAt && onRecordDelivery) {
+    if (mode === 'delivery' && stillOwed && (onSaveDelivery || onRecordDelivery)) {
       setDeliveryError('');
-      setDeliveryPanel({ date: dateInputValue(new Date()), note: '', files: [] });
+      setDeliveryPanel({
+        date: dateInputValue(new Date()),
+        note: '',
+        files: [],
+        // ตั้งต้นที่ "ของที่ยังค้างทั้งหมด" — ส่งครั้งเดียวจบยังเป็นการกดยืนยัน
+        // ครั้งเดียวเหมือนเดิม ส่วนการแบ่งส่งคือการแก้ตัวเลขลง
+        qty: Object.fromEntries(progress.map((p) => [p.uid, p.remaining])),
+      });
       return;
     }
     doPrint(mode);
@@ -940,12 +1005,14 @@ export function WholesaleDetail({
     date: string;
     note: string;
     files: File[];
+    /** จำนวนที่ส่งรอบนี้ ต่อ uid ของรายการ. */
+    qty: Record<string, number>;
   } | null>(null);
   const [deliveryError, setDeliveryError] = useState('');
   const [deliveryBusy, setDeliveryBusy] = useState(false);
 
   async function submitDelivery() {
-    if (!deliveryPanel || !onRecordDelivery) return;
+    if (!deliveryPanel || !(onSaveDelivery || onRecordDelivery)) return;
     const note = deliveryPanel.note.trim();
     if (!note) {
       setDeliveryError('ต้องกรอกข้อมูลการจัดส่ง — ขนส่งเจ้าไหน เลขพัสดุ หรือใครเป็นคนรับ');
@@ -953,6 +1020,18 @@ export function WholesaleDetail({
     }
     if (deliveryPanel.files.length === 0) {
       setDeliveryError('ต้องแนบหลักฐานการจัดส่งอย่างน้อยหนึ่งไฟล์ เช่น รูปใบส่งของที่เซ็นแล้ว');
+      return;
+    }
+    const sending = progress
+      .map((p) => ({ uid: p.uid, name: p.name, qty: Number(deliveryPanel.qty[p.uid] ?? 0) }))
+      .filter((l) => l.qty > 0);
+    if (onSaveDelivery && sending.length === 0) {
+      setDeliveryError('ต้องระบุจำนวนที่ส่งรอบนี้อย่างน้อยหนึ่งรายการ');
+      return;
+    }
+    const over = progress.find((p) => Number(deliveryPanel.qty[p.uid] ?? 0) > p.remaining);
+    if (over) {
+      setDeliveryError(`${over.name}: เหลือให้ส่งอีก ${over.remaining} — ส่งมากกว่านั้นไม่ได้`);
       return;
     }
     setDeliveryBusy(true);
@@ -965,17 +1044,44 @@ export function WholesaleDetail({
         deliveryPanel.files,
       );
       paths = stored.map((sf) => sf.path);
-      const res = await onRecordDelivery(o.id, deliveryPanel.date, note, paths);
+      const uid = newPaymentUid();
+      const res = onSaveDelivery
+        ? await onSaveDelivery({
+            orderId: o.id,
+            uid,
+            date: deliveryPanel.date,
+            note,
+            attachments: paths,
+            items: sending,
+          })
+        : await onRecordDelivery!(o.id, deliveryPanel.date, note, paths);
       if (!res.ok) {
         await discardAttachments('wholesale-attachments', paths);
         setDeliveryError(res.error ?? 'บันทึกการจัดส่งไม่สำเร็จ');
         return;
       }
+      /*
+        รอบที่เพิ่งบันทึก ต้องอยู่บนหน้าจอทันที.
+
+        Not cosmetic: the delivery note prints the LAST round, and the next
+        round's quantities start from what is still owed. A screen that waits
+        for a reload would print the wrong sheet and offer the wrong numbers.
+      */
+      const round = {
+        uid,
+        date: deliveryPanel.date,
+        note,
+        attachments: paths,
+        items: sending.map((l) => ({ itemUid: l.uid, name: l.name, qty: l.qty })),
+      };
+      const deliveries = [...(o.deliveries ?? []), round];
       setO({
         ...o,
-        deliveredAt: deliveryPanel.date,
+        deliveredAt: o.deliveredAt || deliveryPanel.date,
         deliveryNote: note,
         deliveryAttachments: paths,
+        deliveries,
+        status: fullyDelivered(o.items, deliveries) ? 'จัดส่งแล้ว' : o.status,
       });
       setDeliveryPanel(null);
       doPrint('delivery');
@@ -985,6 +1091,25 @@ export function WholesaleDetail({
     } finally {
       setDeliveryBusy(false);
     }
+  }
+
+  /** ลบรอบส่งของที่บันทึกผิด — ของกลับขึ้นชั้น และ PO ที่ปิดไปแล้วเปิดกลับ. */
+  async function removeDelivery(round: WsDelivery) {
+    if (!onDeleteDelivery || !round.id) return;
+    if (!window.confirm(`ลบรอบส่งของวันที่ ${round.date} ใช่ไหม ของจะกลับเข้าสต็อก`)) return;
+    const res = await onDeleteDelivery(round.id);
+    if (!res.ok) {
+      setDeliveryError(res.error ?? 'ลบรอบส่งของไม่สำเร็จ');
+      return;
+    }
+    const deliveries = (o.deliveries ?? []).filter((d) => d.id !== round.id);
+    setO({
+      ...o,
+      deliveries,
+      status:
+        o.status === 'จัดส่งแล้ว' && !fullyDelivered(o.items, deliveries) ? 'รอจัดส่ง' : o.status,
+    });
+    if (res.error) setDeliveryError(res.error);
   }
   /*
     ข้อมูลบนจ่าหน้ากล่อง.
@@ -1216,6 +1341,26 @@ export function WholesaleDetail({
                     style={{ color: '#B23A48' }}
                   />
                 )}
+                {/*
+                  ส่งไปแล้วเท่าไหร่ ของบรรทัดนี้ (0077).
+
+                  ขึ้นเฉพาะเมื่อมีของออกไปแล้ว — PO ที่ยังไม่ได้ส่งไม่ต้องมี
+                  ตัวเลข 0/200 มากวนสายตาในขั้นที่ยังคุยราคากันอยู่
+                */}
+                {(progressOf(idx)?.sent ?? 0) > 0 && (
+                  <p
+                    className="text-xs mt-2"
+                    style={{
+                      color: progressOf(idx).remaining > 0 ? '#8A5A12' : '#4C7A3E',
+                    }}
+                  >
+                    <i className="fa-solid fa-truck-fast mr-1"></i>
+                    ส่งแล้ว {progressOf(idx).sent}/{progressOf(idx).ordered}
+                    {progressOf(idx).remaining > 0
+                      ? ` · ค้างอีก ${progressOf(idx).remaining}`
+                      : ' · ครบแล้ว'}
+                  </p>
+                )}
               </div>
             ))}
             <button
@@ -1224,6 +1369,62 @@ export function WholesaleDetail({
             >
               <i className="fa-solid fa-plus"></i>เพิ่มรายการสินค้า
             </button>
+            {/*
+              รอบส่งของ (0077).
+
+              อยู่ใต้รายการสินค้า เพราะมันคือคำตอบของคำถามที่รายการสินค้าเพิ่ง
+              ตั้งไว้ — ของพวกนี้ออกไปแล้วเท่าไหร่ เมื่อไหร่ และใครรับ
+            */}
+            {(o.deliveries ?? []).length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-semibold mb-2">
+                  <i className="fa-solid fa-truck-fast mr-1.5"></i>รอบส่งของ (
+                  {(o.deliveries ?? []).length})
+                </p>
+                {(o.deliveries ?? []).map((round, rIdx) => (
+                  <div
+                    key={round.id ?? round.uid ?? rIdx}
+                    className="rounded-2xl p-3 mb-2"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface-2)' }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">
+                          รอบที่ {rIdx + 1} · {fmtThaiDayString(round.date)}
+                        </p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
+                          {round.note || 'ไม่ได้บันทึกข้อมูลการจัดส่ง'}
+                        </p>
+                        <ul className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                          {round.items.map((li, liIdx) => (
+                            <li key={li.itemUid || liIdx}>
+                              · {li.name || '(ไม่ทราบสินค้า)'} × {li.qty}
+                            </li>
+                          ))}
+                        </ul>
+                        {round.attachments.length > 0 && (
+                          <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                            <i className="fa-solid fa-paperclip mr-1"></i>
+                            {round.attachments.map((p) => fileNameFromPath(p)).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                      {onDeleteDelivery && round.id && can('wholesale.updateStatus') && (
+                        <button
+                          onClick={() => removeDelivery(round)}
+                          aria-label={`ลบรอบส่งของรอบที่ ${rIdx + 1}`}
+                          title="ลบรอบนี้ ของจะกลับเข้าสต็อก"
+                          className="text-sm px-2 py-1.5 rounded-lg flex-shrink-0"
+                          style={{ color: '#B23A48' }}
+                        >
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           {hasDiscount && o.status === 'รออนุมัติราคา' && can('wholesale.priceApproval') && (
             <div className="rounded-2xl p-4 mb-5" style={{ background: '#FBEAEC' }}>
@@ -1772,9 +1973,42 @@ export function WholesaleDetail({
                   <i className="fa-solid fa-truck-fast mr-1.5"></i>ข้อมูลการจัดส่ง
                 </p>
                 <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
-                  ออกใบส่งของแล้ว PO จะเป็น “จัดส่งแล้ว” — ตัดสต็อกและนับเป็นยอดขาย
-                  จึงต้องมีหลักฐานติดไว้ด้วย
+                  ตัดสต็อกและนับเป็นยอดขายตามวันที่ของรอบนี้ จึงต้องมีหลักฐานติดไว้ด้วย —
+                  ส่งครบทุกรายการเมื่อไหร่ PO จะเป็น “จัดส่งแล้ว” เอง
                 </p>
+                {/*
+                  จำนวนที่ส่งรอบนี้ (0077).
+
+                  ตั้งต้นที่ของที่ยังค้างทั้งหมด การส่งครั้งเดียวจบจึงยังเป็นการ
+                  กดยืนยันครั้งเดียวเหมือนเดิม ส่วนการแบ่งส่งคือการแก้ตัวเลขลง
+                */}
+                <p className="text-xs font-medium mb-1">จำนวนที่ส่งรอบนี้</p>
+                <div className="mb-3 space-y-1.5">
+                  {progress.map((p) => (
+                    <div key={p.uid || p.name} className="flex items-center gap-2">
+                      <span className="text-xs flex-1 truncate" title={p.name}>
+                        {p.name || '(ยังไม่ได้เลือกสินค้า)'}
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                        ค้าง {p.remaining}/{p.ordered}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={p.remaining}
+                        aria-label={`จำนวนที่ส่ง ${p.name}`}
+                        value={deliveryPanel.qty[p.uid] ?? 0}
+                        onChange={(e) =>
+                          setDeliveryPanel({
+                            ...deliveryPanel,
+                            qty: { ...deliveryPanel.qty, [p.uid]: Number(e.target.value) },
+                          })
+                        }
+                        className="field text-sm px-2 py-1 w-20 text-right"
+                      />
+                    </div>
+                  ))}
+                </div>
                 <p className="text-xs font-medium">วันที่จัดส่ง</p>
                 <ThaiDateInput
                   ariaLabel="วันที่จัดส่ง"

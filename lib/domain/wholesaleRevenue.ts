@@ -10,6 +10,10 @@
  * A PO with no delivery date has earned nothing yet and produces no lines at
  * all — not a zero, not a line dated today.
  *
+ * ส่งหลายรอบ = ขายหลายครั้ง (migration 0077). PO ใบเดียวส่งได้หลายรอบ และแต่ละรอบ
+ * คือยอดขายของวันนั้น ไม่ใช่ของวันที่ส่งรอบแรก — PO ที่ส่ง 80 ม้วนเดือนกันยายน
+ * และอีก 120 ม้วนเดือนตุลาคม เคยลงเดือนกันยายนทั้ง 200 ม้วน ซึ่งผิดทั้งสองเดือน.
+ *
  * การคืนสินค้าและการปรับราคาเป็นบรรทัดของตัวเอง ติดลบ ลงวันที่ของมันเอง. A March
  * sale returned in May must reduce May: reaching back to change a month that
  * has already been reported and reconciled is how a report loses its readers.
@@ -25,9 +29,23 @@ import { isApprovedAdjustment } from './orders';
 export type WholesaleRevenueOrder = {
   id: string;
   shop: string;
-  /** `orders.delivered_at`, `YYYY-MM-DD`. Empty or null = not delivered yet. */
+  /**
+   * `orders.delivered_at`, `YYYY-MM-DD` — วันที่ส่งรอบแรก. Empty or null = not
+   * delivered yet. Kept as the date the other two line kinds fall back to.
+   */
   deliveredAt: string | null;
-  items: { name: string; qty: number; requestedPrice: number }[];
+  /**
+   * รอบส่งของ พร้อมจำนวนที่ออกไปจริงในรอบนั้น (migration 0077).
+   *
+   * Where this is present it is authoritative: the sale happened round by
+   * round. Absent — a caller that does not load them — falls back to the old
+   * rule, the whole PO on `deliveredAt`, so no figure silently drops to zero.
+   */
+  deliveries?: {
+    date: string;
+    items: { itemUid: string; name: string; qty: number }[];
+  }[];
+  items: { name: string; qty: number; requestedPrice: number; uid?: string }[];
   returns: { item: string; qty: number; date: string | null }[];
   adjustments: {
     amount: number;
@@ -57,16 +75,39 @@ export function wholesaleRevenueLines(orders: WholesaleRevenueOrder[]): Wholesal
   const lines: WholesaleRevenueLine[] = [];
 
   for (const o of orders) {
+    const rounds = (o.deliveries ?? []).filter((d) => d.date);
     const deliveredAt = (o.deliveredAt ?? '').slice(0, 10);
-    if (!deliveredAt) continue;
+    if (!deliveredAt && rounds.length === 0) continue;
     const base = { orderId: o.id, shop: o.shop };
 
-    for (const it of o.items) {
-      if (!it.name) continue;
-      const amount = Number(it.qty || 0) * Number(it.requestedPrice || 0);
-      if (!amount) continue;
-      lines.push({ ...base, on: deliveredAt, kind: 'ขาย', item: it.name, amount });
+    // ราคาต่อหน่วยของรายการที่รอบนี้ส่ง — จับด้วย uid ก่อน เพราะ PO ใบเดียวมี
+    // สินค้าชื่อเดียวกันสองบรรทัดคนละราคาได้
+    const priceOfLine = (itemUid: string, name: string) => {
+      const byUid = itemUid ? o.items.find((i) => i.uid && i.uid === itemUid) : undefined;
+      return Number((byUid ?? o.items.find((i) => i.name === name))?.requestedPrice || 0);
+    };
+
+    if (rounds.length > 0) {
+      for (const round of rounds) {
+        for (const li of round.items) {
+          const name = li.name || o.items.find((i) => i.uid === li.itemUid)?.name || '';
+          if (!name) continue;
+          const amount = Number(li.qty || 0) * priceOfLine(li.itemUid, name);
+          if (!amount) continue;
+          lines.push({ ...base, on: round.date.slice(0, 10), kind: 'ขาย', item: name, amount });
+        }
+      }
+    } else {
+      for (const it of o.items) {
+        if (!it.name) continue;
+        const amount = Number(it.qty || 0) * Number(it.requestedPrice || 0);
+        if (!amount) continue;
+        lines.push({ ...base, on: deliveredAt, kind: 'ขาย', item: it.name, amount });
+      }
     }
+
+    // วันที่ให้บรรทัดที่ไม่มีวันของตัวเอง (แถวที่เก่ากว่า 0045) มายืน
+    const fallbackOn = deliveredAt || rounds[0].date.slice(0, 10);
 
     // Priced off the line it came back from, exactly as `orderTotal` does — a
     // return is a reversal of a specific sale, not a fresh valuation.
@@ -79,7 +120,7 @@ export function wholesaleRevenueLines(orders: WholesaleRevenueOrder[]): Wholesal
         ...base,
         // Falls back to the delivery date only when the row predates the column
         // (migration 0045); nothing is ever left undated.
-        on: (r.date || deliveredAt).slice(0, 10),
+        on: (r.date || fallbackOn).slice(0, 10),
         kind: 'คืนสินค้า',
         item: r.item,
         amount: -amount,
@@ -94,7 +135,7 @@ export function wholesaleRevenueLines(orders: WholesaleRevenueOrder[]): Wholesal
       if (!amount) continue;
       lines.push({
         ...base,
-        on: (a.date || deliveredAt).slice(0, 10),
+        on: (a.date || fallbackOn).slice(0, 10),
         kind: 'ปรับราคา',
         item: a.reason || 'ปรับราคาหลังส่งของ',
         // A positive adjustment means the bill went DOWN, which is how the PO

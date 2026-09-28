@@ -18,6 +18,39 @@ export type WsItem = {
   listPrice: number;
   requestedPrice: number;
   reason: string;
+  /**
+   * คีย์ประจำรายการ ที่อยู่รอดข้ามการบันทึก (migration 0077).
+   *
+   * `save_order_children` deletes and re-inserts every child row, so the
+   * database id changes on each save. รอบส่งของ points at THIS, because
+   * pointing at the product name breaks the moment one PO carries the same
+   * product on two lines at two prices.
+   */
+  uid?: string;
+};
+
+/**
+ * รอบส่งของหนึ่งรอบ (migration 0077).
+ *
+ * PO ใบเดียวส่งหลายรอบได้ — ลูกค้าสั่ง 200 ม้วน รับไปก่อน 80 ที่เหลือรออีกสอง
+ * สัปดาห์ (ร้านแจ้ง 28 ก.ย. 2569). Each round is the sale of what went out that
+ * day: it carries its own date, its own evidence, and its own quantities, and
+ * รายงานรายได้ books it on that date rather than on the PO's first delivery.
+ */
+export type WsDelivery = {
+  /** `order_deliveries.id`. Absent on a round the form has not saved yet. */
+  id?: number;
+  /** Client-generated key — a double-clicked button must not send twice. */
+  uid: string;
+  /** วันที่ส่งของรอบนี้ — the date this round's revenue belongs to. */
+  date: string;
+  /** ข้อมูลการจัดส่ง (ขนส่ง/เลขพัสดุ/ผู้รับ). */
+  note: string;
+  /** Storage paths in the `wholesale-attachments` bucket, not file names. */
+  attachments: string[];
+  /** ตัดสต๊อกของรอบนี้ไปแล้วหรือยัง. */
+  stockDeductedAt?: string;
+  items: { itemUid: string; name: string; qty: number }[];
 };
 
 /**
@@ -189,6 +222,14 @@ export type WsOrder = {
    */
   customerNote?: string;
   items: WsItem[];
+  /**
+   * รอบส่งของทั้งหมดของ PO ใบนี้ เรียงตามวันที่ (migration 0077).
+   *
+   * `deliveredAt` above stays the FIRST round's date, which is what the
+   * reports that predate this field read. What each round actually carried
+   * lives here.
+   */
+  deliveries?: WsDelivery[];
   returns: WsReturn[];
   adjustments: WsAdjustment[];
   payments: WsPayment[];

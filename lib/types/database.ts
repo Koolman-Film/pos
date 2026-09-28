@@ -760,6 +760,82 @@ export type Database = {
           },
         ]
       }
+      order_deliveries: {
+        Row: {
+          attachments: string[]
+          created_at: string
+          created_by: string | null
+          delivered_at: string
+          id: number
+          note: string
+          order_id: string
+          stock_deducted_at: string | null
+          uid: string
+        }
+        Insert: {
+          attachments?: string[]
+          created_at?: string
+          created_by?: string | null
+          delivered_at: string
+          id?: never
+          note?: string
+          order_id: string
+          stock_deducted_at?: string | null
+          uid?: string
+        }
+        Update: {
+          attachments?: string[]
+          created_at?: string
+          created_by?: string | null
+          delivered_at?: string
+          id?: never
+          note?: string
+          order_id?: string
+          stock_deducted_at?: string | null
+          uid?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_delivery_items: {
+        Row: {
+          delivery_id: number
+          id: number
+          item_name: string
+          item_uid: string
+          qty: number
+        }
+        Insert: {
+          delivery_id: number
+          id?: never
+          item_name?: string
+          item_uid?: string
+          qty: number
+        }
+        Update: {
+          delivery_id?: number
+          id?: never
+          item_name?: string
+          item_uid?: string
+          qty?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_delivery_items_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "order_deliveries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           id: number
@@ -769,6 +845,7 @@ export type Database = {
           qty: number
           reason: string
           requested_price: number
+          uid: string
         }
         Insert: {
           id?: never
@@ -778,6 +855,7 @@ export type Database = {
           qty: number
           reason?: string
           requested_price: number
+          uid?: string
         }
         Update: {
           id?: never
@@ -787,6 +865,7 @@ export type Database = {
           qty?: number
           reason?: string
           requested_price?: number
+          uid?: string
         }
         Relationships: [
           {
@@ -2119,6 +2198,22 @@ export type Database = {
           p_saved_on: string
         }
         Returns: undefined
+      }
+      save_order_delivery: {
+        Args: { p_delivery: Json; p_order_id: string }
+        Returns: number
+      }
+      delete_order_delivery: {
+        Args: { p_delivery_id: number }
+        Returns: Json
+      }
+      order_delivered_qty: {
+        Args: { p_order_id: string }
+        Returns: { item_uid: string; qty: number }[]
+      }
+      order_fully_delivered: {
+        Args: { p_order_id: string }
+        Returns: boolean
       }
       save_service_visit: {
         Args: {

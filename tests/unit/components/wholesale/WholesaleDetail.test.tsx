@@ -377,7 +377,9 @@ describe('WholesaleDetail — สาขา และ ถังขยะ', () => 
 describe('WholesaleDetail — เอกสารขายส่ง', () => {
   const saved = {
     ...order,
-    items: [{ name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 10, listPrice: 1000, requestedPrice: 1000 }],
+    items: [
+      { name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 10, listPrice: 1000, requestedPrice: 1000, uid: 'u1' },
+    ],
     returns: [],
     payments: [],
   } as unknown as WsOrder;
@@ -473,14 +475,159 @@ describe('WholesaleDetail — เอกสารขายส่ง', () => {
     const onRecordDelivery = vi.fn(async () => ({ ok: true }));
     render(
       <WholesaleDetail
-        order={{ ...saved, deliveredAt: '2026-08-20' } as unknown as WsOrder}
+        order={
+          {
+            ...saved,
+            deliveredAt: '2026-08-20',
+            // ส่งครบแล้วจริง ๆ — ซึ่งคือสิ่งที่ PO เก่าทุกใบได้จากการ backfill
+            // ของ 0077 การกดอีกครั้งจึงเป็นการพิมพ์ซ้ำ ไม่ใช่รอบใหม่
+            deliveries: [
+              {
+                uid: 'd1',
+                date: '2026-08-20',
+                note: 'นิ่มซี่เส็ง',
+                attachments: [],
+                items: [{ itemUid: 'u1', name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 10 }],
+              },
+            ],
+          } as unknown as WsOrder
+        }
         canDo={() => true}
         onRecordDelivery={onRecordDelivery}
       />,
     );
     await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
     expect(onRecordDelivery).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(/ขนส่ง \/ เลขพัสดุ \/ ผู้รับ/)).toBeNull();
     expect(screen.getByText(/ส่งของแล้วเมื่อ 20 ส\.ค\. 2569/)).toBeInTheDocument();
+  });
+
+  /**
+   * ส่งของหลายรอบใน PO เดียว (migration 0077).
+   *
+   * ลูกค้าสั่ง 200 ม้วน รับไปก่อน 80 ที่เหลือรออีกสองสัปดาห์ (ร้านแจ้ง 28 ก.ย.
+   * 2569). แผงเดิมจึงถามเพิ่มว่ารอบนี้ส่งอะไรไปเท่าไหร่ โดยตั้งต้นที่ของที่ยัง
+   * ค้างทั้งหมด — ส่งครั้งเดียวจบยังเป็นการกดยืนยันครั้งเดียวเหมือนเดิม
+   */
+  describe('ส่งหลายรอบ', () => {
+    type DeliveryInput = {
+      orderId: string;
+      uid: string;
+      date: string;
+      note: string;
+      attachments: string[];
+      items: { uid: string; name: string; qty: number }[];
+    };
+
+    const bigOrder = {
+      ...saved,
+      items: [
+        { name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 200, listPrice: 1200, requestedPrice: 1200, uid: 'u1' },
+        { name: 'ลำโพง 6 นิ้ว', qty: 10, listPrice: 500, requestedPrice: 450, uid: 'u2' },
+      ],
+    } as unknown as WsOrder;
+
+    const fillEvidence = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.type(screen.getByLabelText(/ขนส่ง \/ เลขพัสดุ \/ ผู้รับ/), 'นิ่มซี่เส็ง NMS1');
+      await user.upload(
+        screen.getByLabelText(/แนบหลักฐาน/),
+        new File(['x'], 'slip.jpg', { type: 'image/jpeg' }),
+      );
+    };
+
+    it('ตั้งต้นที่ของที่ยังค้างทั้งหมด', async () => {
+      const user = userEvent.setup();
+      render(<WholesaleDetail order={bigOrder} canDo={() => true} onSaveDelivery={vi.fn()} />);
+      await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+      expect(screen.getByLabelText('จำนวนที่ส่ง ฟิล์ม 3M CRM (ม้วน)')).toHaveValue(200);
+      expect(screen.getByLabelText('จำนวนที่ส่ง ลำโพง 6 นิ้ว')).toHaveValue(10);
+    });
+
+    it('ส่งบางส่วนได้ และส่งไปเฉพาะบรรทัดที่มีจำนวน', async () => {
+      const user = userEvent.setup();
+      // Typed through its argument, so `mock.calls[0][0]` is the round.
+      const onSaveDelivery = vi.fn(async (_input: DeliveryInput) => ({ ok: true }));
+      render(
+        <WholesaleDetail order={bigOrder} canDo={() => true} onSaveDelivery={onSaveDelivery} />,
+      );
+      await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+      const film = screen.getByLabelText('จำนวนที่ส่ง ฟิล์ม 3M CRM (ม้วน)');
+      await user.clear(film);
+      await user.type(film, '80');
+      const speaker = screen.getByLabelText('จำนวนที่ส่ง ลำโพง 6 นิ้ว');
+      await user.clear(speaker);
+      await user.type(speaker, '0');
+      await fillEvidence(user);
+      await user.click(screen.getByRole('button', { name: /บันทึกการจัดส่ง/ }));
+
+      expect(onSaveDelivery).toHaveBeenCalledTimes(1);
+      const sent = onSaveDelivery.mock.calls[0][0];
+      // ลำโพงที่ยังไม่ได้ส่ง ต้องไม่ถูกส่งไปเป็นศูนย์ — แถวศูนย์ในรอบส่งของคือ
+      // เอกสารที่บอกว่าเคยส่งของจำนวนศูนย์ ซึ่งไม่ใช่เหตุการณ์ที่เกิดขึ้น
+      expect(sent.items).toEqual([{ uid: 'u1', name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 80 }]);
+    });
+
+    it('ส่งเกินของที่ยังค้าง ถูกปฏิเสธก่อนถึงเซิร์ฟเวอร์', async () => {
+      const user = userEvent.setup();
+      const onSaveDelivery = vi.fn(async () => ({ ok: true }));
+      render(
+        <WholesaleDetail
+          order={
+            {
+              ...bigOrder,
+              deliveries: [
+                {
+                  uid: 'd1',
+                  date: '2026-09-10',
+                  note: 'รอบแรก',
+                  attachments: [],
+                  items: [{ itemUid: 'u1', name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 80 }],
+                },
+              ],
+            } as unknown as WsOrder
+          }
+          canDo={() => true}
+          onSaveDelivery={onSaveDelivery}
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: /ใบส่งของ/ }));
+      // ค้างอยู่ 120 — ตั้งต้นให้เท่านั้น ไม่ใช่ 200
+      const film = screen.getByLabelText('จำนวนที่ส่ง ฟิล์ม 3M CRM (ม้วน)');
+      expect(film).toHaveValue(120);
+      await user.clear(film);
+      await user.type(film, '130');
+      await fillEvidence(user);
+      await user.click(screen.getByRole('button', { name: /บันทึกการจัดส่ง/ }));
+      expect(onSaveDelivery).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(/เหลือให้ส่งอีก 120/);
+    });
+
+    it('บอกความคืบหน้าของแต่ละรายการ และแสดงรอบที่ส่งไปแล้ว', () => {
+      render(
+        <WholesaleDetail
+          order={
+            {
+              ...bigOrder,
+              deliveries: [
+                {
+                  id: 7,
+                  uid: 'd1',
+                  date: '2026-09-10',
+                  note: 'นิ่มซี่เส็ง NMS123456',
+                  attachments: [],
+                  items: [{ itemUid: 'u1', name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 80 }],
+                },
+              ],
+            } as unknown as WsOrder
+          }
+          canDo={() => true}
+        />,
+      );
+      expect(screen.getByText(/ส่งแล้ว 80\/200/)).toBeInTheDocument();
+      expect(screen.getByText(/ค้างอีก 120/)).toBeInTheDocument();
+      expect(screen.getByText(/รอบส่งของ \(1\)/)).toBeInTheDocument();
+      expect(screen.getByText(/นิ่มซี่เส็ง NMS123456/)).toBeInTheDocument();
+    });
   });
 });
 
