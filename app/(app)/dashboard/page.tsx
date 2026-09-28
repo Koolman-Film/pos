@@ -115,7 +115,7 @@ export default async function DashboardPage({
         supabase
           .from('orders')
           .select(
-            'id, shop_id, customer_id, status, delivered_at, created_at, due_at, sales_by, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, paid_at, status, cleared_at)',
+            'id, shop_id, customer_id, status, delivered_at, created_at, due_at, sales_by, order_items(name, qty, list_price, requested_price), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_installments(uid, seq, due_at, amount), order_payments(amount, method, paid_at, status, cleared_at, installment_uid)',
           )
           // Deleted POs (migration 0040) are out of the wholesale figures here for
           // the same reason deleted tickets are out of the ticket ones above.
@@ -313,6 +313,13 @@ export default async function DashboardPage({
     deliveredAt: o.delivered_at,
     createdAt: o.created_at ?? '',
     dueAt: o.due_at ?? '',
+    // ตารางงวด (0078) — การ์ดเลยกำหนดชำระบนแดชบอร์ดต้องตอบเหมือนกระดิ่งเตือน
+    installments: (o.order_installments ?? []).map((i) => ({
+      uid: i.uid ?? '',
+      seq: i.seq,
+      dueAt: i.due_at,
+      amount: Number(i.amount) || 0,
+    })),
     salesBy: o.sales_by ?? '',
     items: (o.order_items ?? []).map((i) => ({
       name: i.name,

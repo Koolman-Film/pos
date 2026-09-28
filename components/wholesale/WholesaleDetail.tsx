@@ -32,6 +32,7 @@ import {
 import { dateInputValue, todayValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
 import { deliveryProgress, fullyDelivered } from '@/lib/domain/deliveries';
+import { scheduleStatus, scheduleTotal } from '@/lib/domain/installments';
 import {
   defaultPayMethod,
   LEGACY_METHOD_SUFFIX,
@@ -52,6 +53,7 @@ import {
   type SalesPerson,
   type WsCustomer,
   type WsDelivery,
+  type WsInstallment,
   type WsOrder,
   type WsPayment,
   type WsShopInfo,
@@ -593,6 +595,51 @@ export function WholesaleDetail({
   function removeAdjustment(idx: number) {
     setO({ ...o, adjustments: o.adjustments.filter((_, i) => i !== idx) });
   }
+  /*
+    ตารางงวดชำระ (0078).
+
+    ตกลงกันตอนรับออร์เดอร์ เหมือนกำหนดชำระทั้งใบที่มันมาแทน — ยอดของแต่ละงวด
+    ปล่อยให้ร้านกรอกเอง ไม่บังคับให้รวมเท่ายอด PO เพราะการปรับราคาหลังส่งของ
+    (0051) ทำให้ยอดขยับได้เสมอ และกติกาที่บังคับให้เท่าจะกลายเป็นด่านที่ขวาง
+    การบันทึกงานจริง — ขึ้นเป็นคำเตือนแทน
+  */
+  const schedule = scheduleStatus(o.installments ?? [], o.payments);
+  const scheduleSum = scheduleTotal(o.installments ?? []);
+
+  function addInstallment() {
+    const last = (o.installments ?? [])[(o.installments ?? []).length - 1];
+    setO({
+      ...o,
+      installments: [
+        ...(o.installments ?? []),
+        {
+          uid: newPaymentUid(),
+          seq: (o.installments ?? []).length + 1,
+          // งวดถัดไปตั้งต้นที่ยอดที่ยังไม่ได้ลงงวด ไม่ใช่ศูนย์
+          dueAt: last?.dueAt || o.dueAt || todayValue(),
+          amount: Math.max(0, total - scheduleSum),
+          note: '',
+        },
+      ],
+    });
+  }
+  function updateInstallment(idx: number, k: keyof WsInstallment, v: string | number) {
+    const installments = [...(o.installments ?? [])];
+    installments[idx] = { ...installments[idx], [k]: v };
+    setO({ ...o, installments });
+  }
+  function removeInstallment(idx: number) {
+    const gone = (o.installments ?? [])[idx];
+    setO({
+      ...o,
+      installments: (o.installments ?? []).filter((_, i) => i !== idx),
+      // การรับเงินที่จิ้มงวดนี้ไว้ ต้องไม่ชี้ไปที่งวดที่ไม่มีแล้ว
+      payments: o.payments.map((p) =>
+        p.installmentUid && p.installmentUid === gone?.uid ? { ...p, installmentUid: '' } : p,
+      ),
+    });
+  }
+
   function addPayment() {
     setO({
       ...o,
@@ -1568,8 +1615,101 @@ export function WholesaleDetail({
               className="field text-sm px-3 py-2 w-full"
             />
             <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-              พิมพ์ลงในใบแจ้งหนี้และใบส่งของ เว้นว่างได้ถ้ายังไม่ได้ตกลงวันกัน
+              {(o.installments ?? []).length > 0
+                ? 'ตั้งเป็นงวดไว้แล้ว — ช่องนี้คือวันสุดท้ายที่ทั้งใบต้องจบ ระบบเติมให้เองจากงวดสุดท้าย'
+                : 'พิมพ์ลงในใบแจ้งหนี้และใบส่งของ เว้นว่างได้ถ้ายังไม่ได้ตกลงวันกัน'}
             </p>
+          </div>
+          {/*
+            งวดชำระ (0078).
+
+            อยู่ใต้กำหนดชำระทั้งใบ เพราะมันคือสิ่งเดียวกันในรูปละเอียดขึ้น —
+            มัดจำ 30% วันเปิด PO ที่เหลืออีก 30 วัน คือสองงวดที่มีชะตากรรมคนละ
+            อย่าง และกำหนดชำระวันเดียวพูดแทนไม่ได้
+          */}
+          <div className="mb-5">
+            <p className="text-xs font-medium mb-2" style={{ color: 'var(--ink-soft)' }}>
+              <i className="fa-solid fa-list-ol mr-1.5"></i>แบ่งชำระเป็นงวด
+            </p>
+            {schedule.length === 0 && (
+              <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
+                ไม่ได้แบ่งงวด — ใช้กำหนดชำระทั้งใบด้านบน
+              </p>
+            )}
+            {(o.installments ?? []).map((inst, idx) => {
+              const st = schedule.find((x) => x.uid === inst.uid);
+              return (
+                <div
+                  key={inst.uid || idx}
+                  className="rounded-xl p-2.5 mb-2"
+                  style={{ border: '1px solid var(--line)' }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-medium" style={{ minWidth: '3.5rem' }}>
+                      งวดที่ {idx + 1}
+                    </span>
+                    <input
+                      type="number"
+                      aria-label={`จำนวนเงินงวดที่ ${idx + 1}`}
+                      value={inst.amount}
+                      onChange={(e) => updateInstallment(idx, 'amount', e.target.value)}
+                      className="field text-xs px-2.5 py-1.5 w-28"
+                    />
+                    <div className="flex-1">
+                      <ThaiDateInput
+                        ariaLabel={`กำหนดชำระงวดที่ ${idx + 1}`}
+                        value={inst.dueAt || ''}
+                        onChange={(v) => updateInstallment(idx, 'dueAt', v)}
+                        className="field text-xs px-2.5 py-1.5 w-full"
+                      />
+                    </div>
+                    <button
+                      onClick={() => removeInstallment(idx)}
+                      aria-label={`ลบงวดที่ ${idx + 1}`}
+                      className="text-sm px-2 py-1.5 rounded-lg flex-shrink-0"
+                      style={{ color: '#B23A48' }}
+                    >
+                      <i className="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                  <input
+                    placeholder="หมายเหตุของงวดนี้ เช่น มัดจำ"
+                    aria-label={`หมายเหตุงวดที่ ${idx + 1}`}
+                    value={inst.note ?? ''}
+                    onChange={(e) => updateInstallment(idx, 'note', e.target.value)}
+                    className="field text-xs px-2.5 py-1.5 w-full"
+                  />
+                  {st && (
+                    <p
+                      className="text-xs mt-1.5"
+                      style={{ color: st.outstanding > 0 ? '#8A5A12' : '#4C7A3E' }}
+                    >
+                      {st.outstanding > 0
+                        ? `รับแล้ว ${fmt(st.paid)} · ค้าง ${fmt(st.outstanding)}`
+                        : `รับครบแล้ว ${fmt(st.paid)}`}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            <button
+              onClick={addInstallment}
+              className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
+            >
+              <i className="fa-solid fa-plus"></i>เพิ่มงวดชำระ
+            </button>
+            {/*
+              ไม่ใช่ด่าน เป็นคำเตือน. การปรับราคาหลังส่งของ (0051) ทำให้ยอด PO
+              ขยับได้เสมอ กติกาที่บังคับให้เท่ากันจะกลายเป็นสิ่งที่ขวางการบันทึก
+              งานจริง มากกว่าจะช่วยให้ตัวเลขถูก
+            */}
+            {schedule.length > 0 && Math.abs(scheduleSum - total) > 0.005 && (
+              <p className="text-xs mt-2" style={{ color: '#8A5A12' }}>
+                <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+                รวมทุกงวด {fmt(scheduleSum)} ไม่เท่ายอดสุทธิ {fmt(total)} — ต่างกัน{' '}
+                {fmt(Math.abs(scheduleSum - total))}
+              </p>
+            )}
           </div>
           {/*
             บัญชีรับชำระ (ร้านขอ 21 ก.ย. 2569) — which of this branch's แหล่งเงิน
@@ -1913,6 +2053,7 @@ export function WholesaleDetail({
                 key={idx}
                 p={p}
                 idx={idx}
+                installments={o.installments ?? []}
                 methods={payableAccounts(payAccounts, o.shop).map((a) => a.name)}
                 onChange={updatePayment}
                 saved={savedPaymentUids.has(p.uid ?? '')}
@@ -2319,7 +2460,8 @@ export function WholesaleDetail({
                         fontWeight: 'bold',
                       }}
                     >
-                      กำหนดชำระเงิน {fmtThaiDayString(o.dueAt)}
+                      {schedule.length > 0 ? 'ชำระครบภายใน ' : 'กำหนดชำระเงิน '}
+                      {fmtThaiDayString(o.dueAt)}
                     </p>
                   )}
                 </div>
@@ -2342,6 +2484,36 @@ export function WholesaleDetail({
                   </tr>
                 </tbody>
               </table>
+              {/*
+                ตารางงวดชำระ บนใบแจ้งหนี้ (0078).
+
+                ใบแจ้งหนี้ที่บอกยอดแต่ไม่บอกว่าจ่ายเมื่อไหร่ ทำให้ลูกค้าไม่มี
+                อะไรให้ยึด และร้านต้องไล่ทวงด้วยความจำ — ซึ่งเป็นเหตุผลเดียวกับ
+                ที่ 0050 ใส่กำหนดชำระลงไปตั้งแต่แรก
+              */}
+              {printMode === 'invoice' && schedule.length > 0 && (
+                <table style={{ marginBottom: 12 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 70 }}>งวดที่</th>
+                      <th>กำหนดชำระ</th>
+                      <th style={{ width: 110, textAlign: 'right' }}>จำนวนเงิน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schedule.map((inst, idx) => (
+                      <tr key={inst.uid || idx}>
+                        <td>{idx + 1}</td>
+                        <td>
+                          {fmtThaiDayString(inst.dueAt)}
+                          {inst.note ? ` · ${inst.note}` : ''}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{fmt(inst.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
               <table style={{ marginBottom: 12 }}>
                 <thead>
                   <tr>
@@ -2578,6 +2750,7 @@ export function WholesaleDetail({
 function PaymentRow({
   p,
   idx,
+  installments,
   methods,
   onChange,
   saved,
@@ -2591,6 +2764,8 @@ function PaymentRow({
 }: {
   p: WsPayment;
   idx: number;
+  /** ตารางงวดของ PO ใบนี้ — ว่างเมื่อไม่ได้แบ่งงวด (0078). */
+  installments: WsInstallment[];
   /** The branch's แหล่งเงิน by name (0064). */
   methods: string[];
   onChange: (idx: number, k: keyof WsPayment, v: string | number | boolean | string[]) => void;
@@ -2698,6 +2873,34 @@ function PaymentRow({
         />
         ชำระด้วยเช็ค
       </label>
+      {/*
+        เงินก้อนนี้เข้างวดไหน (0078).
+
+        ขึ้นเฉพาะเมื่อ PO ใบนี้แบ่งงวดไว้ — ไม่แบ่งก็ไม่มีคำถามนี้. เว้นว่างได้
+        และเป็นค่าตั้งต้นด้วย: เงินที่ไม่ได้ระบุงวดจะถูกไล่ลงงวดที่เก่าที่สุดที่
+        ยังค้างให้เอง ระบบจึงไม่ทวงงวดที่เก็บเงินมาแล้วเพราะคนกรอกลืมจิ้ม
+      */}
+      {installments.length > 0 && (
+        <div className="mb-2">
+          <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+            ตัดเข้างวด
+          </label>
+          <select
+            aria-label={`ตัดเข้างวด รายการรับเงินที่ ${idx + 1}`}
+            value={p.installmentUid ?? ''}
+            onChange={(e) => onChange(idx, 'installmentUid', e.target.value)}
+            className="field text-xs px-2.5 py-1.5 w-full"
+          >
+            <option value="">ไม่ระบุ — ลงงวดที่ค้างเก่าสุดให้เอง</option>
+            {installments.map((inst, i) => (
+              <option key={inst.uid} value={inst.uid}>
+                งวดที่ {i + 1}
+                {inst.note ? ` · ${inst.note}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="mb-2">
         <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
           วันที่รับชำระ
