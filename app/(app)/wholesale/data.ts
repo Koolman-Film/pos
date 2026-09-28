@@ -33,7 +33,8 @@ export const ORDER_SELECT = `
   order_deliveries(id, uid, delivered_at, note, attachments, stock_deducted_at, order_delivery_items(item_uid, item_name, qty)),
   order_returns(item_name, qty, reason, returned_at, uid, received_at),
   order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
-  order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, is_cheque, cleared_at, bounced_at, bounce_note)
+  order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, is_cheque, installment_uid, cleared_at, bounced_at, bounce_note),
+  order_installments(uid, seq, due_at, amount, note)
 `;
 
 export type OrderRow = {
@@ -54,6 +55,15 @@ export type OrderRow = {
   note: string | null;
   delivery_note: string | null;
   delivery_attachments: string[] | null;
+  order_installments:
+    | {
+        uid: string | null;
+        seq: number;
+        due_at: string;
+        amount: number;
+        note: string | null;
+      }[]
+    | null;
   order_deliveries:
     | {
         id: number;
@@ -108,6 +118,7 @@ export type OrderRow = {
         cheque_bank: string;
         cheque_date: string | null;
         is_cheque: boolean | null;
+        installment_uid: string | null;
         cleared_at: string | null;
         bounced_at: string | null;
         bounce_note: string;
@@ -134,6 +145,16 @@ export function mapOrder(row: OrderRow): WsOrder {
     note: row.note ?? '',
     deliveryNote: row.delivery_note ?? '',
     deliveryAttachments: row.delivery_attachments ?? [],
+    // เรียงตามกำหนดชำระ แล้วค่อยลำดับงวด — เหมือนที่ `sortedSchedule` ทำ
+    installments: [...(row.order_installments ?? [])]
+      .sort((a, b) => a.due_at.localeCompare(b.due_at) || a.seq - b.seq)
+      .map((i) => ({
+        uid: i.uid ?? '',
+        seq: i.seq,
+        dueAt: i.due_at,
+        amount: Number(i.amount) || 0,
+        note: i.note ?? '',
+      })),
     items: (row.order_items ?? []).map((it) => ({
       name: it.name,
       qty: it.qty,
@@ -188,6 +209,7 @@ export function mapOrder(row: OrderRow): WsOrder {
       chequeBank: p.cheque_bank ?? '',
       chequeDate: p.cheque_date ?? '',
       isCheque: !!p.is_cheque,
+      installmentUid: p.installment_uid ?? '',
       clearedAt: p.cleared_at ?? '',
       bouncedAt: p.bounced_at ?? '',
       bounceNote: p.bounce_note ?? '',
