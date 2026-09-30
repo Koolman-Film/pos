@@ -1,70 +1,115 @@
-# Deployment runbook (plan Task 22)
+# Deployment and releases
 
-**Nothing in this file has been executed.** Every step creates real billed cloud
-resources, publishes publicly, or needs an account only you can log into, so the
-whole of Task 22 is gated on your explicit go-ahead — that gate holds even under
-"full auto", by your own earlier decision.
+**Status 2026-09-30:** POS is live at **https://finnixpos.kool-man.com**, used
+daily by five branches. Production runs `main` at `6c9c8a8` (Vercel deployment
+`pos-1cd367gec`, promoted 2026-09-28) on a database with every migration through
+**0076** applied. Current work in flight and open problems:
+[HANDOFF.md](./HANDOFF.md).
 
-Tasks 1-21 are complete: the app runs end to end against a real Postgres with RLS
-enforced, and the full suite is green (see [Readiness](#readiness) below).
+| Piece    | Where                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------- |
+| App      | Vercel project `pos`, team `vivatchais-projects`; functions pinned to `hnd1` (Tokyo)                                |
+| Domain   | `finnixpos.kool-man.com` (DNS at Cloudflare, owner's account)                                                       |
+| Database | Supabase project `koolman-finance` (`ykkfxpjjhwwthgmppvgv`, `ap-northeast-1`), schema `pos` — **shared, see below** |
+| Code     | `github.com/Koolman-Film/pos`, `main` protected (PR + both CI checks)                                               |
 
-## What is left, in order
+## Releasing a change
 
-Design spec §4 calls for **two** hosted Supabase projects — staging and
-production — so a mistake on staging can never touch real shop data.
+This is the procedure every release since 0053 has used. It exists because two
+shortcuts don't work: **Vercel is not connected to git** (merging ships nothing),
+and **`supabase db push` fails** (the stored database password is stale).
 
-### 1. Staging Supabase project
+### 0. Before
+
+- The change is merged to `main` through a PR, and CI on `main` is green
+  (`gh run list --branch main --limit 1`).
+- Every migration has a matching `supabase/release-NNNN.sql` (same objects,
+  idempotent, ends by stamping `NNNN` into `supabase_migrations.schema_migrations`),
+  and `supabase/release-GO-LIVE.sql` includes it.
+- **Reproduce any backfill against data shaped like production.** Local
+  `db reset` and CI build the schema before seeding, so a backfill that only
+  fails on real rows passes every test (release 0068 did exactly that — see
+  [Hard-won lessons](#hard-won-lessons)).
+- For a risky data change, snapshot the POS schema first:
+  `create schema pos_backup_YYYYMMDD` + `create table … as table pos.…` for the
+  affected tables. Supabase's daily backup restores the **whole** database,
+  which would roll the finance app back too. Drop the snapshot about a week later.
+
+### 1. Build without going live
 
 ```bash
-# Create the project in the Supabase dashboard (or via MCP), then:
-npx supabase link --project-ref <staging-ref>
-npx supabase db push                 # applies migrations 0001-0008
-psql "<staging-connection-string>" -f supabase/seed.sql
-SUPABASE_SERVICE_ROLE_KEY=<staging-service-key> \
-  NEXT_PUBLIC_SUPABASE_URL=https://<staging-ref>.supabase.co \
-  npx tsx supabase/seed.ts           # the four sample logins
-npx supabase gen types typescript --linked > lib/types/database.ts
+vercel link --project pos --scope vivatchais-projects --yes   # once; .vercel is gitignored
+git switch main && git pull && git status                     # must be clean: Vercel uploads the working tree
+vercel deploy --prod --skip-domain --yes
 ```
 
-Then point `.env.local` at staging and smoke-test locally before going further.
-`git diff lib/types/database.ts` should be empty — a non-empty diff means the
-hosted schema and the local one disagree, and that is worth stopping for.
+`--skip-domain` builds a production deployment without moving
+`finnixpos.kool-man.com`, so the new code does not meet the old schema (or the
+reverse) while SQL is being applied. The first attempt once failed with no
+detail; a plain retry worked.
 
-### 2. Production Supabase project
+### 2. Apply the SQL
 
-Same migrations, **no seed** — production starts with an empty schema and no
-users. In particular do NOT run `supabase/seed.ts` against it: it would create
-four accounts sharing the publicly-known password `finnix-staging-2026`.
+One `release-NNNN.sql` per call through the Supabase MCP `execute_sql`, in
+number order, so a failure rolls back just that file. (The Dashboard SQL Editor
+also works — it runs a pasted file as one transaction.) The MCP can also create
+`storage.objects` policies, which the SQL Editor cannot.
 
-Create the real users through the Supabase dashboard (or an invite flow), then
-insert their `app_users` + `user_shop_access` rows. Every real user needs an
-`app_users` row: `lib/auth/session.ts` treats a missing profile as "no access"
-and bounces them to login with `no_profile`.
+### 3. Verify the database
 
-### 3. Vercel
+- **Fingerprint:** run [`supabase/snippets/fingerprint.sql`](../supabase/snippets/fingerprint.sql)
+  on production and on a local DB built with `npm run db:reset`. Every category
+  except `rp` (permission data admins edit) must match. On 2026-09-30 all six
+  schema categories matched.
+- **Behaviour, as a real role, rolled back:** in one `do $$ … $$` block,
+  `perform set_config('request.jwt.claims', '{"sub":"<user uuid>","role":"authenticated"}', true);`
+  then `set local role authenticated;`, exercise the change, and **end with
+  `raise exception 'rollback'`** so it can never commit.
+- `get_advisors` (security) — nothing new compared with before the release.
 
-Link the project, then set environment variables per environment:
+### 4. Go live and check
 
-| Variable                        | Preview / staging   | Production                       |
-| ------------------------------- | ------------------- | -------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | staging project URL | production project URL           |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | staging anon key    | production anon key              |
-| `SUPABASE_SERVICE_ROLE_KEY`     | staging service key | **required** (user provisioning) |
+```bash
+vercel promote <deployment-url> --yes      # ~2 s
+vercel alias ls | grep finnixpos           # points at the new deployment
+curl -sI https://finnixpos.kool-man.com/login | head -1
+```
 
-The service-role key bypasses RLS entirely, so keep it server-only and never
-expose it as `NEXT_PUBLIC_*`. It **is** now required in production: creating a
-login is an Auth Admin API call (`inviteUserByEmail`), which the RLS-bound
-client cannot make. It is read by `lib/supabase/admin.ts`, used by the
-`addUser` / `resendInvite` / `deleteUser` actions in
-`app/(app)/permissions/actions.ts` (all gated admin-only behind `authorize()`),
-plus `supabase/seed.ts` and the e2e helper.
+Then check the Vercel runtime errors for the project (MCP `get_runtime_errors`,
+or search the logs for `[request-error]` / `[action-error]`), and open a page the
+release touched.
 
-### Shared project with the Koolman finance app — read before touching users
+**Rollback:** `vercel promote <previous-deployment-url>` puts the old code back
+in seconds. SQL has no automatic rollback — which is why each release file is
+applied and verified on its own.
+
+## Hard-won lessons
+
+- **Deferred triggers + DDL (55006).** Since 0061, `ticket_items`,
+  `ticket_payments`, `order_*`, `service_visit_points`, `insurance_claims`,
+  `option_lists` and `user_shop_access` carry deferred `activity_log_lines`
+  triggers. A release that UPDATEs rows there and then runs `CREATE INDEX` /
+  `ALTER TABLE` on the same table in one transaction fails — **only when the
+  UPDATE touched rows**. Put DDL before the backfill.
+- **Never match a workflow status by name.** Production closes POs as
+  `เสร็จสิ้น`, not the seed's `ปิดงานแล้ว`; admins can rename statuses.
+- **Dropping a column:** grep the whole repo for it first. 0073 dropped
+  `tickets.finnix_doc_no` while the revenue report still selected it; PostgREST
+  returned an error the code ignored, and retail revenue showed as nothing for
+  six hours (checklist 1.4).
+- **Every migration after 0000 must start with `set search_path = pos, public, extensions`.**
+  The Supabase CLI sends `seed.sql` on the search path the last migration left
+  (a unit test enforces this).
+- **Time zone.** Vercel runs in UTC, the shop in Bangkok. Use `shopDayKey` /
+  `hhmm` (`lib/domain`) and an explicit `+07:00`, never local getters or
+  `toISOString().slice(0, 10)` for a shop date.
+
+## Shared project with the Koolman finance app — read before touching users
 
 POS does **not** have its own Supabase project. It shares one project with the
-Koolman finance app: `pos` (31 tables) and finance's `public` (15 tables) are two
-schemas in the **same** database, which means **one `auth.users` table serves both
-apps**. As of 2026-07-27 all 11 POS users are also finance users — the same login.
+Koolman finance app: `pos` and finance's `public` are two schemas in the **same**
+database, which means **one `auth.users` table serves both apps**. As of
+2026-07-27 all 11 POS users are also finance users — the same login.
 
 Consequences that are easy to get wrong:
 
@@ -78,54 +123,41 @@ Consequences that are easy to get wrong:
   `inviteUserByEmail` is used only for someone with no Koolman account at all.
 - Finance's `public.users` has **no** FK to `auth.users`, so deleting an auth user
   orphans their finance profile rather than cleaning it up.
+- Supabase's security advisor lists finance's `public` tables and the
+  `pos_backup_*` snapshots alongside `pos`; only `pos` findings are ours.
+- **Preview deployments must never get production keys** — a preview would be
+  writing to the finance app's database (Decision D6).
 
-### Auth settings for the invite path
+## Environment variables (Vercel)
+
+| Variable                        | Notes                                                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | production project URL                                                                                                                |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | production anon key                                                                                                                   |
+| `SUPABASE_SERVICE_ROLE_KEY`     | **required**, server-only (never `NEXT_PUBLIC_*`) — used by `lib/supabase/admin.ts` for user provisioning, behind admin `authorize()` |
+
+`.vercelignore` keeps `.env*`, `/supabase/`, `/tests/`, `/docs/` and local
+tooling out of the upload. Every pattern there is anchored with a leading `/` —
+an unanchored `supabase/` once excluded `lib/supabase/` and broke the build.
+
+## Auth settings for the invite path
 
 Hosted Supabase project → **Authentication → URL Configuration**:
 
-- **Site URL**: the deployed origin (e.g. `https://finnixpos.kool-man.com`).
-  Note this is shared with finance — changing it affects both apps.
-- **Redirect URLs** must include `https://<pos-domain>/auth/callback**`.
+- **Site URL**: `https://finnixpos.kool-man.com`. Shared with finance — changing
+  it affects both apps.
+- **Redirect URLs** must include `https://finnixpos.kool-man.com/auth/callback**`.
   Supabase silently **discards** a `redirectTo` that is not on this allow-list and
   falls back to the Site URL — the invite email still arrives but drops the
-  invitee on the site root instead of the set-password page. Verified locally:
-  before allow-listing, `redirect_to` came back as the bare origin.
+  invitee on the site root instead of the set-password page.
 - **SMTP** (Authentication → Emails) is needed only for the genuinely-new-person
-  path. If the project is still on Supabase's built-in sender it is rate-limited
-  to a handful of emails per hour and is not suitable for production; linking an
-  existing Koolman account is unaffected either way. Local dev captures mail in
-  Mailpit.
+  path. Supabase's built-in sender is rate-limited to a handful of emails per
+  hour; linking an existing Koolman account is unaffected. Local dev captures
+  mail in Mailpit.
+- Open (advisor, 2026-09-28): leaked-password protection is off, and the
+  password minimum is enforced only in the browser (checklist 2.11).
 
-### 4. Domain and DNS
-
-Add the custom domain in the Vercel project, then create the record Vercel shows
-you in Cloudflare. Registration and DNS are **your** actions on your own account
-(spec §4) — the exact record type and value come from Vercel's domain screen once
-the domain is added.
-
-## Pre-flight checklist
-
-- [ ] `npm test` green — runs everything below in order
-- [ ] `npm run typecheck` clean
-- [ ] `npm run lint` clean
-- [ ] `npm run format:check` clean
-- [ ] `npm run build` succeeds
-- [ ] `npm run test:unit` green
-- [ ] `npm run test:integration` green (needs a stack with the migrations applied)
-- [ ] `npm run test:rls` green (same)
-- [ ] `npm run test:e2e` green (needs the seed and a dev/prod server)
-- [ ] `npm run test:e2e:visual` green — reseeds first, since the screenshot
-      baselines were captured on pristine seed data
-- [ ] `lib/types/database.ts` regenerated from the hosted project and diff-clean
-- [ ] Production Supabase has **no** seeded sample data and no shared password
-- [ ] Auth redirect URLs in the hosted projects include the Vercel domains
-- [ ] Auth redirect URLs also include `https://<domain>/auth/callback**` (invite flow)
-- [ ] SMTP configured **if** you need to invite people with no Koolman login
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` is set (server-only) — required for user provisioning
-- [ ] Nothing in POS calls `auth.admin.deleteUser` — the login is shared with finance
-- [ ] `vercel.json` pins `"regions": ["hnd1"]` — see below, do not drop this
-
-### Function region must stay in Tokyo (`hnd1`)
+## Function region must stay in Tokyo (`hnd1`)
 
 `vercel.json` pins `"regions": ["hnd1"]`. Without it Vercel defaults to `iad1`
 (US East) while Supabase is in `ap-northeast-1` (Tokyo), so every auth/DB call
@@ -153,24 +185,11 @@ regions are only ~7 ms apart anyway. The Koolman finance app pins `hnd1` for the
 same reason and shares this database. Moving the database to Singapore would gain
 ~10 ms and require migrating a live DB the finance app depends on — don't.
 
-## Readiness
-
-As of the last local run on this branch:
-
-| Check                      | Result                      |
-| -------------------------- | --------------------------- |
-| `tsc --noEmit`             | clean                       |
-| `eslint .`                 | clean, 0 errors, 0 warnings |
-| `next build`               | succeeds, 13 routes         |
-| Unit + RLS (`vitest run`)  | 33 files, 170 tests pass    |
-| e2e (`playwright test`)    | 6 specs pass                |
-| Routes render for an admin | all 10, no console errors   |
-
-Known items deliberately not done, both recorded in the EXECUTION file:
+## Known gaps on paper
 
 - The wrap (ฟิล์มกันรอย) QC checklist on the print sheet renders labelled
-  placeholder boxes instead of the prototype's three inline base64 car diagrams,
-  which would have added ~600KB to the client bundle. Re-add them as `/public`
-  assets when you want them on paper.
-- `price_matrix`, `film_price_matrix` and `corporate_buyers` ship empty, matching
-  the prototype, and are filled in through the app.
+  placeholder boxes instead of the prototype's three inline base64 car diagrams
+  (~600 KB of client bundle). Re-add them as `/public` assets when wanted.
+- The first launch (summer 2026) followed the plan in
+  `docs/superpowers/plans/2026-07-23-finnix-film-port.md`, Task 22. A separate
+  staging project was planned there but never created; see Decision D6.
