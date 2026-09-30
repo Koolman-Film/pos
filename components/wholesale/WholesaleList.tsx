@@ -12,7 +12,12 @@ import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { amountTerms, matchesSearch } from '@/lib/domain/search';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useSearchFromUrl } from '@/lib/hooks/useSearchFromUrl';
-import { orderTotal, orderPaid, needsPriceApproval } from '@/lib/domain/orders';
+import {
+  orderCollectible,
+  orderTotal,
+  orderPaid,
+  needsPriceApproval,
+} from '@/lib/domain/orders';
 import { isWsFlag, matchesWsFlag, WS_FLAG_LABELS, type WsFlag } from '@/lib/alerts/wholesale';
 
 import { pendingCheques } from './cheques';
@@ -243,7 +248,9 @@ export function WholesaleList({
         name,
         count: mine.length,
         revenue: mine.reduce((n, o) => n + orderTotal(o), 0),
-        due: mine.reduce((n, o) => n + orderTotal(o) - orderPaid(o), 0),
+        // ค้างรับ = มูลค่าของที่ส่งไปแล้ว หักเงินที่รับมาแล้ว — กติกาเดียวกับ
+        // การ์ดบนแดชบอร์ด และมาจากฟังก์ชันตัวเดียวกัน (0077)
+        due: mine.reduce((n, o) => n + orderCollectible(o), 0),
       };
     })
     .filter((t) => t.count > 0)
