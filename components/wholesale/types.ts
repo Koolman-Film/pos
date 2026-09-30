@@ -71,6 +71,13 @@ export type WsDelivery = {
  */
 export type WsReturn = {
   item: string;
+  /**
+   * บรรทัดของ `items` ที่ของชิ้นนี้ถูกคืนกลับมา (migration 0080).
+   *
+   * ว่าง = อ้างด้วยชื่อสินค้าแบบเดิม ซึ่งยังจำเป็น เพราะลูกค้าคืนของที่ซื้อจาก
+   * PO ใบอื่นได้ และใบนี้ไม่มีบรรทัดให้ชี้ถึง
+   */
+  itemUid?: string;
   qty: number;
   reason: string;
   date: string;

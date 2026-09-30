@@ -374,3 +374,64 @@ describe('ด่านที่ 0079 เพิ่ม', () => {
     expect(await orderRow()).toMatchObject({ delivery_note: '', delivered_at: null });
   });
 });
+
+/**
+ * บรรทัดที่ของถูกคืนกลับมา ต้องอยู่รอดข้ามการบันทึก (migration 0080).
+ *
+ * `save_order_children` ลบลูกทั้งหมดแล้วใส่กลับใหม่ทุกครั้ง — ถ้าคอลัมน์นี้ไม่ได้
+ * ติดไปกับ payload การคืนจะหลุดกลับไปอ้างด้วยชื่อทุกครั้งที่มีคนกดบันทึก และ
+ * ราคาที่คืนให้ลูกค้าก็เปลี่ยนตามเงียบ ๆ
+ */
+describe('บรรทัดที่ของถูกคืนกลับมา', () => {
+  it('เก็บ item_uid ที่ส่งมา และอยู่รอดข้ามการบันทึก', async () => {
+    assertNoError(
+      'save children with a pinned return',
+      (
+        await asSales.rpc('save_order_children', {
+          p_order_id: ORDER,
+          p_items: [
+            { uid: 'u1', name: 'ฟิล์ม', qty: 200, listPrice: 1200, requestedPrice: 1200 },
+            { uid: 'u2', name: 'ลำโพง', qty: 10, listPrice: 500, requestedPrice: 450 },
+          ] as unknown as Json,
+          p_returns: [
+            { uid: 'r1', item: 'ลำโพง', itemUid: 'u2', qty: 2, date: '2026-09-12' },
+          ] as unknown as Json,
+          p_adjustments: [] as unknown as Json,
+          p_payments: [] as unknown as Json,
+          p_saved_on: '2026-09-12',
+        })
+      ).error,
+    );
+    const { data } = await admin
+      .from('order_returns')
+      .select('item_name, item_uid')
+      .eq('order_id', ORDER);
+    expect(data).toEqual([{ item_name: 'ลำโพง', item_uid: 'u2' }]);
+  });
+
+  it('ไม่ได้ระบุบรรทัดมา เก็บเป็นค่าว่าง ไม่ใช่ null', async () => {
+    // ของที่ลูกค้าซื้อจาก PO ใบอื่น ไม่มีบรรทัดในใบนี้ให้ชี้ถึงตั้งแต่แรก
+    assertNoError(
+      'save children with a name-only return',
+      (
+        await asSales.rpc('save_order_children', {
+          p_order_id: ORDER,
+          p_items: [
+            { uid: 'u1', name: 'ฟิล์ม', qty: 200, listPrice: 1200, requestedPrice: 1200 },
+            { uid: 'u2', name: 'ลำโพง', qty: 10, listPrice: 500, requestedPrice: 450 },
+          ] as unknown as Json,
+          p_returns: [{ uid: 'r2', item: 'ของจากใบอื่น', qty: 1 }] as unknown as Json,
+          p_adjustments: [] as unknown as Json,
+          p_payments: [] as unknown as Json,
+          p_saved_on: '2026-09-12',
+        })
+      ).error,
+    );
+    const { data } = await admin
+      .from('order_returns')
+      .select('item_uid')
+      .eq('order_id', ORDER)
+      .single();
+    expect(data?.item_uid).toBe('');
+  });
+});

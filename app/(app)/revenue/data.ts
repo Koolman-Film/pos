@@ -386,7 +386,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
           supabase
             .from('orders')
             .select(
-              'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price, uid), order_deliveries(delivered_at, order_delivery_items(item_uid, item_name, qty)), order_returns(item_name, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, status)',
+              'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price, uid), order_deliveries(delivered_at, order_delivery_items(item_uid, item_name, qty)), order_returns(item_name, item_uid, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, status)',
             )
             .is('deleted_at', null)
             .not('delivered_at', 'is', null)
@@ -467,6 +467,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
     })),
     returns: (o.order_returns ?? []).map((r) => ({
       item: r.item_name,
+      itemUid: r.item_uid ?? '',
       qty: Number(r.qty || 0),
       date: r.returned_at,
     })),

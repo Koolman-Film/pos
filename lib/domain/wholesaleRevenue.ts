@@ -24,7 +24,7 @@
  * numbers for the same month.
  */
 
-import { isApprovedAdjustment } from './orders';
+import { isApprovedAdjustment, returnUnitPrice } from './orders';
 
 export type WholesaleRevenueOrder = {
   id: string;
@@ -46,7 +46,7 @@ export type WholesaleRevenueOrder = {
     items: { itemUid: string; name: string; qty: number }[];
   }[];
   items: { name: string; qty: number; requestedPrice: number; uid?: string }[];
-  returns: { item: string; qty: number; date: string | null }[];
+  returns: { item: string; qty: number; date: string | null; itemUid?: string }[];
   adjustments: {
     amount: number;
     reason: string;
@@ -111,10 +111,8 @@ export function wholesaleRevenueLines(orders: WholesaleRevenueOrder[]): Wholesal
 
     // Priced off the line it came back from, exactly as `orderTotal` does — a
     // return is a reversal of a specific sale, not a fresh valuation.
-    const priceOf = (name: string) =>
-      Number(o.items.find((i) => i.name === name)?.requestedPrice || 0);
     for (const r of o.returns) {
-      const amount = Number(r.qty || 0) * priceOf(r.item);
+      const amount = Number(r.qty || 0) * returnUnitPrice(o, r);
       if (!amount) continue;
       lines.push({
         ...base,

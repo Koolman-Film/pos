@@ -28,7 +28,12 @@ describe('orderTotal', () => {
     };
     expect(orderTotal(order)).toBe(100);
   });
-  it('prices a return at the FIRST matching item name (prototype uses find)', () => {
+  it('ไม่ได้ระบุบรรทัด ยังคิดจากบรรทัดแรกที่ชื่อตรงกันเหมือนเดิม', () => {
+    /*
+      พฤติกรรมเดิมก่อน 0080 และเป็นทางที่ของเก่าทุกใบเดินอยู่ — การเติมข้อมูล
+      ย้อนหลังจับของที่คืนไว้กับบรรทัดแรกที่ชื่อตรงกัน ซึ่งคือบรรทัดนี้พอดี
+      ยอดของ PO ทุกใบจึงเท่าเดิมเป๊ะ
+    */
     const order = {
       items: [
         { name: 'A', qty: 1, requestedPrice: 100 },
@@ -37,8 +42,45 @@ describe('orderTotal', () => {
       returns: [{ item: 'A', qty: 1 }],
       adjustments: [],
     };
-    // 1000 total, return priced off the first 'A' (100), not the second
     expect(orderTotal(order)).toBe(1000 - 100);
+  });
+
+  /**
+   * ของที่คืน ผูกกับบรรทัดที่ขายไป (migration 0080).
+   *
+   * PO ใบเดียวมีสินค้าชื่อเดียวกันสองบรรทัดคนละราคาได้ — ขายล็อตเก่า 900 ล็อต
+   * ใหม่ 700 ซึ่งเป็นเรื่องปกติของงานขายส่ง การคิดราคาของที่คืนจากชื่ออย่างเดียว
+   * จึงคืนเงินผิดราคาเสมอ และผิดไปทางเดียวกันทุกครั้งคือราคาของบรรทัดแรก
+   */
+  describe('ของที่คืน ผูกกับบรรทัด', () => {
+    const twoLines = (returns: { item: string; qty: number; itemUid?: string }[]) => ({
+      items: [
+        { name: 'ฟิล์มใส', qty: 5, requestedPrice: 900, uid: 'a' },
+        { name: 'ฟิล์มใส', qty: 5, requestedPrice: 700, uid: 'b' },
+      ],
+      returns,
+      adjustments: [],
+    });
+
+    it('คืนของจากบรรทัดที่สอง ได้ราคาของบรรทัดที่สอง', () => {
+      // 5*900 + 5*700 = 8,000 คืน 2 ชิ้นจากบรรทัด 700 = 1,400
+      expect(orderTotal(twoLines([{ item: 'ฟิล์มใส', qty: 2, itemUid: 'b' }]))).toBe(8000 - 1400);
+    });
+
+    it('คืนของจากบรรทัดแรก ได้ราคาของบรรทัดแรก', () => {
+      expect(orderTotal(twoLines([{ item: 'ฟิล์มใส', qty: 2, itemUid: 'a' }]))).toBe(8000 - 1800);
+    });
+
+    it('ชี้ไปที่บรรทัดที่ไม่มีแล้ว ตกกลับไปใช้ชื่อ ไม่ใช่คืนเป็นศูนย์', () => {
+      // บรรทัดถูกลบทิ้งหลังบันทึกการคืน — เงินที่ต้องคืนลูกค้าไม่ได้หายไปด้วย
+      expect(orderTotal(twoLines([{ item: 'ฟิล์มใส', qty: 2, itemUid: 'ไม่มีแล้ว' }]))).toBe(
+        8000 - 1800,
+      );
+    });
+
+    it('ของที่ไม่ได้อยู่ในใบนี้เลย ยังไม่ลดยอด', () => {
+      expect(orderTotal(twoLines([{ item: 'ลำโพง', qty: 1, itemUid: 'zz' }]))).toBe(8000);
+    });
   });
   it('sums multiple adjustments and treats a missing amount as 0', () => {
     const order = {
