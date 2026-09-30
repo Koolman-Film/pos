@@ -9,6 +9,11 @@ and against production.
 staff see or can do is listed under [Decisions](#decisions-needed-behaviour-changes)
 instead, and waits for a yes.
 
+**Status 2026-09-30** — Phase 0 and 1.1–1.4 done and deployed (production = `main` at
+`6c9c8a8`, migrations through 0076). **Open and urgent: 1.5** (new wholesale POs fail
+to save for Finnix North). Phase 2 not started — waits for the owner's go-ahead.
+Done: 18 of 73 · open: 55 (3 of them partly done, 6 are decisions).
+
 **Legend** — Effort: **S** < half a day · **M** 1–2 days · **L** several days.
 Behaviour: **none** = invisible to staff · **fix** = only wrong results become right.
 
@@ -153,6 +158,23 @@ Behaviour: **none** = invisible to staff · **fix** = only wrong results become 
 - [x] **1.4 Revenue report showed no retail sales after 0073** · S · fix _(found 2026-09-27 during 1.1)_
   - ✅ Done 2026-09-27 · PR #5 (hotfix, deployed ~22:45) — the report still selected `tickets.finnix_doc_no`, which 0073 dropped; PostgREST answered 42703, the code read only `data`, and retail revenue silently showed as nothing from the 0073 deploy (~17:00). Fixed the select, made the report's reads throw on error, and added `/revenue` `/money` `/customers` `/activity` `/daily-report` to the route smoke test (h1-checked). Proven: a bad column now fails CI at "/revenue should not error"; on production the old select returns 400 and the new one 200. **Any revenue export taken between ~17:00 and ~22:45 on 27 Sep should be re-run.**
 
+- [ ] **1.5 New wholesale PO fails to save; each attempt leaves an empty PO** · S · fix · **URGENT, live** _(found 2026-09-30 by 1.3's logging)_
+  - Evidence: Vercel logs `[request-error] action POST /wholesale/[id] (/wholesale/new) … invalid input
+syntax for type numeric: ""` — 22 times from 2 users since 28 Sep (first seen 11 Sep), last on
+    30 Sep 11:13 Bangkok. `WholesaleDetail.tsx:1183,1194,1205` store `qty` / `listPrice` /
+    `requestedPrice` as the raw input string (`updateItem(idx, k, e.target.value)`), so a cleared
+    field is `""`; `save_order_children` casts `(it->>'qty')::numeric` and fails. `saveOrder`
+    (`wholesale/actions.ts:67-89`) has already inserted the header in its own request (5.9), so
+    every failed save leaves a PO with no lines and burns a number: **23 empty `fn` POs on
+    production** (WS-FN-0008, 0017, 0021–0025, 0030–0040 moved to the bin by staff;
+    **WS-FN-0043 … 0047 still live, empty, รออนุมัติราคา** on 30 Sep).
+  - Fix: coerce the numeric fields in the form (and defensively in `saveOrder`: `'' → 0`, which is
+    what `coalesce(…, 0)` in the SQL already means for a missing value); regression test with a
+    cleared field. Then ask the owner whether to move WS-FN-0043…0047 to the bin (staff did this
+    for the others). The lasting fix for orphan headers is 5.9 (header + children in one RPC).
+  - Conflicts with the developer's branch `claude/service-schedule-compact` (rewrites
+    `wholesale/actions.ts`); whichever lands second rebases.
+
 ---
 
 ## Phase 2 — Database enforces what the screens enforce
@@ -258,6 +280,9 @@ the API cannot skip it. **Every rule needs a test proving the real screen path s
   - ◐ Partly done 2026-09-27 — `tests/unit/migrations/conventions.test.ts` fails on two migrations with the same number (and on a migration after 0000 that does not set `search_path`). Still open: refusing a new migration numbered at or below `main`'s newest.
   - Fail on duplicate numbers, or a new migration not above `main`'s newest.
 - [ ] **3.4 Schema fingerprint script** · M
+  - ◐ Partly done 2026-09-30 — committed as `supabase/snippets/fingerprint.sql` (per-category
+    md5, single statement for the MCP); production matched a migrations-built DB on all six schema
+    categories. Still open: the CI comparison.
   - Commit the prod-vs-local md5 comparison of functions / triggers / policies as
     `supabase/snippets/fingerprint.sql`; run after every production release; in CI, compare the
     migrations-built DB with a release-files-built DB.
@@ -277,7 +302,9 @@ the API cannot skip it. **Every rule needs a test proving the real screen path s
     (`visual.spec.ts:79-83`), 19 of 38 PNGs orphaned; `npm test` ends with it so it can never
     pass. Keep at most one print-sheet screenshot generated in CI.
 - [ ] **3.10 Test coverage for recent features** · M
-  - Smoke: `routes-smoke.spec.ts:18-29` misses `/money`, `/activity`, `/revenue`, `/customers`.
+  - ~~Smoke: `routes-smoke.spec.ts:18-29` misses `/money`, `/activity`, `/revenue`, `/customers`.~~
+    Added with `/daily-report` in 1.4.
+  - Wholesale PO create with a cleared number field (1.5).
   - E2E: delivery with evidence upload, return confirm, petty-cash top-up, claim via service
     visit, activity log, Excel/PDF exports.
   - RLS/integration: storage `wholesale_attachments_*`, `activity_snapshots`,
@@ -285,6 +312,10 @@ the API cannot skip it. **Every rule needs a test proving the real screen path s
     stock-out on PO delivery (`wholesale/actions.ts:380-398`, no test at all).
   - Template: the 22 rolled-back production checks run on 2026-09-23.
 - [ ] **3.11 Docs and local setup** · S
+  - ◐ Partly done 2026-09-30 — README rewritten; `docs/HANDOFF.md` added; DEPLOYMENT.md now
+    describes production and the release procedure actually used; UPDATING.md's migration range,
+    Kong and port notes fixed; `.gitignore` covers `.remember/` and local `.claude/` files. Still
+    open: `db:reset`'s `sleep 6`.
   - `README.md` is still the create-next-app template; `docs/UPDATING.md:27`,
     `docs/DEPLOYMENT.md:21` say "0001–0008"; `UPDATING.md:41` hardcodes a worktree Kong name;
     `DEPLOYMENT.md:3` says nothing is deployed; `db push` instructions don't work (stale
@@ -297,9 +328,17 @@ the API cannot skip it. **Every rule needs a test proving the real screen path s
     same version in `package.json` (`supabase` devDependency) and CI, and upgrade together.
   - `playwright.config.ts:27` hardcodes port 3000 — read `E2E_PORT` so e2e can run while a
     dev server is up.
-- [ ] **3.13 Release doc is missing rows for 0066–0073** · S · none _(found 2026-09-27)_
+- [x] **3.13 Release doc is missing rows for 0066–0073** · S · none _(found 2026-09-27)_
+  - ✅ Done 2026-09-30 — rows added; the doc's stale "merging deploys" / `db push` instructions
+    corrected and pointed at DEPLOYMENT.md.
   - `docs/RELEASE-post-trial-fixes.md` describes every migration through 0065 and 0074, but
     the service-schedule branch added none for 0066–0073.
+
+- [ ] **3.14 Expected rejections are logged as request errors** · S · none _(found 2026-09-30)_
+  - Wholesale status changes `throw` their validation messages (ต้องกรอกข้อมูลการจัดส่ง …,
+    ต้องระบุวันที่จัดส่งก่อน …) instead of returning `{ ok: false }`, so `onRequestError` logs
+    each one — 30 of the 52 failures logged on 28–30 Sep. They bury real failures like 1.5.
+  - Fix: return them as results (with 5.4), or tag them so `reportRequestError` skips them.
 
 ---
 
@@ -435,14 +474,15 @@ When data grows (≈ 10k tickets):
 - Every server action verifies the user (`getSessionContext()` → `getUser()` + `app_users.active`)
   before mutating; CSRF origin check on; service-role key only in `permissions/actions.ts`
   behind `authorize()`, never deletes shared auth users.
-- All 49 tables have RLS; SECURITY DEFINER functions (except 0.9) pin `search_path`; payment /
+- All 49 tables have RLS; every SECURITY DEFINER function pins `search_path` (0.9, guarded by 0075); payment /
   approval / price / petty-cash functions check capability and shop; privileged functions
   revoked from `anon`; `activity_log` trigger-written, admin-read.
 - Buckets private, 10 MB, image/PDF only; upload names sanitised + UUID-prefixed.
 - No `dangerouslySetInnerHTML` beyond the constant theme script; `.env*` excluded from git and
   Vercel uploads; no secrets in history.
-- Migration ↔ release files (0019–0065): no remaining drift after the 0043 fix; latest versions
-  of redefined functions keep every earlier guard.
+- Migration ↔ release files (0019–0076): no remaining drift after the 0043 fix; latest versions
+  of redefined functions keep every earlier guard. Production's schema fingerprint equals a
+  migrations-built DB (2026-09-30).
 - `lib/types/database.ts` is current; RLS helper calls evaluate once per query, not per row
   (except 4.7); `revalidatePath` breadth costs nothing (no caching in use).
 - Old wholesale payments/discounts without a uid: **0 rows in production** (3 payments,

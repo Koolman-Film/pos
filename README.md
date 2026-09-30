@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Finnix Film POS
 
-## Getting Started
+Point-of-sale and back office for Finnix Film & Central Audio: car film / wrap
+jobs (ใบงาน), wholesale POs (ขายส่ง), stock, expenses, money accounts, insurance
+and service visits, revenue and daily reports — five branches, Thai UI.
 
-First, run the development server:
+Live at **https://finnixpos.kool-man.com**.
+
+**Starting a session? Read [docs/HANDOFF.md](docs/HANDOFF.md) first** — current
+state, work in flight, and what is broken right now.
+
+## Stack
+
+- Next.js 16.3 (App Router, server actions) + React 19, Tailwind 4 —
+  **this Next.js differs from older versions; read `node_modules/next/dist/docs/`
+  before changing framework-level code** (see [AGENTS.md](AGENTS.md)).
+- Supabase Postgres (schema `pos`) with RLS on every table; business rules that
+  must hold are enforced in SQL functions and triggers, not only in the UI.
+  The Supabase project and its `auth.users` are **shared with the Koolman
+  finance app**.
+- Vercel (region `hnd1`, next to the database in Tokyo), deployed by hand.
+- Vitest (unit, integration, RLS) and Playwright (e2e). CI on every PR.
+
+## Layout
+
+| Path                   | What                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `app/(app)/<module>/`  | one folder per screen: `page.tsx`, `data.ts` (reads), `actions.ts` (server actions)    |
+| `components/<module>/` | the client UI for each module                                                          |
+| `lib/domain/`          | pure business logic (money, dates in shop time, statuses) — unit-tested                |
+| `lib/supabase/`        | clients (`server`, `client`, `admin`) and `fetchAllRows` / `pagedData` (1,000-row cap) |
+| `lib/observability/`   | `[action-error]` / `[request-error]` server logging                                    |
+| `supabase/migrations/` | the schema, `NNNN_name.sql`, one number per change                                     |
+| `supabase/release-*`   | the same changes as idempotent files for production                                    |
+| `tests/`               | `unit/`, `integration/`, `rls/` (need the local stack), `e2e/`                         |
+
+## Local development
+
+Needs Docker and Node 22+.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm ci
+npx supabase start        # local stack; API on :54351 (non-default ports)
+npx supabase status       # copy URL / anon / service keys into .env.local
+npm run db:reset          # migrations + seed + four sample logins (reads .env.local)
+npm run dev               # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Sample logins (`admin@`, `exec@`, `sales@`, `tech@finnixfilm.com`) share the
+password in `docs/UPDATING.md` — local only, never production.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Checks (what CI runs)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run typecheck && npm run lint && npm run format:check && npm run test:unit && npm run build
+npm run test:integration && npm run test:rls && npm run test:e2e   # need the local stack
+```
 
-## Learn More
+## Documents
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Doc                                                                  | For                                                                  |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [docs/HANDOFF.md](docs/HANDOFF.md)                                   | where things stand, what is in flight, what to do next               |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)                             | production facts and the release procedure                           |
+| [docs/IMPROVEMENT-CHECKLIST.md](docs/IMPROVEMENT-CHECKLIST.md)       | the improvement plan (Phases 0–5, decisions), with status            |
+| [docs/RELEASE-post-trial-fixes.md](docs/RELEASE-post-trial-fixes.md) | catalogue of every migration since 0012: what it does, what it risks |
+| [docs/UPDATING.md](docs/UPDATING.md)                                 | local stack details; reconciling a new prototype drop                |
+| [docs/PROTOTYPE_MAP.md](docs/PROTOTYPE_MAP.md)                       | prototype feature → code location                                    |
+| `docs/DESIGN-*.md`                                                   | design records for money ledger, notifications, wholesale sales      |
+| `docs/REGION-BENCHMARK.md`, `docs/framework-verification-*.md`       | measurements behind the region and framework choices                 |
+| `docs/superpowers/`                                                  | the original July 2026 port plan and spec (historical)               |

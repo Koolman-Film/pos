@@ -54,3 +54,8 @@ next-env.d.ts
 
 # local secrets, never committed
 .secrets/
+
+# assistant tooling — local state, never committed (.claude/launch.json is shared)
+/.remember/
+/.claude/worktrees/
+/.claude/settings.local.json
