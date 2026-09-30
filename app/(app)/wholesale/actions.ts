@@ -8,7 +8,8 @@ import { createClient } from '@/lib/supabase/server';
 import { cleanPhones } from '@/lib/domain/phone';
 import { shopDayKey } from '@/lib/domain/format';
 import { poOpenedAt } from '@/lib/domain/orders';
-import { applyStockMovements, diffQtyMaps, sumQtyMaps, type QtyMap } from '@/lib/stock/movements';
+import { applyStockMovements, type QtyMap } from '@/lib/stock/movements';
+import { shelfEffect } from '@/lib/domain/deliveries';
 
 import type { Json } from '@/lib/types/database';
 import type { SaveOrderInput } from '@/components/wholesale/types';
@@ -125,20 +126,6 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
   //
   // `adjusted_at` / `paid_at` are NOT NULL dates and the prototype only kept a
   // free-text Thai display string ("วันนี้"), so the save date is persisted.
-  /*
-    ตารางงวดชำระ — เขียนของมันเอง (migration 0078).
-
-    ไม่ได้ยัดเข้า `save_order_children` เพราะการเพิ่มพารามิเตอร์คือการสร้าง
-    ฟังก์ชันใหม่อีกตัว แล้วต้องเลือกระหว่างทิ้งตัวเก่าทันที (แอปรุ่นที่ยังรันอยู่
-    ระหว่างดีพลอยจะบันทึก PO ไม่ได้) กับเก็บไว้ทั้งคู่ (ตัวเก่าจะลบตารางงวดทิ้ง
-    ทุกครั้งที่ถูกเรียก) — สองการเขียนในคำสั่งเดียวของผู้ใช้ ดีกว่าทั้งสองทาง
-  */
-  const { error: scheduleErr } = await supabase.rpc('save_order_installments', {
-    p_order_id: orderId,
-    p_installments: (input.installments ?? []) as unknown as Json,
-  });
-  if (scheduleErr) throw new Error(scheduleErr.message);
-
   const savedOn = new Date().toISOString().slice(0, 10);
   const { error: childErr } = await supabase.rpc('save_order_children', {
     p_order_id: orderId,
@@ -149,6 +136,24 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
     p_saved_on: savedOn,
   });
   if (childErr) throw new Error(childErr.message);
+
+  /*
+    ตารางงวดชำระ — เขียนของมันเอง (migration 0078), และเขียนทีหลัง.
+
+    ไม่ได้ยัดเข้า `save_order_children` เพราะการเพิ่มพารามิเตอร์คือการสร้าง
+    ฟังก์ชันใหม่อีกตัว แล้วต้องเลือกระหว่างทิ้งตัวเก่าทันที (แอปรุ่นที่ยังรันอยู่
+    ระหว่างดีพลอยจะบันทึก PO ไม่ได้) กับเก็บไว้ทั้งคู่ (ตัวเก่าจะลบตารางงวดทิ้ง
+    ทุกครั้งที่ถูกเรียก)
+
+    มาทีหลังเพราะ `save_order_children` มีด่านที่ปฏิเสธการบันทึกได้จริง (ของที่
+    ส่งไปแล้ว ห้ามลดจำนวน) — เขียนตารางงวดก่อนแปลว่าการบันทึกที่ถูกปฏิเสธจะทิ้ง
+    ตารางงวดใหม่ไว้บน PO ที่เนื้อหาที่เหลือไม่ได้เปลี่ยนตาม
+  */
+  const { error: scheduleErr } = await supabase.rpc('save_order_installments', {
+    p_order_id: orderId,
+    p_installments: (input.installments ?? []) as unknown as Json,
+  });
+  if (scheduleErr) throw new Error(scheduleErr.message);
 
   /*
     บันทึก PO ไม่แตะสต๊อกอีกต่อไป (migration 0054).
@@ -166,14 +171,6 @@ export async function saveOrder(input: SaveOrderInput, isNew: boolean) {
   redirect('/wholesale');
 }
 
-/** Net = sold - returned, per product. */
-function orderNetQty(
-  sold: { name: string; qty: number }[],
-  returned: { name: string; qty: number }[],
-): QtyMap {
-  return diffQtyMaps(sumQtyMaps([toQtyMap(returned)]), sumQtyMaps([toQtyMap(sold)]));
-}
-
 function toQtyMap(rows: { name: string; qty: number }[]): QtyMap {
   const map: QtyMap = {};
   for (const r of rows) {
@@ -183,18 +180,51 @@ function toQtyMap(rows: { name: string; qty: number }[]): QtyMap {
   return map;
 }
 
-/** The stored net-per-product for a PO, read straight from its child tables. */
-async function storedOrderNetQty(
+/**
+ * สิ่งที่ PO ใบนี้ทำกับชั้นวางไปแล้วจริง ๆ — บวกคือของออกไป.
+ *
+ * ไม่ใช่ "จำนวนที่สั่ง ลบ จำนวนที่คืน" อีกต่อไป เพราะตั้งแต่ 0077 ของออกจากคลัง
+ * ทีละรอบ PO ที่สั่ง 200 ม้วนและเพิ่งส่งไป 80 เคยลบแล้วคืนของเข้าชั้น 200 ม้วน
+ * ซึ่งเป็นการเสกของที่ร้านไม่มี และเลวร้ายกว่านั้นคือ `orders.stock_deducted_at`
+ * ไม่ถูกเขียนอีกแล้ว (ตราประทับย้ายไปอยู่ที่รอบ) ด่านที่อ่านคอลัมน์นั้นจึงคิดว่า
+ * PO ไม่เคยตัดสต็อก แล้วไม่คืนอะไรเลย — ของ 80 ม้วนหายจากตัวเลขไปเฉย ๆ
+ *
+ * คิดจากตราประทับสองอัน ซึ่งเป็นบันทึกเดียวที่บอกว่าชั้นวางขยับจริง:
+ * รอบที่ `stock_deducted_at` แล้ว (ของออก) และการคืนที่ `stock_returned_at`
+ * แล้ว (ของกลับเข้า) การคืนที่ยังไม่ได้ยืนยันรับของ ไม่เคยขยับชั้นวาง จึงไม่ถูก
+ * หักออก — ของเดิมหักทุกใบ ทำให้ลบ PO แล้วคืนของน้อยกว่าที่เอาไป
+ */
+async function storedOrderShelfEffect(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orderId: string,
+  legacyDeductedAt: string | null,
 ): Promise<QtyMap> {
-  const [{ data: items }, { data: returns }] = await Promise.all([
+  const [{ data: rounds }, { data: returns }, { data: items }] = await Promise.all([
+    supabase
+      .from('order_deliveries')
+      .select('stock_deducted_at, order_delivery_items(item_name, qty)')
+      .eq('order_id', orderId),
+    supabase
+      .from('order_returns')
+      .select('item_name, qty')
+      .eq('order_id', orderId)
+      .not('stock_returned_at', 'is', null),
     supabase.from('order_items').select('name, qty').eq('order_id', orderId),
-    supabase.from('order_returns').select('item_name, qty').eq('order_id', orderId),
   ]);
-  return orderNetQty(
-    (items ?? []).map((i) => ({ name: i.name, qty: Number(i.qty) || 0 })),
+
+  return shelfEffect(
+    (rounds ?? []).map((d) => ({
+      stockDeductedAt: d.stock_deducted_at,
+      items: (d.order_delivery_items ?? []).map((li) => ({
+        name: li.item_name ?? '',
+        qty: Number(li.qty) || 0,
+      })),
+    })),
     (returns ?? []).map((r) => ({ name: r.item_name, qty: Number(r.qty) || 0 })),
+    {
+      deducted: !!legacyDeductedAt,
+      items: (items ?? []).map((i) => ({ name: i.name, qty: Number(i.qty) || 0 })),
+    },
   );
 }
 
@@ -227,14 +257,12 @@ export async function deleteOrder(orderId: string): Promise<{ ok: boolean; error
   if (!order) return { ok: false, error: 'ไม่พบ PO นี้' };
 
   /*
-    คืนของเข้าชั้นเฉพาะ PO ที่เคยตัดสต๊อกไปจริง (migration 0054).
+    คืนเข้าชั้นเท่าที่เคยเอาออกไปจริง (0054, แก้ให้ตรงกับการส่งหลายรอบใน 0079).
 
-    Stock now leaves on delivery, not on save, so a PO deleted before it
-    shipped never took anything — and putting its quantities back would
-    invent goods the branch does not have. `stock_deducted_at` is the record
-    of whether the shelf ever moved for this PO.
+    PO ที่ลบก่อนส่งของ ไม่เคยเอาอะไรออกไป การคืนจำนวนของมันคือการเสกของที่
+    ร้านไม่มี ส่วน PO ที่ส่งไปบางส่วน ต้องคืนเท่าที่ส่ง ไม่ใช่เท่าที่สั่ง
   */
-  const net = order.stock_deducted_at ? await storedOrderNetQty(supabase, orderId) : {};
+  const net = await storedOrderShelfEffect(supabase, orderId, order.stock_deducted_at);
 
   const { error } = await supabase
     .from('orders')
@@ -265,9 +293,9 @@ export async function restoreOrder(orderId: string): Promise<{ ok: boolean; erro
     .maybeSingle();
   if (!order) return { ok: false, error: 'ไม่พบ PO นี้ในถังขยะ' };
 
-  // Mirrors the delete: only a PO whose goods had actually left takes them
-  // off the shelf again when it comes back out of the bin.
-  const net = order.stock_deducted_at ? await storedOrderNetQty(supabase, orderId) : {};
+  // Mirrors the delete: a PO takes off the shelf again exactly what it had
+  // taken before it went into the bin — no more, and not nothing.
+  const net = await storedOrderShelfEffect(supabase, orderId, order.stock_deducted_at);
 
   const { error } = await supabase
     .from('orders')
@@ -572,9 +600,10 @@ export async function recordOrderDelivery(
 
   const result = await saveOrderDelivery({
     orderId,
-    // เกิดจากเอกสาร ไม่ใช่จากปุ่มในฟอร์ม จึงผูก uid กับวันที่: กดออกใบส่งของ
-    // ซ้ำในวันเดียวกันคือการพิมพ์ซ้ำ ไม่ใช่การส่งรอบใหม่
-    uid: `doc-${deliveredAt}`,
+    // ว่างไว้ตั้งใจ: ด่านกันกดซ้ำผูกกับ uid และการส่งของสองเที่ยวในวันเดียวกัน
+    // เป็นเรื่องปกติของงานขายส่ง — คีย์ที่ผูกกับวันที่จะกลืนเที่ยวที่สองหายไป
+    // โดยที่ระบบตอบว่าสำเร็จ ส่วนการกดปุ่มซ้ำมีด่านของตัวเองอยู่ที่หน้าจอแล้ว
+    uid: '',
     date: deliveredAt,
     note: deliveryNote,
     attachments,

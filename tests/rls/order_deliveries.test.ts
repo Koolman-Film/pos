@@ -297,3 +297,80 @@ describe('ลบรอบส่งของ', () => {
     }
   });
 });
+
+/**
+ * ช่องโหว่ที่เจอตอนไล่อ่านโมดูล 30 ก.ย. 2569 (migration 0079).
+ *
+ * ทั้งหมดมาจากที่เดียวกัน: 0077 ผูก "ส่งไปแล้วเท่าไหร่" ไว้กับ uid ของรายการ
+ * แต่ไม่ได้บังคับว่าต้องมี uid และไม่ได้กันการอ่าน-แล้ว-เขียนพร้อมกัน
+ */
+describe('ด่านที่ 0079 เพิ่ม', () => {
+  it('รายการที่ไม่ได้ส่ง uid มา ได้ uid ที่สร้างให้ ไม่ใช่ค่าว่าง', async () => {
+    // ค่าว่างทำให้ทุกบรรทัดตกไปอยู่ถังเดียวกัน แล้ว PO ปิดเองทั้งที่ของยังไม่ออก
+    assertNoError(
+      'save children without uids',
+      (
+        await asSales.rpc('save_order_children', {
+          p_order_id: ORDER,
+          p_items: [
+            { name: 'ฟิล์ม', qty: 200, listPrice: 1200, requestedPrice: 1200 },
+            { name: 'ลำโพง', qty: 10, listPrice: 500, requestedPrice: 450 },
+          ] as unknown as Json,
+          p_returns: [] as unknown as Json,
+          p_adjustments: [] as unknown as Json,
+          p_payments: [] as unknown as Json,
+          p_saved_on: '2026-09-10',
+        })
+      ).error,
+    );
+    const { data } = await admin.from('order_items').select('uid').eq('order_id', ORDER);
+    const uids = (data ?? []).map((i) => i.uid);
+    expect(uids.filter((u) => !u)).toEqual([]);
+    expect(new Set(uids).size).toBe(2);
+  });
+
+  it('ส่งของโดยไม่บอกว่าเป็นสินค้าตัวไหน ถูกปฏิเสธ', async () => {
+    const { error } = await deliver(round({ items: [{ uid: '', name: 'ฟิล์ม', qty: 5 }] }));
+    expect(error?.message ?? '').toContain('รายการสินค้าใน PO เปลี่ยนไปแล้ว');
+    expect(await sentQty()).toEqual({});
+    expect(await orderRow()).toMatchObject({ status: 'รอจัดส่ง' });
+  });
+
+  it('PO ที่อยู่ในถังขยะ ส่งของไม่ได้', async () => {
+    await admin.from('orders').update({ deleted_at: new Date().toISOString() }).eq('id', ORDER);
+    const { error } = await deliver(round({ items: [line('u1', 1)] }));
+    expect(error?.message ?? '').toContain('ไม่พบ PO นี้');
+    await admin.from('orders').update({ deleted_at: null }).eq('id', ORDER);
+  });
+
+  it('ลบรอบล่าสุด หลักฐานบน PO กลับไปเป็นของรอบที่ยังเหลือ', async () => {
+    // สองคอลัมน์นี้คือสิ่งที่ด่านหลักฐาน (0055) อ่าน และเป็นของที่ร้านหยิบมาใช้
+    // ตอนลูกค้าบอกว่าไม่ได้รับของ — ปล่อยให้ค้างเป็นของรอบที่ลบไปแล้วไม่ได้
+    await deliver(round({ note: 'รอบแรก นิ่มซี่เส็ง', items: [line('u1', 50)] }));
+    await deliver(round({ date: '2026-09-20', note: 'รอบสอง Kerry', items: [line('u1', 50)] }));
+    expect(await orderRow()).toMatchObject({ delivery_note: 'รอบสอง Kerry' });
+
+    const { data: rows } = await admin
+      .from('order_deliveries')
+      .select('id')
+      .eq('order_id', ORDER)
+      .order('id', { ascending: false })
+      .limit(1);
+    assertNoError(
+      'delete latest round',
+      (await asSales.rpc('delete_order_delivery', { p_delivery_id: rows![0].id })).error,
+    );
+    expect(await orderRow()).toMatchObject({ delivery_note: 'รอบแรก นิ่มซี่เส็ง' });
+  });
+
+  it('ลบรอบสุดท้ายที่เหลือ หลักฐานถูกล้าง ไม่ใช่ค้างของเก่า', async () => {
+    await deliver(round({ note: 'รอบเดียว', items: [line('u1', 50)] }));
+    const { data: rows } = await admin
+      .from('order_deliveries')
+      .select('id')
+      .eq('order_id', ORDER)
+      .limit(1);
+    await asSales.rpc('delete_order_delivery', { p_delivery_id: rows![0].id });
+    expect(await orderRow()).toMatchObject({ delivery_note: '', delivered_at: null });
+  });
+});
