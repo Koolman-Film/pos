@@ -1,35 +1,33 @@
-# Release runbook — post-trial fixes (migrations 0012–0037)
+# Release catalogue — migrations 0012 onward
 
-Branch: `claude/post-trial-fixes-a16ecc` (pushed to origin)
+> **Status 2026-09-30:** every migration through **0076** is applied to production
+> (verified by schema fingerprint, `supabase/snippets/fingerprint.sql`). This file
+> is now the **catalogue** — what each migration does and what it risks — plus the
+> release-file index. The procedure actually used for releases is
+> [DEPLOYMENT.md → Releasing a change](./DEPLOYMENT.md#releasing-a-change). Two
+> things this file used to say are no longer true, and are corrected below:
+> merging to `main` does **not** deploy (Vercel is not connected to git), and
+> `supabase db push` does **not** work (the stored database password is stale).
 
-This is the batch that came out of the shop's trial run. [DEPLOYMENT.md](./DEPLOYMENT.md)
-is the first-launch runbook; this file only covers what shipping THIS batch to an
-environment that is already live needs.
-
-Everything below has been applied to a local Supabase and verified there. Nothing
-has been run against a hosted project — that needs an account only you can log
-into, and the production database is shared with the Koolman finance app (see the
-warning in DEPLOYMENT.md), so it is worth doing deliberately rather than fast.
+It began as the runbook for the batch that came out of the shop's trial run
+(branch `claude/post-trial-fixes-a16ecc`, now merged) and has grown one row per
+migration since.
 
 ## 1. Merge
 
-```bash
-# Open the PR GitHub offered on push:
-#   https://github.com/Koolman-Film/pos/pull/new/claude/post-trial-fixes-a16ecc
-```
+Through a pull request — `main` is protected (see [AGENTS.md](../AGENTS.md)).
+Merging ships nothing: Vercel deploys only when someone runs `vercel deploy`.
+Do the database work FIRST (step 2) whenever the new code reads columns or
+functions a migration adds — a deploy that lands before its migrations 500s on
+every page that reads them.
 
-Merging to `main` is what triggers the Vercel production deploy. Do the database
-work FIRST (step 2) — the new code reads columns that do not exist yet, so a
-deploy that lands before the migrations will 500 on the ticket list, the
-dashboard and the accounting page.
+## 2. Database
 
-## 2. Database — nine migrations
-
-```bash
-npx supabase login                       # personal access token, once
-npx supabase link --project-ref <production-ref>
-npx supabase db push                     # applies 0012 … 0037 only
-```
+~~`npx supabase db push`~~ — fails: the database password the CLI would use is
+stale. Apply each `supabase/release-NNNN.sql` through the Supabase MCP
+(`execute_sql`, one file per call, so a failure rolls back cleanly), or paste it
+into the Dashboard SQL Editor. Each file stamps its own version into
+`supabase_migrations.schema_migrations`.
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
@@ -195,6 +193,14 @@ deleted. Only 0019 rewrites anything in place, and only to fill in a new column:
 | `0063_order_customer_note`            | **หมายเหตุ 2 แบบบน PO** — `customer_note` ใหม่ พิมพ์ลงเอกสารลูกค้าทุกใบ ส่วน `note` เดิมเป็นหมายเหตุสำหรับร้าน ไม่พิมพ์                                                                                                                                                                                                                                                                                                                                        | ต่ำ. ไม่แก้ข้อมูลเดิม หมายเหตุที่มีอยู่ยังเป็นของร้านเหมือนเดิม                                                                                                                                                                                                   |
 | `0064_one_money_list`                 | **การชำระเงิน / แหล่งเงิน เป็นรายการเดียว** — ชื่อแหล่งเงินห้ามซ้ำในสาขา, เปลี่ยนชื่อแล้วเก็บชื่อเดิมเป็นชื่อจับคู่อัตโนมัติ, เช็คในขายส่งเป็นช่อง `is_cheque` ของตัวเอง หน้าจอทุกโมดูลเลือกวิธีชำระ/จ่ายจากจากแหล่งเงินของสาขา                                                                                                                                                                                                                                | ปานกลาง. **ถ้ามีแหล่งเงินชื่อซ้ำในสาขาเดียวกัน ไฟล์จะหยุดและบอกชื่อ** ต้องแก้ชื่อก่อน รายการเดิมไม่ถูกแก้ ควรตั้งชื่อแหล่งเงินให้อ่านรู้เรื่องก่อนใช้ เพราะพนักงานเลือกทุกวันและพิมพ์บนใบเสร็จ                                                                    |
 | `0065_legacy_stock_stamps`            | **ของเก่าที่ 0054 ตกหล่น** — PO ที่ระบบเก่าตัดสต๊อกไปแล้ว (รวมสถานะสุดท้ายที่ร้านตั้งชื่อเอง เช่น เสร็จสิ้น) ถูกบันทึกว่าตัดแล้ว และการรับคืนเก่าได้ uid ของตัวเอง                                                                                                                                                                                                                                                                                             | ต่ำ. แตะเฉพาะแถวที่ยังไม่ได้ตั้ง ไม่แก้จำนวนหรือสต๊อก ถ้าไม่รันไฟล์นี้ PO ที่ปิดแล้วจะตัดสต๊อกซ้ำเมื่อย้อนกลับไปจัดส่งแล้ว และการรับคืนเก่าจะค้างยืนยันไม่ได้                                                                                                     |
+| `0066_tech_after_lock`                | **ข้อมูลของช่างกรอกย้อนหลังได้บนใบงานที่ล็อกแล้ว** — `save_ticket_tech()` เป็นทางเขียนเดียว และ `enforce_ticket_lock` / `enforce_ticket_item_lock` ปล่อยเฉพาะช่องของช่าง ยอดขายและค่าคอมยังล็อกเหมือนเดิม (ร้านขอ 23 ก.ย.)                                                                                                                                                                                                                                     | ต่ำ. เปลี่ยนเฉพาะ function/trigger ไม่แตะข้อมูล                                                                                                                                                                                                                   |
+| `0067_claim_without_service`          | **เคลมประกันได้โดยไม่ต้องเป็นรอบเซอร์วิส** — `service_visits.kind` แยก รอบเซอร์วิส กับ เคลมอย่างเดียว (ไม่กินสิทธิ์เซอร์วิสของลูกค้า) และ `save_service_visit()` รับทั้งสองแบบ                                                                                                                                                                                                                                                                                 | ต่ำ. แถวเดิมเป็นรอบเซอร์วิสตามค่าตั้งต้น                                                                                                                                                                                                                          |
+| `0068_item_revenue_kind`              | **รายได้สาขา / รับแทน Finnix ทีละรายการสินค้า** — `ticket_items.revenue_kind` เติมย้อนหลังจาก `tickets.revenue_kind` ของใบงานนั้น และ `save_ticket_children` เขียนช่องนี้                                                                                                                                                                                                                                                                                      | ต่ำ. **ใน release ต้องสร้าง index ก่อน backfill** — 0061 มี deferred trigger บน `ticket_items` ทำให้ UPDATE แล้ว CREATE INDEX ใน transaction เดียวล้มบนข้อมูลจริง (55006) แก้แล้วใน `623aac6`                                                                     |
+| `0069_money_account_owner`            | **แหล่งเงินระบุว่าเป็นเงินของสาขาหรือของ Finnix** — `money_accounts.owner` หน้าใบงานเทียบกับรายการที่ขายว่าเงินส่วนของ Finnix เข้าบัญชีของ Finnix หรือไม่                                                                                                                                                                                                                                                                                                      | ต่ำ. แหล่งเงินเดิมเป็นของสาขาตามค่าตั้งต้น                                                                                                                                                                                                                        |
+| `0070_owner_known_from`               | `money_accounts.owner_set_at` — การจับคู่เงิน Finnix ใช้กับใบงานหลังวันที่ตั้งเจ้าของบัญชีเท่านั้น ใบงานเก่าที่เคลียร์ไปแล้วไม่ขึ้นเตือน                                                                                                                                                                                                                                                                                                                       | ต่ำ. เพิ่มคอลัมน์                                                                                                                                                                                                                                                 |
+| `0071_insurance_payment`              | **ค่าประกันมีการรับเงินของตัวเอง** — `insurance_policies.paid_amount` / `paid_at` / `paid_method`, `save_insurance_policy()` บันทึกการรับเงิน ไม่เพิ่มยอดให้ใบงาน (ใบงานมักล็อกไปแล้ว)                                                                                                                                                                                                                                                                         | ต่ำ. **กรมธรรม์เก่า 11 ฉบับ (฿48,000) ยังไม่มีการรับเงิน — ให้ฝ่ายบัญชีบันทึก**                                                                                                                                                                                   |
+| `0072_finnix_peak_doc`                | เลขที่เอกสาร PEAK หนึ่งเลขต่อใบงาน (`tickets.finnix_doc_no`, `save_ticket_finnix_doc()`) แก้ได้แม้ใบงานล็อกแล้ว                                                                                                                                                                                                                                                                                                                                                | ต่ำ. ถูกแทนที่ด้วย 0073                                                                                                                                                                                                                                           |
+| `0073_item_finnix_doc`                | **เลขที่เอกสาร PEAK ทีละรายการสินค้า** — ย้ายเลขจาก `tickets.finnix_doc_no` ลง `ticket_items.finnix_doc_no` ของรายการรับแทน แล้ว**ลบคอลัมน์เดิมทิ้ง**; `save_ticket_item_finnix_docs()`                                                                                                                                                                                                                                                                        | ปานกลาง. โค้ดที่ยังอ่าน `tickets.finnix_doc_no` จะพัง — รายงานรายได้พังจริงหลังขึ้นระบบ 27 ก.ย. (checklist 1.4) ค้นทั้ง repo ก่อนลบคอลัมน์ทุกครั้ง                                                                                                                |
 | `0074_daily_report_module`            | **โมดูลรายงานการเงินรายวัน** — สิทธิ์เมนูใหม่ `dailyReport` สำหรับหน้า รายงานการเงินรายวัน (ยอดขายที่เก็บเงินได้ แยกปลีก/ส่งและชนิดสินค้า, เงินรับเข้าและค่าใช้จ่ายแยกแหล่งเงิน, งานค้างชำระ, ยอดคงเหลือ) เปิดให้ แอดมิน และ ผู้บริหาร                                                                                                                                                                                                                         | ต่ำ. เพิ่มสิทธิ์ใหม่อย่างเดียว ไม่แตะข้อมูล ถ้ายังไม่รันไฟล์นี้ แอดมินยังเห็นเมนู แต่ผู้บริหารจะไม่เห็นจนกว่าจะรัน                                                                                                                                                |
 | `0075_pin_search_path`                | **ปักหมุด search_path** ให้ `current_user_sees_all_shops` ที่หายไปตั้งแต่ 0008 และตรวจว่าฟังก์ชัน SECURITY DEFINER ทุกตัวใน pos ปักหมุดแล้ว                                                                                                                                                                                                                                                                                                                    | ต่ำ. เปลี่ยนแค่การตั้งค่าของฟังก์ชัน ไม่เปลี่ยนการทำงาน                                                                                                                                                                                                           |
 | `0076_ticket_id_in_db`                | **เลขใบงานออกโดยฐานข้อมูล** — trigger + advisory lock ต่อสาขา เหมือนเลข PO (0036) แก้เลขชนเมื่อสาขาเกิน 1,000 ใบ และเลขชนเมื่อบันทึกพร้อมกัน                                                                                                                                                                                                                                                                                                                   | ต่ำ. รูปแบบเลขเดิม เลขที่มีอยู่ไม่เปลี่ยน โค้ดเดิมที่ส่งเลขมาเองยังใช้ได้                                                                                                                                                                                         |
