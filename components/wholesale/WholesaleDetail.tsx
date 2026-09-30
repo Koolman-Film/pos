@@ -28,6 +28,7 @@ import {
   ADJUSTMENT_REJECTED,
   isApprovedAdjustment,
   orderPendingAdjustments,
+  returnUnitPrice,
 } from '@/lib/domain/orders';
 import { dateInputValue, todayValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
@@ -526,6 +527,41 @@ export function WholesaleDetail({
       ...customerPurchasedProducts(o.customerId, orders),
     ]),
   ];
+
+  /*
+    ของที่คืน เลือกจาก "บรรทัด" ของใบนี้ก่อน (0080).
+
+    ราคาที่คืนให้ต้องเป็นราคาที่ขายไปจริง และ PO ใบเดียวมีสินค้าชื่อเดียวกันสอง
+    บรรทัดคนละราคาได้ — ขายล็อตเก่า 900 ล็อตใหม่ 700 การเลือกด้วยชื่ออย่างเดียว
+    จึงคืนเงินผิดราคาเสมอ ราคาจะโผล่ในตัวเลือกเฉพาะตอนที่ชื่อซ้ำ เพราะนั่นคือ
+    ตอนเดียวที่คนกรอกต้องตัดสินใจ
+
+    ชื่อที่ลูกค้าเคยซื้อจาก PO ใบอื่นยังเลือกได้เหมือนเดิม — ของพวกนั้นไม่มี
+    บรรทัดในใบนี้ให้ชี้ถึง และยอดของใบนี้ก็ไม่ได้ลดตามอยู่แล้ว
+  */
+  const nameCount = new Map<string, number>();
+  for (const it of o.items) nameCount.set(it.name, (nameCount.get(it.name) ?? 0) + 1);
+
+  const returnOptions = [
+    ...o.items
+      .filter((it) => it.name)
+      .map((it, i) => ({
+        value: `u:${it.uid || `idx${i}`}`,
+        uid: it.uid ?? '',
+        name: it.name,
+        label:
+          (nameCount.get(it.name) ?? 0) > 1
+            ? `${returnLabel(it.name)} · ${fmt(it.requestedPrice)}`
+            : returnLabel(it.name),
+      })),
+    ...purchasedProducts
+      .filter((name) => !o.items.some((it) => it.name === name))
+      .map((name) => ({ value: `n:${name}`, uid: '', name, label: returnLabel(name) })),
+  ];
+
+  /** ค่าที่ select ควรแสดง สำหรับรายการคืนที่มีอยู่แล้ว. */
+  const returnValue = (r: WsOrder['returns'][number]) =>
+    (r.itemUid && returnOptions.find((op) => op.uid === r.itemUid)?.value) || `n:${r.item}`;
   function addReturn() {
     setO({
       ...o,
@@ -535,7 +571,8 @@ export function WholesaleDetail({
         // be stamped with whenever the PO was next saved, which could be weeks
         // later and in the wrong month.
         {
-          item: purchasedProducts[0] || '',
+          item: returnOptions[0]?.name || '',
+          itemUid: returnOptions[0]?.uid || '',
           qty: 1,
           reason: '',
           date: dateInputValue(new Date()),
@@ -547,6 +584,12 @@ export function WholesaleDetail({
   function updateReturn(idx: number, k: keyof WsOrder['returns'][number], v: string | number) {
     const returns = [...o.returns];
     returns[idx] = { ...returns[idx], [k]: v };
+    setO({ ...o, returns });
+  }
+  /** ชื่อสินค้ากับบรรทัดที่มันมาจาก ต้องเปลี่ยนพร้อมกันเสมอ (0080). */
+  function updateReturnFields(idx: number, fields: Partial<WsOrder['returns'][number]>) {
+    const returns = [...o.returns];
+    returns[idx] = { ...returns[idx], ...fields };
     setO({ ...o, returns });
   }
   /*
@@ -944,7 +987,7 @@ export function WholesaleDetail({
     const returnRows = o.returns.map((r) => ({
       name: r.item,
       qty: Number(r.qty) || 0,
-      unit: Number(o.items.find((it) => it.name === r.item)?.requestedPrice) || 0,
+      unit: returnUnitPrice(o, r),
     }));
 
     switch (mode) {
@@ -1751,17 +1794,23 @@ export function WholesaleDetail({
               // the right edge of the panel, where it was unreachable.
               <div key={idx} className="flex flex-wrap gap-2 mb-2 items-start">
                 <select
-                  value={r.item}
+                  value={returnValue(r)}
                   aria-label="สินค้าที่รับคืน"
-                  onChange={(e) => updateReturn(idx, 'item', e.target.value)}
+                  onChange={(e) => {
+                    const picked = returnOptions.find((op) => op.value === e.target.value);
+                    updateReturnFields(idx, {
+                      item: picked?.name ?? '',
+                      itemUid: picked?.uid ?? '',
+                    });
+                  }}
                   className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
                 >
                   <option value="" disabled>
                     เลือกสินค้าที่เคยซื้อ...
                   </option>
-                  {purchasedProducts.map((name) => (
-                    <option key={name} value={name}>
-                      {returnLabel(name)}
+                  {returnOptions.map((op) => (
+                    <option key={op.value} value={op.value}>
+                      {op.label}
                     </option>
                   ))}
                 </select>

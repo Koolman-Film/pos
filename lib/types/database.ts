@@ -994,6 +994,7 @@ export type Database = {
           stock_returned_at: string | null
           uid: string
           id: number
+          item_uid: string
           item_name: string
           order_id: string
           qty: number
@@ -1006,6 +1007,7 @@ export type Database = {
           stock_returned_at?: string | null
           uid?: string
           id?: never
+          item_uid?: string
           item_name: string
           order_id: string
           qty: number
@@ -1018,6 +1020,7 @@ export type Database = {
           stock_returned_at?: string | null
           uid?: string
           id?: never
+          item_uid?: string
           item_name?: string
           order_id?: string
           qty?: number

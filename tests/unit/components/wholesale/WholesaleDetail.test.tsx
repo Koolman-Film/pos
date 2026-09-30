@@ -1705,3 +1705,60 @@ describe('WholesaleDetail — งวดชำระ', () => {
     expect(sent.payments[0].installmentUid).toBe('');
   });
 });
+
+/**
+ * ของที่คืน เลือกบรรทัดได้ ไม่ใช่แค่ชื่อ (migration 0080).
+ *
+ * PO ใบเดียวมีสินค้าชื่อเดียวกันสองบรรทัดคนละราคาได้ — ขายล็อตเก่า 900 ล็อตใหม่
+ * 700 การคืนที่อ้างด้วยชื่ออย่างเดียวจะคืนเงินผิดราคาเสมอ
+ */
+describe('WholesaleDetail — บรรทัดที่ของถูกคืนกลับมา', () => {
+  const sameName = {
+    ...order,
+    items: [
+      { name: 'ฟิล์มใส', qty: 5, listPrice: 900, requestedPrice: 900, uid: 'a' },
+      { name: 'ฟิล์มใส', qty: 5, listPrice: 900, requestedPrice: 700, uid: 'b' },
+    ],
+    returns: [],
+    payments: [],
+  } as unknown as WsOrder;
+
+  it('ชื่อซ้ำกัน ตัวเลือกบอกราคาให้แยกออก', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={sameName} canDo={() => true} />);
+    await user.click(screen.getByRole('button', { name: /บันทึกการคืนสินค้า/ }));
+    const picker = screen.getByLabelText('สินค้าที่รับคืน');
+    const labels = Array.from(picker.querySelectorAll('option')).map((o) => o.textContent ?? '');
+    expect(labels.some((l) => l.includes('900'))).toBe(true);
+    expect(labels.some((l) => l.includes('700'))).toBe(true);
+  });
+
+  it('เลือกบรรทัดที่สอง แล้วบันทึก ตัวเลขผูกไปกับบรรทัดนั้น', async () => {
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn();
+    render(<WholesaleDetail order={sameName} canDo={() => true} onSaveOrder={onSaveOrder} />);
+    await user.click(screen.getByRole('button', { name: /บันทึกการคืนสินค้า/ }));
+    await user.selectOptions(screen.getByLabelText('สินค้าที่รับคืน'), 'u:b');
+    await user.click(screen.getByRole('button', { name: /^บันทึก PO/ }));
+
+    const sent = onSaveOrder.mock.calls[0][0] as WsOrder;
+    expect(sent.returns[0]).toMatchObject({ item: 'ฟิล์มใส', itemUid: 'b' });
+  });
+
+  it('รายการคืนที่เคยบันทึกไว้ เปิดมาแล้วยังชี้บรรทัดเดิม', () => {
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...sameName,
+            returns: [
+              { item: 'ฟิล์มใส', itemUid: 'b', qty: 2, reason: '', date: '2026-09-10', uid: 'r1' },
+            ],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+      />,
+    );
+    expect(screen.getByLabelText('สินค้าที่รับคืน')).toHaveValue('u:b');
+  });
+});
