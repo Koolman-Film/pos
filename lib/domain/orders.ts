@@ -1,5 +1,4 @@
 // Ported behavior-for-behavior from reference/v0.4/finnix-film.html:331-337.
-// Returns are priced off the first order item whose `name` matches `return.item`.
 
 import { deliveredValue, type DeliveryRound } from './deliveries';
 
@@ -10,7 +9,32 @@ export type OrderItem = {
   /** คีย์ประจำรายการ (migration 0077) — รอบส่งของชี้มาที่คีย์นี้. */
   uid?: string;
 };
-export type OrderReturn = { item: string; qty: number };
+export type OrderReturn = {
+  item: string;
+  qty: number;
+  /**
+   * บรรทัดของ `items` ที่ของชิ้นนี้ถูกคืนกลับมา (migration 0080).
+   *
+   * เดิมคิดราคาของที่คืนจาก "บรรทัดแรกที่ชื่อตรงกัน" ซึ่งคืนเงินผิดราคาเสมอเมื่อ
+   * PO ใบเดียวมีสินค้าชื่อเดียวกันสองบรรทัดคนละราคา — ขายล็อตเก่า 900 ล็อตใหม่
+   * 700 เป็นเรื่องปกติของงานขายส่ง
+   *
+   * ว่างได้: ของที่คืนอาจเป็นสินค้าที่ลูกค้าซื้อจาก PO ใบอื่น ซึ่งไม่มีบรรทัดใน
+   * ใบนี้ให้ชี้ถึงตั้งแต่แรก และของที่บันทึกไว้ก่อน 0080 ก็ยังอ้างด้วยชื่อได้
+   */
+  itemUid?: string;
+};
+
+/**
+ * ราคาต่อหน่วยที่ของคืนชิ้นนี้ถูกขายไป.
+ *
+ * บรรทัดที่ระบุไว้ก่อน แล้วค่อยตกกลับไปที่ชื่อ — การคืนเป็นการกลับรายการขายที่
+ * เจาะจง ไม่ใช่การตีราคาใหม่
+ */
+export function returnUnitPrice(o: { items: OrderItem[] }, r: OrderReturn): number {
+  const byUid = r.itemUid ? o.items.find((i) => i.uid && i.uid === r.itemUid) : undefined;
+  return Number((byUid ?? o.items.find((i) => i.name === r.item))?.requestedPrice || 0);
+}
 
 /**
  * The steps a PO is still moving through. Anything else is the closing step.
@@ -82,10 +106,7 @@ export type OrderForTotals = {
 
 export function orderTotal(o: OrderForTotals): number {
   const itemsTotal = o.items.reduce((s, i) => s + i.qty * i.requestedPrice, 0);
-  const returnsTotal = o.returns.reduce((s, r) => {
-    const it = o.items.find((i) => i.name === r.item);
-    return s + (it ? r.qty * it.requestedPrice : 0);
-  }, 0);
+  const returnsTotal = o.returns.reduce((s, r) => s + r.qty * returnUnitPrice(o, r), 0);
   // เฉพาะที่อนุมัติแล้ว: an adjustment waiting on ผู้บริหาร must not have
   // reduced the bill already, or the approval is decoration and the money is
   // gone before anybody agreed to it.

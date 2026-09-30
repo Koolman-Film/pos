@@ -31,7 +31,7 @@ export const ORDER_SELECT = `
   price_decision, price_decided_at, price_decided_by, note, delivery_note, delivery_attachments,
   order_items(name, qty, list_price, requested_price, reason, uid),
   order_deliveries(id, uid, delivered_at, note, attachments, stock_deducted_at, order_delivery_items(item_uid, item_name, qty)),
-  order_returns(item_name, qty, reason, returned_at, uid, received_at),
+  order_returns(item_name, item_uid, qty, reason, returned_at, uid, received_at),
   order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
   order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, is_cheque, installment_uid, cleared_at, bounced_at, bounce_note),
   order_installments(uid, seq, due_at, amount, note)
@@ -89,6 +89,7 @@ export type OrderRow = {
   order_returns:
     | {
         item_name: string;
+        item_uid: string | null;
         qty: number;
         reason: string;
         returned_at: string;
@@ -181,6 +182,7 @@ export function mapOrder(row: OrderRow): WsOrder {
       })),
     returns: (row.order_returns ?? []).map((r) => ({
       item: r.item_name,
+      itemUid: r.item_uid ?? '',
       qty: r.qty,
       reason: r.reason ?? '',
       date: r.returned_at ?? '',
