@@ -87,3 +87,50 @@ export function deliveredValue(
     0,
   );
 }
+
+/**
+ * สิ่งที่ PO ใบหนึ่งทำกับชั้นวางไปแล้วจริง ๆ — บวกคือของออกไปจากคลัง.
+ *
+ * ใช้ตอนลบ PO (ต้องคืนเท่านี้) และตอนกู้คืน (ต้องเอาออกอีกเท่านี้) ก่อนหน้านี้
+ * ทั้งสองทางคิดจาก "จำนวนที่สั่ง ลบ จำนวนที่คืน" ซึ่งผิดสองชั้นตั้งแต่ของออกจาก
+ * คลังทีละรอบ (0077): PO ที่สั่ง 200 ส่งไป 80 จะคืนเข้าชั้น 200 คือเสกของที่
+ * ร้านไม่มี และการคืนที่ลูกค้าแจ้งไว้แต่ยังไม่ได้ส่งของกลับมา ก็ถูกหักออกทั้งที่
+ * ชั้นวางไม่เคยขยับ
+ *
+ * ตราประทับสองอันคือหลักฐานเดียวที่บอกว่าชั้นวางขยับจริง — รอบที่ตัดสต็อกแล้ว
+ * และการคืนที่รับของกลับเข้ามาแล้ว อย่างอื่นเป็นแค่ความตั้งใจ
+ *
+ * `legacy` ใช้เฉพาะ PO ที่ตัดสต็อกไปก่อน 0077 แต่ไม่มีรอบส่งของเลย ซึ่ง
+ * การ backfill น่าจะเก็บครบหมดแล้ว — แต่ถ้าหลุดมา การคืนศูนย์ชิ้นคือการกลืนของ
+ * หายไปเงียบ ๆ ซึ่งแย่กว่าการเดาด้วยจำนวนที่สั่ง
+ */
+export function shelfEffect(
+  rounds: { stockDeductedAt?: string | null; items: { name: string; qty: number }[] }[],
+  returns: { name: string; qty: number }[],
+  /**
+   * PO ที่ตัดสต็อกไปก่อน 0077: `deducted` คือตราประทับเดิมบน `orders` และ
+   * `items` คือจำนวนที่สั่ง ซึ่งสมัยนั้นออกจากคลังทั้งใบพร้อมกัน
+   */
+  legacy?: { deducted: boolean; items: { name: string; qty: number }[] },
+): Record<string, number> {
+  const effect: Record<string, number> = {};
+  const add = (name: string, qty: number) => {
+    if (!name) return;
+    effect[name] = (effect[name] ?? 0) + qty;
+  };
+
+  const shipped = rounds.filter((r) => !!r.stockDeductedAt);
+  if (shipped.length > 0) {
+    for (const round of shipped) {
+      for (const li of round.items) add(li.name, Number(li.qty) || 0);
+    }
+  } else if (legacy?.deducted) {
+    for (const it of legacy.items) add(it.name, Number(it.qty) || 0);
+  }
+
+  for (const r of returns) add(r.name, -(Number(r.qty) || 0));
+
+  // ศูนย์ไม่ใช่การเคลื่อนไหว และการส่งเข้าไปก็แค่เพิ่มแถวในทะเบียนสต็อกเปล่า ๆ
+  for (const [name, qty] of Object.entries(effect)) if (qty === 0) delete effect[name];
+  return effect;
+}
