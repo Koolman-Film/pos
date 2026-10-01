@@ -24,6 +24,7 @@ const base: SaleLine = {
   paidIntoFinnix: 0,
   documents: [],
   channel: 'ปลีก',
+  status: 'ส่งมอบแล้ว',
 };
 const l = (over: Partial<SaleLine>): SaleLine => ({ ...base, ...over });
 
