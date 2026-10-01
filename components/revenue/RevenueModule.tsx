@@ -10,6 +10,7 @@ import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/
 import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 
+import { MultiSelectFilter } from '@/components/ui/MultiSelectFilter';
 import type { SaleLine } from '@/app/(app)/revenue/data';
 
 import { groupRevenueReport, type ReportRow } from './revenueReport';
@@ -94,6 +95,14 @@ export function RevenueModule({
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [docFilter, setDocFilter] = useState('all');
   const [channelFilter, setChannelFilter] = useState('all');
+  /*
+    สถานะงาน — เลือกได้หลายสถานะพร้อมกัน (ร้านขอ 1 ต.ค. 2569).
+
+    ว่าง = ไม่กรอง. เก็บเป็นรายการของสถานะที่เลือก ไม่ใช่ 'all' แบบตัวกรองอื่น
+    เพราะคำถามที่ร้านถามคือ "ขอดูเฉพาะที่ยังไม่ปิดกับที่ค้างชำระ" ซึ่งเป็นสอง
+    สถานะพร้อมกัน และตัวเลือกเดียวตอบไม่ได้
+  */
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
   const shopName = (id: string) => accessibleShops.find((s) => s.id === id)?.name ?? id;
 
@@ -115,11 +124,19 @@ export function RevenueModule({
   const scoped = inScope.filter((l) => !l.held);
   const heldLines = inScope.filter((l) => l.held);
   const categories = [...new Set(scoped.map((l) => l.category))].sort();
+  /*
+    สถานะที่มีจริงในช่วงที่ดูอยู่ ไม่ใช่รายการสถานะทั้งหมดของระบบ.
+
+    ตัวกรองที่เสนอสถานะซึ่งไม่มีแถวไหนเป็น คือตัวเลือกที่กดแล้วได้ตารางว่าง —
+    และคนกดจะไม่รู้ว่าเพราะไม่มีข้อมูล หรือเพราะกรองผิด
+  */
+  const statuses = [...new Set(scoped.map((l) => l.status).filter(Boolean))].sort();
 
   const visible = scoped.filter(
     (l) =>
       (categoryFilter === 'all' || l.category === categoryFilter) &&
       (channelFilter === 'all' || l.channel === channelFilter) &&
+      (statusFilter.length === 0 || statusFilter.includes(l.status)) &&
       (docFilter === 'all' || (docFilter === 'tax' ? !!l.taxInvoiceNo : !l.taxInvoiceNo)),
   );
 
@@ -243,6 +260,7 @@ export function RevenueModule({
         ช่องทาง: l.channel,
         ชนิดสินค้า: l.category,
         สินค้า: l.product,
+        สถานะงาน: l.status,
         ยอดขาย: l.amount,
         ...(canSeeCost ? { ต้นทุน: l.cost, กำไรขั้นต้น: l.amount - l.cost } : {}),
         วิธีชำระ: l.payment?.methods ?? '',
@@ -542,6 +560,17 @@ export function RevenueModule({
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <p className="text-sm font-semibold">รายการขาย ({visible.length})</p>
           <div className="flex gap-2 flex-wrap">
+            {/* ขึ้นเฉพาะเมื่อมีสถานะให้เลือกจริง — ช่วงที่ไม่มียอดขายเลยไม่ต้องมี
+                ตัวกรองที่กดแล้วไม่เกิดอะไร */}
+            {statuses.length > 0 && (
+              <MultiSelectFilter
+                ariaLabel="กรองตามสถานะงาน"
+                label="ทุกสถานะ"
+                options={statuses}
+                values={statusFilter}
+                onChange={setStatusFilter}
+              />
+            )}
             <select
               aria-label="กรองตามชนิดสินค้า"
               value={categoryFilter}
@@ -667,7 +696,10 @@ export function RevenueModule({
             <h2>
               รายงานรายได้{shopFilter !== 'all' ? ' · ' + shopName(shopFilter) : ''}
               {categoryFilter !== 'all' ? ' · ' + categoryFilter : ''}
-              {channelFilter !== 'all' ? ' · ขาย' + channelFilter : ''} ·{' '}
+              {channelFilter !== 'all' ? ' · ขาย' + channelFilter : ''}
+              {/* เอกสารที่พิมพ์ออกไปต้องบอกได้ว่ามันถูกกรองด้วยอะไร ไม่งั้นมันคือ
+                  ตัวเลขที่ไม่มีใครย้อนกลับมาตรวจได้ */}
+              {statusFilter.length > 0 ? ' · ' + statusFilter.join(', ') : ''} ·{' '}
               {periodCaption(period, periodValue, rangeStart, rangeEnd, new Date()).replace(
                 'สรุปข้อมูล',
                 '',

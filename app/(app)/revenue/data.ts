@@ -84,6 +84,18 @@ export type SaleLine = {
    * `paid` / `due` once per document — see components/revenue/revenueReport.ts.
    */
   payment?: PaymentSummary;
+  /**
+   * สถานะของใบงานหรือ PO ที่บรรทัดนี้มาจาก (ร้านขอ 1 ต.ค. 2569).
+   *
+   * ยอดขายเกิดก่อนงานจบเสมอ — ใบงานที่ติดตั้งเสร็จแต่ยังไม่ปิด และ PO ที่ส่งของ
+   * แล้วแต่ยังค้างชำระ อยู่ในรายงานเดือนเดียวกัน แต่เป็นคนละเรื่องสำหรับคนอ่าน
+   * สองคนละแบบ จึงต้องกรองแยกได้
+   *
+   * ค่าของสองช่องทางเป็นคนละชุด (ใบงาน: จองแล้ว/กำลังทำ/ส่งมอบแล้ว · PO:
+   * รอจัดส่ง/จัดส่งแล้ว/ค้างชำระ) และตั้งใจให้อยู่ในตัวกรองเดียวกัน — คนอ่าน
+   * เลือกจากสิ่งที่ตาเห็นในตาราง ไม่ใช่จากโครงสร้างข้อมูลข้างหลัง
+   */
+  status: string;
 };
 
 const TAX_INVOICE = 'ใบกำกับภาษี/ใบเสร็จรับเงิน';
@@ -98,7 +110,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
         supabase
           .from('tickets')
           .select(
-            'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, ' +
+            'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, status, ' +
               'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind, finnix_doc_no), ' +
               'ticket_payments(amount, method)',
           )
@@ -172,6 +184,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
     plate: string;
     drop_off_date: string | null;
     revenue_kind: string;
+    status: string;
     brand: string | null;
     model: string | null;
     booking_channel: string | null;
@@ -316,6 +329,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
         bookingChannel: t.booking_channel ?? '',
         car: carOf(t),
         payment: paymentForLine(t.id),
+        status: t.status ?? '',
       });
       costLeft = 0;
     }
@@ -355,6 +369,8 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       payment: summarizePayments(Number(p.price || 0), [
         { amount: Number(p.paid_amount || 0), method: 'ค่าประกัน' },
       ]),
+      // กรมธรรม์ไม่มีสถานะของตัวเอง — มันเกาะอยู่กับใบงานที่ขายมันไป
+      status: t.status ?? '',
     });
   }
 
@@ -386,7 +402,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
           supabase
             .from('orders')
             .select(
-              'id, shop_id, customer_id, delivered_at, sales_by, order_items(name, qty, requested_price, uid), order_deliveries(delivered_at, order_delivery_items(item_uid, item_name, qty)), order_returns(item_name, item_uid, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, status)',
+              'id, shop_id, customer_id, status, delivered_at, sales_by, order_items(name, qty, requested_price, uid), order_deliveries(delivered_at, order_delivery_items(item_uid, item_name, qty)), order_returns(item_name, item_uid, qty, returned_at), order_adjustments(amount, reason, adjusted_at, status), order_payments(amount, method, status)',
             )
             .is('deleted_at', null)
             .not('delivered_at', 'is', null)
@@ -534,6 +550,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       bookingChannel: '',
       car: '',
       payment: orderPayment.get(l.orderId),
+      status: o?.status ?? '',
     };
   });
 }
