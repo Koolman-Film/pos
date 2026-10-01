@@ -32,6 +32,7 @@ const line = (over: Partial<SaleLine> = {}): SaleLine => ({
   finnixDocNo: '',
   paidIntoFinnix: 0,
   documents: [],
+  status: 'ส่งมอบแล้ว',
   ...over,
 });
 
@@ -430,5 +431,80 @@ describe('RevenueModule — รายงานแยกตาราง', () => {
       'รวมทั้งสาขา FINNIX CM',
     ]);
     expect(groups[1].rows.at(-1)).toMatchObject({ สาขา: 'ยอดรวมทั้งหมด', ยอดขาย: 10000 });
+  });
+});
+
+/**
+ * กรองตามสถานะงาน เลือกได้หลายสถานะพร้อมกัน (ร้านขอ 1 ต.ค. 2569).
+ *
+ * ยอดขายเกิดก่อนงานจบเสมอ ใบงานที่ติดตั้งเสร็จแต่ยังไม่ปิด กับ PO ที่ส่งของแล้ว
+ * แต่ค้างชำระ อยู่ในรายงานเดือนเดียวกัน — และคำถามที่ร้านถามคือ "ขอดูเฉพาะสอง
+ * สถานะนี้" ซึ่งตัวเลือกเดียวตอบไม่ได้
+ */
+describe('RevenueModule — กรองตามสถานะงาน', () => {
+  const lines = [
+    line({ ticketId: 'JT-1', product: 'ฟิล์ม A', status: 'ส่งมอบแล้ว', amount: 1000 }),
+    line({ ticketId: 'JT-2', product: 'ฟิล์ม B', status: 'กำลังทำ', amount: 2000 }),
+    line({ ticketId: 'JT-3', product: 'ฟิล์ม C', status: 'ปิดงานแล้ว', amount: 4000 }),
+  ];
+
+  const open = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole('button', { name: 'กรองตามสถานะงาน' }));
+
+  it('ยังไม่เลือกอะไร = ไม่กรอง', () => {
+    renderModule(lines);
+    expect(screen.getByText('รายการขาย (3)')).toBeInTheDocument();
+  });
+
+  it('เสนอเฉพาะสถานะที่มีจริงในช่วงที่ดูอยู่', async () => {
+    // ตัวเลือกที่กดแล้วได้ตารางว่าง ทำให้คนกดแยกไม่ออกว่าไม่มีข้อมูลหรือกรองผิด
+    const user = userEvent.setup();
+    renderModule(lines);
+    await open(user);
+    for (const s of ['ส่งมอบแล้ว', 'กำลังทำ', 'ปิดงานแล้ว']) {
+      expect(screen.getByRole('checkbox', { name: s })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole('checkbox', { name: 'รออนุมัติราคา' })).toBeNull();
+  });
+
+  it('เลือกสองสถานะพร้อมกัน ได้ทั้งสอง', async () => {
+    const user = userEvent.setup();
+    renderModule(lines);
+    await open(user);
+    await user.click(screen.getByRole('checkbox', { name: 'ส่งมอบแล้ว' }));
+    await user.click(screen.getByRole('checkbox', { name: 'ปิดงานแล้ว' }));
+    expect(screen.getByText('รายการขาย (2)')).toBeInTheDocument();
+    expect(screen.getByText('ฟิล์ม A')).toBeInTheDocument();
+    expect(screen.getByText('ฟิล์ม C')).toBeInTheDocument();
+    expect(screen.queryByText('ฟิล์ม B')).toBeNull();
+  });
+
+  it('ติ๊กซ้ำเป็นการเอาออก', async () => {
+    const user = userEvent.setup();
+    renderModule(lines);
+    await open(user);
+    await user.click(screen.getByRole('checkbox', { name: 'กำลังทำ' }));
+    expect(screen.getByText('รายการขาย (1)')).toBeInTheDocument();
+    await user.click(screen.getByRole('checkbox', { name: 'กำลังทำ' }));
+    expect(screen.getByText('รายการขาย (3)')).toBeInTheDocument();
+  });
+
+  it('ปุ่มบอกว่าเลือกไว้กี่สถานะ และล้างได้', async () => {
+    const user = userEvent.setup();
+    renderModule(lines);
+    await open(user);
+    await user.click(screen.getByRole('checkbox', { name: 'ส่งมอบแล้ว' }));
+    // เลือกค่าเดียวบอกชื่อไปเลย อ่านง่ายกว่า "1 สถานะ"
+    expect(screen.getByRole('button', { name: 'กรองตามสถานะงาน' })).toHaveTextContent('ส่งมอบแล้ว');
+    await user.click(screen.getByRole('checkbox', { name: 'กำลังทำ' }));
+    expect(screen.getByRole('button', { name: 'กรองตามสถานะงาน' })).toHaveTextContent('2 สถานะ');
+
+    await user.click(screen.getByRole('button', { name: /ล้างตัวกรอง/ }));
+    expect(screen.getByText('รายการขาย (3)')).toBeInTheDocument();
+  });
+
+  it('ช่วงที่ไม่มียอดขายเลย ไม่มีตัวกรองสถานะให้กด', () => {
+    renderModule([]);
+    expect(screen.queryByRole('button', { name: 'กรองตามสถานะงาน' })).toBeNull();
   });
 });
