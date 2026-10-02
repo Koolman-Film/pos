@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
 import { fmt } from '@/lib/domain/format';
 import type { CountItem } from '@/components/dailyReport/buildDailyReport';
@@ -57,6 +57,7 @@ export function CountPopover({
     setHovering(false);
   };
   const wrapRef = useRef<HTMLSpanElement>(null);
+  const panelRef = useRef<HTMLSpanElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const panelId = useId();
 
@@ -87,6 +88,36 @@ export function CountPopover({
     timer.current = null;
   };
 
+  /*
+    เลื่อนกล่องกลับเข้าจอ หลังจากที่มันกางออกมาแล้ว.
+
+    วัดจากของจริงแทนที่จะเดาจากตำแหน่งตอนเขียนโค้ด เพราะตัวเลขเดียวกันอยู่คนละที่
+    บนจอคอมกับจอมือถือ และการ์ดสรุปกับแถวในตารางก็ชิดคนละด้านกัน
+  */
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (!open || !el) return;
+    /*
+      ล้างการเลื่อนออกก่อนวัด แล้วคำนวณรอบเดียวจบ.
+
+      ถ้าวัดทั้งที่ยังเลื่อนอยู่ ต้องลบค่าที่เลื่อนไว้ออกเอง ซึ่งแปลว่าผลลัพธ์
+      ขึ้นกับว่าค่าที่วัดได้สะท้อน transform แล้วจริงไหม — จริงบนเบราว์เซอร์
+      แต่ไม่จริงใน jsdom และ effect ที่ป้อนค่าตัวเองกลับเข้าไปแบบนั้นวนไม่รู้จบ
+      เมื่อสมมติฐานพัง (เจอตอนเขียนเทสต์) วัดจากศูนย์เสมอจึงไม่มีทางวน
+    */
+    el.style.transform = '';
+    const box = el.getBoundingClientRect();
+    const margin = 8;
+    let next = 0;
+    if (box.left < margin) next = margin - box.left;
+    else if (box.right > window.innerWidth - margin) {
+      next = window.innerWidth - margin - box.right;
+    }
+    // เขียนลงโหนดตรง ๆ ไม่เก็บเป็น state: ค่านี้ไม่มีใครอ่านนอกจากตัวกล่องเอง
+    // และกล่องถูกถอดออกตอนปิดอยู่แล้ว จึงไม่มีอะไรต้องรีเซ็ต
+    if (next) el.style.transform = `translateX(${next}px)`;
+  }, [open, items.length]);
+
   const total = items.reduce((n, i) => n + i.amount, 0);
 
   return (
@@ -114,17 +145,26 @@ export function CountPopover({
           aria-label={title}
           /* กล่องที่ลอยอยู่ตอนกดแคป ไม่ใช่ส่วนหนึ่งของรายงาน */
           data-capture-hide=""
+          ref={panelRef}
           className="absolute z-30 rounded-xl p-2 text-left"
           style={{
             top: 'calc(100% + 4px)',
-            // ชิดขวาของตัวเลข: ตัวเลขพวกนี้อยู่ชิดขวาของตารางเกือบทั้งหมด
-            // กล่องที่กางไปทางขวาจะล้นออกนอกการ์ด
+            /*
+              ตั้งต้นชิดขวาของตัวเลข แล้วค่อยเลื่อนให้อยู่ในจอ.
+
+              ตัวเลขจำนวนส่วนใหญ่อยู่ชิดขวาของตาราง กล่องจึงควรกางไปทางซ้าย —
+              แต่ตัวเลขบนการ์ดสรุปอยู่ชิดซ้ายของหน้า กล่องเลยทะลุออกไปทับแถบ
+              เมนูจนอ่านไม่ได้ (ร้านเจอ 2 ต.ค. 2569) การเดาทิศทางจากตำแหน่งที่
+              เขียนโค้ดไว้ตอบไม่ได้ทุกกรณี โดยเฉพาะบนจอแคบที่ทุกอย่างขยับ —
+              จึงวัดเอาหลังกางแล้วเลื่อนเท่าที่ล้นจริง
+            */
             right: 0,
             background: 'var(--surface)',
             border: '1px solid var(--line)',
             boxShadow: '0 10px 28px rgba(0,0,0,.16)',
             minWidth: '15rem',
-            maxWidth: '22rem',
+            // บนมือถือ กล่องกว้างกว่าจอคือกล่องที่อ่านไม่ได้ ไม่ว่าจะวางตรงไหน
+            maxWidth: 'min(22rem, calc(100vw - 24px))',
             maxHeight: '16rem',
             overflowY: 'auto',
             whiteSpace: 'normal',
