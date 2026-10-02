@@ -7,6 +7,19 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: nav.push, refresh: vi.fn(), replace: vi.fn() }),
 }));
 
+/*
+  `html-to-image` วาดผ่าน <foreignObject> ของ SVG ซึ่ง jsdom แปลงเป็นรูปไม่ได้
+  สิ่งที่เทสต์ได้จึงเป็นสัญญารอบ ๆ มัน: วาดจากกรอบไหน ตัดอะไรออก ตั้งชื่อไฟล์ว่า
+  อะไร และกดพิมพ์แล้วใบพิมพ์เป็นรูปนั้นจริงไหม — ส่วนหน้าตาของรูป ตรวจบนเบราว์เซอร์จริง
+*/
+type CaptureOptions = { backgroundColor?: string; filter?: (node: Node) => boolean };
+const capture = vi.hoisted(() => ({
+  toPng: vi.fn<(node: HTMLElement, options?: CaptureOptions) => Promise<string>>(
+    async () => 'data:image/png;base64,AAAA',
+  ),
+}));
+vi.mock('html-to-image', () => ({ toPng: capture.toPng }));
+
 import type { DailyReport } from '@/components/dailyReport/buildDailyReport';
 import { DailyReportView } from '@/components/dailyReport/DailyReportView';
 
@@ -143,5 +156,79 @@ describe('DailyReportView', () => {
     expect(nav.push).toHaveBeenLastCalledWith('/daily-report?d=2026-09-23&shop=all');
     await userEvent.click(screen.getByRole('button', { name: 'Central Audio' }));
     expect(nav.push).toHaveBeenLastCalledWith('/daily-report?d=2026-09-22&shop=north');
+  });
+});
+
+/**
+ * บันทึกเป็นรูป / พิมพ์ — ภาพเดียวกัน (ร้านขอ 2 ต.ค. 2569).
+ *
+ * ร้านบอกว่า PDF ตารางเปล่าของเดิมดูยากกว่าหน้าจอ ทางที่ตรงที่สุดคือให้สิ่งที่
+ * ออกไปเป็นหน้าจอ ไม่ใช่การจัดหน้าใหม่ให้คล้ายหน้าจอ
+ */
+describe('DailyReportView — บันทึกเป็นรูป และพิมพ์', () => {
+  beforeEach(() => {
+    capture.toPng.mockClear();
+    capture.toPng.mockResolvedValue('data:image/png;base64,AAAA');
+  });
+
+  it('ตั้งชื่อไฟล์ด้วยวันที่นำหน้า แล้วตามด้วยขอบเขตที่ดูอยู่', async () => {
+    // เรียงตัวเองได้ในโฟลเดอร์ เพราะคนเปิดหาคือหา "ของวันไหน"
+    const user = userEvent.setup();
+    const clicks: { download: string; href: string }[] = [];
+    const orig = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      clicks.push({ download: this.download, href: this.href });
+    };
+    try {
+      renderView();
+      await user.click(screen.getByRole('button', { name: /บันทึกเป็นรูป/ }));
+      expect(clicks[0].download).toBe('2026-09-22-ทุกสาขา.png');
+      expect(clicks[0].href).toContain('data:image/png');
+    } finally {
+      HTMLAnchorElement.prototype.click = orig;
+    }
+  });
+
+  it('ไม่เอาปุ่มและตัวเลือกวัน/สาขาติดไปในรูป', async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole('button', { name: /บันทึกเป็นรูป/ }));
+
+    const filter = capture.toPng.mock.calls[0][1]!.filter!;
+    const hidden = document.querySelector('[data-capture-hide]')!;
+    expect(filter(hidden)).toBe(false);
+    // ส่วนที่เป็นเนื้อรายงานยังผ่านตามปกติ
+    expect(filter(screen.getByRole('heading', { name: /① ยอดขาย/ }))).toBe(true);
+  });
+
+  it('พื้นหลังขาวเสมอ ไม่ใช่สีของธีมที่เปิดอยู่', async () => {
+    // คนที่เปิดโหมดมืดก็ยังส่งรูปให้คนอื่นอ่าน และพื้นดำที่พิมพ์ลงกระดาษคือหมึกเต็มหน้า
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole('button', { name: /บันทึกเป็นรูป/ }));
+    expect(capture.toPng.mock.calls[0][1]).toMatchObject({ backgroundColor: '#ffffff' });
+  });
+
+  it('กดพิมพ์ แล้วใบที่พิมพ์คือรูปนั้น ไม่ใช่ตารางอีกชุด', async () => {
+    const user = userEvent.setup();
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+    try {
+      renderView();
+      await user.click(screen.getByRole('button', { name: /พิมพ์ \/ PDF/ }));
+      // รอให้รูปเข้า DOM ก่อนเปิดหน้าต่างพิมพ์ — ตัวจริงรอสองเฟรม ไม่งั้นหน้าต่าง
+      // พิมพ์เปิดมาบนใบเปล่า
+      await vi.waitFor(() => expect(print).toHaveBeenCalled());
+      expect(capture.toPng).toHaveBeenCalled();
+    } finally {
+      print.mockRestore();
+    }
+  });
+
+  it('แคปไม่สำเร็จ บอกออกมา ไม่ใช่เงียบ', async () => {
+    capture.toPng.mockRejectedValueOnce(new Error('วาดรูปไม่สำเร็จ'));
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole('button', { name: /บันทึกเป็นรูป/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('วาดรูปไม่สำเร็จ');
   });
 });
