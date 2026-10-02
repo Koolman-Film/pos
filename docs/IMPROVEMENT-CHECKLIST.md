@@ -408,9 +408,13 @@ When data grows (≈ 10k tickets):
       receivables (`receivables.ts:48`) compare raw decimals; some price/discount combinations
       leave ~1e-11 unpaid, so the ticket never locks and shows a phantom receivable. Tickets that
       should lock would start locking. **Check production for affected tickets first.**
-- [ ] **D4 Deleting a delivered PO.** `storedOrderNetQty` (`wholesale/actions.ts:168`) returns
-      unconfirmed returns too, and ignores post-delivery item edits. Reverse only what
-      `stock_movements` actually recorded for the PO?
+- [x] **D4 Deleting a delivered PO.** `storedOrderNetQty` returned unconfirmed returns too, and
+      ignored post-delivery item edits.
+  - Done 2026-09-30 (0079, `7d4974b`): replaced by `shelfEffect` (`lib/domain/deliveries.ts`),
+    which reverses exactly what the two stamps say moved — delivery rounds with
+    `stock_deducted_at`, less returns with `stock_returned_at`. The old code also read
+    `orders.stock_deducted_at`, which 0077 stopped writing, so a delivered PO was being
+    deleted without returning anything to the shelf at all.
 - [ ] **D5 Login captcha** (server-side sign-in means Supabase rate limits see Vercel's IPs), and
       **activity history retention** period.
 - [ ] **D6 Preview deploys:** separate staging Supabase project (cost) or previews off / behind

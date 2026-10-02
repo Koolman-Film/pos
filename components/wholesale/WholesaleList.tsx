@@ -7,17 +7,25 @@ import * as XLSX from 'xlsx';
 
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
 import { fmt, fmtThaiDate, fmtThaiDayString } from '@/lib/domain/format';
-import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
-import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
+import {
+  currentMonthValue,
+  daysAgoValue,
+  exportStamp,
+  previousMonthValue,
+  todayValue,
+} from '@/lib/domain/now';
+import { DEFAULT_PERIOD, isInPeriod, periodCaption } from '@/lib/domain/period';
 import { amountTerms, matchesSearch } from '@/lib/domain/search';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useSearchFromUrl } from '@/lib/hooks/useSearchFromUrl';
 import {
+  isOpenOrderStatus,
   orderCollectible,
   orderTotal,
   orderPaid,
   needsPriceApproval,
 } from '@/lib/domain/orders';
+import { deliveryProgress, hasUndelivered } from '@/lib/domain/deliveries';
 import { isWsFlag, matchesWsFlag, WS_FLAG_LABELS, type WsFlag } from '@/lib/alerts/wholesale';
 
 import { pendingCheques } from './cheques';
@@ -212,7 +220,22 @@ export function WholesaleList({
     );
   }
   // ... and the status last, so the chips above can count `scoped`.
-  const visible = filter === 'all' ? scoped : scoped.filter((o) => o.status === filter);
+  /*
+    ยังค้างส่ง — คำถามที่ห้าสถานะตอบไม่ได้ (0077).
+
+    PO ที่ส่งไปแล้ว 80 จาก 200 ยังเป็น "รอจัดส่ง" เหมือน PO ที่ยังไม่ได้ส่งเลย
+    และ PO ที่ส่งครบแล้วแต่ยังไม่ปิดก็อยู่ปนกันในนั้น คนที่ต้องไล่ว่าวันนี้ต้อง
+    ส่งอะไรบ้าง จึงไม่มีทางกรองออกมาดูได้
+  */
+  const UNDELIVERED = 'ยังค้างส่ง';
+  const owes = (o: WsOrder) =>
+    isOpenOrderStatus(o.status) && hasUndelivered(o.items, o.deliveries ?? []);
+  const visible =
+    filter === 'all'
+      ? scoped
+      : filter === UNDELIVERED
+        ? scoped.filter(owes)
+        : scoped.filter((o) => o.status === filter);
 
   const productScoped = list.filter(
     (o) =>
@@ -453,6 +476,18 @@ export function WholesaleList({
               {s} {scoped.filter((o) => o.status === s).length}
             </button>
           ))}
+          {/* ขึ้นเฉพาะเมื่อมีของค้างส่งจริง ชิปที่กดแล้วได้ศูนย์ไม่ได้ช่วยใคร */}
+          {scoped.some(owes) && (
+            <button
+              onClick={() => setFilter(UNDELIVERED)}
+              className={`text-xs px-3.5 py-1.5 rounded-full font-semibold ${
+                filter === UNDELIVERED ? 'pill-active' : 'pill-inactive'
+              }`}
+            >
+              <i className="fa-solid fa-truck-fast mr-1.5"></i>
+              {UNDELIVERED} {scoped.filter(owes).length}
+            </button>
+          )}
         </div>
         {/*
           บอกว่ากำลังกรองอะไรอยู่ และกดออกได้.
@@ -545,15 +580,68 @@ export function WholesaleList({
                     <span className="font-semibold">{fmt(t.revenue)}</span>
                     {/* ค้างรับ beside the sales figure, because a big number
                         with a big balance behind it is a different result. */}
+                    {/*
+                      บอกว่าเป็นยอดของที่ส่งแล้ว ไม่ใช่ยอดทั้งบิล.
+
+                      ตัวเลขนี้คิดจากของที่ออกไปจริง (0077) ส่วน "ค้างชำระ" ที่
+                      แต่ละแถว PO คือยอดคงเหลือของบิลทั้งใบ — คนละคำถามกัน และ
+                      ถ้าไม่บอกไว้ คนที่บวกแถวเองจะได้ไม่เท่ากับสรุปแล้วงงว่า
+                      ตัวไหนผิด
+                    */}
                     {t.due > 0 && (
                       <span className="text-xs" style={{ color: '#B23A48' }}>
-                        ค้างรับ {fmt(t.due)}
+                        ค้างรับ (ส่งของแล้ว) {fmt(t.due)}
                       </span>
                     )}
                   </span>
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {/*
+          ไม่มีอะไรให้แสดง ต้องบอกว่าทำไม (ร้านแจ้ง 2 ต.ค. 2569).
+
+          ตัวกรองช่วงเวลาตั้งต้นเป็นเดือนปัจจุบัน เปิดโมดูลวันที่ 1 ของเดือนจึง
+          เจอหน้าที่จบลงตรงแถวชิปสถานะ ไม่มีรายการ ไม่มีคำอธิบาย ซึ่งอ่านได้
+          อย่างเดียวว่าระบบพัง — ทั้งที่ของอยู่ครบในเดือนก่อน
+
+          ปุ่มที่ให้มาคือทางออกจากตัวกรองที่กำลังซ่อนของอยู่ ไม่ใช่แค่คำบอกเล่า
+        */}
+        {visible.length === 0 && (
+          <div className="card p-6 text-center">
+            <p className="text-sm font-semibold">
+              {list.length === 0 ? 'ยังไม่มี PO ขายส่ง' : 'ไม่มี PO ที่ตรงกับที่กรองอยู่'}
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+              {list.length === 0
+                ? 'กด “สร้าง PO ใหม่” เพื่อเปิดใบแรก'
+                : periodCaption(period, periodValue, rangeStart, rangeEnd, new Date()).replace(
+                    'สรุปข้อมูล',
+                    'ช่วงที่ดูอยู่:',
+                  )}
+            </p>
+            {list.length > 0 && (
+              <div className="flex gap-2 justify-center mt-3 flex-wrap">
+                {filter !== 'all' && (
+                  <button
+                    onClick={() => setFilter('all')}
+                    className="btn-outline text-xs px-3 py-2 rounded-lg font-medium"
+                  >
+                    ล้างตัวกรองสถานะ
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setPeriod('month');
+                    setPeriodValue(previousMonthValue(periodValue));
+                  }}
+                  className="btn-outline text-xs px-3 py-2 rounded-lg font-medium"
+                >
+                  <i className="fa-solid fa-chevron-left mr-1.5"></i>ดูเดือนก่อนหน้า
+                </button>
+              </div>
+            )}
           </div>
         )}
         <div className="flex flex-col gap-2.5">
@@ -643,6 +731,28 @@ export function WholesaleList({
                                   ? 'ชำระครบแล้ว'
                                   : `ค้างชำระ ${fmt(orderTotal(o) - orderPaid(o))}`}
                               </p>
+                              {/*
+                                ส่งไปแล้วเท่าไหร่ (0077).
+
+                                PO ที่ส่งไปแล้วบางส่วนเคยหน้าตาเหมือน PO ที่ยัง
+                                ไม่ได้ส่งเลยทุกประการ — สถานะเดียวกัน ยอดเดียวกัน
+                                คนที่ต้องไล่ว่าวันนี้ต้องส่งอะไร จึงต้องเปิดทีละใบ
+
+                                ขึ้นเฉพาะใบที่ส่งไปแล้วบางส่วน: ใบที่ยังไม่ส่งเลย
+                                หรือส่งครบแล้ว สถานะบอกครบอยู่แล้ว
+                              */}
+                              {(() => {
+                                const p = deliveryProgress(o.items, o.deliveries ?? []);
+                                const sent = p.reduce((n, x) => n + x.sent, 0);
+                                const ordered = p.reduce((n, x) => n + x.ordered, 0);
+                                if (sent <= 0 || sent >= ordered) return null;
+                                return (
+                                  <p className="text-xs mt-0.5" style={{ color: '#8A5A12' }}>
+                                    <i className="fa-solid fa-truck-fast mr-1"></i>
+                                    ส่งแล้ว {sent}/{ordered}
+                                  </p>
+                                );
+                              })()}
                             </div>
                             <span className="row-action pr-2" style={{ color: 'var(--primary)' }}>
                               <i className="fa-solid fa-chevron-right text-xs"></i>

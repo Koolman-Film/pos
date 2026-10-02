@@ -52,3 +52,19 @@ export function dateInputValue(d: Date | string | null | undefined): string {
 export function exportStamp(): number {
   return Date.now();
 }
+
+/**
+ * เดือนก่อนหน้าของค่าในช่อง `<input type="month">` (`YYYY-MM`).
+ *
+ * ใช้โดยปุ่ม "ดูเดือนก่อนหน้า" ที่โผล่เมื่อช่วงที่เลือกไม่มีข้อมูล — ซึ่งเกิด
+ * ทุกต้นเดือน เพราะตัวกรองตั้งต้นเป็นเดือนปัจจุบันเสมอ
+ *
+ * ค่าที่อ่านไม่ออกคืนค่าเดิมกลับไป ไม่ใช่โยนทิ้ง: ปุ่มที่กดแล้วพาไปเดือน NaN
+ * แย่กว่าปุ่มที่กดแล้วไม่เกิดอะไร
+ */
+export function previousMonthValue(value: string): string {
+  const [y, m] = value.split('-').map(Number);
+  if (!y || !m) return value;
+  const d = new Date(Date.UTC(y, m - 2, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
