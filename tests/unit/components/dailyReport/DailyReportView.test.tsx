@@ -426,6 +426,42 @@ describe('DailyReportView — กล่องที่มาต้องไม�
     }
   });
 
+  it('อยู่ในจอแต่ไปนอนใต้แถบเมนู ก็ยังต้องเลื่อน', async () => {
+    /*
+      ด่านรอบแรกหนีบไว้กับขอบหน้าต่างอย่างเดียว กล่องเลยผ่านด่านทั้งที่ไปนอนอยู่
+      ใต้แถบเมนูที่ลอยทับซ้ายมืออยู่ — อ่านไม่ได้เหมือนเดิม พื้นที่อ่านได้คือ
+      คอลัมน์เนื้อหา ไม่ใช่หน้าต่าง
+    */
+    const user = userEvent.setup();
+    const spy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        // แถบเมนูกว้าง 256 — เนื้อหาเริ่มที่ 256 ส่วนกล่องกางไปอยู่ที่ 70
+        return this.tagName === 'MAIN' ? rect(256, 1000) : rect(70, 310);
+      });
+    try {
+      // ต้องมีคอลัมน์เนื้อหาจริง ๆ ให้กล่องวัด เหมือนที่ layout ของแอปมีให้
+      render(
+        <main>
+          <DailyReportView
+            report={REPORT}
+            today="2026-09-23"
+            shopFilter="all"
+            shops={SHOPS}
+            scopeName="ทุกสาขา"
+            showShopColumn={false}
+          />
+        </main>,
+      );
+      await user.click(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
+      const panel = await screen.findByRole('dialog');
+      // 70 + 194 = 264 — ขอบซ้ายของเนื้อหา บวกระยะขอบที่เผื่อไว้
+      expect(panel.style.transform).toBe('translateX(194px)');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('อยู่ในจออยู่แล้ว ไม่ต้องเลื่อน', async () => {
     const user = userEvent.setup();
     const spy = vi
