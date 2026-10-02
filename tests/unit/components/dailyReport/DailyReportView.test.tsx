@@ -398,3 +398,46 @@ describe('DailyReportView — ที่มาของจำนวน', () => {
     expect(screen.getByRole('dialog').closest('[data-capture-hide]')).not.toBeNull();
   });
 });
+
+/**
+ * กล่องต้องอยู่ในจอ (ร้านเจอ 2 ต.ค. 2569).
+ *
+ * ตั้งต้นให้กล่องชิดขวาของตัวเลขเพราะตัวเลขส่วนใหญ่อยู่ชิดขวาของตาราง แต่ตัวเลข
+ * บนการ์ดสรุปอยู่ชิดซ้ายของหน้า กล่องเลยกางทะลุไปทับแถบเมนูจนอ่านชื่อใบงานไม่ได้
+ * เหลือแต่ตัวเลขเงิน — ข้อมูลอยู่ครบมาตลอด แต่คนอ่านมองไม่เห็น
+ */
+describe('DailyReportView — กล่องที่มาต้องไม่ล้นจอ', () => {
+  const rect = (left: number, right: number) =>
+    ({ left, right, top: 0, bottom: 0, width: right - left, height: 0 }) as DOMRect;
+
+  it('ล้นขอบซ้าย ถูกเลื่อนกลับเข้ามา', async () => {
+    const user = userEvent.setup();
+    const spy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect(-120, 120));
+    try {
+      renderView();
+      await user.click(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
+      const panel = await screen.findByRole('dialog');
+      // -120 + 128 = 8 — ขอบซ้ายพอดีกับระยะขอบที่เผื่อไว้
+      expect(panel.style.transform).toBe('translateX(128px)');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('อยู่ในจออยู่แล้ว ไม่ต้องเลื่อน', async () => {
+    const user = userEvent.setup();
+    const spy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect(200, 440));
+    try {
+      renderView();
+      await user.click(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
+      const panel = await screen.findByRole('dialog');
+      expect(panel.style.transform).toBe('');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
