@@ -38,32 +38,111 @@ const REPORT: DailyReport = {
         total: 11500,
         count: 3,
         categories: [
-          { name: 'ฟิล์มกรองแสง', amount: 7500, count: 2 },
-          { name: 'เครื่องเสียง', amount: 4000, count: 1 },
+          {
+            name: 'ฟิล์มกรองแสง',
+            amount: 7500,
+            count: 2,
+            items: [
+              { label: 'JT-CM-00101', amount: 5000, href: '/tickets/JT-CM-00101' },
+              { label: 'JT-CM-00102', amount: 2500, href: '/tickets/JT-CM-00102' },
+            ],
+          },
+          {
+            name: 'เครื่องเสียง',
+            amount: 4000,
+            count: 1,
+            items: [{ label: 'JT-CM-00103', amount: 4000, href: '/tickets/JT-CM-00103' }],
+          },
+        ],
+        items: [
+          { label: 'JT-CM-00101', amount: 5000, href: '/tickets/JT-CM-00101' },
+          { label: 'JT-CM-00103', amount: 4000, href: '/tickets/JT-CM-00103' },
+          { label: 'JT-CM-00102', amount: 2500, href: '/tickets/JT-CM-00102' },
         ],
       },
       {
         channel: 'ขายส่ง',
         total: 8000,
         count: 1,
-        categories: [{ name: 'ลำโพง', amount: 8000, count: 1 }],
+        categories: [
+          {
+            name: 'ลำโพง',
+            amount: 8000,
+            count: 1,
+            items: [{ label: 'WS-CM-0007', amount: 8000, href: '/wholesale/WS-CM-0007' }],
+          },
+        ],
+        items: [{ label: 'WS-CM-0007', amount: 8000, href: '/wholesale/WS-CM-0007' }],
       },
+    ],
+    items: [
+      { label: 'WS-CM-0007', amount: 8000, href: '/wholesale/WS-CM-0007' },
+      { label: 'JT-CM-00101', amount: 5000, href: '/tickets/JT-CM-00101' },
+      { label: 'JT-CM-00103', amount: 4000, href: '/tickets/JT-CM-00103' },
+      { label: 'JT-CM-00102', amount: 2500, href: '/tickets/JT-CM-00102' },
     ],
     total: 19500,
     previousTotal: 10000,
     held: 700,
     documents: 4,
-    outstanding: { count: 5, amount: 42300 },
+    outstanding: {
+      count: 5,
+      amount: 42300,
+      items: [
+        { label: 'JT-CM-00099', note: 'รอส่งมอบ', amount: 42300, href: '/tickets/JT-CM-00099' },
+      ],
+    },
   },
   inflow: {
     rows: [
-      { key: 'a1', shop: 'cm', accountId: 1, name: 'เงินสดหน้าร้าน', amount: 7500, count: 2 },
-      { key: 'lcm:โอน TTB', shop: 'cm', accountId: null, name: 'โอน TTB', amount: 700, count: 1 },
+      {
+        key: 'a1',
+        shop: 'cm',
+        accountId: 1,
+        name: 'เงินสดหน้าร้าน',
+        amount: 7500,
+        count: 2,
+        items: [
+          {
+            label: 'JT-CM-00101',
+            note: 'คุณ เอ · เงินสด',
+            amount: 5000,
+            href: '/tickets/JT-CM-00101',
+          },
+          {
+            label: 'JT-CM-00102',
+            note: 'คุณ บี · เงินสด',
+            amount: 2500,
+            href: '/tickets/JT-CM-00102',
+          },
+        ],
+      },
+      {
+        key: 'lcm:โอน TTB',
+        shop: 'cm',
+        accountId: null,
+        name: 'โอน TTB',
+        amount: 700,
+        count: 1,
+        items: [{ label: 'โอน TTB', amount: 700 }],
+      },
     ],
     total: 8200,
   },
   outflow: {
-    rows: [{ key: 'a3', shop: 'cm', accountId: 3, name: 'เงินสดย่อย', amount: 350, count: 1 }],
+    rows: [
+      {
+        key: 'a3',
+        shop: 'cm',
+        accountId: 3,
+        name: 'เงินสดย่อย',
+        amount: 350,
+        count: 1,
+        items: [
+          { label: 'POS-0012', note: 'ค่ากาแฟ · ของใช้สำนักงาน', amount: 350, href: '/accounting' },
+        ],
+      },
+    ],
     total: 350,
   },
   balances: [
@@ -117,7 +196,9 @@ describe('DailyReportView', () => {
     expect(within(inflowTile).getByText('เงินรอคืน Finnix')).toBeInTheDocument();
     expect(within(inflowTile).getByText('700.00')).toBeInTheDocument();
     expect(screen.getAllByText('19,500.00').length).toBeGreaterThan(0);
-    expect(screen.getByText('▲ 95% จากเมื่อวาน · 4 งาน')).toBeInTheDocument();
+    // จำนวนงานเป็นปุ่มของตัวเองแล้ว (กดดูที่มาได้) ข้อความจึงถูกแยกเป็นสองชิ้น
+    expect(screen.getByText(/▲ 95% จากเมื่อวาน/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' })).toHaveTextContent('4 งาน');
     expect(screen.getAllByText('+7,850.00').length).toBeGreaterThan(0);
   });
 
@@ -230,5 +311,90 @@ describe('DailyReportView — บันทึกเป็นรูป และ�
     renderView();
     await user.click(screen.getByRole('button', { name: /บันทึกเป็นรูป/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent('วาดรูปไม่สำเร็จ');
+  });
+});
+
+/**
+ * ชี้เมาส์หรือกดค้างที่ตัวเลข "จำนวน" แล้วเห็นที่มา (ร้านขอ 2 ต.ค. 2569).
+ *
+ * "1 งาน" ตอบได้แค่ว่ามีกี่อัน และคำถามถัดไปคือ "อันไหน" เสมอ — เดิมต้องออกจาก
+ * รายงานไปเปิดอีกโมดูลแล้วไล่หาเอง ซึ่งแปลว่าเลิกอ่านรายงานกลางคัน
+ */
+describe('DailyReportView — ที่มาของจำนวน', () => {
+  it('ชี้เมาส์ที่จำนวนงาน แล้วเห็นใบงานที่จ่ายเงินเข้ามา', async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.hover(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
+    const panel = await screen.findByRole('dialog', { name: 'ใบงาน / PO ที่จ่ายเงินเข้ามาวันนี้' });
+    expect(within(panel).getByText('WS-CM-0007')).toBeInTheDocument();
+    expect(within(panel).getByText('JT-CM-00101')).toBeInTheDocument();
+    // รวมท้ายกล่อง เพื่อให้เทียบกับตัวเลขบนการ์ดได้ทันทีว่าครบไหม
+    expect(within(panel).getByText('19,500.00')).toBeInTheDocument();
+  });
+
+  it('เปิดเอกสารต้นทางได้จากในป๊อปอัพ', async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.hover(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
+    const panel = await screen.findByRole('dialog');
+    expect(within(panel).getByRole('link', { name: 'WS-CM-0007' })).toHaveAttribute(
+      'href',
+      '/wholesale/WS-CM-0007',
+    );
+  });
+
+  it('จำนวนรายการของแต่ละแหล่งเงิน บอกว่าเงินก้อนไหนบ้าง', async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole('button', { name: 'ดูที่มาของ2 รายการของ เงินสดหน้าร้าน' }));
+    const panel = await screen.findByRole('dialog', { name: 'เงินสดหน้าร้าน' });
+    expect(within(panel).getByText('คุณ เอ · เงินสด')).toBeInTheDocument();
+  });
+
+  it('งานค้างชำระ บอกสถานะ ณ วันนั้นของแต่ละงาน', async () => {
+    // ไม่ใช่สถานะวันนี้ — รายงานของเมื่อวานต้องอ่านเหมือนเมื่อวาน
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole('button', { name: 'ดูที่มาของ5 งานขายค้างชำระ' }));
+    const panel = await screen.findByRole('dialog', { name: 'งานขายค้างชำระ ณ สิ้นวัน' });
+    expect(within(panel).getByText('รอส่งมอบ')).toBeInTheDocument();
+  });
+
+  it('คลิกคือการปักหมุด กล่องอยู่ต่อแม้เมาส์ออกไปแล้ว', async () => {
+    // คนที่จะกดลิงก์ข้างในต้องเลื่อนเมาส์ออกจากตัวเลขก่อนเสมอ
+    const user = userEvent.setup();
+    renderView();
+    const btn = screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' });
+    await user.click(btn);
+    await user.unhover(btn);
+    expect(screen.queryByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('ชี้เมาส์เฉย ๆ แล้วเอาเมาส์ออก กล่องปิดเอง', async () => {
+    const user = userEvent.setup();
+    renderView();
+    const btn = screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' });
+    await user.hover(btn);
+    expect(screen.queryByRole('dialog')).toBeInTheDocument();
+    await user.unhover(btn);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('กด Escape แล้วปิด แม้ปักหมุดไว้', async () => {
+    const user = userEvent.setup();
+    renderView();
+    const btn = screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' });
+    await user.click(btn);
+    await user.keyboard('{Escape}');
+    await user.unhover(btn);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('ป๊อปอัพไม่ติดไปในรูปที่แคป', async () => {
+    // รูปของรายงานต้องเป็นรายงาน ไม่ใช่รายงานที่มีกล่องลอยบังอยู่
+    const user = userEvent.setup();
+    renderView();
+    await user.click(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
+    expect(screen.getByRole('dialog').closest('[data-capture-hide]')).not.toBeNull();
   });
 });
