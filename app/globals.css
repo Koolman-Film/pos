@@ -383,6 +383,24 @@ body {
   .app-shell {
     display: none !important;
   }
+  /*
+    ใบพิมพ์ที่เป็นรูปแคปหน้าจอ (รายงานการเงินรายวัน).
+
+    กฎที่แบนทุกอย่างให้เป็นหมึกดำข้างบน ใช้กับตัวหนังสือ — รูปไม่ได้รับผลอยู่แล้ว
+    แต่ `@page` margin 2cm ทำให้รูปเหลือความกว้างไม่พอจนตัวเลขเล็กเกินอ่าน
+    หน้าที่เป็นรูปจึงใช้ขอบแคบลง และกันไม่ให้รูปถูกตัดกลางหน้า
+  */
+  @page capture-page {
+    size: A4;
+    margin: 8mm;
+  }
+  .print-area.print-capture {
+    page: capture-page;
+  }
+  .print-area.print-capture img {
+    max-width: 100%;
+    break-inside: avoid;
+  }
   .print-area {
     display: block !important;
     width: auto;

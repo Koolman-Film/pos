@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt, fmtThaiDateLong, shortShopName } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
+import { captureElement, downloadDataUrl, reportFileName } from '@/lib/print/captureScreen';
 
 import {
   nextDay,
@@ -57,6 +59,64 @@ export function DailyReportView({
   const mounted = useIsMounted();
   const { sales, inflow, outflow, balances } = report;
 
+  /*
+    บันทึกเป็นรูป และ พิมพ์ — ใช้ภาพเดียวกัน (ร้านขอ 2 ต.ค. 2569).
+
+    ร้านบอกว่า PDF ตารางเปล่าของเดิม "ดูยากกว่าที่เห็นบนหน้าจอ" ทางที่ตรงที่สุด
+    คือให้สิ่งที่พิมพ์ออกไป *เป็น* หน้าจอ ไม่ใช่การจัดหน้าใหม่ให้คล้ายหน้าจอ —
+    อย่างหลังคือสิ่งที่มีอยู่แล้วและเป็นสิ่งที่ร้านบอกว่าอ่านยาก
+
+    ผลพลอยได้ที่สำคัญกว่าความง่าย: ภาพกับใบพิมพ์มาจากการวาดครั้งเดียวกัน จึง
+    ไม่มีทางที่สองอย่างนี้จะพูดตัวเลขคนละชุด
+  */
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [capturing, setCapturing] = useState(false);
+  const [captured, setCaptured] = useState('');
+  const [captureError, setCaptureError] = useState('');
+
+  async function capture(): Promise<string> {
+    const node = sheetRef.current;
+    if (!node) throw new Error('ไม่พบส่วนของรายงานที่จะบันทึก');
+    /*
+      พื้นขาวเสมอ ไม่ใช่สีพื้นของธีมที่เปิดอยู่.
+
+      คนที่เปิดโหมดมืดอยู่ก็ยังส่งรูปให้คนอื่นอ่าน และรูปพื้นดำที่พิมพ์ลงกระดาษ
+      คือหมึกเต็มหน้า
+    */
+    const { dataUrl } = await captureElement(node, { background: '#ffffff' });
+    return dataUrl;
+  }
+
+  async function saveImage() {
+    setCapturing(true);
+    setCaptureError('');
+    try {
+      const dataUrl = await capture();
+      downloadDataUrl(dataUrl, reportFileName(report.day, scopeName, 'png'));
+    } catch (e) {
+      setCaptureError(e instanceof Error ? e.message : 'บันทึกรูปไม่สำเร็จ');
+    } finally {
+      setCapturing(false);
+    }
+  }
+
+  async function printImage() {
+    setCapturing(true);
+    setCaptureError('');
+    try {
+      const dataUrl = await capture();
+      setCaptured(dataUrl);
+      // รอให้ <img> เข้า DOM ก่อน ไม่งั้นหน้าต่างพิมพ์เปิดมาบนใบเปล่า
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      window.print();
+      setCaptured('');
+    } catch (e) {
+      setCaptureError(e instanceof Error ? e.message : 'เตรียมไฟล์พิมพ์ไม่สำเร็จ');
+    } finally {
+      setCapturing(false);
+    }
+  }
+
   const go = (next: { d?: string; shop?: string }) => {
     const q = new URLSearchParams({ d: next.d ?? report.day, shop: next.shop ?? shopFilter });
     router.push(`/daily-report?${q}`);
@@ -86,16 +146,36 @@ export function DailyReportView({
             {scopeName} · {dateLabel}
           </p>
         </div>
-        <button
-          onClick={() => window.print()}
-          className="btn-outline text-xs px-3 py-2 rounded-lg font-medium"
-        >
-          <i className="fa-solid fa-file-pdf mr-1.5" style={{ color: '#C0392B' }}></i>พิมพ์ / PDF
-        </button>
+        {/* data-capture-hide: ปุ่มไม่ใช่ส่วนหนึ่งของรายงาน และไม่มีความหมายในภาพนิ่ง */}
+        <div className="flex items-center gap-2" data-capture-hide>
+          {captureError && (
+            <span className="text-xs" style={{ color: '#B23A48' }} role="alert">
+              {captureError}
+            </span>
+          )}
+          <button
+            onClick={saveImage}
+            disabled={capturing}
+            className="btn-outline text-xs px-3 py-2 rounded-lg font-medium"
+            style={{ opacity: capturing ? 0.6 : 1 }}
+          >
+            <i className="fa-solid fa-image mr-1.5" style={{ color: '#2F6B3F' }}></i>
+            {capturing ? 'กำลังบันทึก…' : 'บันทึกเป็นรูป'}
+          </button>
+          <button
+            onClick={printImage}
+            disabled={capturing}
+            className="btn-outline text-xs px-3 py-2 rounded-lg font-medium"
+            style={{ opacity: capturing ? 0.6 : 1 }}
+          >
+            <i className="fa-solid fa-file-pdf mr-1.5" style={{ color: '#C0392B' }}></i>พิมพ์ / PDF
+          </button>
+        </div>
       </div>
 
       {/* ----------------------------------------------------------- filter -- */}
-      <div className="card p-3 mb-4 flex flex-wrap items-center gap-2">
+      {/* ตัวเลือกวันและสาขา ไม่ติดไปในรูป — มันคือวิธีไปถึงรายงาน ไม่ใช่รายงาน */}
+      <div className="card p-3 mb-4 flex flex-wrap items-center gap-2" data-capture-hide>
         <button
           onClick={() => go({ d: previousDay(report.day) })}
           aria-label="วันก่อนหน้า"
@@ -148,243 +228,147 @@ export function DailyReportView({
         )}
       </div>
 
-      {/* ------------------------------------------------------------- tiles -- */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <Tile
-          tone="sales"
-          icon="fa-cash-register"
-          label="ยอดขายที่เก็บเงินได้"
-          value={sales.total}
-          note={
-            change === null
-              ? `${sales.documents} งาน`
-              : `${change >= 0 ? '▲' : '▼'} ${Math.abs(change)}% จากเมื่อวาน · ${sales.documents} งาน`
-          }
-        />
-        <Tile
-          tone="in"
-          icon="fa-arrow-down"
-          label="เงินรับเข้า"
-          value={inflow.total}
-          note={`${inflow.rows.reduce((n, r) => n + r.count, 0)} รายการ`}
-          detail={
-            /*
+      {/*
+        ส่วนที่ติดไปในรูป เริ่มที่หัวรายงาน จบที่การ์ดใบสุดท้าย.
+
+        รูปที่ถูกส่งเข้าแชตต้องบอกตัวเองได้ว่าเป็นรายงานอะไร ของวันไหน สาขาไหน
+        โดยไม่มีหน้าเว็บรอบ ๆ ช่วย — หัวรายงานจึงถูกวาดซ้ำไว้ในกรอบนี้
+      */}
+      <div ref={sheetRef} style={{ background: 'var(--paper)' }}>
+        <div className="mb-3">
+          <h2 className="text-lg font-bold">รายงานการเงินรายวัน</h2>
+          <p className="text-sm mt-0.5" style={muted}>
+            {scopeName} · {dateLabel}
+          </p>
+        </div>
+
+        {/* ------------------------------------------------------------- tiles -- */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <Tile
+            tone="sales"
+            icon="fa-cash-register"
+            label="ยอดขายที่เก็บเงินได้"
+            value={sales.total}
+            note={
+              change === null
+                ? `${sales.documents} งาน`
+                : `${change >= 0 ? '▲' : '▼'} ${Math.abs(change)}% จากเมื่อวาน · ${sales.documents} งาน`
+            }
+          />
+          <Tile
+            tone="in"
+            icon="fa-arrow-down"
+            label="เงินรับเข้า"
+            value={inflow.total}
+            note={`${inflow.rows.reduce((n, r) => n + r.count, 0)} รายการ`}
+            detail={
+              /*
               Where the money came from. It differs from ยอดขาย by exactly the
               money taken in for another Finnix shop, so saying so here is what
               lets the two cards be read side by side.
             */
-            sales.held > 0 ? (
-              <>
-                <div className="flex justify-between gap-2">
-                  <span>ยอดขาย</span>
-                  <span>{fmt(sales.total)}</span>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <span>เงินรอคืน Finnix</span>
-                  <span>{fmt(sales.held)}</span>
-                </div>
-                <div className="mt-0.5">รับเงินไว้แทนสาขาอื่น จึงไม่นับเป็นยอดขาย</div>
-              </>
-            ) : undefined
-          }
-        />
-        <Tile
-          tone="out"
-          icon="fa-arrow-up"
-          label="ค่าใช้จ่าย"
-          value={outflow.total}
-          note={`${outflow.rows.reduce((n, r) => n + r.count, 0)} รายการ`}
-        />
-        <Tile
-          tone="net"
-          icon="fa-scale-balanced"
-          label="เงินสุทธิวันนี้"
-          value={net}
-          note="รับเข้า − ค่าใช้จ่าย"
-          valueColor={net >= 0 ? 'var(--report-in)' : 'var(--report-due)'}
-          signed
-        />
-      </div>
-
-      {report.hasUnmatched && (
-        <div className="card p-3 mb-4 text-sm" style={{ borderLeft: '4px solid #B8860B' }}>
-          <i className="fa-solid fa-triangle-exclamation mr-1.5" style={{ color: '#B8860B' }}></i>
-          มีเงินที่บันทึกด้วยชื่อแหล่งเงินที่ยังไม่ได้ผูกกับบัญชีใด (ทำเครื่องหมาย ⚠) —{' '}
-          {linksToMoney ? (
-            <Link href="/money" style={{ color: 'var(--primary)' }}>
-              ไปผูกที่การจัดการเงิน/บัญชี
-            </Link>
-          ) : (
-            'ผู้ดูแลการจัดการเงิน/บัญชีผูกชื่อให้ได้'
-          )}
+              sales.held > 0 ? (
+                <>
+                  <div className="flex justify-between gap-2">
+                    <span>ยอดขาย</span>
+                    <span>{fmt(sales.total)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span>เงินรอคืน Finnix</span>
+                    <span>{fmt(sales.held)}</span>
+                  </div>
+                  <div className="mt-0.5">รับเงินไว้แทนสาขาอื่น จึงไม่นับเป็นยอดขาย</div>
+                </>
+              ) : undefined
+            }
+          />
+          <Tile
+            tone="out"
+            icon="fa-arrow-up"
+            label="ค่าใช้จ่าย"
+            value={outflow.total}
+            note={`${outflow.rows.reduce((n, r) => n + r.count, 0)} รายการ`}
+          />
+          <Tile
+            tone="net"
+            icon="fa-scale-balanced"
+            label="เงินสุทธิวันนี้"
+            value={net}
+            note="รับเข้า − ค่าใช้จ่าย"
+            valueColor={net >= 0 ? 'var(--report-in)' : 'var(--report-due)'}
+            signed
+          />
         </div>
-      )}
 
-      {/* ---------------------------------------------------------------- ① -- */}
-      <div className="card overflow-hidden mb-4">
-        <SectionHead
-          tone="sales"
-          icon="fa-tags"
-          title="① ยอดขาย (ที่เก็บเงินได้) แยกตามชนิดสินค้า"
-        />
-        <div className="p-5 pt-3">
-          {sales.channels.length === 0 ? (
-            <p className="text-sm" style={muted}>
-              ไม่มีการรับชำระเงินในวันนี้
-            </p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ ...muted, borderBottom: '1px solid var(--line)' }}>
-                  <th style={{ ...cell, textAlign: 'left' }}>ชนิดสินค้า</th>
-                  <th style={numCell}>จำนวนงาน</th>
-                  <th style={numCell}>ยอดเงิน</th>
-                  <th style={{ ...cell, width: '35%' }} className="hidden sm:table-cell">
-                    สัดส่วน
-                  </th>
-                </tr>
-              </thead>
-              {sales.channels.map((c) => (
-                <tbody key={c.channel}>
-                  <tr style={{ background: 'var(--report-sales-soft)' }}>
-                    <td style={{ ...cell, fontWeight: 700 }}>
-                      {CHANNEL_LABEL[c.channel] ?? c.channel}
-                    </td>
-                    <td style={{ ...numCell, fontWeight: 700 }}>{c.count}</td>
-                    <td style={{ ...numCell, fontWeight: 700 }}>{fmt(c.total)}</td>
-                    <td style={cell} className="hidden sm:table-cell text-xs">
-                      <span style={muted}>{pct(c.total, sales.total)}% ของยอดขาย</span>
-                    </td>
-                  </tr>
-                  {c.categories.map((cat) => (
-                    <tr key={cat.name} style={{ borderBottom: '1px solid var(--line)' }}>
-                      <td style={{ ...cell, paddingLeft: 22 }}>{cat.name}</td>
-                      <td style={numCell}>{cat.count}</td>
-                      <td style={numCell}>{fmt(cat.amount)}</td>
-                      <td style={cell} className="hidden sm:table-cell">
-                        <div className="flex items-center gap-2">
-                          <div
-                            style={{
-                              height: 8,
-                              borderRadius: 4,
-                              background: 'var(--report-sales)',
-                              width: `${Math.max(2, pct(cat.amount, sales.total))}%`,
-                            }}
-                          />
-                          <span className="text-xs" style={muted}>
-                            {pct(cat.amount, sales.total)}%
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              ))}
-              <tfoot>
-                <tr style={{ borderTop: '2px solid var(--line-strong)' }}>
-                  <td style={{ ...cell, fontWeight: 700 }}>รวมยอดขาย</td>
-                  <td style={{ ...numCell, fontWeight: 700 }}>{sales.documents}</td>
-                  <td style={{ ...numCell, fontWeight: 700 }}>{fmt(sales.total)}</td>
-                  <td className="hidden sm:table-cell"></td>
-                </tr>
-                <OutstandingRow outstanding={sales.outstanding} cell={cell} numCell={numCell} />
-              </tfoot>
-            </table>
-          )}
-          {sales.channels.length === 0 && sales.outstanding.count > 0 && (
-            <table className="w-full text-sm mt-3">
-              <tbody>
-                <OutstandingRow outstanding={sales.outstanding} cell={cell} numCell={numCell} />
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+        {report.hasUnmatched && (
+          <div className="card p-3 mb-4 text-sm" style={{ borderLeft: '4px solid #B8860B' }}>
+            <i className="fa-solid fa-triangle-exclamation mr-1.5" style={{ color: '#B8860B' }}></i>
+            มีเงินที่บันทึกด้วยชื่อแหล่งเงินที่ยังไม่ได้ผูกกับบัญชีใด (ทำเครื่องหมาย ⚠) —{' '}
+            {linksToMoney ? (
+              <Link href="/money" style={{ color: 'var(--primary)' }}>
+                ไปผูกที่การจัดการเงิน/บัญชี
+              </Link>
+            ) : (
+              'ผู้ดูแลการจัดการเงิน/บัญชีผูกชื่อให้ได้'
+            )}
+          </div>
+        )}
 
-      {/* ------------------------------------------------------------- ② ③ -- */}
-      <div className="grid md:grid-cols-2 gap-4 mb-4">
-        <SourceCard
-          tone="in"
-          icon="fa-arrow-down"
-          title="② เงินรับเข้า แยกแหล่งเงิน"
-          rows={inflow.rows}
-          total={inflow.total}
-          nameOf={sourceName}
-          empty="ไม่มีเงินรับเข้า"
-        />
-        <SourceCard
-          tone="out"
-          icon="fa-arrow-up"
-          title="③ ค่าใช้จ่าย แยกแหล่งเงิน"
-          rows={outflow.rows}
-          total={outflow.total}
-          nameOf={sourceName}
-          empty="ไม่มีค่าใช้จ่าย"
-        />
-      </div>
-
-      {/* ---------------------------------------------------------------- ④ -- */}
-      <div className="card overflow-hidden">
-        <SectionHead
-          tone="bal"
-          icon="fa-vault"
-          title="④ ยอดคงเหลือแต่ละแหล่งเงิน ณ สิ้นวัน"
-          hint="ยกมา + รับเข้า − จ่ายออก ± โอนระหว่างแหล่งเงิน = คงเหลือ"
-        />
-        <div className="p-5 pt-3">
-          {balances.length === 0 ? (
-            <p className="text-sm" style={muted}>
-              ยังไม่ได้ตั้งแหล่งเงิน
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" style={{ minWidth: 560 }}>
+        {/* ---------------------------------------------------------------- ① -- */}
+        <div className="card overflow-hidden mb-4">
+          <SectionHead
+            tone="sales"
+            icon="fa-tags"
+            title="① ยอดขาย (ที่เก็บเงินได้) แยกตามชนิดสินค้า"
+          />
+          <div className="p-5 pt-3">
+            {sales.channels.length === 0 ? (
+              <p className="text-sm" style={muted}>
+                ไม่มีการรับชำระเงินในวันนี้
+              </p>
+            ) : (
+              <table className="w-full text-sm">
                 <thead>
                   <tr style={{ ...muted, borderBottom: '1px solid var(--line)' }}>
-                    <th style={{ ...cell, textAlign: 'left' }}>แหล่งเงิน</th>
-                    <th style={numCell}>ยกมา</th>
-                    <th style={numCell}>+ รับ</th>
-                    <th style={numCell}>− จ่าย</th>
-                    <th style={numCell}>± โอน</th>
-                    <th style={numCell}>คงเหลือ</th>
+                    <th style={{ ...cell, textAlign: 'left' }}>ชนิดสินค้า</th>
+                    <th style={numCell}>จำนวนงาน</th>
+                    <th style={numCell}>ยอดเงิน</th>
+                    <th style={{ ...cell, width: '35%' }} className="hidden sm:table-cell">
+                      สัดส่วน
+                    </th>
                   </tr>
                 </thead>
-                {balances.map((b) => (
-                  <tbody key={b.shop}>
-                    {showShopColumn && (
-                      <tr style={{ background: 'var(--report-bal-soft)' }}>
-                        <td colSpan={5} style={{ ...cell, fontWeight: 700 }}>
-                          {b.name}
-                        </td>
-                        <td style={{ ...numCell, fontWeight: 700 }}>{fmt(b.total)}</td>
-                      </tr>
-                    )}
-                    {b.accounts.map((a) => (
-                      <tr key={a.accountId} style={{ borderBottom: '1px solid var(--line)' }}>
-                        <td style={cell}>
-                          {linksToMoney ? (
-                            <Link href={`/money/${a.accountId}`} style={{ color: 'var(--ink)' }}>
-                              {a.name}
-                            </Link>
-                          ) : (
-                            a.name
-                          )}
-                        </td>
-                        <td style={numCell}>{fmt(a.opening)}</td>
-                        <td style={numCell}>{a.inflow ? fmt(a.inflow) : '-'}</td>
-                        <td style={numCell}>{a.outflow ? fmt(a.outflow) : '-'}</td>
-                        <td style={numCell}>
-                          {a.transfer ? `${a.transfer > 0 ? '+' : ''}${fmt(a.transfer)}` : '-'}
-                        </td>
-                        <td
-                          style={{
-                            ...numCell,
-                            fontWeight: 700,
-                            color: a.closing < 0 ? '#b23a48' : undefined,
-                          }}
-                        >
-                          {fmt(a.closing)}
-                          {a.closing < 0 ? ' ⚠' : ''}
+                {sales.channels.map((c) => (
+                  <tbody key={c.channel}>
+                    <tr style={{ background: 'var(--report-sales-soft)' }}>
+                      <td style={{ ...cell, fontWeight: 700 }}>
+                        {CHANNEL_LABEL[c.channel] ?? c.channel}
+                      </td>
+                      <td style={{ ...numCell, fontWeight: 700 }}>{c.count}</td>
+                      <td style={{ ...numCell, fontWeight: 700 }}>{fmt(c.total)}</td>
+                      <td style={cell} className="hidden sm:table-cell text-xs">
+                        <span style={muted}>{pct(c.total, sales.total)}% ของยอดขาย</span>
+                      </td>
+                    </tr>
+                    {c.categories.map((cat) => (
+                      <tr key={cat.name} style={{ borderBottom: '1px solid var(--line)' }}>
+                        <td style={{ ...cell, paddingLeft: 22 }}>{cat.name}</td>
+                        <td style={numCell}>{cat.count}</td>
+                        <td style={numCell}>{fmt(cat.amount)}</td>
+                        <td style={cell} className="hidden sm:table-cell">
+                          <div className="flex items-center gap-2">
+                            <div
+                              style={{
+                                height: 8,
+                                borderRadius: 4,
+                                background: 'var(--report-sales)',
+                                width: `${Math.max(2, pct(cat.amount, sales.total))}%`,
+                              }}
+                            />
+                            <span className="text-xs" style={muted}>
+                              {pct(cat.amount, sales.total)}%
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -392,22 +376,152 @@ export function DailyReportView({
                 ))}
                 <tfoot>
                   <tr style={{ borderTop: '2px solid var(--line-strong)' }}>
-                    <td colSpan={5} style={{ ...cell, fontWeight: 700 }}>
-                      รวมเงินทุกแหล่ง
-                    </td>
-                    <td style={{ ...numCell, fontWeight: 700 }}>
-                      {fmt(balances.reduce((n, b) => n + b.total, 0))}
-                    </td>
+                    <td style={{ ...cell, fontWeight: 700 }}>รวมยอดขาย</td>
+                    <td style={{ ...numCell, fontWeight: 700 }}>{sales.documents}</td>
+                    <td style={{ ...numCell, fontWeight: 700 }}>{fmt(sales.total)}</td>
+                    <td className="hidden sm:table-cell"></td>
                   </tr>
+                  <OutstandingRow outstanding={sales.outstanding} cell={cell} numCell={numCell} />
                 </tfoot>
               </table>
-            </div>
-          )}
+            )}
+            {sales.channels.length === 0 && sales.outstanding.count > 0 && (
+              <table className="w-full text-sm mt-3">
+                <tbody>
+                  <OutstandingRow outstanding={sales.outstanding} cell={cell} numCell={numCell} />
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------------- ② ③ -- */}
+        <div className="grid md:grid-cols-2 gap-4 mb-4">
+          <SourceCard
+            tone="in"
+            icon="fa-arrow-down"
+            title="② เงินรับเข้า แยกแหล่งเงิน"
+            rows={inflow.rows}
+            total={inflow.total}
+            nameOf={sourceName}
+            empty="ไม่มีเงินรับเข้า"
+          />
+          <SourceCard
+            tone="out"
+            icon="fa-arrow-up"
+            title="③ ค่าใช้จ่าย แยกแหล่งเงิน"
+            rows={outflow.rows}
+            total={outflow.total}
+            nameOf={sourceName}
+            empty="ไม่มีค่าใช้จ่าย"
+          />
+        </div>
+
+        {/* ---------------------------------------------------------------- ④ -- */}
+        <div className="card overflow-hidden">
+          <SectionHead
+            tone="bal"
+            icon="fa-vault"
+            title="④ ยอดคงเหลือแต่ละแหล่งเงิน ณ สิ้นวัน"
+            hint="ยกมา + รับเข้า − จ่ายออก ± โอนระหว่างแหล่งเงิน = คงเหลือ"
+          />
+          <div className="p-5 pt-3">
+            {balances.length === 0 ? (
+              <p className="text-sm" style={muted}>
+                ยังไม่ได้ตั้งแหล่งเงิน
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" style={{ minWidth: 560 }}>
+                  <thead>
+                    <tr style={{ ...muted, borderBottom: '1px solid var(--line)' }}>
+                      <th style={{ ...cell, textAlign: 'left' }}>แหล่งเงิน</th>
+                      <th style={numCell}>ยกมา</th>
+                      <th style={numCell}>+ รับ</th>
+                      <th style={numCell}>− จ่าย</th>
+                      <th style={numCell}>± โอน</th>
+                      <th style={numCell}>คงเหลือ</th>
+                    </tr>
+                  </thead>
+                  {balances.map((b) => (
+                    <tbody key={b.shop}>
+                      {showShopColumn && (
+                        <tr style={{ background: 'var(--report-bal-soft)' }}>
+                          <td colSpan={5} style={{ ...cell, fontWeight: 700 }}>
+                            {b.name}
+                          </td>
+                          <td style={{ ...numCell, fontWeight: 700 }}>{fmt(b.total)}</td>
+                        </tr>
+                      )}
+                      {b.accounts.map((a) => (
+                        <tr key={a.accountId} style={{ borderBottom: '1px solid var(--line)' }}>
+                          <td style={cell}>
+                            {linksToMoney ? (
+                              <Link href={`/money/${a.accountId}`} style={{ color: 'var(--ink)' }}>
+                                {a.name}
+                              </Link>
+                            ) : (
+                              a.name
+                            )}
+                          </td>
+                          <td style={numCell}>{fmt(a.opening)}</td>
+                          <td style={numCell}>{a.inflow ? fmt(a.inflow) : '-'}</td>
+                          <td style={numCell}>{a.outflow ? fmt(a.outflow) : '-'}</td>
+                          <td style={numCell}>
+                            {a.transfer ? `${a.transfer > 0 ? '+' : ''}${fmt(a.transfer)}` : '-'}
+                          </td>
+                          <td
+                            style={{
+                              ...numCell,
+                              fontWeight: 700,
+                              color: a.closing < 0 ? '#b23a48' : undefined,
+                            }}
+                          >
+                            {fmt(a.closing)}
+                            {a.closing < 0 ? ' ⚠' : ''}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  ))}
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--line-strong)' }}>
+                      <td colSpan={5} style={{ ...cell, fontWeight: 700 }}>
+                        รวมเงินทุกแหล่ง
+                      </td>
+                      <td style={{ ...numCell, fontWeight: 700 }}>
+                        {fmt(balances.reduce((n, b) => n + b.total, 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* ------------------------------------------------------------ print -- */}
+      {/*
+        ใบที่พิมพ์ = รูปที่เพิ่งแคป ไม่ใช่ตารางที่จัดใหม่.
+
+        ของเดิมเป็นตารางขาวดำอีกชุดหนึ่งที่เขียนไว้คู่ขนานกับหน้าจอ ซึ่งแปลว่า
+        มีสองที่ที่ต้องแก้ทุกครั้งที่รายงานเปลี่ยน และเป็นสิ่งที่ร้านบอกว่าอ่าน
+        ยากกว่าหน้าจอ (2 ต.ค. 2569) ตอนนี้เหลือที่เดียว
+
+        ยังเก็บตารางเดิมไว้ใต้ `.print-sheet-fallback` สำหรับคนที่กด Ctrl+P เอง
+        โดยไม่ผ่านปุ่ม — หน้ากระดาษเปล่าคือสิ่งที่แย่กว่าตารางที่อ่านยาก
+      */}
       {mounted &&
+        captured &&
+        createPortal(
+          <div className="print-area print-capture">
+            <img src={captured} alt="" style={{ width: '100%' }} />
+          </div>,
+          document.body,
+        )}
+      {mounted &&
+        !captured &&
         createPortal(
           <div className="print-area">
             <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 2px' }}>
