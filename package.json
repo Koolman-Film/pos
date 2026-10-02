@@ -26,6 +26,7 @@
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
     "chart.js": "^4.5.1",
+    "html-to-image": "file:vendor/html-to-image-1.11.13.tgz",
     "next": "16.3.6",
     "react": "19.2.4",
     "react-chartjs-2": "^5.3.1",
