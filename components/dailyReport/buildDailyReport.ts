@@ -31,14 +31,35 @@ import {
 
 export type DailyShop = { id: string; name: string };
 
+/**
+ * รายการที่อยู่เบื้องหลังตัวเลข "จำนวน" หนึ่งตัว (ร้านขอ 2 ต.ค. 2569).
+ *
+ * ตัวเลขอย่าง "1 งาน" หรือ "3 รายการ" ตอบได้แค่ว่ามีกี่อัน ไม่ได้ตอบว่าอันไหน
+ * และคำถามถัดไปของคนอ่านคืออันไหนเสมอ — เดิมต้องออกจากหน้านี้ไปเปิดอีกโมดูล
+ * แล้วไล่หาเอง ซึ่งแปลว่าเลิกอ่านรายงานกลางคัน
+ *
+ * สร้างตอนประกอบรายงาน ไม่ใช่ตอนกด เพราะข้อมูลทั้งหมดอยู่ในมืออยู่แล้ว ณ
+ * จังหวะนั้น การไปถามใหม่ทีหลังคือการถามสิ่งที่เพิ่งนับไปเมื่อกี้
+ */
+export type CountItem = {
+  /** บรรทัดบน — เลขที่ใบงาน/PO หรือชื่อรายการเงิน. */
+  label: string;
+  /** บรรทัดล่าง — ลูกค้า วิธีจ่าย หรือหมวดค่าใช้จ่าย. ว่างได้. */
+  note?: string;
+  amount: number;
+  /** เปิดเอกสารต้นทางได้ไหม และที่ไหน. */
+  href?: string;
+};
+
 /** `count` is how many ใบงาน / PO paid toward it — one job paying twice is one job. */
-export type CategoryAmount = { name: string; amount: number; count: number };
+export type CategoryAmount = { name: string; amount: number; count: number; items: CountItem[] };
 
 export type ChannelSales = {
   channel: SalesReceipt['channel'];
   total: number;
   count: number;
   categories: CategoryAmount[];
+  items: CountItem[];
 };
 
 /**
@@ -61,7 +82,7 @@ export type OutstandingJob = {
   status: string;
 };
 
-export type Outstanding = { count: number; amount: number };
+export type Outstanding = { count: number; amount: number; items: CountItem[] };
 
 /**
  * สถานะของงาน ณ สิ้นวัน `day`.
@@ -94,6 +115,7 @@ export function outstandingOn(
   const wanted = new Set(statuses);
   let count = 0;
   let amount = 0;
+  const items: CountItem[] = [];
   for (const j of jobs) {
     if (j.held || !j.dropOff || j.dropOff > day) continue;
     const status = statusOn(j, day, today);
@@ -103,8 +125,10 @@ export function outstandingOn(
     if (due <= 0) continue;
     count += 1;
     amount = satang(amount + due);
+    // สถานะ ณ วันนั้น ไม่ใช่สถานะวันนี้ — รายงานของเมื่อวานต้องอ่านเหมือนเมื่อวาน
+    items.push({ label: j.id, note: status, amount: due, href: `/tickets/${j.id}` });
   }
-  return { count, amount };
+  return { count, amount, items: items.sort((a, b) => b.amount - a.amount) };
 }
 
 export type SourceRow = {
@@ -115,6 +139,7 @@ export type SourceRow = {
   name: string;
   amount: number;
   count: number;
+  items: CountItem[];
 };
 
 export type BalanceRow = {
@@ -134,6 +159,8 @@ export type DailyReport = {
   day: string;
   sales: {
     channels: ChannelSales[];
+    /** ใบงาน/PO ที่จ่ายเงินเข้ามาวันนี้ — เบื้องหลังตัวเลข `documents`. */
+    items: CountItem[];
     total: number;
     /** Sales on the previous day, for the "เทียบเมื่อวาน" line. */
     previousTotal: number;
@@ -171,17 +198,44 @@ export function nextDay(day: string): string {
 
 const jobsIn = (rows: SalesReceipt[]) => new Set(rows.map((r) => r.sourceId)).size;
 
+/**
+ * ใบงาน/PO ที่อยู่เบื้องหลังกองเงินกองหนึ่ง — ใบละบรรทัด ไม่ใช่การจ่ายละบรรทัด.
+ *
+ * งานที่จ่ายสองครั้งในวันเดียวคือหนึ่งงาน ซึ่งเป็นกติกาเดียวกับที่ `jobsIn`
+ * ใช้นับ ถ้าป๊อปอัพแสดงสองบรรทัดแต่ตัวเลขข้างบนบอก 1 คนอ่านจะเชื่อตัวไหนก็ผิด
+ */
+function receiptItems(rows: SalesReceipt[]): CountItem[] {
+  const byDoc = new Map<string, { amount: number; channel: SalesReceipt['channel'] }>();
+  for (const r of rows) {
+    const found = byDoc.get(r.sourceId) ?? { amount: 0, channel: r.channel };
+    byDoc.set(r.sourceId, { amount: satang(found.amount + r.amount), channel: r.channel });
+  }
+  return [...byDoc.entries()]
+    .map(([id, v]) => ({
+      label: id,
+      amount: v.amount,
+      href: v.channel === 'ขายส่ง' ? `/wholesale/${id}` : `/tickets/${id}`,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
 function salesFor(receipts: SalesReceipt[]): ChannelSales[] {
   return CHANNEL_ORDER.map((channel) => {
     const mine = receipts.filter((r) => r.channel === channel);
     const categories = [...new Set(mine.map((r) => r.category))]
       .map((name) => {
         const rows = mine.filter((r) => r.category === name);
-        return { name, amount: sumReceipts(rows), count: jobsIn(rows) };
+        return { name, amount: sumReceipts(rows), count: jobsIn(rows), items: receiptItems(rows) };
       })
       .filter((c) => c.amount !== 0)
       .sort((a, b) => b.amount - a.amount);
-    return { channel, total: sumReceipts(mine), count: jobsIn(mine), categories };
+    return {
+      channel,
+      total: sumReceipts(mine),
+      count: jobsIn(mine),
+      categories,
+      items: receiptItems(mine),
+    };
   }).filter((c) => c.categories.length > 0);
 }
 
@@ -234,9 +288,29 @@ export function buildDailyReport(input: {
       name: account?.name ?? m.source,
       amount: 0,
       count: 0,
+      items: [],
     };
     row.amount = satang(row.amount + Math.abs(m.amount));
     row.count += 1;
+    /*
+      เงินมาจากไหน — ใช้ `ref` ที่การเคลื่อนไหวพกมาอยู่แล้ว (โมดูลการเงิน).
+
+      การเคลื่อนไหวที่ไม่มี `ref` คือยอดยกมาหรือรายการที่ลงมือ ไม่มีเอกสาร
+      ต้นทางให้เปิด — แสดงชื่อแหล่งเงินไว้แทนที่จะข้าม เพราะจำนวนที่นับไว้
+      ข้างบนนับมันไปแล้ว
+    */
+    row.items.push({
+      label: m.ref?.docNo || m.source,
+      note: [m.ref?.title, m.ref?.detail].filter(Boolean).join(' · ') || undefined,
+      amount: Math.abs(m.amount),
+      href: m.ref
+        ? m.ref.kind === 'ticket'
+          ? `/tickets/${m.ref.id}`
+          : m.ref.kind === 'order'
+            ? `/wholesale/${m.ref.id}`
+            : '/accounting'
+        : undefined,
+    });
     bucket.set(key, row);
   }
 
@@ -295,6 +369,7 @@ export function buildDailyReport(input: {
     day,
     sales: {
       channels,
+      items: receiptItems(earned),
       total: sumReceipts(earned),
       previousTotal,
       held: sumReceipts(todays.filter((r) => r.held)),

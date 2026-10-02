@@ -93,7 +93,7 @@ describe('buildDailyReport', () => {
 
   it('counts only the money in on the day, retail and wholesale apart', () => {
     expect(report.sales.total).toBe(19500);
-    expect(report.sales.channels).toEqual([
+    expect(report.sales.channels).toMatchObject([
       {
         channel: 'ปลีก',
         total: 11500,
@@ -174,6 +174,41 @@ describe('buildDailyReport', () => {
     expect(one.inflow.rows).toEqual([]);
     expect(one.balances).toEqual([]);
   });
+
+  /**
+   * ที่มาของตัวเลข "จำนวน" ติดมากับรายงาน (ร้านขอ 2 ต.ค. 2569).
+   *
+   * ประกอบตอนนับ ไม่ใช่ตอนกด เพราะข้อมูลอยู่ในมืออยู่แล้ว ณ จังหวะนั้น — และ
+   * ที่สำคัญกว่า: ถ้าไปถามใหม่ทีหลัง คำตอบอาจไม่ตรงกับตัวเลขที่นับไว้เมื่อกี้
+   */
+  describe('buildDailyReport — รายการเบื้องหลังจำนวน', () => {
+    it('ยอดขายทั้งวัน บอกเป็นรายใบงาน ไม่ใช่รายการจ่าย', () => {
+      // งานที่จ่ายสองครั้งในวันเดียวคือหนึ่งงาน — กติกาเดียวกับที่ตัวเลขข้างบนนับ
+      const items = report.sales.items;
+      expect(items.map((i) => i.label).sort()).toEqual(['JT-1', 'JT-2', 'WS-1']);
+      expect(items.reduce((n, i) => n + i.amount, 0)).toBe(report.sales.total);
+    });
+
+    it('ลิงก์ไปถูกโมดูล ใบงานไปใบงาน PO ไปขายส่ง', () => {
+      const byLabel = new Map(report.sales.items.map((i) => [i.label, i.href]));
+      expect(byLabel.get('JT-1')).toBe('/tickets/JT-1');
+      expect(byLabel.get('WS-1')).toBe('/wholesale/WS-1');
+    });
+
+    it('แต่ละชนิดสินค้า บอกเฉพาะใบงานของชนิดนั้น', () => {
+      const retail = report.sales.channels.find((c) => c.channel === 'ปลีก')!;
+      const audio = retail.categories.find((c) => c.name === 'เครื่องเสียง')!;
+      expect(audio.items.map((i) => i.label)).toEqual(['JT-1']);
+      expect(audio.items[0].amount).toBe(audio.amount);
+    });
+
+    it('แต่ละแหล่งเงิน บอกว่าเงินก้อนไหนบ้าง และรวมแล้วเท่ายอดของแถว', () => {
+      for (const row of [...report.inflow.rows, ...report.outflow.rows]) {
+        expect(row.items).toHaveLength(row.count);
+        expect(row.items.reduce((n, i) => n + i.amount, 0)).toBeCloseTo(row.amount, 2);
+      }
+    });
+  });
 });
 
 describe('previousDay / nextDay', () => {
@@ -216,7 +251,7 @@ describe('งานขายค้างชำระ', () => {
       '2026-09-23',
       '2026-09-24',
     );
-    expect(r).toEqual({ count: 2, amount: 16000 });
+    expect(r).toMatchObject({ count: 2, amount: 16000 });
   });
 
   it('reads a past day from history, today from the job itself', () => {
@@ -249,6 +284,6 @@ describe('งานขายค้างชำระ', () => {
       dueStatuses: DUE,
       today: DAY,
     });
-    expect(r.sales.outstanding).toEqual({ count: 1, amount: 2500 });
+    expect(r.sales.outstanding).toMatchObject({ count: 1, amount: 2500 });
   });
 });

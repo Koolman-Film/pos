@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { CountPopover } from '@/components/ui/CountPopover';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt, fmtThaiDateLong, shortShopName } from '@/lib/domain/format';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
@@ -13,6 +14,7 @@ import { captureElement, downloadDataUrl, reportFileName } from '@/lib/print/cap
 import {
   nextDay,
   previousDay,
+  type CountItem,
   type DailyReport,
   type Outstanding,
   type SourceRow,
@@ -132,6 +134,16 @@ export function DailyReportView({
       ? Math.round(((sales.total - sales.previousTotal) / sales.previousTotal) * 100)
       : null;
 
+  /*
+    รวมรายการของทุกแหล่งเงินเข้าด้วยกัน สำหรับการ์ดด้านบน.
+
+    การ์ดบอกยอดรวมทั้งวัน ป๊อปอัพของมันจึงต้องเป็นรายการทั้งวัน ส่วนป๊อปอัพของ
+    แต่ละแถวข้างล่างเป็นของแหล่งเงินนั้นแหล่งเดียว
+  */
+  const countOf = (rows: SourceRow[]) => rows.reduce((n, r) => n + r.count, 0);
+  const itemsOf = (rows: SourceRow[]): CountItem[] =>
+    rows.flatMap((r) => r.items).sort((a, b) => b.amount - a.amount);
+
   const muted = { color: 'var(--ink-soft)' };
   const cell = { padding: '7px 8px' };
   const numCell = { ...cell, textAlign: 'right' as const, whiteSpace: 'nowrap' as const };
@@ -250,9 +262,16 @@ export function DailyReportView({
             label="ยอดขายที่เก็บเงินได้"
             value={sales.total}
             note={
-              change === null
-                ? `${sales.documents} งาน`
-                : `${change >= 0 ? '▲' : '▼'} ${Math.abs(change)}% จากเมื่อวาน · ${sales.documents} งาน`
+              <>
+                {change !== null &&
+                  `${change >= 0 ? '▲' : '▼'} ${Math.abs(change)}% จากเมื่อวาน · `}
+                <CountPopover
+                  count={`${sales.documents} งาน`}
+                  items={sales.items}
+                  label={`${sales.documents} งาน`}
+                  title="ใบงาน / PO ที่จ่ายเงินเข้ามาวันนี้"
+                />
+              </>
             }
           />
           <Tile
@@ -260,7 +279,14 @@ export function DailyReportView({
             icon="fa-arrow-down"
             label="เงินรับเข้า"
             value={inflow.total}
-            note={`${inflow.rows.reduce((n, r) => n + r.count, 0)} รายการ`}
+            note={
+              <CountPopover
+                count={`${countOf(inflow.rows)} รายการ`}
+                items={itemsOf(inflow.rows)}
+                label="รายการเงินรับเข้า"
+                title="เงินรับเข้าวันนี้"
+              />
+            }
             detail={
               /*
               Where the money came from. It differs from ยอดขาย by exactly the
@@ -287,7 +313,14 @@ export function DailyReportView({
             icon="fa-arrow-up"
             label="ค่าใช้จ่าย"
             value={outflow.total}
-            note={`${outflow.rows.reduce((n, r) => n + r.count, 0)} รายการ`}
+            note={
+              <CountPopover
+                count={`${countOf(outflow.rows)} รายการ`}
+                items={itemsOf(outflow.rows)}
+                label="รายการค่าใช้จ่าย"
+                title="ค่าใช้จ่ายวันนี้"
+              />
+            }
           />
           <Tile
             tone="net"
@@ -344,7 +377,14 @@ export function DailyReportView({
                       <td style={{ ...cell, fontWeight: 700 }}>
                         {CHANNEL_LABEL[c.channel] ?? c.channel}
                       </td>
-                      <td style={{ ...numCell, fontWeight: 700 }}>{c.count}</td>
+                      <td style={{ ...numCell, fontWeight: 700 }}>
+                        <CountPopover
+                          count={c.count}
+                          items={c.items}
+                          label={`${c.count} งาน ${CHANNEL_LABEL[c.channel] ?? c.channel}`}
+                          title={`${CHANNEL_LABEL[c.channel] ?? c.channel} — ใบงาน / PO`}
+                        />
+                      </td>
                       <td style={{ ...numCell, fontWeight: 700 }}>{fmt(c.total)}</td>
                       <td style={cell} className="hidden sm:table-cell text-xs">
                         <span style={muted}>{pct(c.total, sales.total)}% ของยอดขาย</span>
@@ -353,7 +393,14 @@ export function DailyReportView({
                     {c.categories.map((cat) => (
                       <tr key={cat.name} style={{ borderBottom: '1px solid var(--line)' }}>
                         <td style={{ ...cell, paddingLeft: 22 }}>{cat.name}</td>
-                        <td style={numCell}>{cat.count}</td>
+                        <td style={numCell}>
+                          <CountPopover
+                            count={cat.count}
+                            items={cat.items}
+                            label={`${cat.count} งาน ${cat.name}`}
+                            title={`${cat.name} — ใบงาน / PO`}
+                          />
+                        </td>
                         <td style={numCell}>{fmt(cat.amount)}</td>
                         <td style={cell} className="hidden sm:table-cell">
                           <div className="flex items-center gap-2">
@@ -516,6 +563,9 @@ export function DailyReportView({
         captured &&
         createPortal(
           <div className="print-area print-capture">
+            {/* eslint-disable-next-line @next/next/no-img-element --
+                next/image ย่อ/แคชรูปจากเซิร์ฟเวอร์ ส่วนนี่คือ data URL ที่เพิ่งวาด
+                ในเบราว์เซอร์เพื่อส่งเข้าหน้าต่างพิมพ์ทันที ไม่มีอะไรให้ย่อหรือแคช */}
             <img src={captured} alt="" style={{ width: '100%' }} />
           </div>,
           document.body,
@@ -694,7 +744,8 @@ function Tile({
   icon: string;
   label: string;
   value: number;
-  note: string;
+  /** ไม่ใช่แค่ข้อความ: ตัวเลขจำนวนในบรรทัดนี้กดดูที่มาได้ (2 ต.ค. 2569). */
+  note: React.ReactNode;
   /** A breakdown under the figure, set off by a rule. */
   detail?: React.ReactNode;
   valueColor?: string;
@@ -786,7 +837,15 @@ function OutstandingRow({
           สถานะ ณ วันที่เลือก: {DUE_LABEL}
         </span>
       </td>
-      <td style={{ ...numCell, fontWeight: 700, color: due }}>{outstanding.count}</td>
+      <td style={{ ...numCell, fontWeight: 700, color: due }}>
+        <CountPopover
+          count={outstanding.count}
+          items={outstanding.items}
+          label={`${outstanding.count} งานขายค้างชำระ`}
+          title="งานขายค้างชำระ ณ สิ้นวัน"
+          emptyNote="ไม่มีงานค้างชำระในวันนี้"
+        />
+      </td>
       <td style={{ ...numCell, fontWeight: 700, color: due }}>{fmt(outstanding.amount)}</td>
       <td className="hidden sm:table-cell"></td>
     </tr>
@@ -837,7 +896,12 @@ function SourceCard({
                       className="text-xs ml-1.5 whitespace-nowrap"
                       style={{ color: 'var(--ink-soft)' }}
                     >
-                      {r.count} รายการ
+                      <CountPopover
+                        count={`${r.count} รายการ`}
+                        items={r.items}
+                        label={`${r.count} รายการของ ${nameOf(r)}`}
+                        title={nameOf(r)}
+                      />
                     </span>
                   </td>
                   <td style={numCell}>{fmt(r.amount)}</td>
