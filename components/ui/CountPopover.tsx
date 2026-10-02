@@ -89,10 +89,16 @@ export function CountPopover({
   };
 
   /*
-    เลื่อนกล่องกลับเข้าจอ หลังจากที่มันกางออกมาแล้ว.
+    เลื่อนกล่องกลับเข้า "พื้นที่อ่านได้" หลังจากที่มันกางออกมาแล้ว.
 
     วัดจากของจริงแทนที่จะเดาจากตำแหน่งตอนเขียนโค้ด เพราะตัวเลขเดียวกันอยู่คนละที่
     บนจอคอมกับจอมือถือ และการ์ดสรุปกับแถวในตารางก็ชิดคนละด้านกัน
+
+    พื้นที่อ่านได้คือ `<main>` ตัดกับขอบหน้าต่าง ไม่ใช่ขอบหน้าต่างอย่างเดียว —
+    รอบแรกผมหนีบไว้กับหน้าต่าง กล่องเลยผ่านด่าน "อยู่ในจอ" ทั้งที่ไปนอนอยู่ใต้
+    แถบเมนูที่ลอยทับซ้ายมืออยู่ อ่านไม่ได้เหมือนเดิม (ร้านเจอซ้ำ 2 ต.ค. 2569)
+    ส่วนขอบหน้าต่างก็ยังต้องนับ เพราะเมื่อจอแคบกว่าความกว้างของ `<main>` ตัวมันเอง
+    ล้นออกไปนอกจอ
   */
   useLayoutEffect(() => {
     const el = panelRef.current;
@@ -108,11 +114,14 @@ export function CountPopover({
     el.style.transform = '';
     const box = el.getBoundingClientRect();
     const margin = 8;
+    const column = el.closest('main')?.getBoundingClientRect();
+    const minLeft = Math.max(column ? column.left : 0, 0) + margin;
+    const maxRight =
+      Math.min(column ? column.right : window.innerWidth, window.innerWidth) - margin;
     let next = 0;
-    if (box.left < margin) next = margin - box.left;
-    else if (box.right > window.innerWidth - margin) {
-      next = window.innerWidth - margin - box.right;
-    }
+    // ชิดซ้ายก่อน: ถ้าแคบจนเลือกได้ด้านเดียว ด้านที่ต้องเห็นคือด้านที่มีชื่อเอกสาร
+    if (box.left < minLeft) next = minLeft - box.left;
+    else if (box.right > maxRight) next = Math.max(maxRight - box.right, minLeft - box.left);
     // เขียนลงโหนดตรง ๆ ไม่เก็บเป็น state: ค่านี้ไม่มีใครอ่านนอกจากตัวกล่องเอง
     // และกล่องถูกถอดออกตอนปิดอยู่แล้ว จึงไม่มีอะไรต้องรีเซ็ต
     if (next) el.style.transform = `translateX(${next}px)`;
