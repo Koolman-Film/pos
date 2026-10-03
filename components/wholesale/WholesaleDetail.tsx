@@ -713,6 +713,11 @@ export function WholesaleDetail({
   // behaviour) plus the server transition when wired. The server action is the
   // real authorization boundary (C2); the buttons are only visible because of
   // the `canDo` gate below.
+  /*
+    อนุมัติราคา — หนึ่งในสองการตัดสินใจที่ยังเป็นของคน (0081).
+
+    ที่เหลือระบบคำนวณเองจากกิจกรรม: ส่งของแล้วเป็นอะไร เก็บเงินครบแล้วเป็นอะไร
+  */
   async function approvePrice() {
     field('status', 'รอจัดส่ง');
     if (onApprovePrice) await onApprovePrice(o.id);
@@ -722,7 +727,15 @@ export function WholesaleDetail({
     if (onRejectPrice) await onRejectPrice(o.id);
   }
   async function markBadDebt() {
-    field('status', 'ค้างชำระ');
+    /*
+      ไปที่สถานะของตัวเอง ไม่ใช่ "ค้างชำระ" เหมือนเดิม (0081).
+
+      ตั้งแต่สถานะเปลี่ยนเองตามกิจกรรม "ค้างชำระ" คือสิ่งที่ระบบตั้งให้อยู่แล้ว
+      เมื่อส่งของแล้วเก็บเงินไม่ครบ ปุ่มที่ตั้งค่าเดียวกันจึงกลายเป็นปุ่มที่กด
+      แล้วไม่เกิดอะไร ส่วนหนี้ที่ตัดทิ้งแล้วเป็นการตัดสินใจของคน ซึ่งกิจกรรม
+      ถัดไปต้องไม่เขียนทับ
+    */
+    field('status', 'ตัดหนี้สูญ');
     if (onMarkBadDebt) await onMarkBadDebt(o.id);
   }
 
@@ -1261,19 +1274,24 @@ export function WholesaleDetail({
                 {shopName(o.shop, shops)}
               </p>
             )}
-            <select
-              value={o.status}
+            {/*
+              สถานะเป็นผลของกิจกรรม ไม่ใช่ช่องให้กรอก (0081).
+
+              ฐานข้อมูลคำนวณใหม่ทุกครั้งที่มีอะไรเกิดขึ้นกับ PO ใบนี้ — เพิ่ม
+              รายการสินค้า บันทึกรอบส่งของ ยืนยันเงินเข้า เช็คเด้ง — ค่าที่คน
+              เลือกทับไว้จึงอยู่ได้แค่ถึงกิจกรรมถัดไป ซึ่งแย่กว่าไม่ให้เลือก
+              เพราะมันดูเหมือนใช้ได้
+
+              สองการตัดสินใจที่ยังเป็นของคน — อนุมัติราคา และ ตัดหนี้สูญ — มีปุ่ม
+              ของตัวเองอยู่ในหน้านี้
+            */}
+            <span
               aria-label="สถานะของ PO"
-              onChange={(e) => field('status', e.target.value)}
-              className="text-xs font-semibold px-2.5 py-1 rounded-full border-none cursor-pointer"
+              className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block"
               style={{ background: st.bg || '#F1EDE7', color: st.text || '#6B5F55' }}
             >
-              {Object.keys(wsStatuses).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+              {o.status}
+            </span>
           </div>
           <div className="mb-5">
             <label className="text-xs font-medium block mb-1" style={{ color: 'var(--ink-soft)' }}>

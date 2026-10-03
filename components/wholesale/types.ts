@@ -365,9 +365,13 @@ export function customerPurchasedProducts(customerId: number | null, orders: WsO
 export const DEFAULT_WS_STATUS: WsStatusMap = {
   รออนุมัติราคา: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
   รอจัดส่ง: { bg: '#DEEEEC', text: '#286B62', dot: '#2F8F82' },
+  // ส่งแล้วแต่ยังไม่ครบ (0081) — สีเดียวกับ "รอ" เพราะมันยังเป็นงานที่ค้างอยู่
+  จัดส่งแล้วบางส่วน: { bg: '#FBF1DA', text: '#8A5A12', dot: '#E8B23D' },
   จัดส่งแล้ว: { bg: '#E6EFDC', text: '#4C7A3E', dot: '#6BA24F' },
   ค้างชำระ: { bg: '#FBEAEC', text: '#B23A48', dot: '#C24B57' },
   ปิดงานแล้ว: { bg: '#F1EDE7', text: '#6B5F55', dot: '#B5AAA1' },
+  // หนี้ที่ตัดทิ้งแล้ว — จางกว่าสถานะปิดงาน เพราะมันคือการปิดที่ไม่ได้เงิน
+  ตัดหนี้สูญ: { bg: '#EDE7E3', text: '#6B5F55', dot: '#9A8F86' },
 };
 
 /** Prototype: `reference/v0.4/finnix-film.html:302`. */

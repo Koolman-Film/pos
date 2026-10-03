@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import { WholesaleList } from '@/components/wholesale/WholesaleList';
 import { getSessionContext } from '@/lib/auth/session';
 
-import { updateOrderStatus } from './actions';
 import { loadWholesaleListData } from './data';
 
 /**
@@ -53,7 +52,6 @@ export default async function WholesalePage({
       wsStatuses={wsStatuses}
       accessibleShops={shops}
       canSeeAllShops={session.seesAllShops}
-      onUpdateStatus={updateOrderStatus}
       initialStatus={typeof params.status === 'string' ? params.status : undefined}
       initialApproval={typeof params.approval === 'string' ? params.approval : undefined}
       initialFlag={typeof params.flag === 'string' ? params.flag : undefined}

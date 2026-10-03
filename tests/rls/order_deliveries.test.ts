@@ -74,6 +74,12 @@ const round = (over: Record<string, unknown> = {}) => ({
 
 const line = (uid: string, qty: number) => ({ uid, name: uid === 'u1' ? 'ฟิล์ม' : 'ลำโพง', qty });
 
+/** ส่งครบหรือยัง — สิ่งที่สถานะเคยบอก ก่อนที่มันจะไปพูดเรื่องเงินแทน (0081). */
+const fullyDelivered = async () => {
+  const { data } = await admin.rpc('order_fully_delivered', { p_order_id: ORDER });
+  return data;
+};
+
 const orderRow = async () => {
   const { data } = await admin
     .from('orders')
@@ -147,8 +153,13 @@ describe('รอบส่งของ', () => {
     const { error } = await deliver(round({ items: [line('u1', 80)] }));
     expect(error).toBeNull();
     expect(await sentQty()).toEqual({ u1: 80 });
-    // ยังค้างอยู่ 120 กับลำโพงอีก 10 — ปิดตอนนี้คือบอกว่าส่งครบทั้งที่ไม่ครบ
-    expect(await orderRow()).toMatchObject({ status: 'รอจัดส่ง', delivered_at: '2026-09-10' });
+    /*
+      สถานะขยับเองตามกิจกรรม (0081): ส่งของแล้วแต่ยังไม่ได้เงิน = ค้างชำระ
+      ที่สำคัญคือมันไม่ใช่ "จัดส่งแล้ว" เพราะของยังออกไม่ครบ และวันที่ส่งยังเป็น
+      ของรอบแรก
+    */
+    expect(await orderRow()).toMatchObject({ status: 'ค้างชำระ', delivered_at: '2026-09-10' });
+    expect(await fullyDelivered()).toBe(false);
   });
 
   it('รอบที่ส่งครบ ปิด PO ให้เอง และวันที่ยังเป็นของรอบแรก', async () => {
@@ -158,12 +169,15 @@ describe('รอบส่งของ', () => {
     );
     expect(error).toBeNull();
     expect(await orderRow()).toMatchObject({
-      status: 'จัดส่งแล้ว',
+      // ส่งครบแล้วแต่ยังไม่ได้เงิน — ค้างชำระ ไม่ใช่ จัดส่งแล้ว (0081)
+      status: 'ค้างชำระ',
       // รอบแรกคือวันที่ยอดขายก้อนแรกเกิด การส่งรอบหลังไม่ย้ายมัน
       delivered_at: '2026-09-10',
       // ส่วนหลักฐานเป็นของรอบล่าสุด ซึ่งคือสิ่งที่ด่านหลักฐาน (0055) อ่าน
       delivery_note: 'Kerry TH9',
     });
+    // ของครบจริง แม้สถานะจะไปอยู่ที่เรื่องเงินแล้ว
+    expect(await fullyDelivered()).toBe(true);
   });
 
   it('ส่งเกินจำนวนที่สั่ง ถูกปฏิเสธ', async () => {
@@ -246,7 +260,7 @@ describe('รอบส่งของ', () => {
 describe('ลบรอบส่งของ', () => {
   it('ลบแล้ว PO ที่ปิดไปกลับมารอจัดส่ง', async () => {
     await deliver(round({ items: [line('u1', 200), line('u2', 10)] }));
-    expect(await orderRow()).toMatchObject({ status: 'จัดส่งแล้ว' });
+    expect(await orderRow()).toMatchObject({ status: 'ค้างชำระ' });
 
     const { data: rows } = await admin
       .from('order_deliveries')

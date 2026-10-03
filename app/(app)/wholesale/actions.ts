@@ -917,7 +917,8 @@ export async function rejectOrderPrice(orderId: string) {
 export async function markOrderBadDebt(orderId: string) {
   const session = await getSessionContext();
   if (!session.canDo('wholesale.badDebt')) throw new Error('ไม่มีสิทธิ์แจ้งตัดหนี้สูญ');
-  await setOrderStatusInternal(orderId, 'ค้างชำระ');
+  // สถานะของตัวเอง ไม่ใช่ ค้างชำระ ซึ่งตอนนี้ระบบตั้งให้เองอยู่แล้ว (0081)
+  await setOrderStatusInternal(orderId, 'ตัดหนี้สูญ');
 }
 
 /**

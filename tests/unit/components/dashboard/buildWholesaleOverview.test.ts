@@ -66,6 +66,8 @@ describe('buildWholesaleOverview', () => {
     expect(d.statusCounts).toEqual([
       { status: 'รออนุมัติราคา', count: 1 },
       { status: 'รอจัดส่ง', count: 2 },
+      // ส่งแล้วแต่ยังไม่ครบ ก็ยังเป็นงานที่ต้องตาม (0081)
+      { status: 'จัดส่งแล้วบางส่วน', count: 0 },
       { status: 'จัดส่งแล้ว', count: 0 },
       { status: 'ค้างชำระ', count: 0 },
     ]);
