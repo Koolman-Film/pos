@@ -2369,6 +2369,50 @@ export function PrintJobSheet({
           </div>
 
           {/*
+            หมายเหตุ บนใบเสนอราคา (ร้านขอ 3 ต.ค. 2569).
+
+            ใบเสนอราคาคือข้อเสนอ และเงื่อนไขของข้อเสนออยู่ในหมายเหตุเสมอ — ราคานี้
+            ยืนกี่วัน อะไรไม่รวม ต้องสั่งของล่วงหน้าไหม ก่อนหน้านี้มันพิมพ์อยู่บน
+            ใบงานของช่างเท่านั้น ลูกค้าจึงได้ราคาที่ไม่มีเงื่อนไขติดไปด้วย แล้ว
+            เงื่อนไขก็กลายเป็นเรื่องที่ต้องเถียงกันทีหลัง
+
+            เฉพาะใบเสนอราคา ไม่ใช่ทั้งสามใบ: ใบกำกับภาษีและใบเสร็จเป็นบันทึกของ
+            สิ่งที่จบไปแล้ว เงื่อนไขของข้อเสนอไม่ได้อยู่ในนั้น
+
+            ตัวเล็กและกรอบบาง ต่างจากกล่องหมายเหตุบนใบงานที่ตั้งใจให้อ่านข้าม
+            โต๊ะช่างได้ — บนเอกสารการเงิน มันเป็นเงื่อนไข ไม่ใช่คำสั่งงาน
+          */}
+          {isQuotation &&
+            (() => {
+              const general = (t.notes || '').trim();
+              const perCategory = Object.entries(t.notesByCategory || {})
+                .map(([cat, note]) => [cat, (note || '').trim()] as const)
+                .filter(([, note]) => note);
+              if (!general && perCategory.length === 0) return null;
+              return (
+                <div
+                  style={{
+                    border: '1px solid #666',
+                    borderRadius: 6,
+                    padding: '8px 10px',
+                    marginBottom: 12,
+                    fontSize: 11,
+                  }}
+                >
+                  <p style={{ margin: '0 0 4px', fontWeight: 'bold' }}>{bi('หมายเหตุ', 'Notes')}</p>
+                  {general && (
+                    <p style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>{general}</p>
+                  )}
+                  {perCategory.map(([cat, note]) => (
+                    <p key={cat} style={{ margin: '3px 0 0', fontSize: 12 }}>
+                      <b>{cat}:</b> <span style={{ whiteSpace: 'pre-wrap' }}>{note}</span>
+                    </p>
+                  ))}
+                </div>
+              );
+            })()}
+
+          {/*
             2:1, not 50/50. A channel here is the shop's full deposit line —
             "ธนาคารกสิกรไทย เลขบัญชี 236-1-38053-6 ชื่อบัญชี หจก.คูลมาน ลำปาง" —
             and half a page wrapped it across three lines. The signature needs a

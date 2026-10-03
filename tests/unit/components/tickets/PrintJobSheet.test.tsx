@@ -956,3 +956,47 @@ describe('เอกสารการเงิน — รายได้สา�
     expect(screen.getAllByText('6,000.00').length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * หมายเหตุบนใบเสนอราคา (ร้านขอ 3 ต.ค. 2569).
+ *
+ * ใบเสนอราคาคือข้อเสนอ และเงื่อนไขของข้อเสนออยู่ในหมายเหตุเสมอ — ราคานี้ยืนกี่วัน
+ * อะไรไม่รวม ต้องสั่งของล่วงหน้าไหม ก่อนหน้านี้มันพิมพ์อยู่บนใบงานของช่างเท่านั้น
+ * ลูกค้าจึงได้ราคาที่ไม่มีเงื่อนไขติดไปด้วย
+ */
+describe('PrintJobSheet — หมายเหตุบนใบเสนอราคา', () => {
+  const quote = (t: Partial<Ticket>) =>
+    renderSheet(makeTicket({ items: [item()], ...t }), 'doc', {
+      docType: 'ใบเสนอราคา',
+      total: 29500,
+      paid: 0,
+    });
+
+  it('หมายเหตุของใบงาน ขึ้นบนใบเสนอราคา', () => {
+    quote({ notes: 'ราคานี้ยืน 7 วัน · ไม่รวมค่าติดตั้งนอกสถานที่' });
+    expect(screen.getByText(/ราคานี้ยืน 7 วัน/)).toBeInTheDocument();
+    // bi() วาง อังกฤษ ไว้ในสแปนของตัวเอง นำหน้าด้วย ' / '
+    expect(screen.getByText(/\/ Notes/)).toBeInTheDocument();
+  });
+
+  it('หมายเหตุแยกตามชนิดสินค้า ขึ้นพร้อมชื่อชนิด', () => {
+    quote({ notesByCategory: { ฟิล์มกรองแสง: 'ต้องสั่งของล่วงหน้า 3 วัน' } });
+    expect(screen.getByText('ฟิล์มกรองแสง:')).toBeInTheDocument();
+    expect(screen.getByText(/สั่งของล่วงหน้า 3 วัน/)).toBeInTheDocument();
+  });
+
+  it('ไม่มีหมายเหตุ ก็ไม่มีกรอบเปล่า', () => {
+    quote({ notes: '   ', notesByCategory: { ฟิล์มกรองแสง: '  ' } });
+    expect(screen.queryByText(/\/ Notes/)).toBeNull();
+  });
+
+  it('ใบเสร็จรับเงินไม่เอาหมายเหตุไปด้วย', () => {
+    // ใบเสร็จเป็นบันทึกของสิ่งที่จบไปแล้ว เงื่อนไขของข้อเสนอไม่ได้อยู่ในนั้น
+    renderSheet(makeTicket({ items: [item()], notes: 'ราคานี้ยืน 7 วัน' }), 'doc', {
+      docType: 'ใบเสร็จรับเงิน',
+      total: 29500,
+      paid: 29500,
+    });
+    expect(screen.queryByText(/ราคานี้ยืน 7 วัน/)).toBeNull();
+  });
+});
