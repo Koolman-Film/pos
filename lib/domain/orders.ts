@@ -40,10 +40,22 @@ export function returnUnitPrice(o: { items: OrderItem[] }, r: OrderReturn): numb
  * The steps a PO is still moving through. Anything else is the closing step.
  *
  * Listed rather than naming the closing step, because the shop names that one
- * itself: production calls it เสร็จสิ้น, the seed ปิดงานแล้ว. The four open
- * steps are the workflow the code drives, so they are fixed.
+ * itself: production calls it เสร็จสิ้น, the seed ปิดงานแล้ว. The open steps are
+ * the workflow the code drives, so they are fixed.
+ *
+ * `จัดส่งแล้วบางส่วน` (migration 0081) อยู่ในนี้ด้วย: ของยังออกไม่ครบและเงินยัง
+ * ไม่จบ มันจึงเป็นงานที่ยังต้องตามเหมือนขั้นอื่น
+ *
+ * `ตัดหนี้สูญ` ไม่อยู่ในนี้ และเป็นเรื่องตั้งใจ — หนี้ที่ตัดทิ้งแล้วไม่ควรนั่งอยู่
+ * ในยอดค้างรับให้คนไล่ตามต่อ นั่นคือความหมายทั้งหมดของการตัดมันทิ้ง
  */
-export const WS_OPEN_STATUSES = ['รออนุมัติราคา', 'รอจัดส่ง', 'จัดส่งแล้ว', 'ค้างชำระ'] as const;
+export const WS_OPEN_STATUSES = [
+  'รออนุมัติราคา',
+  'รอจัดส่ง',
+  'จัดส่งแล้วบางส่วน',
+  'จัดส่งแล้ว',
+  'ค้างชำระ',
+] as const;
 
 export function isOpenOrderStatus(status: string): boolean {
   return (WS_OPEN_STATUSES as readonly string[]).includes(status);

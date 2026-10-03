@@ -44,9 +44,8 @@ import {
  *
  * The prototype held `orders` in React state and mutated it with `setOrders`;
  * here the list is server-rendered and navigation moves between the list and
- * `/wholesale/[id]` (with `/wholesale/new` for a fresh PO). Inline status
- * changes are mirrored locally for responsiveness and persisted through the
- * optional `onUpdateStatus` server action.
+ * `/wholesale/[id]` (with `/wholesale/new` for a fresh PO). สถานะเป็นป้าย
+ * อ่านอย่างเดียว ตั้งแต่ 0081 ที่ฐานข้อมูลคำนวณมันจากกิจกรรมของ PO เอง
  *
  * `orderTotal` / `orderPaid` come from `lib/domain/orders.ts` — the same domain
  * functions the detail view and the Excel/print exports use.
@@ -59,7 +58,6 @@ export function WholesaleList({
   wsStatuses,
   accessibleShops,
   canSeeAllShops = true,
-  onUpdateStatus,
   stockWarning,
   initialStatus,
   initialApproval,
@@ -75,7 +73,6 @@ export function WholesaleList({
   wsStatuses: WsStatusMap;
   accessibleShops: Shop[];
   canSeeAllShops?: boolean;
-  onUpdateStatus?: (orderId: string, status: string) => Promise<void> | void;
   /**
    * สินค้าที่ตัดสต็อกไม่สำเร็จตอนบันทึก PO ใบล่าสุด.
    *
@@ -107,12 +104,8 @@ export function WholesaleList({
 }) {
   const can = canDo ?? ((k: string) => !!caps?.[k]);
   const router = useRouter();
-  const [list, setList] = useState<WsOrder[]>(orders);
-
-  function updateOrderStatus(id: string, newStatus: string) {
-    setList((prev) => prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o)));
-    if (onUpdateStatus) onUpdateStatus(id, newStatus);
-  }
+  // ไม่มีอะไรแก้รายการในหน้านี้อีกแล้ว ตั้งแต่สถานะกลายเป็นป้ายอ่านอย่างเดียว (0081)
+  const [list] = useState<WsOrder[]>(orders);
 
   // Gates the body-level print portal below; document does not exist during SSR.
   const mounted = useIsMounted();
@@ -698,26 +691,26 @@ export function WholesaleList({
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
                             <div className="text-right">
-                              <select
-                                value={o.status}
-                                aria-label="สถานะของ PO"
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  updateOrderStatus(o.id, e.target.value);
-                                }}
-                                className="text-xs font-semibold px-2.5 py-1 rounded-full border-none cursor-pointer"
+                              {/*
+                                สถานะเป็นป้าย ไม่ใช่ช่องให้เลือกอีกต่อไป (0081).
+
+                                ระบบคำนวณจากสิ่งที่เกิดขึ้นกับ PO จริง ๆ —
+                                อนุมัติราคา ส่งของ รับเงิน — ช่องที่เลือกทับได้
+                                จึงให้ได้แค่สถานะที่ขัดกับความจริงจนกว่าจะมี
+                                กิจกรรมถัดไปมาเขียนทับอยู่ดี
+
+                                สองการตัดสินใจที่ยังเป็นของคน (อนุมัติราคา,
+                                ตัดหนี้สูญ) มีปุ่มของตัวเองอยู่ในหน้า PO
+                              */}
+                              <span
+                                className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block"
                                 style={{
                                   background: st.bg || '#F1EDE7',
                                   color: st.text || '#6B5F55',
                                 }}
                               >
-                                {Object.keys(wsStatuses).map((s) => (
-                                  <option key={s} value={s}>
-                                    {s}
-                                  </option>
-                                ))}
-                              </select>
+                                {o.status}
+                              </span>
                               <p className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
                                 {fmt(orderTotal(o))} บาท
                               </p>
