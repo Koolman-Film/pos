@@ -508,3 +508,60 @@ describe('RevenueModule — กรองตามสถานะงาน', () =
     expect(screen.queryByRole('button', { name: 'กรองตามสถานะงาน' })).toBeNull();
   });
 });
+
+/**
+ * กรองตามจองผ่าน (ร้านขอ 3 ต.ค. 2569).
+ *
+ * ร้านจ่ายค่าโฆษณาหลายทาง และคำถามที่ตามมาคือทางไหนคุ้ม ซึ่งตอบได้ก็ต่อเมื่อแยก
+ * ยอดขายตามทางที่ลูกค้าเข้ามาได้ — ข้อมูลอยู่ในใบงานมาตลอด แต่ไม่เคยมีที่ให้กรอง
+ */
+describe('RevenueModule — กรองตามจองผ่าน', () => {
+  const lines = [
+    line({ ticketId: 'JT-1', product: 'ฟิล์ม A', bookingChannel: 'Facebook', amount: 1000 }),
+    line({ ticketId: 'JT-2', product: 'ฟิล์ม B', bookingChannel: 'Walk-in', amount: 2000 }),
+    line({ ticketId: 'JT-3', product: 'ฟิล์ม C', bookingChannel: 'LINE', amount: 4000 }),
+    // ขายส่งไม่มีจองผ่าน
+    line({ ticketId: 'WS-1', product: 'ลำโพง', bookingChannel: '', channel: 'ส่ง', amount: 8000 }),
+  ];
+
+  const open = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole('button', { name: 'กรองตามจองผ่าน' }));
+
+  it('เสนอเฉพาะช่องทางที่มีจริง และไม่เสนอค่าว่างของขายส่ง', async () => {
+    const user = userEvent.setup();
+    renderModule(lines);
+    await open(user);
+    for (const c of ['Facebook', 'Walk-in', 'LINE']) {
+      expect(screen.getByRole('checkbox', { name: c })).toBeInTheDocument();
+    }
+    expect(screen.getAllByRole('checkbox').length).toBe(3);
+  });
+
+  it('เลือกสองช่องทางพร้อมกันได้', async () => {
+    const user = userEvent.setup();
+    renderModule(lines);
+    await open(user);
+    await user.click(screen.getByRole('checkbox', { name: 'Facebook' }));
+    await user.click(screen.getByRole('checkbox', { name: 'LINE' }));
+    expect(screen.getByText('รายการขาย (2)')).toBeInTheDocument();
+    // สรุปบนปุ่มต้องใช้หน่วยของตัวเอง ไม่ใช่ 'สถานะ' ที่ติดมาจากตัวกรองแรก
+    expect(screen.getByRole('button', { name: 'กรองตามจองผ่าน' })).toHaveTextContent('2 ช่องทาง');
+    expect(screen.getByText('ฟิล์ม A')).toBeInTheDocument();
+    expect(screen.getByText('ฟิล์ม C')).toBeInTheDocument();
+  });
+
+  it('กรองแล้ว บรรทัดขายส่งที่ไม่มีจองผ่าน หลุดออกไป', async () => {
+    // มันตอบคำถาม "ลูกค้ามาจากทางไหน" ไม่ได้ จึงไม่ควรนั่งอยู่ในคำตอบ
+    const user = userEvent.setup();
+    renderModule(lines);
+    await open(user);
+    await user.click(screen.getByRole('checkbox', { name: 'Walk-in' }));
+    expect(screen.getByText('รายการขาย (1)')).toBeInTheDocument();
+    expect(screen.queryByText('ลำโพง')).toBeNull();
+  });
+
+  it('ไม่มีใบไหนบันทึกจองผ่านไว้เลย ก็ไม่มีตัวกรองให้กด', () => {
+    renderModule([line({ bookingChannel: '' })]);
+    expect(screen.queryByRole('button', { name: 'กรองตามจองผ่าน' })).toBeNull();
+  });
+});

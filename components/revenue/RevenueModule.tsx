@@ -103,6 +103,14 @@ export function RevenueModule({
     สถานะพร้อมกัน และตัวเลือกเดียวตอบไม่ได้
   */
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  /*
+    จองผ่าน — เลือกได้หลายช่องทางพร้อมกัน (ร้านขอ 3 ต.ค. 2569).
+
+    ร้านจ่ายค่าโฆษณาหลายทาง และคำถามที่ตามมาคือทางไหนคุ้ม ซึ่งตอบได้ก็ต่อเมื่อ
+    แยกยอดขายตามทางที่ลูกค้าเข้ามาได้ — ข้อมูลอยู่ในใบงานมาตลอด แต่ไม่เคยมี
+    ที่ให้กรอง มีแค่คอลัมน์ในรายงานที่พิมพ์ออกมา
+  */
+  const [bookingFilter, setBookingFilter] = useState<string[]>([]);
 
   const shopName = (id: string) => accessibleShops.find((s) => s.id === id)?.name ?? id;
 
@@ -131,12 +139,22 @@ export function RevenueModule({
     และคนกดจะไม่รู้ว่าเพราะไม่มีข้อมูล หรือเพราะกรองผิด
   */
   const statuses = [...new Set(scoped.map((l) => l.status).filter(Boolean))].sort();
+  /*
+    ช่องทางที่มีจริงในช่วงที่ดูอยู่.
+
+    ขายส่งไม่มีจองผ่าน (PO ไม่ได้มาจากช่องทางไหน) บรรทัดพวกนั้นจึงไม่มีค่าให้
+    เสนอ และจะหลุดออกไปเองเมื่อมีการกรอง — ซึ่งถูก เพราะมันตอบคำถามนี้ไม่ได้
+  */
+  const bookingChannels = [
+    ...new Set(scoped.map((l) => (l.bookingChannel ?? '').trim()).filter(Boolean)),
+  ].sort();
 
   const visible = scoped.filter(
     (l) =>
       (categoryFilter === 'all' || l.category === categoryFilter) &&
       (channelFilter === 'all' || l.channel === channelFilter) &&
       (statusFilter.length === 0 || statusFilter.includes(l.status)) &&
+      (bookingFilter.length === 0 || bookingFilter.includes((l.bookingChannel ?? '').trim())) &&
       (docFilter === 'all' || (docFilter === 'tax' ? !!l.taxInvoiceNo : !l.taxInvoiceNo)),
   );
 
@@ -566,9 +584,21 @@ export function RevenueModule({
               <MultiSelectFilter
                 ariaLabel="กรองตามสถานะงาน"
                 label="ทุกสถานะ"
+                unit="สถานะ"
                 options={statuses}
                 values={statusFilter}
                 onChange={setStatusFilter}
+              />
+            )}
+            {/* เหมือนกัน: ไม่มีช่องทางให้เลือก ก็ไม่ต้องมีตัวกรองที่กดแล้วไม่เกิดอะไร */}
+            {bookingChannels.length > 0 && (
+              <MultiSelectFilter
+                ariaLabel="กรองตามจองผ่าน"
+                label="ทุกช่องทางจอง"
+                unit="ช่องทาง"
+                options={bookingChannels}
+                values={bookingFilter}
+                onChange={setBookingFilter}
               />
             )}
             <select
@@ -699,7 +729,8 @@ export function RevenueModule({
               {channelFilter !== 'all' ? ' · ขาย' + channelFilter : ''}
               {/* เอกสารที่พิมพ์ออกไปต้องบอกได้ว่ามันถูกกรองด้วยอะไร ไม่งั้นมันคือ
                   ตัวเลขที่ไม่มีใครย้อนกลับมาตรวจได้ */}
-              {statusFilter.length > 0 ? ' · ' + statusFilter.join(', ') : ''} ·{' '}
+              {statusFilter.length > 0 ? ' · ' + statusFilter.join(', ') : ''}
+              {bookingFilter.length > 0 ? ' · จองผ่าน ' + bookingFilter.join(', ') : ''} ·{' '}
               {periodCaption(period, periodValue, rangeStart, rangeEnd, new Date()).replace(
                 'สรุปข้อมูล',
                 '',
