@@ -13,11 +13,12 @@ import { useEffect, useId, useRef, useState } from 'react';
  * ตัวกรองอื่นในแถวเดียวกัน และเลือกหลายค่าได้โดยไม่ต้องรู้ทางลัดอะไร
  *
  * ไม่มีค่าไหนถูกเลือก = ไม่กรอง ซึ่งเป็นคนละเรื่องกับ "เลือกครบทุกค่า" ในทาง
- * ตรรกะ แต่ให้ผลเหมือนกันบนตาราง และเป็นสถานะที่คนอ่านเข้าใจได้ทันทีว่าแปลว่า
+ * ตรรกะ แต่ให้ผลเหมือนกันบนตาราง และเป็นสภาพที่คนอ่านเข้าใจได้ทันทีว่าแปลว่า
  * ยังไม่ได้กรองอะไร
  */
 export function MultiSelectFilter({
   label,
+  unit,
   options,
   values,
   onChange,
@@ -25,6 +26,14 @@ export function MultiSelectFilter({
 }: {
   /** คำที่ขึ้นบนปุ่มเมื่อยังไม่ได้เลือกอะไร เช่น "ทุกสถานะ". */
   label: string;
+  /**
+   * หน่วยของสิ่งที่เลือก ใช้ตอนสรุปว่า "2 สถานะ" / "2 ช่องทาง".
+   *
+   * เคยเขียนคำว่า "สถานะ" ไว้ในคอมโพเนนต์ตรง ๆ เพราะตัวกรองแรกที่ใช้มันคือ
+   * ตัวกรองสถานะ พอมีตัวที่สองคำนั้นก็ติดไปด้วย แล้วปุ่มจองผ่านก็ขึ้นว่า
+   * "2 สถานะ"
+   */
+  unit: string;
   options: string[];
   values: string[];
   onChange: (next: string[]) => void;
@@ -47,13 +56,13 @@ export function MultiSelectFilter({
   /*
     ค่าที่เลือกไว้แต่หายไปจากรายการ ยังนับว่าเลือกอยู่.
 
-    ตารางที่ถูกกรองอยู่อาจไม่เหลือแถวของสถานะนั้นแล้ว ถ้าตัดทิ้งเงียบ ๆ ตัวกรอง
+    ตารางที่ถูกกรองอยู่อาจไม่เหลือแถวของค่านั้นแล้ว ถ้าตัดทิ้งเงียบ ๆ ตัวกรอง
     จะคลายตัวเองโดยที่คนใช้ไม่ได้สั่ง
   */
   const shown = [...new Set([...options, ...values])];
 
   const summary =
-    values.length === 0 ? label : values.length === 1 ? values[0] : `${values.length} สถานะ`;
+    values.length === 0 ? label : values.length === 1 ? values[0] : `${values.length} ${unit}`;
 
   const toggle = (o: string) =>
     onChange(values.includes(o) ? values.filter((v) => v !== o) : [...values, o]);
@@ -89,7 +98,7 @@ export function MultiSelectFilter({
         >
           {shown.length === 0 && (
             <p className="text-xs px-2 py-1" style={{ color: 'var(--ink-faint)' }}>
-              ไม่มีสถานะให้เลือก
+              ไม่มี{unit}ให้เลือก
             </p>
           )}
           {shown.map((o) => (
