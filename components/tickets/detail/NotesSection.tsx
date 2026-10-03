@@ -24,7 +24,7 @@ export function NotesSection({
   return (
     <div className="mb-5">
       <label className="text-xs font-medium block mb-1" style={{ color: 'var(--ink-soft)' }}>
-        หมายเหตุ (พิมพ์ในใบงานทุกใบ)
+        หมายเหตุ (พิมพ์ในใบงานทุกใบ และใบเสนอราคา)
       </label>
       <textarea
         value={t.notes || ''}
