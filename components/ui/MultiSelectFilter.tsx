@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 
+import { useClampIntoReadableArea } from '@/components/ui/useClampIntoReadableArea';
+
 /**
  * ตัวกรองที่เลือกได้หลายค่าพร้อมกัน.
  *
@@ -39,8 +41,17 @@ export function MultiSelectFilter({
   onChange: (next: string[]) => void;
   ariaLabel: string;
 }) {
+  /*
+    ค่าที่เลือกไว้แต่หายไปจากรายการ ยังนับว่าเลือกอยู่.
+
+    ตารางที่ถูกกรองอยู่อาจไม่เหลือแถวของค่านั้นแล้ว ถ้าตัดทิ้งเงียบ ๆ ตัวกรอง
+    จะคลายตัวเองโดยที่คนใช้ไม่ได้สั่ง
+  */
+  const shown = [...new Set([...options, ...values])];
+
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
 
   // ปิดเมื่อคลิกข้างนอก — แบบเดียวกับ SearchableSelect ที่อยู่บนฟอร์มเดียวกัน
@@ -54,12 +65,14 @@ export function MultiSelectFilter({
   }, [open]);
 
   /*
-    ค่าที่เลือกไว้แต่หายไปจากรายการ ยังนับว่าเลือกอยู่.
+    กล่องกางออกจากขอบขวาของปุ่ม คือกางไปทางซ้าย — ซึ่งตกขอบเมื่อปุ่มอยู่ซ้ายสุด.
 
-    ตารางที่ถูกกรองอยู่อาจไม่เหลือแถวของค่านั้นแล้ว ถ้าตัดทิ้งเงียบ ๆ ตัวกรอง
-    จะคลายตัวเองโดยที่คนใช้ไม่ได้สั่ง
+    ในโมดูลรายได้ ปุ่มตัวแรกอยู่ชิดซ้ายของการ์ด และชื่อสถานะบางอันยาว ("รอ EDC
+    ก่อนติดตั้ง") กล่องจึงยื่นเลยขอบซ้ายของเนื้อหาไปนอนใต้แถบเมนู อ่านไม่ออก
+    (ร้านเจอ 6 ต.ค. 2569) เรื่องเดียวกับที่ป๊อปอัพในรายงานรายวันเคยเจอ จึงใช้
+    ตัววัดตัวเดียวกัน
   */
-  const shown = [...new Set([...options, ...values])];
+  useClampIntoReadableArea(panelRef, open, shown.length);
 
   const summary =
     values.length === 0 ? label : values.length === 1 ? values[0] : `${values.length} ${unit}`;
@@ -86,12 +99,15 @@ export function MultiSelectFilter({
       {open && (
         <div
           id={panelId}
+          ref={panelRef}
           className="absolute right-0 mt-1 rounded-xl p-2 z-20"
           style={{
             background: 'var(--surface)',
             border: '1px solid var(--line)',
             boxShadow: '0 8px 24px rgba(0,0,0,.12)',
             minWidth: '13rem',
+            // กว้างกว่าพื้นที่ที่มี = ยังไงก็มีด้านที่ตกขอบ เลื่อนช่วยไม่ได้
+            maxWidth: 'min(20rem, calc(100vw - 24px))',
             maxHeight: '18rem',
             overflowY: 'auto',
           }}
@@ -104,11 +120,21 @@ export function MultiSelectFilter({
           {shown.map((o) => (
             <label
               key={o}
-              className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg cursor-pointer"
-              style={{ whiteSpace: 'nowrap' }}
+              className="flex items-start gap-2 text-xs px-2 py-1.5 rounded-lg cursor-pointer"
             >
-              <input type="checkbox" checked={values.includes(o)} onChange={() => toggle(o)} />
-              {o}
+              {/*
+                ชื่อยาวให้ขึ้นบรรทัดใหม่ ไม่ใช่ยืดกล่องออกไปเรื่อย ๆ.
+
+                เดิมห้ามตัดบรรทัด กล่องจึงกว้างตามชื่อที่ยาวที่สุดเสมอ ซึ่งเป็น
+                เหตุที่มันยื่นออกนอกพื้นที่อ่านได้ตั้งแต่แรก
+              */}
+              <input
+                type="checkbox"
+                className="mt-0.5 shrink-0"
+                checked={values.includes(o)}
+                onChange={() => toggle(o)}
+              />
+              <span className="min-w-0">{o}</span>
             </label>
           ))}
           {values.length > 0 && (
