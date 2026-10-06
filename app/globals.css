@@ -136,11 +136,57 @@ body {
   color: var(--ink-faint);
 }
 
+/*
+  Density — one place to tune how much of a page fits on a screen.
+
+  The scale this app inherited was drawn for a showroom monitor: 16px body
+  text, a 4px spacing step, 30-36px display figures. On the shop's own laptop
+  that meant the sales table of รายได้ started 290px BELOW the fold — you
+  scrolled past a screen of headings and summary cards before reaching the
+  rows you came for, on every module. (ร้านขอ 6 ต.ค. 2569: "1 หน้าจอมี 3 การ์ด
+  ปรับเป็น 5-6 การ์ด")
+
+  Tailwind v4 resolves spacing and text utilities through these variables at
+  RUNTIME, not at build time. That is what lets one block retune every page —
+  and what lets `.print-area` further down set them back, so a printed
+  document keeps the measurements it was laid out for.
+
+  The numbers were tuned by measuring, not by taste: on รายได้ at 840x790 the
+  page went 2797px → 1834px and the first table row moved from y=1079 to y=736,
+  which is 4 cards per screen → 5-6 with the table already started.
+
+  Two guardrails the numbers are held to:
+
+  - 11px is the floor for `--text-xs`. It is the body size of every table
+    here, and below that the reader can no longer tell วิ from ว็ at a glance.
+    Everything else is sized down from it, which is why the ramp is tighter at
+    the top (36 → 24) than at the bottom (12 → 11): the display figures were
+    the part that was actually oversized.
+  - The `--text-xs` leading is set in absolute terms, not tightened. Thai
+    stacks a vowel above the consonant and a tone mark above that; 11px × 1.45
+    lands at ~16px, the same leading the 12px text had. It costs 13px over a
+    whole page — measured — and it is what keeps a Thai table from clipping.
+*/
+@theme {
+  /* 4px → 2.56px per step — every p-*, gap-*, space-y-*, w-* in the app */
+  --spacing: 0.16rem;
+
+  --text-xs: 0.6875rem; /* 12 → 11 */
+  --text-xs--line-height: 1.45; /* ~16px, unchanged in absolute terms */
+  --text-sm: 0.75rem; /* 14 → 12 */
+  --text-base: 0.875rem; /* 16 → 14 */
+  --text-lg: 0.9375rem; /* 18 → 15 */
+  --text-xl: 1rem; /* 20 → 16 */
+  --text-2xl: 1.125rem; /* 24 → 18 */
+  --text-3xl: 1.3125rem; /* 30 → 21 */
+  --text-4xl: 1.5rem; /* 36 → 24 */
+}
+
 @layer components {
   .card {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 18px;
+    border-radius: 12px;
     box-shadow: var(--shadow-sm);
     transition:
       box-shadow 0.2s ease,
@@ -192,7 +238,7 @@ body {
   .field {
     background: var(--surface);
     border: 1.5px solid var(--line);
-    border-radius: 11px;
+    border-radius: 8px;
     transition: all 0.15s ease;
   }
   .field:focus {
@@ -201,9 +247,9 @@ body {
     outline: none;
   }
   .icon-tile {
-    width: 38px;
-    height: 38px;
-    border-radius: 11px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -253,6 +299,23 @@ body {
 }
 .print-area {
   display: none;
+  /*
+    A printed page is a fixed size, so the density block above must not reach
+    it: its tables were measured against these numbers, and `fitPrintPages()`
+    (lib/print/fitToPage.ts) decides page breaks from what it measures here.
+    Same variables, back at the Tailwind defaults — they inherit, so every
+    utility inside the sheet resolves against them.
+  */
+  --spacing: 0.25rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: calc(1 / 0.75);
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
 }
 
 /*
