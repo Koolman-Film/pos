@@ -36,8 +36,17 @@ export function SidebarNav({
       {open && (
         <div onClick={() => setOpen(false)} className="fixed inset-0 bg-black/40 z-40 md:hidden" />
       )}
+      {/*
+        ความกว้างเขียนเป็นค่าคงที่ ไม่ได้ผูกกับสเกลระยะห่างของแอป.
+
+        เดิมเป็น `w-64` ซึ่ง Tailwind คิดจาก `--spacing` — พอชั้นความหนาแน่น
+        ใน globals.css บีบสเกลลง แถบเมนูก็แคบตามจนเหลือ 164px แล้ว
+        "รายงานการเงินรายวัน" ตัดบรรทัดกลางคำเป็น "...ราย / วัน" เมนูไม่ใช่
+        เนื้อหา มันต้องกว้างพอสำหรับชื่อที่ยาวที่สุดเท่านั้น และไม่ควรขยับ
+        ทุกครั้งที่จูนความหนาแน่นของหน้า (180px — วัดแล้วพอดีที่ 176px)
+      */}
       <aside
-        className={`fixed md:sticky top-0 h-screen w-64 flex-shrink-0 flex flex-col z-50 transition-transform duration-300 ${
+        className={`fixed md:sticky top-0 h-screen w-[11.25rem] flex-shrink-0 flex flex-col z-50 transition-transform duration-300 ${
           open ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
         style={{ background: 'var(--sidebar)' }}
