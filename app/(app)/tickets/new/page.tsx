@@ -60,6 +60,7 @@ export default async function NewTicketPage({
         'list.printSheet': session.canDo('list.printSheet'),
         'options.manage': session.canDo('options.manage'),
       }}
+      currentUserId={session.userId}
       currentUserName={session.name}
       initialOptions={registries.options}
       initialStock={registries.stock}
