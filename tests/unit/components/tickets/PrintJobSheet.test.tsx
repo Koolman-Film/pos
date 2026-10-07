@@ -1000,3 +1000,51 @@ describe('PrintJobSheet — หมายเหตุบนใบเสนอร�
     expect(screen.queryByText(/ราคานี้ยืน 7 วัน/)).toBeNull();
   });
 });
+
+/**
+ * MEMO ต้องไม่หลุดลงกระดาษ (ร้านขอ 7 ต.ค. 2569).
+ *
+ * "ข้อความในmemo จะไม่แสดงในเอกสาร จะเห็นเฉพาะในระบบเท่านั้น" — MEMO คือบทสนทนา
+ * ภายใน ("ลูกค้าต่อราคาหนักมาก ยอมได้ถึง 25,000") เอกสารทุกใบที่นี่ออกคือกระดาษ
+ * ที่ลูกค้าถือกลับบ้าน
+ *
+ * วันนี้ฝั่งพิมพ์ไม่ได้อ่าน `memos` เลย เทสต์นี้จึงไม่ได้ทดสอบโค้ดที่มีอยู่ แต่
+ * ทดสอบว่ามันยังไม่มี — ซึ่งเป็นสิ่งที่พังได้ในวันที่ใครสักคนไล่ใส่ field ใหม่
+ * ลงใบเสนอราคาแล้วหยิบผิดช่อง
+ */
+describe('MEMO ไม่อยู่บนเอกสาร', () => {
+  const SECRET = 'ลูกค้าต่อราคาหนัก ยอมได้ถึง 25,000 อย่าบอกลูกค้า';
+  const withMemo = () =>
+    makeTicket({
+      items: [item()],
+      memos: [
+        {
+          id: 1,
+          body: SECRET,
+          authorId: '00000000-0000-4000-8000-00000000000a',
+          authorName: 'ไผริน',
+          createdAt: '2026-10-05T04:00:00Z',
+        },
+      ],
+    });
+
+  for (const [label, mode] of [
+    ['ใบงานขาย', 'sale'],
+    ['ใบงานติดตั้ง', 'job'],
+    ['ใบงานนอกสถานที่', 'offsite'],
+  ] as const) {
+    it(`${label} ไม่มีข้อความ MEMO`, () => {
+      renderSheet(withMemo(), mode);
+      expect(screen.queryByText(new RegExp(SECRET))).toBeNull();
+      expect(screen.queryByText(/ไผริน/)).toBeNull();
+    });
+  }
+
+  for (const docType of ['ใบเสนอราคา', 'ใบกำกับภาษี/ใบเสร็จรับเงิน', 'ใบเสร็จรับเงิน'] as const) {
+    it(`${docType} ไม่มีข้อความ MEMO`, () => {
+      renderSheet(withMemo(), 'doc', { docType, total: 29500, paid: 29500 });
+      expect(screen.queryByText(new RegExp(SECRET))).toBeNull();
+      expect(screen.queryByText(/ไผริน/)).toBeNull();
+    });
+  }
+});

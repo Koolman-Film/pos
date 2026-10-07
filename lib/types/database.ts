@@ -1685,6 +1685,41 @@ export type Database = {
           },
         ]
       }
+      ticket_memos: {
+        Row: {
+          author: string | null
+          author_name: string
+          body: string
+          created_at: string
+          id: number
+          ticket_id: string
+        }
+        Insert: {
+          author?: never
+          author_name?: never
+          body: string
+          created_at?: never
+          id?: never
+          ticket_id: string
+        }
+        Update: {
+          author?: never
+          author_name?: never
+          body?: never
+          created_at?: never
+          id?: never
+          ticket_id?: never
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_memos_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ticket_payments: {
         Row: {
           amount: number

@@ -6,6 +6,8 @@ import { loadPayAccounts } from '@/lib/money/payAccounts';
 import { createClient } from '@/lib/supabase/server';
 
 import {
+  addTicketMemo,
+  deleteTicketMemo,
   deleteTicket,
   getTicketAttachmentUrl,
   deleteServiceVisit,
@@ -65,6 +67,9 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       // ประวัติการแก้ไข — admin by ROLE, like the page it opens (0061). Not a
       // capability: those are what จัดการสิทธิ์ hands out, and this is not.
       canSeeHistory={session.roleId === 'admin'}
+      // MEMO: ลบของคนอื่นได้เฉพาะแอดมิน — เงื่อนไขเดียวกับที่ RLS บังคับ (0082)
+      canDeleteAnyMemo={session.roleId === 'admin'}
+      currentUserId={session.userId}
       currentUserName={session.name}
       initialOptions={registries.options}
       initialStock={registries.stock}
@@ -92,6 +97,8 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
       insuranceAction={saveInsurancePolicy}
       insuranceDeleteAction={deleteInsurancePolicy}
       documentAction={recordTicketDocument}
+      memoAddAction={addTicketMemo}
+      memoDeleteAction={deleteTicketMemo}
     />
   );
 }

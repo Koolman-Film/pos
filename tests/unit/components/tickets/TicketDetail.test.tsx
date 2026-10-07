@@ -52,6 +52,7 @@ function baseProps(ticket: Ticket) {
     shops: [{ id: 'cm', name: 'FINNIX CM' }],
     statuses,
     canDo: () => true,
+    currentUserId: '00000000-0000-4000-8000-000000000001',
     currentUserName: 'ผู้ทดสอบ',
     initialOptions: options(),
     initialStock: [],

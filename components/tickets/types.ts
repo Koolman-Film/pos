@@ -231,6 +231,23 @@ export type InsurancePolicy = {
   claims: InsuranceClaim[];
 };
 
+/**
+ * หนึ่งข้อความใน MEMO ของใบงาน (migration 0082).
+ *
+ * ทุก field มาจากฐานข้อมูล ไม่มีอันไหนที่หน้าจอตั้งเองได้นอกจาก `body` — ชื่อ
+ * คนเขียนกับเวลาถูก trigger ประทับ เพราะคำถามที่ช่องนี้ตอบคือ "ใครพิมพ์ไว้"
+ */
+export type TicketMemo = {
+  id: number;
+  body: string;
+  /** auth.users id ของคนเขียน — null คือเขียนจากฝั่งระบบ ใช้ดูว่าลบได้ไหม */
+  authorId: string | null;
+  /** ชื่อ ณ ตอนที่เขียน ไม่ใช่ชื่อปัจจุบัน */
+  authorName: string;
+  /** ISO timestamp */
+  createdAt: string;
+};
+
 export type Ticket = {
   id: string;
   shop: string;
@@ -276,6 +293,14 @@ export type Ticket = {
    * like an upload does, and it is what gets shared with the customer when set.
    */
   qcAlbumUrl?: string;
+  /**
+   * MEMO — ข้อความภายในของใบงานนี้ เรียงเก่าไปใหม่เหมือนช่องแชท (migration 0082).
+   *
+   * แยกจาก `notes` โดยตั้งใจ: `notes` ถูกพิมพ์ลงใบงานทุกใบและใบเสนอราคา
+   * ส่วนนี่เห็นเฉพาะในระบบ การรวมสองอย่างนี้เข้าด้วยกันจะทำให้บทสนทนาภายใน
+   * หลุดไปอยู่ในมือลูกค้า
+   */
+  memos?: TicketMemo[];
   /** Visits recorded against this ticket, newest first. */
   serviceVisits?: ServiceVisit[];
   /**

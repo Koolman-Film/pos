@@ -923,3 +923,86 @@ export async function recordTicketDocument(input: {
   revalidatePath('/revenue');
   return { ok: true };
 }
+
+/** ความยาวสูงสุดของหนึ่งข้อความ — ยาวกว่านี้คือเอกสาร ไม่ใช่ข้อความ */
+const MEMO_MAX = 2000;
+
+/**
+ * เพิ่มหนึ่งข้อความใน MEMO ของใบงาน (migration 0082).
+ *
+ * ไม่ผ่านปุ่มบันทึกใบงาน และไม่ติดด่านล็อก — MEMO ไม่ใช่ตัวเลขของใบงาน มันคือ
+ * บทสนทนาเรื่องใบงาน ซึ่งยังเกิดขึ้นหลังปิดงานแล้วได้ตามปกติ
+ *
+ * ชื่อคนเขียนกับเวลาไม่ได้ส่งมาจากที่นี่โดยตั้งใจ ฐานข้อมูลประทับเอง (trigger
+ * `stamp_ticket_memo`) — ถ้าค่าที่ตอบว่า "ใครพิมพ์" มาจาก action ที่ client
+ * เรียกได้ ก็แปลว่าใครก็พิมพ์แทนคนอื่นได้
+ */
+export async function addTicketMemo(input: {
+  ticketId: string;
+  body: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext(); // C2: authenticate before mutating
+  // Same gate as everything else on the ticket screen: seeing Book งาน is what
+  // lets someone work on a ticket at all.
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์เขียน MEMO' };
+
+  const body = input.body.trim();
+  if (!body) return { ok: false, error: 'ยังไม่ได้พิมพ์ข้อความ' };
+  if (body.length > MEMO_MAX) {
+    return { ok: false, error: `ข้อความยาวเกิน ${MEMO_MAX} ตัวอักษร` };
+  }
+
+  const supabase = await createClient();
+  try {
+    // RLS scopes the insert to the caller's shops; this is only here so a
+    // mistyped id comes back as a sentence rather than a policy violation.
+    const { data: ticket } = await supabase
+      .from('tickets')
+      .select('id')
+      .eq('id', input.ticketId)
+      .maybeSingle();
+    if (!ticket) return { ok: false, error: 'ไม่พบใบงานนี้' };
+
+    const { error } = await supabase
+      .from('ticket_memos')
+      .insert({ ticket_id: input.ticketId, body });
+    if (error) throw new Error(error.message);
+    revalidatePath(`/tickets/${input.ticketId}`);
+    return { ok: true };
+  } catch (e) {
+    reportActionError('tickets.addTicketMemo', e, session.userId);
+    return { ok: false, error: e instanceof Error ? e.message : 'บันทึก MEMO ไม่สำเร็จ' };
+  }
+}
+
+/**
+ * ลบข้อความ MEMO หนึ่งข้อความ.
+ *
+ * ใครลบได้ถูกตัดสินใน RLS (เจ้าของข้อความ หรือแอดมิน) ไม่ใช่ที่นี่ — ฝั่งนี้
+ * รู้แค่ว่าแถวหายไปหรือไม่หาย ซึ่งเป็นคำตอบเดียวกันทั้งกรณี "ไม่มีสิทธิ์" และ
+ * "ลบไปแล้ว" จึงไม่บอกต่างกัน
+ *
+ * แก้ข้อความไม่ได้เลย (ฐานข้อมูลถอนสิทธิ์ update ไว้): ข้อความที่คนอื่นอ่านไป
+ * แล้วถูกแก้ทีหลังโดยไม่มีร่องรอย ทำให้ทั้งเส้นเชื่อถือไม่ได้
+ */
+export async function deleteTicketMemo(input: {
+  id: number;
+  ticketId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.hasNav('list')) return { ok: false, error: 'ไม่มีสิทธิ์ลบ MEMO' };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('ticket_memos')
+    .delete()
+    .eq('id', input.id)
+    .eq('ticket_id', input.ticketId)
+    .select('id');
+  if (error) return { ok: false, error: error.message };
+  if ((data ?? []).length === 0) {
+    return { ok: false, error: 'ลบไม่ได้ — ลบได้เฉพาะข้อความของตัวเอง' };
+  }
+  revalidatePath(`/tickets/${input.ticketId}`);
+  return { ok: true };
+}

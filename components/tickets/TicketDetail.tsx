@@ -29,6 +29,7 @@ import { ExtrasSection } from './detail/ExtrasSection';
 import { EXPIRY_WARNING_DAYS, InsuranceSection, daysLeft } from './detail/InsuranceSection';
 import { FormSection, SECTION_TONES } from './detail/FormSection';
 import { ItemsSection } from './detail/ItemsSection';
+import { MemoSection } from './detail/MemoSection';
 import { NotesSection } from './detail/NotesSection';
 import { PaymentsSection } from './detail/PaymentsSection';
 import { ServiceVisitsSection } from './detail/ServiceVisitsSection';
@@ -98,6 +99,7 @@ function branchSells(items: Ticket['items']): number {
 function formOwned(x: Ticket): Partial<Ticket> {
   const rest: Partial<Ticket> = { ...x };
   for (const key of [
+    'memos',
     'serviceVisits',
     'serviceVisitsForPlate',
     'insurancePolicies',
@@ -125,6 +127,7 @@ export function TicketDetail({
   statuses,
   canDo,
   canSeeHistory = false,
+  currentUserId,
   currentUserName,
   initialOptions,
   initialStock,
@@ -148,6 +151,9 @@ export function TicketDetail({
   payAccountAction,
   serviceVisitAction,
   serviceVisitDeleteAction,
+  canDeleteAnyMemo = false,
+  memoAddAction,
+  memoDeleteAction,
   insurancePlans = [],
   insuranceAction,
   insuranceDeleteAction,
@@ -165,6 +171,8 @@ export function TicketDetail({
   canDo: (key: string) => boolean;
   /** Role admin — shows ประวัติการแก้ไข (migration 0061). */
   canSeeHistory?: boolean;
+  /** ใช้ตัดสินว่าข้อความ MEMO ไหนเป็นของคนที่เปิดหน้าอยู่ */
+  currentUserId: string;
   currentUserName: string;
   initialOptions: Options;
   initialStock: StockRow[];
@@ -238,6 +246,23 @@ export function TicketDetail({
     claim?: { policyId: number; bigUsed: number; smallUsed: number; detail: string } | null;
   }) => Promise<{ ok: boolean; error?: string; id?: number }>;
   serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * ลบข้อความ MEMO ของคนอื่นได้ไหม — แอดมินโดยบทบาท ตรงกับกติกาใน RLS (0082).
+   *
+   * ไม่ใช่ `canSeeHistory` ที่บังเอิญเป็นค่าเดียวกันวันนี้: ปุ่มนี้กับสิทธิ์
+   * เห็นประวัติการแก้ไข ไม่มีเหตุผลที่จะต้องเปลี่ยนไปด้วยกันตลอดไป
+   */
+  canDeleteAnyMemo?: boolean;
+  /** MEMO — เขียนเพิ่มทีละข้อความ ไม่ผ่านปุ่มบันทึกใบงาน (migration 0082) */
+  memoAddAction?: (input: {
+    ticketId: string;
+    body: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  memoDeleteAction?: (input: {
+    id: number;
+    ticketId: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+
   /** แผนประกัน the branch sells, for the picker (migration 0023). */
   insurancePlans?: InsurancePlan[];
   /** Records one กรมธรรม์ประกัน against this ticket, with its claims. */
@@ -1846,6 +1871,31 @@ export function TicketDetail({
                 <i className="fa-solid fa-print"></i> ออก{docType}
               </button>
             </FormSection>
+          )}
+          {/*
+            MEMO — นอกกรอบที่ถูกปิดตอนใบงานล็อก โดยตั้งใจ.
+
+            ด่านล็อกกันไม่ให้ตัวเลขของใบงานที่ปิดไปแล้วขยับ MEMO ไม่ใช่ตัวเลข
+            ของใบงาน และคำถามเรื่องงานที่ปิดไปแล้วก็ยังโทรเข้ามาอยู่ดี
+            ฐานข้อมูลก็ไม่ได้กันไว้เหมือนกัน (0082)
+          */}
+          {memoAddAction && memoDeleteAction && (
+            <MemoSection
+              /*
+                Server-owned: จาก initialTicket ไม่ใช่ draft — เหมือนใบเซอร์วิส
+                ร่างในฟอร์มถูกหว่านครั้งเดียวตอนเปิดหน้า มันจึงไม่มีวันรู้จัก
+                ข้อความที่เพิ่งส่งไป หรือที่คนอื่นส่งเข้ามาระหว่างนี้
+              */
+              memos={initialTicket.memos ?? []}
+              ticketId={initialTicket.id}
+              currentUserId={currentUserId}
+              canDeleteAny={canDeleteAnyMemo}
+              disabled={isNew}
+              disabledNote="บันทึกใบงานก่อน แล้วจึงเขียน MEMO ได้"
+              onAdd={memoAddAction}
+              onDelete={memoDeleteAction}
+              onDone={() => router.refresh()}
+            />
           )}
           {/*
             ข้อมูลของช่าง sits at the very bottom, below the financial-document
