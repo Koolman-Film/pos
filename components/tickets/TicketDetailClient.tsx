@@ -33,6 +33,7 @@ export function TicketDetailClient({
   statuses,
   capabilities,
   canSeeHistory = false,
+  currentUserId,
   currentUserName,
   initialOptions,
   initialStock,
@@ -56,6 +57,9 @@ export function TicketDetailClient({
   payAccountAction,
   serviceVisitAction,
   serviceVisitDeleteAction,
+  canDeleteAnyMemo = false,
+  memoAddAction,
+  memoDeleteAction,
   insurancePlans,
   insuranceAction,
   insuranceDeleteAction,
@@ -69,6 +73,7 @@ export function TicketDetailClient({
   capabilities: Record<string, boolean>;
   /** Role admin — the ประวัติการแก้ไข button (migration 0061). */
   canSeeHistory?: boolean;
+  currentUserId: string;
   currentUserName: string;
   initialOptions: Record<OptionListName, string[]>;
   initialStock: StockRow[];
@@ -124,6 +129,23 @@ export function TicketDetailClient({
     claim?: { policyId: number; bigUsed: number; smallUsed: number; detail: string } | null;
   }) => Promise<{ ok: boolean; error?: string; id?: number }>;
   serviceVisitDeleteAction?: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * ลบข้อความ MEMO ของคนอื่นได้ไหม — แอดมินโดยบทบาท ตรงกับกติกาใน RLS (0082).
+   *
+   * ไม่ใช่ `canSeeHistory` ที่บังเอิญเป็นค่าเดียวกันวันนี้: ปุ่มนี้กับสิทธิ์
+   * เห็นประวัติการแก้ไข ไม่มีเหตุผลที่จะต้องเปลี่ยนไปด้วยกันตลอดไป
+   */
+  canDeleteAnyMemo?: boolean;
+  /** MEMO — เขียนเพิ่มทีละข้อความ ไม่ผ่านปุ่มบันทึกใบงาน (migration 0082) */
+  memoAddAction?: (input: {
+    ticketId: string;
+    body: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+  memoDeleteAction?: (input: {
+    id: number;
+    ticketId: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
+
   insurancePlans?: InsurancePlan[];
   insuranceAction?: (input: {
     id?: number;
@@ -152,6 +174,7 @@ export function TicketDetailClient({
       statuses={statuses}
       canDo={canDo}
       canSeeHistory={canSeeHistory}
+      currentUserId={currentUserId}
       currentUserName={currentUserName}
       initialOptions={initialOptions}
       initialStock={initialStock}
@@ -175,6 +198,9 @@ export function TicketDetailClient({
       payAccountAction={payAccountAction}
       serviceVisitAction={serviceVisitAction}
       serviceVisitDeleteAction={serviceVisitDeleteAction}
+      canDeleteAnyMemo={canDeleteAnyMemo}
+      memoAddAction={memoAddAction}
+      memoDeleteAction={memoDeleteAction}
       insurancePlans={insurancePlans}
       insuranceAction={insuranceAction}
       insuranceDeleteAction={insuranceDeleteAction}

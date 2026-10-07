@@ -443,6 +443,33 @@ type ServiceVisitRow = {
  * own list drives "ครั้งที่ 2 / 10", the plate count drives "รถคันนี้เซอร์วิสไป
  * กี่ครั้ง" across every job it has ever had.
  */
+/**
+ * MEMO ของใบงาน เก่าไปใหม่ (migration 0082).
+ *
+ * คิวรีของตัวเอง ไม่ฝังไปกับใบงาน: มันไม่ใช่ลูกที่ฟอร์มเป็นเจ้าของ — ปุ่มบันทึก
+ * ใบงานไม่เคยเขียนมัน และมันถูกเขียนเพิ่มระหว่างที่ฟอร์มเปิดค้างอยู่ได้
+ *
+ * เก่าขึ้นบน เหมือนทุกช่องแชทที่คนเคยใช้ ข้อความใหม่จึงอยู่ตรงที่ตาหยุด
+ */
+async function loadTicketMemos(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ticketId: string,
+): Promise<Ticket['memos']> {
+  const { data } = await supabase
+    .from('ticket_memos')
+    .select('id, body, author, author_name, created_at')
+    .eq('ticket_id', ticketId)
+    .order('created_at')
+    .order('id');
+  return (data ?? []).map((m) => ({
+    id: m.id,
+    body: m.body,
+    authorId: m.author,
+    authorName: m.author_name,
+    createdAt: m.created_at,
+  }));
+}
+
 async function loadServiceVisits(
   supabase: Awaited<ReturnType<typeof createClient>>,
   ticketId: string,
@@ -675,6 +702,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
 
   const service = await loadServiceVisits(supabase, t.id, t.plate);
   const insurance = await loadInsurance(supabase, t.id, t.plate);
+  const memos = await loadTicketMemos(supabase, t.id);
 
   return {
     id: t.id,
@@ -703,6 +731,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     qcBy: meta.qcBy ?? '',
     qcPhotos: meta.qcPhotos ?? [],
     qcAlbumUrl: meta.qcAlbumUrl ?? '',
+    memos,
     serviceVisits: service.visits,
     serviceVisitsForPlate: service.forPlate,
     insurancePolicies: insurance.policies,
@@ -771,6 +800,7 @@ export function blankTicket(shop: string): Ticket {
     wrapOptions: [],
     qcPhotos: [],
     qcAlbumUrl: '',
+    memos: [],
     serviceVisits: [],
     serviceVisitsForPlate: 0,
   };
