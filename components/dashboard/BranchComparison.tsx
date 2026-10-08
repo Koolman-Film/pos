@@ -150,6 +150,15 @@ const COLUMNS: {
   },
 ];
 
+/*
+  ความกว้างขั้นต่ำของตาราง — แคบกว่าการ์ดบนหน้าต่างขนาดปกติ จึงไม่มีแถบเลื่อน.
+
+  วัดจากของจริงหลังหดช่องไฟ ไม่ใช่ตัวเลขที่เดาไว้: แปดช่องต่อแถว ช่องละ 14px
+  (จาก 24px) บวกตัวอักษรที่เล็กลงหนึ่งขั้น
+*/
+const CELL_MIN_WIDE = 640;
+const CELL_MIN_NARROW = 500;
+
 export function BranchComparison({ data, caption }: { data: Data; caption?: string }) {
   const [sortKey, setSortKey] = useState<SortKey>('revenue');
   const rows = [...data.rows].sort((a, b) => b[sortKey] - a[sortKey]);
@@ -177,7 +186,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
       <td
         key={key}
         style={{
-          padding: '10px 12px',
+          padding: '8px 5px',
           textAlign: 'right',
           fontWeight: sortKey === key ? 700 : 500,
           color: value < 0 ? '#B23A48' : 'var(--ink)',
@@ -207,17 +216,25 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
         กดหัวคอลัมน์เพื่อจัดอันดับใหม่
       </p>
 
-      {/* Wide on purpose: six columns of Thai baht do not fit a phone, so the
-          table scrolls inside its own box rather than the whole page sliding. */}
+      {/*
+        ยังเลื่อนแนวนอนได้ แต่บนจอคอมไม่ควรต้องเลื่อน (ร้านขอ 8 ต.ค. 2569).
+
+        ตารางนี้เคยกว้าง 800px ขั้นต่ำ ซึ่งเกินความกว้างของการ์ดบนหน้าต่างขนาด
+        ปกติ แถบเลื่อนจึงขึ้นตลอด และตัวเลขที่ต้องเอามาเทียบกันก็ไม่ได้อยู่บนจอ
+        พร้อมกัน ซึ่งเป็นงานเดียวของการ์ดนี้
+
+        ที่หดคือช่องไฟกับขนาดตัวอักษร ไม่ใช่จำนวนคอลัมน์ — คอลัมน์ที่ถูกตัดทิ้ง
+        คือตัวเลขที่ไม่มีใครเห็น ส่วน overflow ยังอยู่เพราะบนมือถือยังไงก็ไม่พอ
+      */}
       <div style={{ overflowX: 'auto' }}>
         <table
           style={{
             width: '100%',
             borderCollapse: 'collapse',
-            fontSize: 13,
-            // Two more columns need two more columns of room; squeezing them
-            // into the same width is how baht figures start wrapping.
-            minWidth: hasWholesale ? 800 : 640,
+            fontSize: 11,
+            // ตัวเลขเงินเรียงหลักตรงกัน อ่านเทียบกันได้โดยไม่ต้องใช้ช่องไฟช่วย
+            fontVariantNumeric: 'tabular-nums',
+            minWidth: hasWholesale ? CELL_MIN_WIDE : CELL_MIN_NARROW,
           }}
         >
           <thead>
@@ -225,14 +242,14 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
                 under it runs only over the columns it covers, so the eye reads
                 the caption and the block as one thing. */}
             <tr>
-              <th style={{ padding: '0 12px 4px' }}></th>
+              <th style={{ padding: '0 5px 4px' }}></th>
               {headerGroups.map((g, gi) => (
                 <th
                   key={g.key}
                   colSpan={g.span}
                   className="text-xs font-semibold"
                   style={{
-                    padding: '0 12px 4px',
+                    padding: '0 5px 4px',
                     textAlign: 'right',
                     color: 'var(--ink-faint)',
                     whiteSpace: 'nowrap',
@@ -248,7 +265,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
               <th
                 style={{
                   textAlign: 'left',
-                  padding: '6px 12px 8px',
+                  padding: '6px 5px 8px',
                   color: 'var(--ink-soft)',
                   fontWeight: 600,
                   whiteSpace: 'nowrap',
@@ -257,7 +274,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
                 สาขา
               </th>
               {columns.map((c, i) => (
-                <th key={c.key} style={{ padding: '6px 12px 8px', borderLeft: groupRule(i) }}>
+                <th key={c.key} style={{ padding: '6px 5px 8px', borderLeft: groupRule(i) }}>
                   <button
                     onClick={() => setSortKey(c.key)}
                     title={c.hint}
@@ -281,7 +298,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
           <tbody>
             {rows.map((r, i) => (
               <tr key={r.shop} style={{ borderBottom: '1px solid var(--line)' }}>
-                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '8px 5px', whiteSpace: 'nowrap' }}>
                   {/* The rank is the point of the card, so it is stated rather
                       than left to be inferred from the row order. */}
                   <span
@@ -300,7 +317,7 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
                 <td
                   colSpan={columns.length + 1}
                   className="text-sm"
-                  style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--ink-faint)' }}
+                  style={{ padding: '24px 5px', textAlign: 'center', color: 'var(--ink-faint)' }}
                 >
                   ไม่มีสาขาให้เปรียบเทียบ
                 </td>
@@ -310,14 +327,14 @@ export function BranchComparison({ data, caption }: { data: Data; caption?: stri
           {rows.length > 0 && (
             <tfoot>
               <tr style={{ borderTop: '1.5px solid var(--line-strong)' }}>
-                <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '8px 5px', fontWeight: 700, whiteSpace: 'nowrap' }}>
                   รวมทุกสาขา
                 </td>
                 {columns.map((c, i) => (
                   <td
                     key={c.key}
                     style={{
-                      padding: '10px 12px',
+                      padding: '8px 5px',
                       textAlign: 'right',
                       fontWeight: 700,
                       whiteSpace: 'nowrap',
