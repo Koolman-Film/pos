@@ -941,43 +941,54 @@ export function Dashboard({
                   <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-soft)' }}>
                     {t.products.join(', ') || 'ยังไม่ระบุสินค้า'}
                   </p>
-                  <JobDates
-                    className="text-xs mt-0.5 block truncate"
-                    dropOff={t.dropOff}
-                    pickup={t.pickup}
-                  />
                 </div>
               </Link>
-              <div className="flex items-center gap-3 flex-shrink-0">
-                {/* Same net total as the Book งาน list, so the two screens agree. */}
-                {t.total != null && (
-                  <p
-                    className="text-sm font-bold whitespace-nowrap"
-                    aria-label={`ยอดรวม ${fmt(t.total)} บาท`}
-                  >
-                    {fmt(t.total)}
-                    <span
-                      className="text-xs font-medium ml-1"
-                      style={{ color: 'var(--ink-faint)' }}
+              {/*
+                ยอด/สถานะ/วันที่ อยู่คอลัมน์ขวา ไม่ใช่ต่อท้ายรายการสินค้า.
+
+                คอลัมน์ซ้ายถือสามบรรทัดอยู่แล้ว (ลูกค้า+รถ · การนัดหมาย+ชนิด ·
+                สินค้า) ซึ่งเป็นบรรทัดที่ยาวและโดน truncate ตัดอยู่เรื่อย ๆ
+                บรรทัดที่สี่ทำให้แถวหนักไปข้างเดียวและวันที่เป็นอันแรกที่หาย
+                (ร้านขอ 8 ต.ค. 2569) — และตรงกับหน้า Book งาน ที่วันที่อยู่ขวา
+                อยู่แล้ว
+              */}
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  {/* Same net total as the Book งาน list, so the two screens agree. */}
+                  {t.total != null && (
+                    <p
+                      className="text-sm font-bold whitespace-nowrap"
+                      aria-label={`ยอดรวม ${fmt(t.total)} บาท`}
                     >
-                      บาท
-                    </span>
-                  </p>
-                )}
-                <TicketStatusSelect
-                  ticketId={t.id}
-                  status={t.status}
-                  statuses={statuses}
-                  onChange={onUpdateTicketStatus}
+                      {fmt(t.total)}
+                      <span
+                        className="text-xs font-medium ml-1"
+                        style={{ color: 'var(--ink-faint)' }}
+                      >
+                        บาท
+                      </span>
+                    </p>
+                  )}
+                  <TicketStatusSelect
+                    ticketId={t.id}
+                    status={t.status}
+                    statuses={statuses}
+                    onChange={onUpdateTicketStatus}
+                  />
+                  <Link
+                    href={`/tickets/${t.id}`}
+                    aria-label={`เปิดใบงาน ${t.id}`}
+                    className="row-action text-xs"
+                    style={{ color: 'var(--primary)' }}
+                  >
+                    <i className="fa-solid fa-arrow-right"></i>
+                  </Link>
+                </div>
+                <JobDates
+                  className="text-xs whitespace-nowrap"
+                  dropOff={t.dropOff}
+                  pickup={t.pickup}
                 />
-                <Link
-                  href={`/tickets/${t.id}`}
-                  aria-label={`เปิดใบงาน ${t.id}`}
-                  className="row-action text-xs"
-                  style={{ color: 'var(--primary)' }}
-                >
-                  <i className="fa-solid fa-arrow-right"></i>
-                </Link>
               </div>
             </div>
           ))}
