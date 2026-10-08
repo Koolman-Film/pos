@@ -45,13 +45,72 @@ function setup(over: Partial<Parameters<typeof MemoSection>[0]> = {}) {
 }
 
 describe('MemoSection', () => {
-  it('แสดงทุกข้อความ พร้อมชื่อคนเขียนและเวลา', () => {
+  it('แสดงทุกข้อความ และบอกชื่อคนอื่น', () => {
     setup();
-    expect(screen.getByText('สมชาย')).toBeInTheDocument();
     expect(screen.getByText('ลูกค้าขอเลื่อนเป็นบ่าย')).toBeInTheDocument();
-    expect(screen.getByText('ไผริน')).toBeInTheDocument();
+    expect(screen.getByText(/แจ้งช่างแล้ว/)).toBeInTheDocument();
+    expect(screen.getByText('สมชาย')).toBeInTheDocument();
+    /*
+      ชื่อของตัวเองไม่ขึ้น — ฟองอยู่ฝั่งขวาแล้ว เหมือนทุกแอปแชท การเขียนชื่อ
+      ตัวเองกำกับทุกข้อความคือข้อมูลที่คนอ่านรู้อยู่แล้ว
+    */
+    expect(screen.queryByText('ไผริน')).toBeNull();
+  });
+
+  it('วันที่ขึ้นครั้งเดียวเป็นป้ายคั่น ส่วนแต่ละข้อความเหลือแค่เวลา', () => {
+    setup();
+    // สองข้อความอยู่วันเดียวกัน จึงมีป้ายคั่นใบเดียว
+    expect(screen.getAllByText(/5 ต\.ค\. 2569/)).toHaveLength(1);
     // เวลาเป็น <time> ที่ถือ ISO ไว้ ไม่ใช่แค่ข้อความที่อ่านกลับไม่ได้
-    expect(screen.getAllByText(/5 ต\.ค\. 2569/)).toHaveLength(2);
+    const times = Array.from(document.querySelectorAll('time'));
+    expect(times.map((t) => t.getAttribute('dateTime') ?? t.getAttribute('datetime'))).toEqual([
+      '2026-10-05T03:15:00Z',
+      '2026-10-05T04:00:00Z',
+    ]);
+    expect(times.map((t) => t.textContent)).toEqual(['10:15', '11:00']);
+  });
+
+  it('ข้ามวันแล้วขึ้นป้ายใหม่ และวันนี้เรียกว่า "วันนี้"', () => {
+    const today = new Date();
+    setup({
+      memos: [
+        MEMOS[0],
+        { ...MEMOS[1], id: 9, createdAt: today.toISOString(), authorId: SOMEONE_ELSE },
+      ],
+    });
+    expect(screen.getByText(/5 ต\.ค\. 2569/)).toBeInTheDocument();
+    expect(screen.getByText('วันนี้')).toBeInTheDocument();
+  });
+
+  it('คนเดิมพิมพ์ติดกัน ไม่ขึ้นชื่อซ้ำ', () => {
+    /* คนพิมพ์สามบรรทัดรวด ไม่ได้แปลว่ามีสามคนพูด */
+    setup({
+      memos: [
+        MEMOS[0],
+        {
+          ...MEMOS[0],
+          id: 3,
+          body: 'อีกเรื่องหนึ่ง',
+          createdAt: '2026-10-05T03:16:00Z',
+        },
+      ],
+    });
+    expect(screen.getAllByText('สมชาย')).toHaveLength(1);
+  });
+
+  it('คนเดิมแต่ห่างกันเกินห้านาที ขึ้นชื่อใหม่', () => {
+    setup({
+      memos: [
+        MEMOS[0],
+        {
+          ...MEMOS[0],
+          id: 3,
+          body: 'กลับมาอีกที',
+          createdAt: '2026-10-05T03:30:00Z',
+        },
+      ],
+    });
+    expect(screen.getAllByText('สมชาย')).toHaveLength(2);
   });
 
   it('ส่งข้อความแล้วล้างช่อง และบอกให้หน้าไปดึงของใหม่มา', async () => {
