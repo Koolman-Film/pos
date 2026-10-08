@@ -8,7 +8,7 @@ import userEvent from '@testing-library/user-event';
 vi.mock('@/components/charts/LineChart', () => ({ LineChart: () => null }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => {} }) }));
 
-import { shopDayKey } from '@/lib/domain/format';
+import { fmtThaiDate, shopDayKey } from '@/lib/domain/format';
 import {
   Dashboard,
   appointmentDate,
@@ -563,5 +563,32 @@ describe('Dashboard — ปฏิทินงานใช้สีสถาน�
   it('shows a status the shop added itself', () => {
     const calendar = renderWith();
     expect(dotBeside(calendar, 'ยกเลิกนัด')).toHaveStyle({ background: '#7F1D1D' });
+  });
+});
+
+/**
+ * งานล่าสุด บอกวันรับและวันส่งเหมือนหน้า Book งาน (ร้านขอ 8 ต.ค. 2569).
+ *
+ * สองหน้านี้เป็นลิสต์ใบงานเหมือนกัน และคนเปิดสลับกันทั้งวัน ถ้าหน้าหนึ่งบอกวัน
+ * อีกหน้าไม่บอก คนก็ต้องเปิดใบงานเพื่อถามคำถามเดิมซ้ำ
+ */
+describe('Dashboard — วันที่รับงาน/ส่งงาน ใน งานล่าสุด', () => {
+  const dropOff = new Date('2026-09-14T03:00:00Z');
+  const pickup = new Date('2026-09-16T09:00:00Z');
+
+  it('แสดงทั้งสองวันในแถว', () => {
+    render(<Dashboard {...base} recentJobs={[job({ dropOff, pickup })]} />);
+    const line = screen.getByText(
+      (_, el) =>
+        el?.textContent === `รับงาน ${fmtThaiDate(dropOff)} · ส่งงาน ${fmtThaiDate(pickup)}`,
+    );
+    expect(line).toBeInTheDocument();
+  });
+
+  it('ใบที่ยังไม่มีวัน ขึ้นขีด ไม่ใช่ว่างเปล่า', () => {
+    render(<Dashboard {...base} recentJobs={[job()]} />);
+    expect(
+      screen.getByText((_, el) => el?.textContent === 'รับงาน - · ส่งงาน -'),
+    ).toBeInTheDocument();
   });
 });

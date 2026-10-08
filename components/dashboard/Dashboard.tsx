@@ -27,6 +27,7 @@ import type { BranchComparison as BranchComparisonData } from './branchTotals';
 import type { ReactNode } from 'react';
 
 import { LineChart } from '@/components/charts/LineChart';
+import { JobDates } from '@/components/tickets/JobDates';
 import { getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { fmt, fmtThaiDate, fmtThaiDateLong, hhmm, shopDayKey } from '@/lib/domain/format';
 
@@ -139,6 +140,10 @@ export type RecentJob = {
   status: string;
   /** ยอดรวมของใบงาน — `ticketTotal`, the figure the ticket list and the ticket show. */
   total?: number;
+  /** วันที่รับงาน — the same pair the Book งาน list shows, through the same component. */
+  dropOff?: Date | null;
+  /** วันที่ส่งงาน */
+  pickup?: Date | null;
 };
 
 /** The two counters on the "รอการอนุมัติ" card. */
@@ -936,6 +941,11 @@ export function Dashboard({
                   <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-soft)' }}>
                     {t.products.join(', ') || 'ยังไม่ระบุสินค้า'}
                   </p>
+                  <JobDates
+                    className="text-xs mt-0.5 block truncate"
+                    dropOff={t.dropOff}
+                    pickup={t.pickup}
+                  />
                 </div>
               </Link>
               <div className="flex items-center gap-3 flex-shrink-0">

@@ -809,6 +809,8 @@ export default async function DashboardPage({
     products: t.products,
     status: t.status,
     total: ticketTotal(t),
+    dropOff: t.dropOff,
+    pickup: t.pickup,
   }));
 
   /*
