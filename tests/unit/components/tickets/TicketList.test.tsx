@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 import { TicketList } from '@/components/tickets/TicketList';
+import { fmtThaiDate } from '@/lib/domain/format';
 
 const tickets = [
   {
@@ -107,5 +108,64 @@ describe('TicketList — ยอดรวม และ ยี่ห้อ/รุ�
     );
     // The row title, matched whole: no dangling " · " where a car would go.
     expect(screen.getByText('คุณ เอ · 250 กก')).toBeInTheDocument();
+  });
+});
+
+/**
+ * วันที่รับงาน และ วันที่ส่งงาน บนทุกแถว (ร้านขอ 8 ต.ค. 2569).
+ *
+ * แถวเคยบอกวันเดียว และบอกผิดด้วย: ป้ายเขียนว่า "รับรถ" แต่พิมพ์ `pickupDateObj`
+ * ซึ่งคือวันที่ส่งงาน งานที่รับวันจันทร์ส่งวันพุธ จึงขึ้นในลิสต์ว่า "รับรถ วันพุธ"
+ */
+describe('TicketList — วันที่รับงาน และ วันที่ส่งงาน', () => {
+  const dropOff = new Date();
+  const pickup = new Date(Date.now() + 2 * 86400000);
+  const dated = {
+    ...tickets[0],
+    dropOffDateObj: dropOff,
+    pickupDateObj: pickup,
+  };
+
+  const renderRow = () =>
+    render(
+      <TicketList
+        tickets={[dated]}
+        statuses={statuses}
+        canDo={() => true}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
+    );
+
+  it('แสดงทั้งสองวัน พร้อมป้ายที่ตรงกับช่องในใบงาน', () => {
+    renderRow();
+    const line = screen.getByText(
+      (_, el) =>
+        el?.textContent === `รับงาน ${fmtThaiDate(dropOff)} · ส่งงาน ${fmtThaiDate(pickup)}`,
+    );
+    expect(line).toBeInTheDocument();
+  });
+
+  it('ไม่เรียกวันส่งงานว่า "รับรถ" อีกแล้ว', () => {
+    /*
+      ตัวเลขที่เคยขึ้นใต้คำว่า "รับรถ" คือวันที่ส่งงานมาตลอด การปล่อยคำนี้ไว้
+      แปลว่ายังมีที่หนึ่งในระบบที่พูดไม่ตรงกับใบงาน
+    */
+    renderRow();
+    expect(screen.queryByText(/รับรถ/)).toBeNull();
+  });
+
+  it('ยังไม่ได้นัดวันส่ง ขึ้นขีด ไม่ใช่ยืมวันรับมาใช้', () => {
+    render(
+      <TicketList
+        tickets={[{ ...tickets[0], dropOffDateObj: dropOff, pickupDateObj: null }]}
+        statuses={statuses}
+        canDo={() => true}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
+    );
+    const line = screen.getByText(
+      (_, el) => el?.textContent === `รับงาน ${fmtThaiDate(dropOff)} · ส่งงาน -`,
+    );
+    expect(line).toBeInTheDocument();
   });
 });

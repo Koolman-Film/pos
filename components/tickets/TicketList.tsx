@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Badge, getStatus, type StatusConfig } from '@/components/ui/Badge';
+import { JobDates } from '@/components/tickets/JobDates';
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
 import { rememberTicketFilter } from '@/lib/browser/ticketFilter';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
@@ -210,7 +211,10 @@ export function TicketList({
     } else {
       exportGroups.forEach((g) => {
         const data = g.items.map((t) => ({
-          วันที่รับรถ: fmtThaiDate(t.dropOffDateObj),
+          // เรียกว่า "รับรถ" มาตลอด ทั้งที่ช่องในใบงานชื่อ วันที่รับงาน — และไฟล์
+          // ที่ส่งออกไปไม่เคยมีวันส่งงานเลย ทั้งที่เป็นวันที่คนถามถึงบ่อยกว่า
+          วันที่รับงาน: fmtThaiDate(t.dropOffDateObj),
+          วันที่ส่งงาน: fmtThaiDate(t.pickupDateObj),
           เลขที่ใบงาน: t.id,
           ลูกค้า: t.customer,
           'ทะเบียนรถ/เลขถัง': t.plate,
@@ -472,9 +476,18 @@ export function TicketList({
                               {(() => {
                                 const all = Object.values(t.techByCategory || {}).flat();
                                 return all.length ? all.join(', ') : 'ยังไม่มอบหมาย';
-                              })()}{' '}
-                              &middot; รับรถ {fmtThaiDate(t.pickupDateObj)}
+                              })()}
                             </p>
+                            {/*
+                              วันที่อยู่บรรทัดของตัวเอง ไม่ต่อท้ายชื่อช่าง — สองวัน
+                              บวกรายชื่อช่างสามคนในบรรทัดเดียว ถูกตัดด้วย truncate
+                              จนไม่เหลือวันให้อ่าน ซึ่งเป็นสิ่งที่เพิ่งขอมา
+                            */}
+                            <JobDates
+                              className="text-xs mt-0.5 hidden sm:block whitespace-nowrap"
+                              dropOff={t.dropOffDateObj}
+                              pickup={t.pickupDateObj}
+                            />
                           </div>
                           <span className="row-action pr-3" style={{ color: 'var(--primary)' }}>
                             <i className="fa-solid fa-chevron-right text-xs"></i>
@@ -512,7 +525,8 @@ export function TicketList({
                 <table>
                   <thead>
                     <tr>
-                      <th>วันที่รับรถ</th>
+                      <th>วันที่รับงาน</th>
+                      <th>วันที่ส่งงาน</th>
                       <th>เลขที่ใบงาน</th>
                       <th>ลูกค้า</th>
                       <th>ทะเบียนรถ/เลขถัง</th>
@@ -525,6 +539,7 @@ export function TicketList({
                     {g.items.map((t) => (
                       <tr key={t.id}>
                         <td>{fmtThaiDate(t.dropOffDateObj)}</td>
+                        <td>{fmtThaiDate(t.pickupDateObj)}</td>
                         <td>{t.id}</td>
                         <td>{t.customer}</td>
                         <td>{t.plate}</td>
