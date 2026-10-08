@@ -2,21 +2,31 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { fmtThaiDate, fmtThaiDateTime, hhmm, shopDayKey } from '@/lib/domain/format';
+import {
+  fmtThaiDate,
+  fmtThaiDateTime,
+  fmtThaiDayMonth,
+  hhmm,
+  shopDayKey,
+} from '@/lib/domain/format';
 import { daysAgoValue, todayValue } from '@/lib/domain/now';
 import type { TicketMemo } from '../types';
 
 /**
- * ป้ายคั่นวัน — "วันนี้" / "เมื่อวาน" / วันที่เต็ม.
+ * วันของข้อความ สั้นที่สุดเท่าที่ยังตอบได้ว่าวันไหน.
  *
- * เส้นแชทที่ติดวันที่เต็มไว้ทุกข้อความอ่านยากกว่าที่คิด เพราะสิ่งที่คนมองหาคือ
- * "ข้อความนี้มาก่อนหรือหลังอันนั้น" ไม่ใช่วันที่ของแต่ละอัน วันเต็มจึงขึ้นครั้ง
- * เดียวตอนข้ามวัน ที่เหลือเหลือแค่เวลา
+ * เคยเป็นป้ายกลมคั่นกลางเส้นตอนข้ามวัน ซึ่งกินทั้งแถวเพื่อบอกอย่างเดียว ร้านขอ
+ * ให้ย้ายมาอยู่ที่เดียวกับเวลาแทน (8 ต.ค. 2569) — เส้นแชทจึงแคบลงหนึ่งแถวต่อวัน
+ * และทุกข้อความตอบ "เมื่อไหร่" ได้ในตัวเอง โดยไม่ต้องเงยไปหาป้ายข้างบน
+ *
+ * ย่อลงตามระยะ: วันนี้กับเมื่อวานเรียกด้วยคำ ปีนี้ตัดปีทิ้ง เหลือปีไว้เฉพาะ
+ * ข้อความข้ามปี ซึ่งเป็นกรณีเดียวที่ "5 ต.ค." กำกวมจริง
  */
-function dayLabel(key: string): string {
+function dayStamp(at: Date): string {
+  const key = shopDayKey(at);
   if (key === todayValue()) return 'วันนี้';
   if (key === daysAgoValue(1)) return 'เมื่อวาน';
-  return fmtThaiDate(new Date(`${key}T00:00:00+07:00`));
+  return key.slice(0, 4) === todayValue().slice(0, 4) ? fmtThaiDayMonth(at) : fmtThaiDate(at);
 }
 
 /** หัวแทนรูปโปรไฟล์ — ตัวอักษรแรกของชื่อ ซึ่งเป็นทุกอย่างที่ระบบนี้รู้เรื่องหน้าตาคน */
@@ -174,9 +184,8 @@ export function MemoSection({
               const mine = !!m.authorId && m.authorId === currentUserId;
               const at = new Date(m.createdAt);
               const prev = i > 0 ? memos[i - 1] : null;
-              const newDay = !prev || shopDayKey(new Date(prev.createdAt)) !== shopDayKey(at);
+              // ห้านาทีกินข้ามเที่ยงคืนไม่ได้อยู่แล้ว จึงไม่ต้องเช็ควันแยก
               const sameBlock =
-                !newDay &&
                 !!prev &&
                 prev.authorId === m.authorId &&
                 at.getTime() - new Date(prev.createdAt).getTime() < SAME_BLOCK_MS;
@@ -207,22 +216,14 @@ export function MemoSection({
                       <i className="fa-solid fa-trash text-[10px]"></i>
                     </button>
                   )}
-                  <time dateTime={m.createdAt}>{hhmm(at)}</time>
+                  <time dateTime={m.createdAt} className="whitespace-nowrap">
+                    {dayStamp(at)} {hhmm(at)}
+                  </time>
                 </span>
               );
 
               return (
                 <li key={m.id}>
-                  {newDay && (
-                    <div className="flex justify-center my-2">
-                      <span
-                        className="text-[10px] px-2.5 py-0.5 rounded-full"
-                        style={{ background: 'var(--line)', color: 'var(--ink-soft)' }}
-                      >
-                        {dayLabel(shopDayKey(at))}
-                      </span>
-                    </div>
-                  )}
                   <div
                     className={`flex gap-1.5 items-end ${mine ? 'justify-end' : 'justify-start'}`}
                   >
