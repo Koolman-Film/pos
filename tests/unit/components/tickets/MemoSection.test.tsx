@@ -57,29 +57,46 @@ describe('MemoSection', () => {
     expect(screen.queryByText('ไผริน')).toBeNull();
   });
 
-  it('วันที่ขึ้นครั้งเดียวเป็นป้ายคั่น ส่วนแต่ละข้อความเหลือแค่เวลา', () => {
+  it('วันอยู่ในป้ายเวลาของแต่ละข้อความ ไม่ใช่แถวคั่นของตัวเอง', () => {
+    /*
+      ป้ายคั่นกลางเส้นกินทั้งแถวเพื่อบอกอย่างเดียว ร้านขอให้ย้ายมารวมกับเวลา
+      (8 ต.ค. 2569) — เส้นจึงแคบลงหนึ่งแถวต่อวัน และทุกข้อความตอบ "เมื่อไหร่"
+      ได้ในตัวเอง
+    */
     setup();
-    // สองข้อความอยู่วันเดียวกัน จึงมีป้ายคั่นใบเดียว
-    expect(screen.getAllByText(/5 ต\.ค\. 2569/)).toHaveLength(1);
-    // เวลาเป็น <time> ที่ถือ ISO ไว้ ไม่ใช่แค่ข้อความที่อ่านกลับไม่ได้
     const times = Array.from(document.querySelectorAll('time'));
+    // เวลาเป็น <time> ที่ถือ ISO ไว้ ไม่ใช่แค่ข้อความที่อ่านกลับไม่ได้
     expect(times.map((t) => t.getAttribute('dateTime') ?? t.getAttribute('datetime'))).toEqual([
       '2026-10-05T03:15:00Z',
       '2026-10-05T04:00:00Z',
     ]);
-    expect(times.map((t) => t.textContent)).toEqual(['10:15', '11:00']);
+    expect(times.map((t) => t.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      '5 ต.ค. 10:15',
+      '5 ต.ค. 11:00',
+    ]);
   });
 
-  it('ข้ามวันแล้วขึ้นป้ายใหม่ และวันนี้เรียกว่า "วันนี้"', () => {
+  it('วันนี้กับเมื่อวานเรียกด้วยคำ ไม่ใช่ตัวเลข', () => {
     const today = new Date();
+    const yesterday = new Date(Date.now() - 86400000);
     setup({
       memos: [
-        MEMOS[0],
-        { ...MEMOS[1], id: 9, createdAt: today.toISOString(), authorId: SOMEONE_ELSE },
+        { ...MEMOS[0], id: 8, createdAt: yesterday.toISOString() },
+        { ...MEMOS[1], id: 9, createdAt: today.toISOString() },
       ],
     });
-    expect(screen.getByText(/5 ต\.ค\. 2569/)).toBeInTheDocument();
-    expect(screen.getByText('วันนี้')).toBeInTheDocument();
+    const times = Array.from(document.querySelectorAll('time')).map((t) =>
+      (t.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    );
+    expect(times[0]).toMatch(/^เมื่อวาน /);
+    expect(times[1]).toMatch(/^วันนี้ /);
+  });
+
+  it('ข้อความข้ามปี เหลือปีไว้ให้ไม่กำกวม', () => {
+    /* "5 ต.ค." ของปีไหน ตอบไม่ได้ถ้าเส้นคาบสองปี ซึ่งเกิดกับใบงานที่ถูกรื้อ */
+    setup({ memos: [{ ...MEMOS[0], createdAt: '2025-10-05T03:15:00Z' }] });
+    const stamp = (document.querySelector('time')?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    expect(stamp).toBe('5 ต.ค. 2568 10:15');
   });
 
   it('คนเดิมพิมพ์ติดกัน ไม่ขึ้นชื่อซ้ำ', () => {
