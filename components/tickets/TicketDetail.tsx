@@ -598,11 +598,11 @@ export function TicketDetail({
         },
       );
       setPrintVisit(visit);
-      doPrint('claim');
+      void doPrint('claim');
       return;
     }
     setPrintVisit(visit);
-    doPrint('service');
+    void doPrint('service');
   }
 
   /** Save a visit, then pull the ticket's list back from the server. */
@@ -649,7 +649,7 @@ export function TicketDetail({
   function printInsuranceReceipt(policy: InsurancePolicy) {
     setPrintPolicy(policy);
     setPrintClaim(null);
-    doPrint('insurance');
+    void doPrint('insurance');
   }
 
   /**
@@ -712,7 +712,7 @@ export function TicketDetail({
       notes: policy.notes,
       points: c?.detail ? [{ seq: 1, position: '', detail: c.detail, note: '' }] : [],
     });
-    doPrint('claim');
+    void doPrint('claim');
   }
 
   /** Save a policy with its claims, then pull the list back from the server. */
@@ -770,7 +770,9 @@ export function TicketDetail({
    * at the counter waiting for the paper, and a reporting row is not worth
    * making them wait for — or worth cancelling the print over if it fails.
    */
-  function issueDocument() {
+  async function issueDocument() {
+    // เอกสารการเงินต้องตรงกับสิ่งที่ระบบเก็บไว้ ไม่ใช่สิ่งที่ยังอยู่แค่บนหน้าจอ
+    if (!(await saveBeforePrint())) return;
     void documentAction?.({
       ticketId: t.id,
       docType,
@@ -780,10 +782,35 @@ export function TicketDetail({
       buyerAddress,
       amount: total,
     });
-    doPrint('doc');
+    printNow('doc');
   }
 
-  function doPrint(mode: PrintMode) {
+  /*
+    บันทึกก่อนพิมพ์เสมอ (ร้านแจ้ง 9 ต.ค. 2569).
+
+    "พนักงานกรอกข้อมูลไปแล้วกดพิมพ์เอกสาร โดยที่ยังไม่ได้มีการบันทึกข้อมูล
+    ทำให้มีเอกสารออกมาถูกต้อง แต่ในระบบไม่มีข้อมูลจริง"
+
+    กระดาษที่ยื่นให้ลูกค้าคือสิ่งที่ยืนยันกับคนนอก ระบบที่ไม่มีข้อมูลนั้นคือ
+    ระบบที่เถียงกับกระดาษของตัวเอง — และรู้ตัวอีกทีตอนกระทบยอดสิ้นเดือน
+
+    เลือกบันทึกให้ ไม่ใช่เตือนแล้วให้กดเอง: กล่องเตือนที่มีปุ่ม "พิมพ์ต่อไป"
+    จะถูกกดผ่านเหมือนทุกกล่องเตือน และคนที่พิมพ์เอกสารก็ตั้งใจจะเก็บข้อมูลนั้น
+    อยู่แล้ว ไม่มีใครอยากได้เอกสารของงานที่ไม่มีอยู่
+
+    บันทึกไม่ผ่าน = ไม่พิมพ์ แถบแดงที่ `save()` ขึ้นไว้คือคำอธิบาย
+  */
+  async function saveBeforePrint(): Promise<boolean> {
+    if (locked || !isDirty) return true;
+    return save();
+  }
+
+  async function doPrint(mode: PrintMode) {
+    if (!(await saveBeforePrint())) return;
+    printNow(mode);
+  }
+
+  function printNow(mode: PrintMode) {
     setPrintMode(mode);
     setTimeout(() => {
       // Shrink any page that would spill onto a second sheet, then print. The
@@ -794,7 +821,8 @@ export function TicketDetail({
     }, 50);
   }
 
-  async function save() {
+  /** @returns บันทึกสำเร็จไหม — คนเรียกบางคนต้องรู้ก่อนจะทำขั้นต่อไป (เช่นการพิมพ์) */
+  async function save(): Promise<boolean> {
     setSaveError(null);
     setSaved(null);
     setSaving(true);
@@ -804,7 +832,7 @@ export function TicketDetail({
       if (!result.ok) {
         setSaveError(result.error || 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
         setSaving(false);
-        return;
+        return false;
       }
       window.__hasUnsavedFormChanges = false;
       // The save worked, so this is not an error banner — but the shop has to
@@ -830,9 +858,11 @@ export function TicketDetail({
       router.refresh();
       setSaved(`บันทึกแล้ว${result.id ? ` · ${result.id}` : ''}`);
       setSaving(false);
+      return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
       setSaving(false);
+      return false;
     }
   }
 
@@ -1681,13 +1711,13 @@ export function TicketDetail({
               {!isNew && t.items.some((i) => i.sold) && canDo('list.printSheet') && (
                 <div className="flex gap-3 mt-3">
                   <button
-                    onClick={() => doPrint('job')}
+                    onClick={() => void doPrint('job')}
                     className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
                   >
                     <i className="fa-solid fa-print"></i> ใบงานติดตั้ง
                   </button>
                   <button
-                    onClick={() => doPrint('sale')}
+                    onClick={() => void doPrint('sale')}
                     className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
                   >
                     <i className="fa-solid fa-print"></i> ใบงานขาย
@@ -1699,7 +1729,7 @@ export function TicketDetail({
                 canDo('list.printSheet') &&
                 t.extras?.['นอกสถานที่']?.checked && (
                   <button
-                    onClick={() => doPrint('offsite')}
+                    onClick={() => void doPrint('offsite')}
                     className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
                   >
                     <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
@@ -1902,7 +1932,7 @@ export function TicketDetail({
                     แสดงข้อความแจ้งเตือนตรวจเช็ครอบคัน
                   </label>
                   <button
-                    onClick={issueDocument}
+                    onClick={() => void issueDocument()}
                     disabled={docType === TAX_DOC_TYPE && taxDocBlocked}
                     className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
                     style={{
