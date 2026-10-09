@@ -4,6 +4,8 @@ import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt } from '@/lib/domain/format';
 import { LEGACY_METHOD_SUFFIX } from '@/lib/domain/payAccount';
 
+import { countMissingEvidence, missingEvidence } from '@/lib/domain/paymentEvidence';
+
 import { AttachmentField } from './AttachmentField';
 
 import type { Ticket, TicketPayment } from '../types';
@@ -34,6 +36,14 @@ export function PaymentsSection({
   total: number;
   paid: number;
 }) {
+  /*
+    กี่แถวที่รับเงินไว้แล้วยังไม่มีสลิป (ร้านขอ 9 ต.ค. 2569).
+
+    ช่องแนบไฟล์มีมาตั้งแต่ 0018 แต่ไม่เคยมีอะไรบอกว่าแถวไหนยังว่าง คนกรอกยอด
+    แล้วตั้งใจจะแนบทีหลังจึงลืมได้ฟรี ๆ
+  */
+  const missing = countMissingEvidence(t.payments);
+
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
     <div>
@@ -140,6 +150,11 @@ export function PaymentsSection({
             onChange={(next) => updatePayment(idx, 'attachments', next)}
             folder={shop}
             urlAction={attachmentUrlAction}
+            /*
+              เตือนที่แถว ไม่ใช่แค่ยอดรวมข้างล่าง — คนที่กำลังจะลืมคือคนที่เพิ่ง
+              พิมพ์ยอดลงแถวนี้ และสายตาเขาอยู่ตรงนี้พอดี
+            */
+            emptyHint={missingEvidence(p) ? 'ยังไม่ได้แนบหลักฐานการรับเงิน' : undefined}
           />
         </div>
       ))}
@@ -149,6 +164,21 @@ export function PaymentsSection({
       >
         <i className="fa-solid fa-plus"></i>เพิ่มรายการรับเงิน
       </button>
+      {/*
+        สรุปอีกครั้งใต้ตาราง สำหรับคนที่เลื่อนผ่านแถวมาแล้ว.
+
+        สีเหลืองไม่ใช่สีแดง: ยังไม่แนบสลิปไม่ได้แปลว่าบันทึกผิด แปลว่ายังทำไม่
+        เสร็จ — สีแดงในแอปนี้แปลว่ามีอะไรไม่ถูกต้อง
+      */}
+      {missing > 0 && (
+        <p
+          className="text-xs mt-3 px-2.5 py-2 rounded-lg flex items-start gap-1.5"
+          style={{ background: '#FBF1DA', color: '#8A5A12' }}
+        >
+          <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+          <span>มีการรับเงิน {missing} รายการที่ยังไม่ได้แนบหลักฐานการรับเงิน</span>
+        </p>
+      )}
       <div
         className="flex justify-between text-sm mt-4 pt-3"
         style={{ borderTop: '1px solid var(--line)' }}

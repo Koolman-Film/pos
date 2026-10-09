@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 
 import { Badge, getStatus, type StatusConfig } from '@/components/ui/Badge';
 import { JobDates } from '@/components/tickets/JobDates';
+import { countMissingEvidence } from '@/lib/domain/paymentEvidence';
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
 import { rememberTicketFilter } from '@/lib/browser/ticketFilter';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
@@ -213,6 +214,8 @@ export function TicketList({
         const data = g.items.map((t) => ({
           // เรียกว่า "รับรถ" มาตลอด ทั้งที่ช่องในใบงานชื่อ วันที่รับงาน — และไฟล์
           // ที่ส่งออกไปไม่เคยมีวันส่งงานเลย ทั้งที่เป็นวันที่คนถามถึงบ่อยกว่า
+          // ไล่ตรวจย้อนหลังจากไฟล์ได้โดยไม่ต้องเปิดระบบ — กรองคอลัมน์นี้ทีเดียวจบ
+          หลักฐานการรับเงิน: countMissingEvidence(t.payments ?? []) > 0 ? 'ยังไม่แนบ' : 'ครบ',
           วันที่รับงาน: fmtThaiDate(t.dropOffDateObj),
           วันที่ส่งงาน: fmtThaiDate(t.pickupDateObj),
           เลขที่ใบงาน: t.id,
@@ -469,6 +472,31 @@ export function TicketList({
                               </span>
                             </p>
                             <Badge status={t.status} statuses={statuses} />
+                            {/*
+                              รับเงินแล้วแต่ยังไม่มีสลิป (ร้านขอ 9 ต.ค. 2569).
+
+                              "ช่วยให้ตรวจสอบย้อนหลังได้สะดวก" — คำถามนี้เคย
+                              ตอบได้ด้วยการเปิดใบงานทีละใบเท่านั้น ป้ายอยู่บน
+                              แถวเพื่อให้กวาดตาทั้งเดือนทีเดียวจบ
+
+                              สีเหลือง ไม่ใช่สีแดง: ยังไม่แนบสลิปแปลว่ายังทำ
+                              ไม่เสร็จ ไม่ได้แปลว่าบันทึกผิด
+                            */}
+                            {(() => {
+                              const missing = countMissingEvidence(t.payments ?? []);
+                              if (missing === 0) return null;
+                              return (
+                                <p
+                                  className="text-xs mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full"
+                                  style={{ background: '#FBF1DA', color: '#8A5A12' }}
+                                  title={`มีการรับเงิน ${missing} รายการที่ยังไม่ได้แนบหลักฐาน`}
+                                >
+                                  <i className="fa-solid fa-paperclip text-[10px]"></i>
+                                  ยังไม่แนบหลักฐาน
+                                  {missing > 1 && ` ${missing}`}
+                                </p>
+                              );
+                            })()}
                             <p
                               className="text-xs mt-1.5 hidden sm:block"
                               style={{ color: 'var(--ink-faint)' }}

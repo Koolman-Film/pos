@@ -7,6 +7,7 @@ import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { LEGACY_METHOD_SUFFIX, payableAccounts, type PayAccount } from '@/lib/domain/payAccount';
 import { dateInputValue } from '@/lib/domain/now';
+import { missingEvidence } from '@/lib/domain/paymentEvidence';
 
 import type { InsuranceClaim, InsurancePlan, InsurancePolicy, Ticket } from '../types';
 
@@ -598,7 +599,12 @@ export function InsuranceSection({
               onChange={(paths) => set('paidAttachments', paths)}
               folder={t.shop}
               urlAction={attachmentUrlAction}
-              emptyHint="ยังไม่ได้แนบสลิป"
+              /* เตือนเฉพาะเมื่อรับเงินไว้แล้วจริง — กติกาเดียวกับการรับเงินของใบงาน */
+              emptyHint={
+                missingEvidence({ amount: draft.paidAmount, attachments: draft.paidAttachments })
+                  ? 'ยังไม่ได้แนบหลักฐานการรับเงิน'
+                  : 'ยังไม่ได้แนบสลิป'
+              }
             />
           </div>
 
