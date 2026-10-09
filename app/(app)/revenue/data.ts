@@ -33,6 +33,17 @@ export type SaleLine = {
   plate: string;
   category: string;
   product: string;
+  /**
+   * สินค้าที่สนใจ ของบรรทัดนี้ — ว่างเมื่อไม่มี (ร้านขอ 9 ต.ค. 2569).
+   *
+   * ลูกค้าดูของสองอย่างแล้วซื้ออย่างเดียว อีกอย่างถูกจดไว้ในใบงานว่า "สนใจ" —
+   * เป็นของที่เกือบขายได้ และเป็นข้อมูลที่รายงานยอดขายไม่เคยพามาด้วย ทั้งที่
+   * คนอ่านรายงานคือคนเดียวกับที่จะโทรตามงานนั้น
+   *
+   * ขายส่ง ประกัน และรายการปรับราคา/คืนของ ไม่มีเรื่องนี้ — ไม่มีขั้นตอนเสนอของ
+   * ที่ลูกค้าไม่ได้เอา
+   */
+  interested: string;
   /** Net of the line's own discount, which is what was actually charged. */
   amount: number;
   /**
@@ -111,7 +122,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
           .from('tickets')
           .select(
             'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, status, ' +
-              'ticket_items(category, sold, sold_price, discount_type, discount_value, revenue_kind, finnix_doc_no), ' +
+              'ticket_items(category, sold, interested, sold_price, discount_type, discount_value, revenue_kind, finnix_doc_no), ' +
               'ticket_payments(amount, method)',
           )
           .is('deleted_at', null)
@@ -192,6 +203,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
     ticket_items: {
       category: string;
       sold: string;
+      interested: string | null;
       sold_price: number;
       revenue_kind: string | null;
       finnix_doc_no: string | null;
@@ -312,6 +324,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
         plate: t.plate,
         category: i.category || 'ไม่ระบุชนิด',
         product: i.sold,
+        interested: i.interested ?? '',
         amount: itemNetPrice({
           soldPrice: Number(i.sold_price || 0),
           discountType: (i.discount_type as 'percent' | 'amount' | null) ?? undefined,
@@ -347,6 +360,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       plate: t.plate,
       category: 'ประกัน',
       product: p.plan_name || 'ประกัน',
+      interested: '',
       amount: Number(p.price || 0),
       // ประกัน has no materials — the cover is the product.
       cost: 0,
@@ -538,6 +552,7 @@ async function wholesaleLines(): Promise<SaleLine[]> {
       plate: o?.sales_by ?? '',
       category: l.kind === 'ปรับราคา' ? 'ปรับราคา' : (categoryOf.get(l.item) ?? 'ไม่ระบุชนิด'),
       product: l.kind === 'คืนสินค้า' ? `คืนสินค้า: ${l.item}` : l.item,
+      interested: '',
       amount: l.amount,
       cost,
       held: false,

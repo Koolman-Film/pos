@@ -24,6 +24,7 @@ const line = (over: Partial<SaleLine> = {}): SaleLine => ({
   plate: 'กก 999',
   category: 'ฟิล์มกันรอย',
   product: 'TPU กันรอยเกรดพรีเมียม',
+  interested: '',
   amount: 30000,
   cost: 0,
   held: false,
@@ -563,5 +564,24 @@ describe('RevenueModule — กรองตามจองผ่าน', () => {
   it('ไม่มีใบไหนบันทึกจองผ่านไว้เลย ก็ไม่มีตัวกรองให้กด', () => {
     renderModule([line({ bookingChannel: '' })]);
     expect(screen.queryByRole('button', { name: 'กรองตามจองผ่าน' })).toBeNull();
+  });
+});
+
+/**
+ * สินค้าที่สนใจ ในรายงาน (ร้านขอ 9 ต.ค. 2569).
+ *
+ * ลูกค้าดูของสองอย่างแล้วซื้ออย่างเดียว อีกอย่างถูกจดไว้ในใบงานว่า "สนใจ" — เป็น
+ * ของที่เกือบขายได้ และเป็นข้อมูลที่รายงานยอดขายไม่เคยพามาด้วย ทั้งที่คนอ่าน
+ * รายงานคือคนเดียวกับที่จะโทรตามงานนั้น
+ */
+describe('RevenueModule — สินค้าที่สนใจ', () => {
+  it('ขึ้นใต้สินค้าที่ขายได้ ในแถวที่มี', () => {
+    renderModule([line({ interested: 'ฟิล์มกันรอยเต็มคัน' })]);
+    expect(screen.getByText(/สนใจ: ฟิล์มกันรอยเต็มคัน/)).toBeInTheDocument();
+  });
+
+  it('ไม่มีก็ไม่ขึ้น — ไม่ใช่ช่องว่างที่ต้องอ่านผ่าน', () => {
+    renderModule([line()]);
+    expect(screen.queryByText(/สนใจ:/)).toBeNull();
   });
 });

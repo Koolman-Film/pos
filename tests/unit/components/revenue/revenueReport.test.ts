@@ -16,6 +16,7 @@ const base: SaleLine = {
   plate: '',
   category: 'ฟิล์มกรองแสง',
   product: 'ฟิล์ม',
+  interested: '',
   amount: 1000,
   cost: 0,
   held: false,
