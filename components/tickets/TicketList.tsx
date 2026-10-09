@@ -450,6 +450,13 @@ export function TicketList({
                           >
                             {t.items.map((i) => i.category).join(' + ') || 'ยังไม่มีสินค้า'}{' '}
                             &middot; {t.id}
+                            {/*
+                              จองผ่าน — หลังเลขที่ใบงาน ไม่ใช่ก่อน.
+
+                              บรรทัดนี้ถูก truncate ตัดท้าย และเลขที่ใบงานคือ
+                              สิ่งที่คนใช้ค้นต่อ มันจึงต้องรอดก่อน
+                            */}
+                            {t.bookingChannel ? ' · จองผ่าน ' + t.bookingChannel : ''}
                           </p>
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">

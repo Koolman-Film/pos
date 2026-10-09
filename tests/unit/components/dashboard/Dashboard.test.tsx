@@ -592,3 +592,15 @@ describe('Dashboard — วันที่รับงาน/ส่งงาน 
     ).toBeInTheDocument();
   });
 });
+
+describe('Dashboard — จองผ่าน ใน งานล่าสุด', () => {
+  it('ขึ้นต่อท้ายชนิดสินค้า', () => {
+    render(<Dashboard {...base} recentJobs={[job({ bookingChannel: 'เพจร้าน' })]} />);
+    expect(screen.getByText(/จองผ่าน เพจร้าน/)).toBeInTheDocument();
+  });
+
+  it('ไม่มีก็ไม่ขึ้น', () => {
+    render(<Dashboard {...base} recentJobs={[job()]} />);
+    expect(screen.queryByText(/จองผ่าน/)).toBeNull();
+  });
+});

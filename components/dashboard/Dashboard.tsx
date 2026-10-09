@@ -135,6 +135,8 @@ export type RecentJob = {
   model: string;
   plate: string;
   serviceType: string;
+  /** จองผ่าน — ลูกค้ารายนี้มาจากทางไหน (ร้านขอ 9 ต.ค. 2569) */
+  bookingChannel?: string;
   categories: string[];
   products: string[];
   status: string;
@@ -937,6 +939,16 @@ export function Dashboard({
                   <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-faint)' }}>
                     {t.serviceType || 'ยังไม่ระบุการนัดหมาย'} &middot;{' '}
                     {t.categories.join(', ') || 'ยังไม่ระบุชนิดสินค้า'}
+                    {/*
+                      จองผ่าน — ลูกค้ามาจากทางไหน (ร้านขอ 9 ต.ค. 2569).
+
+                      ร้านจ่ายค่าโฆษณาหลายทาง และคำถามว่าทางไหนได้ผลเริ่มจาก
+                      การเห็นมันติดอยู่กับงานจริง ไม่ใช่ต้องเปิดใบงานทีละใบ
+
+                      ท้ายบรรทัด เพราะบรรทัดนี้ถูก truncate ตัดท้าย — สิ่งที่
+                      ยอมให้หายก่อนคือสิ่งที่สำคัญน้อยที่สุดในบรรทัด
+                    */}
+                    {t.bookingChannel ? ' · จองผ่าน ' + t.bookingChannel : ''}
                   </p>
                   <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-soft)' }}>
                     {t.products.join(', ') || 'ยังไม่ระบุสินค้า'}
