@@ -604,3 +604,36 @@ describe('Dashboard — จองผ่าน ใน งานล่าสุด
     expect(screen.queryByText(/จองผ่าน/)).toBeNull();
   });
 });
+
+/**
+ * จองผ่าน ในการ์ดนัดหมาย (ร้านขอ 9 ต.ค. 2569).
+ *
+ * การ์ดใบนี้คือใบที่ร้านถ่ายรูปส่งต่อ คนที่รับรูปไปจึงควรรู้ด้วยว่าคันไหนมาจาก
+ * ทางไหน โดยไม่ต้องเปิดระบบ
+ */
+describe('Dashboard — จองผ่าน ในการ์ดนัดหมาย', () => {
+  const appt = (over: Record<string, unknown> = {}) => ({
+    id: 'JT-1',
+    customer: 'คุณ เอ',
+    brand: 'Toyota',
+    model: 'Vios',
+    plate: '1กก',
+    serviceType: 'เข้าทำ/ติดตั้ง',
+    categories: ['ฟิล์มกันรอย'],
+    products: ['เต็มคัน: TPU'],
+    status: 'จองแล้ว',
+    dropOff: new Date(),
+    pickup: null,
+    ...over,
+  });
+
+  it('ขึ้นเป็นบรรทัดของตัวเอง', () => {
+    render(<Dashboard {...base} upcoming={[appt({ bookingChannel: 'Dex' })]} />);
+    expect(screen.getByText('จองผ่าน Dex')).toBeInTheDocument();
+  });
+
+  it('ไม่มีก็ไม่ขึ้นบรรทัดเปล่า', () => {
+    render(<Dashboard {...base} upcoming={[appt()]} />);
+    expect(screen.queryByText(/จองผ่าน/)).toBeNull();
+  });
+});
