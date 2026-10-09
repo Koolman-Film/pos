@@ -49,7 +49,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             ackAlertsAction={acknowledgeAlertsToday}
             searchHome={searchHome}
           />
-          <main className="flex-1 px-4 sm:px-6 py-6 max-w-6xl w-full mx-auto">{children}</main>
+          {/*
+            ความกว้างของเนื้อหา — 1152px มาจากต้นแบบที่วาดบนจอแล็ปท็อป.
+
+            บนจอร้านจริง (1900px ที่ซูม 75% = พื้นที่ 2500px) คอลัมน์นั้นกินแค่
+            ครึ่งเดียว ที่เหลือเป็นขอบว่างสองข้าง ส่วนเนื้อหาก็ยาวลงไปเรื่อย ๆ
+            จนต้องเลื่อน (ร้านขอ 8 ต.ค. 2569)
+
+            1800px ไม่ใช่ "ไม่จำกัด": การ์ดอย่าง ลูกหนี้/เจ้าหนี้ วางชื่อไว้ซ้าย
+            ยอดเงินไว้ขวา พอกว้างเกินนั้นสองอย่างก็ห่างกันจนสายตาต้องวิ่งตาม
+            หน้าใบงานไม่โดนผลนี้ เพราะมันหนีบตัวเองไว้ที่ max-w-2xl อยู่แล้ว
+          */}
+          <main className="flex-1 px-4 sm:px-6 py-6 max-w-[1800px] w-full mx-auto">{children}</main>
         </div>
       </MobileNavProvider>
     </div>
