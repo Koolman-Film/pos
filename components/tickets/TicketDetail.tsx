@@ -1226,9 +1226,20 @@ export function TicketDetail({
   );
   const paid = t.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
 
+  /*
+    ด่านล็อก — ครอบทีเดียวแทนการใส่ `disabled` ให้ตัวควบคุมทั้งสี่สิบตัวข้างใน
+    ส่วนที่อ่านได้ยังอ่านได้ และไม่มีช่องไหนหลุดด่านเมื่อมีคนเพิ่มช่องใหม่
+
+    เป็นค่าคงที่เพราะตอนนี้มีสามกลุ่ม (ซ้ายบน · ขวา · ซ้ายล่าง) ไม่ใช่กลุ่มเดียว
+    เหมือนตอนที่ฟอร์มเป็นคอลัมน์เดียว เขียนซ้ำสามรอบคือสามที่ที่เผลอแก้ไม่ครบได้
+  */
+  const guard = locked
+    ? ({ pointerEvents: 'none', opacity: 0.65, userSelect: 'text' } as const)
+    : undefined;
+
   return (
     <OptionManageProvider canManage={canDo('options.manage')}>
-      <div className="max-w-2xl fade-page">
+      <div className="max-w-2xl xl:max-w-[1360px] fade-page">
         <div className="flex items-center justify-between gap-2 mb-4">
           <button
             onClick={() => {
@@ -1375,529 +1386,560 @@ export function TicketDetail({
           )}
 
           {/*
-            One guard around every editable section instead of a `disabled` on
-            each of the ~40 controls inside them: the sections stay readable, the
-            status dropdown above stays usable for nothing (it is covered too),
-            and there is no field left behind when a new one is added.
+            จอกว้าง = สินค้า/การติดตั้ง ย้ายไปอยู่คอลัมน์ขวา (ร้านขอ 8 ต.ค. 2569).
+
+            ฟอร์มถูกหนีบไว้ที่ 672px ตั้งแต่ต้นแบบ บนจอร้านจริงจึงเหลือพื้นที่ว่าง
+            ทางขวาเกือบครึ่งจอ ขณะที่การ์ดที่เหลือต้องเลื่อนลงไปหา — และการ์ด
+            สินค้า/การติดตั้ง เป็นใบที่สูงที่สุดของหน้า ทุกใบที่อยู่ใต้มันจึงอยู่
+            ไกลจากสายตาโดยไม่จำเป็น
+
+            วางด้วย col-start/row-start ไม่ใช่เรียงสองกล่องต่อกัน เพราะลำดับบน
+            มือถือต้องเป็น 1 → 2 → 3 เหมือนเดิม: กล่องขวาจึงอยู่ระหว่างส่วนที่ 1
+            กับส่วนที่ 3 ใน DOM และกระโดดไปคอลัมน์ขวาเฉพาะตอนที่กริดทำงาน
+            (ไม่ใช่กริดก่อน xl — ต่ำกว่านั้นมันคือหน้าเดิมทุกพิกเซล)
+
+            ขวา row-span-2 เพื่อให้ยืดคร่อมทั้งสองแถวของคอลัมน์ซ้ายได้ ถ้าไม่มี
+            มันจะดันแถวแรกให้สูงเท่าตัวเอง แล้วเกิดช่องว่างใต้ส่วนที่ 1
           */}
-          <div
-            style={
-              locked ? { pointerEvents: 'none', opacity: 0.65, userSelect: 'text' } : undefined
-            }
-            aria-disabled={locked || undefined}
-          >
-            <FormSection step={1} title="ข้อมูลงานและลูกค้า" icon="fa-car" tone={SECTION_TONES.job}>
-              <VehicleInfoSection
-                t={t}
-                field={field}
-                bookingChannels={options.booking_channels}
-                setBookingChannels={opt('booking_channels')}
-                serviceTypes={options.service_types}
-                setServiceTypes={opt('service_types')}
-                carTypes={options.car_types}
-                setCarTypes={opt('car_types')}
-                carBrands={options.car_brands}
-                setCarBrands={opt('car_brands')}
-                retailCustomers={retailCustomers}
-                setRetailCustomers={setRetailCustomers}
-                onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
-                onModelChange={onModelChange}
-                commitModelRegistry={commitModelRegistry}
-                shopChoices={isNew ? accessibleShops : []}
-              />
-            </FormSection>
-
-            <FormSection
-              step={2}
-              title={`สินค้า/การติดตั้ง (${t.items.length})`}
-              icon="fa-bag-shopping"
-              tone={SECTION_TONES.items}
+          <div className="xl:grid xl:grid-cols-2 xl:gap-x-6 xl:items-start">
+            <div
+              className="min-w-0 xl:col-start-1 xl:row-start-1"
+              data-guard="form"
+              style={guard}
+              aria-disabled={locked || undefined}
             >
-              <ItemsSection
-                t={t}
-                stock={stock}
-                productCategories={productCategories}
-                filmPositions={options.film_positions}
-                setFilmPositions={opt('film_positions')}
-                wrapPositions={options.wrap_positions}
-                setWrapPositions={opt('wrap_positions')}
-                addItem={addItem}
-                removeItem={removeItem}
-                updateItem={updateItem}
-                saveFinnixDocs={saveFinnixDocs}
-                updateItemFields={updateItemFields}
-                updateFilmPositions={updateFilmPositions}
-                lookupPrice={lookupPrice}
-                lookupFilmPrice={lookupFilmPrice}
-                commitPrice={commitPrice}
-              />
+              <FormSection
+                step={1}
+                title="ข้อมูลงานและลูกค้า"
+                icon="fa-car"
+                tone={SECTION_TONES.job}
+              >
+                <VehicleInfoSection
+                  t={t}
+                  field={field}
+                  bookingChannels={options.booking_channels}
+                  setBookingChannels={opt('booking_channels')}
+                  serviceTypes={options.service_types}
+                  setServiceTypes={opt('service_types')}
+                  carTypes={options.car_types}
+                  setCarTypes={opt('car_types')}
+                  carBrands={options.car_brands}
+                  setCarBrands={opt('car_brands')}
+                  retailCustomers={retailCustomers}
+                  setRetailCustomers={setRetailCustomers}
+                  onSelectCustomer={(c) => setT({ ...t, customer: c.name, phone: c.phone })}
+                  onModelChange={onModelChange}
+                  commitModelRegistry={commitModelRegistry}
+                  shopChoices={isNew ? accessibleShops : []}
+                />
+              </FormSection>
+            </div>
 
-              {/*
+            <div
+              className="min-w-0 xl:col-start-2 xl:row-start-1 xl:row-span-2"
+              data-guard="form"
+              style={guard}
+              aria-disabled={locked || undefined}
+            >
+              <FormSection
+                step={2}
+                title={`สินค้า/การติดตั้ง (${t.items.length})`}
+                icon="fa-bag-shopping"
+                tone={SECTION_TONES.items}
+              >
+                <ItemsSection
+                  t={t}
+                  stock={stock}
+                  productCategories={productCategories}
+                  filmPositions={options.film_positions}
+                  setFilmPositions={opt('film_positions')}
+                  wrapPositions={options.wrap_positions}
+                  setWrapPositions={opt('wrap_positions')}
+                  addItem={addItem}
+                  removeItem={removeItem}
+                  updateItem={updateItem}
+                  saveFinnixDocs={saveFinnixDocs}
+                  updateItemFields={updateItemFields}
+                  updateFilmPositions={updateFilmPositions}
+                  lookupPrice={lookupPrice}
+                  lookupFilmPrice={lookupFilmPrice}
+                  commitPrice={commitPrice}
+                />
+
+                {/*
                 These three sit BELOW the products on purpose: the wrap tick-list
                 and the per-category notes only mean anything once the ชนิดสินค้า
                 on the ticket are known, and a note box that appears above the
                 item you just added is a box nobody scrolls back up to.
               */}
-              <div className="mt-4">
-                {t.items.some((i) => i.category === WRAP_CATEGORY) && (
-                  <WrapOptionsSection
-                    selected={t.wrapOptions ?? []}
-                    onChange={(next) => field('wrapOptions', next)}
+                <div className="mt-4">
+                  {t.items.some((i) => i.category === WRAP_CATEGORY) && (
+                    <WrapOptionsSection
+                      selected={t.wrapOptions ?? []}
+                      onChange={(next) => field('wrapOptions', next)}
+                    />
+                  )}
+
+                  <NotesSection
+                    t={t}
+                    setNote={(v) => field('notes', v)}
+                    setCategoryNote={setCategoryNote}
                   />
-                )}
 
-                <NotesSection
-                  t={t}
-                  setNote={(v) => field('notes', v)}
-                  setCategoryNote={setCategoryNote}
-                />
-
-                {/*
+                  {/*
                   pointerEvents back on: this one block escapes the lock. A
                   car comes back for service — and sometimes buys ประกัน —
                   long after the ticket was delivered, paid and closed, so
                   freezing this along with the money made the shop ask an
                   admin to reopen a finished job just to write down a visit.
                 */}
-                <div style={locked ? { pointerEvents: 'auto', opacity: 1 } : undefined}>
-                  {locked && (
-                    <p
-                      className="text-xs mb-2 flex items-center gap-1.5"
-                      style={{ color: '#4C7A3E' }}
-                    >
-                      <i className="fa-solid fa-lock-open"></i>
-                      ส่วนนี้ยังแก้ไขได้แม้ใบงานปิดแล้ว (เซอร์วิส / ประกัน)
-                    </p>
-                  )}
-                  <ExtrasSection
-                    t={t}
-                    extraOptions={options.extra_options}
-                    setExtraOptions={opt('extra_options')}
-                    slideTypes={options.slide_types}
-                    stock={stock}
-                    toggleExtra={toggleExtra}
-                    updateExtraDetail={updateExtraDetail}
-                    saveExtraDetail={saveExtraDetail}
-                    setSlideType={setSlideType}
-                    updateSlideLeg={updateSlideLeg}
-                    shareLink={shareLink}
-                    insurance={
-                      // A policy is a child row of a saved ticket, like a visit.
-                      isNew || !insuranceAction
-                        ? undefined
-                        : () => (
-                            <InsuranceSection
-                              t={t}
-                              // Server-owned: from initialTicket, not the draft.
-                              policies={initialTicket.insurancePolicies ?? []}
-                              forPlate={initialTicket.insuranceForPlate ?? []}
-                              plans={insurancePlans}
-                              technicians={options.technicians}
-                              canDelete={canDo('list.delete')}
-                              onSave={saveInsurancePolicy}
-                              onDelete={deleteInsurancePolicy}
-                              onPrint={printInsuranceReceipt}
-                              payAccounts={payAccounts}
-                              onPrintClaim={printInsuranceClaim}
-                            />
-                          )
-                    }
-                    claimVisits={
-                      /*
+                  <div style={locked ? { pointerEvents: 'auto', opacity: 1 } : undefined}>
+                    {locked && (
+                      <p
+                        className="text-xs mb-2 flex items-center gap-1.5"
+                        style={{ color: '#4C7A3E' }}
+                      >
+                        <i className="fa-solid fa-lock-open"></i>
+                        ส่วนนี้ยังแก้ไขได้แม้ใบงานปิดแล้ว (เซอร์วิส / ประกัน)
+                      </p>
+                    )}
+                    <ExtrasSection
+                      t={t}
+                      extraOptions={options.extra_options}
+                      setExtraOptions={opt('extra_options')}
+                      slideTypes={options.slide_types}
+                      stock={stock}
+                      toggleExtra={toggleExtra}
+                      updateExtraDetail={updateExtraDetail}
+                      saveExtraDetail={saveExtraDetail}
+                      setSlideType={setSlideType}
+                      updateSlideLeg={updateSlideLeg}
+                      shareLink={shareLink}
+                      insurance={
+                        // A policy is a child row of a saved ticket, like a visit.
+                        isNew || !insuranceAction
+                          ? undefined
+                          : () => (
+                              <InsuranceSection
+                                t={t}
+                                // Server-owned: from initialTicket, not the draft.
+                                policies={initialTicket.insurancePolicies ?? []}
+                                forPlate={initialTicket.insuranceForPlate ?? []}
+                                plans={insurancePlans}
+                                technicians={options.technicians}
+                                canDelete={canDo('list.delete')}
+                                onSave={saveInsurancePolicy}
+                                onDelete={deleteInsurancePolicy}
+                                onPrint={printInsuranceReceipt}
+                                payAccounts={payAccounts}
+                                onPrintClaim={printInsuranceClaim}
+                              />
+                            )
+                      }
+                      claimVisits={
+                        /*
                         งานเคลมประกัน (0067) — the way in that does not go through
                         Service. A claim is not always part of a service and a
                         car may hold cover with no Service package at all, so
                         this sits under ประกัน, where the cover is.
                       */
-                      isNew || !serviceVisitAction || carPolicies.length === 0
-                        ? undefined
-                        : () => (
-                            <ServiceVisitsSection
-                              t={t}
-                              claimOnly
-                              // Server-owned: from initialTicket, not the draft.
-                              visits={initialTicket.serviceVisits ?? []}
-                              visitsForPlate={initialTicket.serviceVisitsForPlate ?? 0}
-                              entitled={0}
-                              technicians={options.technicians}
-                              setTechnicians={opt('technicians')}
-                              currentUserName={currentUserName}
-                              filmProduct={initialTicket.serviceVisits?.[0]?.filmProduct ?? ''}
-                              assignedTechnicians={t.techByCategory?.['ฟิล์มกันรอย'] ?? []}
-                              canDelete={canDo('list.delete')}
-                              onSave={saveServiceVisit}
-                              onDelete={deleteServiceVisit}
-                              onPrint={printServiceSheet}
-                              policies={carPolicies}
-                            />
-                          )
-                    }
-                    serviceVisits={
-                      // A visit is a child row of a saved ticket, so there is
-                      // nothing for it to hang off until the ticket has an id.
-                      isNew || !serviceVisitAction
-                        ? undefined
-                        : ({ entitled, filmProduct, assignedTechnicians, schedule }) => (
-                            <ServiceVisitsSection
-                              t={t}
-                              // Server-owned: from initialTicket, not the draft.
-                              visits={initialTicket.serviceVisits ?? []}
-                              visitsForPlate={initialTicket.serviceVisitsForPlate ?? 0}
-                              entitled={entitled}
-                              technicians={options.technicians}
-                              setTechnicians={opt('technicians')}
-                              currentUserName={currentUserName}
-                              filmProduct={filmProduct}
-                              assignedTechnicians={assignedTechnicians}
-                              canDelete={canDo('list.delete')}
-                              onSave={saveServiceVisit}
-                              onDelete={deleteServiceVisit}
-                              onPrint={printServiceSheet}
-                              schedule={schedule}
-                              policies={carPolicies}
-                            />
-                          )
-                    }
-                  />
-                  {/* Its own save: the ticket-wide one is gone while locked. */}
-                  {locked && extrasAction && (
-                    <div className="flex items-center gap-3 mt-3">
-                      <button
-                        onClick={saveExtras}
-                        disabled={savingExtras}
-                        className="btn-primary rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2"
-                        style={{ opacity: savingExtras ? 0.7 : 1 }}
-                      >
-                        <i
-                          className={`fa-solid ${savingExtras ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}
-                        ></i>
-                        {savingExtras ? 'กำลังบันทึก...' : 'บันทึกข้อมูลเพิ่มเติม'}
-                      </button>
-                      {/* On section 2's items fill (#EAF4F2), where #4C7A3E
+                        isNew || !serviceVisitAction || carPolicies.length === 0
+                          ? undefined
+                          : () => (
+                              <ServiceVisitsSection
+                                t={t}
+                                claimOnly
+                                // Server-owned: from initialTicket, not the draft.
+                                visits={initialTicket.serviceVisits ?? []}
+                                visitsForPlate={initialTicket.serviceVisitsForPlate ?? 0}
+                                entitled={0}
+                                technicians={options.technicians}
+                                setTechnicians={opt('technicians')}
+                                currentUserName={currentUserName}
+                                filmProduct={initialTicket.serviceVisits?.[0]?.filmProduct ?? ''}
+                                assignedTechnicians={t.techByCategory?.['ฟิล์มกันรอย'] ?? []}
+                                canDelete={canDo('list.delete')}
+                                onSave={saveServiceVisit}
+                                onDelete={deleteServiceVisit}
+                                onPrint={printServiceSheet}
+                                policies={carPolicies}
+                              />
+                            )
+                      }
+                      serviceVisits={
+                        // A visit is a child row of a saved ticket, so there is
+                        // nothing for it to hang off until the ticket has an id.
+                        isNew || !serviceVisitAction
+                          ? undefined
+                          : ({ entitled, filmProduct, assignedTechnicians, schedule }) => (
+                              <ServiceVisitsSection
+                                t={t}
+                                // Server-owned: from initialTicket, not the draft.
+                                visits={initialTicket.serviceVisits ?? []}
+                                visitsForPlate={initialTicket.serviceVisitsForPlate ?? 0}
+                                entitled={entitled}
+                                technicians={options.technicians}
+                                setTechnicians={opt('technicians')}
+                                currentUserName={currentUserName}
+                                filmProduct={filmProduct}
+                                assignedTechnicians={assignedTechnicians}
+                                canDelete={canDo('list.delete')}
+                                onSave={saveServiceVisit}
+                                onDelete={deleteServiceVisit}
+                                onPrint={printServiceSheet}
+                                schedule={schedule}
+                                policies={carPolicies}
+                              />
+                            )
+                      }
+                    />
+                    {/* Its own save: the ticket-wide one is gone while locked. */}
+                    {locked && extrasAction && (
+                      <div className="flex items-center gap-3 mt-3">
+                        <button
+                          onClick={saveExtras}
+                          disabled={savingExtras}
+                          className="btn-primary rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2"
+                          style={{ opacity: savingExtras ? 0.7 : 1 }}
+                        >
+                          <i
+                            className={`fa-solid ${savingExtras ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}
+                          ></i>
+                          {savingExtras ? 'กำลังบันทึก...' : 'บันทึกข้อมูลเพิ่มเติม'}
+                        </button>
+                        {/* On section 2's items fill (#EAF4F2), where #4C7A3E
                           is 4.50:1 — see InsuranceSection. */}
-                      {extrasSaved && (
-                        <span className="text-xs" style={{ color: '#3F6B33' }}>
-                          <i className="fa-solid fa-circle-check mr-1"></i>บันทึกแล้ว
-                        </span>
-                      )}
-                    </div>
-                  )}
+                        {extrasSaved && (
+                          <span className="text-xs" style={{ color: '#3F6B33' }}>
+                            <i className="fa-solid fa-circle-check mr-1"></i>บันทึกแล้ว
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </FormSection>
-
-            <FormSection
-              step={3}
-              title="การชำระเงิน"
-              icon="fa-money-bill-wave"
-              tone={SECTION_TONES.payment}
-            >
-              <PaymentsSection
-                t={t}
-                shop={t.shop}
-                paymentMethods={paymentMethodOptions}
-                attachmentUrlAction={attachmentUrlAction}
-                addPayment={addPayment}
-                removePayment={removePayment}
-                updatePayment={updatePayment}
-                total={total}
-                paid={paid}
-              />
-            </FormSection>
-          </div>
-
-          {saveError && (
-            <p
-              className="text-sm mb-3 px-3 py-2 rounded-lg"
-              style={{ background: '#FBEAEC', color: '#B23A48' }}
-              role="alert"
-            >
-              <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
-              {saveError}
-            </p>
-          )}
-          <div className="flex gap-3">
-            <button
-              onClick={() => router.push(ticketsHref())}
-              className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
-            >
-              {locked ? 'กลับไปรายการใบงาน' : 'ยกเลิก'}
-            </button>
-            {/* Saving a locked ticket would be refused by the database anyway;
-                not offering the button is the honest version of that. */}
-            {!locked && (
-              <button
-                onClick={save}
-                disabled={saving}
-                className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-                style={{ opacity: saving ? 0.7 : 1 }}
-              >
-                <i className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}></i>
-                {saving ? 'กำลังบันทึก...' : 'บันทึกใบงาน'}
-              </button>
-            )}
-          </div>
-
-          {!isNew && t.items.some((i) => i.sold) && canDo('list.printSheet') && (
-            <div className="flex gap-3 mt-3">
-              <button
-                onClick={() => doPrint('job')}
-                className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-              >
-                <i className="fa-solid fa-print"></i> ใบงานติดตั้ง
-              </button>
-              <button
-                onClick={() => doPrint('sale')}
-                className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-              >
-                <i className="fa-solid fa-print"></i> ใบงานขาย
-              </button>
+              </FormSection>
             </div>
-          )}
-          {!isNew &&
-            t.items.some((i) => i.sold) &&
-            canDo('list.printSheet') &&
-            t.extras?.['นอกสถานที่']?.checked && (
-              <button
-                onClick={() => doPrint('offsite')}
-                className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-              >
-                <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
-              </button>
-            )}
-          {!isNew && !locked && canDo('list.delete') && deleteAction && (
-            <button
-              onClick={remove}
-              disabled={deleting}
-              className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-              style={{ color: '#B23A48', borderColor: '#B23A48', opacity: deleting ? 0.7 : 1 }}
-            >
-              <i className={`fa-solid ${deleting ? 'fa-spinner fa-spin' : 'fa-trash'}`}></i>
-              {deleting ? 'กำลังลบ...' : 'ลบใบงาน'}
-            </button>
-          )}
-          {!isNew && (
-            <FormSection
-              step={4}
-              title="ออกเอกสารทางการเงิน"
-              icon="fa-file-invoice"
-              tone={SECTION_TONES.document}
-            >
-              <div className="flex gap-1.5 mb-2.5">
-                {['ใบเสนอราคา', TAX_DOC_TYPE, 'ใบเสร็จรับเงิน'].map((dt) => {
-                  const off = dt === TAX_DOC_TYPE && taxDocBlocked;
-                  return (
-                    <button
-                      key={dt}
-                      onClick={() => changeDocType(dt)}
-                      disabled={off}
-                      title={off ? taxBlockedReason : undefined}
-                      className="text-xs px-2.5 py-1.5 rounded-full font-semibold flex-1 flex items-center justify-center gap-1"
-                      style={{
-                        background: docType === dt ? '#2563EB' : '#fff',
-                        color: docType === dt ? '#fff' : '#1D4ED8',
-                        opacity: off ? 0.45 : 1,
-                        cursor: off ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      {off && <i className="fa-solid fa-lock text-[10px]"></i>}
-                      {dt}
-                    </button>
-                  );
-                })}
+
+            <div className="min-w-0 xl:col-start-1 xl:row-start-2">
+              <div data-guard="form" style={guard} aria-disabled={locked || undefined}>
+                <FormSection
+                  step={3}
+                  title="การชำระเงิน"
+                  icon="fa-money-bill-wave"
+                  tone={SECTION_TONES.payment}
+                >
+                  <PaymentsSection
+                    t={t}
+                    shop={t.shop}
+                    paymentMethods={paymentMethodOptions}
+                    attachmentUrlAction={attachmentUrlAction}
+                    addPayment={addPayment}
+                    removePayment={removePayment}
+                    updatePayment={updatePayment}
+                    total={total}
+                    paid={paid}
+                  />
+                </FormSection>
               </div>
-              {taxDocBlocked && (
-                <p className="text-xs mb-2.5 flex items-start gap-1.5" style={{ color: '#8A5A12' }}>
-                  <i className="fa-solid fa-lock mt-0.5"></i>
-                  <span>{taxBlockedReason}</span>
+
+              {saveError && (
+                <p
+                  className="text-sm mb-3 px-3 py-2 rounded-lg"
+                  style={{ background: '#FBEAEC', color: '#B23A48' }}
+                  role="alert"
+                >
+                  <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
+                  {saveError}
                 </p>
               )}
-              {/*
+              <div className="flex gap-3">
+                <button
+                  onClick={() => router.push(ticketsHref())}
+                  className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
+                >
+                  {locked ? 'กลับไปรายการใบงาน' : 'ยกเลิก'}
+                </button>
+                {/* Saving a locked ticket would be refused by the database anyway;
+                not offering the button is the honest version of that. */}
+                {!locked && (
+                  <button
+                    onClick={save}
+                    disabled={saving}
+                    className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                    style={{ opacity: saving ? 0.7 : 1 }}
+                  >
+                    <i
+                      className={`fa-solid ${saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}
+                    ></i>
+                    {saving ? 'กำลังบันทึก...' : 'บันทึกใบงาน'}
+                  </button>
+                )}
+              </div>
+
+              {!isNew && t.items.some((i) => i.sold) && canDo('list.printSheet') && (
+                <div className="flex gap-3 mt-3">
+                  <button
+                    onClick={() => doPrint('job')}
+                    className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                  >
+                    <i className="fa-solid fa-print"></i> ใบงานติดตั้ง
+                  </button>
+                  <button
+                    onClick={() => doPrint('sale')}
+                    className="btn-outline flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                  >
+                    <i className="fa-solid fa-print"></i> ใบงานขาย
+                  </button>
+                </div>
+              )}
+              {!isNew &&
+                t.items.some((i) => i.sold) &&
+                canDo('list.printSheet') &&
+                t.extras?.['นอกสถานที่']?.checked && (
+                  <button
+                    onClick={() => doPrint('offsite')}
+                    className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                  >
+                    <i className="fa-solid fa-print"></i> ใบงานนอกสถานที่
+                  </button>
+                )}
+              {!isNew && !locked && canDo('list.delete') && deleteAction && (
+                <button
+                  onClick={remove}
+                  disabled={deleting}
+                  className="btn-outline w-full mt-3 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                  style={{ color: '#B23A48', borderColor: '#B23A48', opacity: deleting ? 0.7 : 1 }}
+                >
+                  <i className={`fa-solid ${deleting ? 'fa-spinner fa-spin' : 'fa-trash'}`}></i>
+                  {deleting ? 'กำลังลบ...' : 'ลบใบงาน'}
+                </button>
+              )}
+              {!isNew && (
+                <FormSection
+                  step={4}
+                  title="ออกเอกสารทางการเงิน"
+                  icon="fa-file-invoice"
+                  tone={SECTION_TONES.document}
+                >
+                  <div className="flex gap-1.5 mb-2.5">
+                    {['ใบเสนอราคา', TAX_DOC_TYPE, 'ใบเสร็จรับเงิน'].map((dt) => {
+                      const off = dt === TAX_DOC_TYPE && taxDocBlocked;
+                      return (
+                        <button
+                          key={dt}
+                          onClick={() => changeDocType(dt)}
+                          disabled={off}
+                          title={off ? taxBlockedReason : undefined}
+                          className="text-xs px-2.5 py-1.5 rounded-full font-semibold flex-1 flex items-center justify-center gap-1"
+                          style={{
+                            background: docType === dt ? '#2563EB' : '#fff',
+                            color: docType === dt ? '#fff' : '#1D4ED8',
+                            opacity: off ? 0.45 : 1,
+                            cursor: off ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {off && <i className="fa-solid fa-lock text-[10px]"></i>}
+                          {dt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {taxDocBlocked && (
+                    <p
+                      className="text-xs mb-2.5 flex items-start gap-1.5"
+                      style={{ color: '#8A5A12' }}
+                    >
+                      <i className="fa-solid fa-lock mt-0.5"></i>
+                      <span>{taxBlockedReason}</span>
+                    </p>
+                  )}
+                  {/*
                 บัญชีรับชำระ (ร้านขอ 21 ก.ย. 2569) — which of this branch's
                 แหล่งเงิน the quotation tells the customer to pay into. Only on a
                 quotation: a receipt records what was paid and how, it does not
                 ask for money.
               */}
-              {docType === 'ใบเสนอราคา' && (
-                <div className="mb-2.5">
-                  <label className="text-xs" style={{ color: '#1D4ED8' }}>
-                    บัญชีรับชำระ (พิมพ์ในใบเสนอราคา)
-                  </label>
-                  <select
-                    aria-label="บัญชีรับชำระ"
-                    value={payToAccountId ?? ''}
-                    onChange={(e) =>
-                      void choosePayAccount(e.target.value ? Number(e.target.value) : null)
-                    }
-                    className="field w-full text-xs px-2.5 py-1.5"
-                  >
-                    <option value="">ไม่ระบุ</option>
-                    {shopPayAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {payAccountLine(a)}
-                      </option>
-                    ))}
-                  </select>
-                  {payAccountError && (
-                    <p className="text-xs mt-1" style={{ color: '#B23A48' }}>
-                      {payAccountError}
-                    </p>
+                  {docType === 'ใบเสนอราคา' && (
+                    <div className="mb-2.5">
+                      <label className="text-xs" style={{ color: '#1D4ED8' }}>
+                        บัญชีรับชำระ (พิมพ์ในใบเสนอราคา)
+                      </label>
+                      <select
+                        aria-label="บัญชีรับชำระ"
+                        value={payToAccountId ?? ''}
+                        onChange={(e) =>
+                          void choosePayAccount(e.target.value ? Number(e.target.value) : null)
+                        }
+                        className="field w-full text-xs px-2.5 py-1.5"
+                      >
+                        <option value="">ไม่ระบุ</option>
+                        {shopPayAccounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {payAccountLine(a)}
+                          </option>
+                        ))}
+                      </select>
+                      {payAccountError && (
+                        <p className="text-xs mt-1" style={{ color: '#B23A48' }}>
+                          {payAccountError}
+                        </p>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
-              <div className="mb-2.5">
-                <label className="text-xs" style={{ color: '#1D4ED8' }}>
-                  ชื่อลูกค้าในเอกสาร
-                </label>
-                <input
-                  value={buyerName}
-                  onChange={(e) => setBuyerName(e.target.value)}
-                  placeholder={t.customer}
-                  className="field w-full text-xs px-2.5 py-1.5"
-                />
-              </div>
-              {/*
+                  <div className="mb-2.5">
+                    <label className="text-xs" style={{ color: '#1D4ED8' }}>
+                      ชื่อลูกค้าในเอกสาร
+                    </label>
+                    <input
+                      value={buyerName}
+                      onChange={(e) => setBuyerName(e.target.value)}
+                      placeholder={t.customer}
+                      className="field w-full text-xs px-2.5 py-1.5"
+                    />
+                  </div>
+                  {/*
                 ข้อมูลนิติบุคคล shows for a tax invoice, and for any document going
                 out under the shop's own company name and tax id — a ใบเสร็จรับเงิน
                 made out to a company still needs the company on it, and at a
                 branch that cannot issue a tax invoice there was nowhere to type it.
               */}
-              {(docType === TAX_DOC_TYPE || showCompanyInfo) && (
-                <div className="mb-2.5 rounded-lg p-2.5" style={{ background: '#fff' }}>
-                  <p className="text-xs font-medium mb-2" style={{ color: '#1D4ED8' }}>
-                    ข้อมูลนิติบุคคล
-                  </p>
-                  {corporateBuyers.length > 0 && (
-                    <select
-                      onChange={(e) => {
-                        const b = corporateBuyers.find((x) => x.name === e.target.value);
-                        if (b) {
-                          setBuyerName(b.name);
-                          setBuyerAddress(b.address);
-                          setBuyerTaxId(b.taxId);
-                        }
-                      }}
-                      defaultValue=""
-                      className="field w-full text-xs px-2.5 py-1.5 mb-2"
-                    >
-                      <option value="" disabled>
-                        เลือกจากที่บันทึกไว้...
-                      </option>
-                      {corporateBuyers.map((b) => (
-                        <option key={b.name} value={b.name}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <input
-                    value={buyerAddress}
-                    onChange={(e) => setBuyerAddress(e.target.value)}
-                    placeholder="ที่อยู่นิติบุคคล"
-                    className="field w-full text-xs px-2.5 py-1.5 mb-2"
-                  />
-                  <input
-                    value={buyerTaxId}
-                    onChange={(e) => setBuyerTaxId(e.target.value)}
-                    placeholder="เลขผู้เสียภาษี 13 หลัก"
-                    className="field w-full text-xs px-2.5 py-1.5 mb-2"
-                  />
-                  <button
-                    onClick={saveBuyer}
-                    disabled={savingBuyer}
-                    className="btn-outline w-full text-xs py-1.5 rounded-lg"
-                    style={{
-                      borderColor: '#2563EB',
-                      color: '#1D4ED8',
-                      opacity: savingBuyer ? 0.7 : 1,
-                    }}
-                  >
-                    <i
-                      className={`fa-solid ${savingBuyer ? 'fa-spinner fa-spin' : 'fa-floppy-disk'} mr-1.5`}
-                    ></i>
-                    {savingBuyer ? 'กำลังบันทึก...' : 'บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป'}
-                  </button>
-                  {/* The button's whole promise is that this survives. Saying so
+                  {(docType === TAX_DOC_TYPE || showCompanyInfo) && (
+                    <div className="mb-2.5 rounded-lg p-2.5" style={{ background: '#fff' }}>
+                      <p className="text-xs font-medium mb-2" style={{ color: '#1D4ED8' }}>
+                        ข้อมูลนิติบุคคล
+                      </p>
+                      {corporateBuyers.length > 0 && (
+                        <select
+                          onChange={(e) => {
+                            const b = corporateBuyers.find((x) => x.name === e.target.value);
+                            if (b) {
+                              setBuyerName(b.name);
+                              setBuyerAddress(b.address);
+                              setBuyerTaxId(b.taxId);
+                            }
+                          }}
+                          defaultValue=""
+                          className="field w-full text-xs px-2.5 py-1.5 mb-2"
+                        >
+                          <option value="" disabled>
+                            เลือกจากที่บันทึกไว้...
+                          </option>
+                          {corporateBuyers.map((b) => (
+                            <option key={b.name} value={b.name}>
+                              {b.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <input
+                        value={buyerAddress}
+                        onChange={(e) => setBuyerAddress(e.target.value)}
+                        placeholder="ที่อยู่นิติบุคคล"
+                        className="field w-full text-xs px-2.5 py-1.5 mb-2"
+                      />
+                      <input
+                        value={buyerTaxId}
+                        onChange={(e) => setBuyerTaxId(e.target.value)}
+                        placeholder="เลขผู้เสียภาษี 13 หลัก"
+                        className="field w-full text-xs px-2.5 py-1.5 mb-2"
+                      />
+                      <button
+                        onClick={saveBuyer}
+                        disabled={savingBuyer}
+                        className="btn-outline w-full text-xs py-1.5 rounded-lg"
+                        style={{
+                          borderColor: '#2563EB',
+                          color: '#1D4ED8',
+                          opacity: savingBuyer ? 0.7 : 1,
+                        }}
+                      >
+                        <i
+                          className={`fa-solid ${savingBuyer ? 'fa-spinner fa-spin' : 'fa-floppy-disk'} mr-1.5`}
+                        ></i>
+                        {savingBuyer ? 'กำลังบันทึก...' : 'บันทึกข้อมูลนี้ไว้ใช้ครั้งถัดไป'}
+                      </button>
+                      {/* The button's whole promise is that this survives. Saying so
                       out loud is the difference between a saved buyer and one
                       that only looked saved. */}
-                  {buyerSaveMsg && (
-                    <p
-                      className="text-xs mt-1.5"
-                      role="status"
-                      style={{ color: buyerSaveMsg.ok ? '#3F6B33' : '#B23A48' }}
-                    >
-                      <i
-                        className={`fa-solid ${buyerSaveMsg.ok ? 'fa-circle-check' : 'fa-triangle-exclamation'} mr-1`}
-                      ></i>
-                      {buyerSaveMsg.text}
-                    </p>
+                      {buyerSaveMsg && (
+                        <p
+                          className="text-xs mt-1.5"
+                          role="status"
+                          style={{ color: buyerSaveMsg.ok ? '#3F6B33' : '#B23A48' }}
+                        >
+                          <i
+                            className={`fa-solid ${buyerSaveMsg.ok ? 'fa-circle-check' : 'fa-triangle-exclamation'} mr-1`}
+                          ></i>
+                          {buyerSaveMsg.text}
+                        </p>
+                      )}
+                    </div>
                   )}
-                </div>
+                  <label
+                    className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
+                    style={{ color: '#1D4ED8' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showCompanyInfo}
+                      onChange={(e) => setShowCompanyInfo(e.target.checked)}
+                      className="w-3.5 h-3.5"
+                    />
+                    แสดงชื่อนิติบุคคล/เลขผู้เสียภาษีของร้าน
+                  </label>
+                  <label
+                    className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
+                    style={{ color: '#1D4ED8' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showDisclaimer}
+                      onChange={(e) => setShowDisclaimer(e.target.checked)}
+                      className="w-3.5 h-3.5"
+                    />
+                    แสดงข้อความแจ้งเตือนตรวจเช็ครอบคัน
+                  </label>
+                  <button
+                    onClick={issueDocument}
+                    disabled={docType === TAX_DOC_TYPE && taxDocBlocked}
+                    className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
+                    style={{
+                      background: '#2563EB',
+                      color: '#fff',
+                      opacity: docType === TAX_DOC_TYPE && taxDocBlocked ? 0.45 : 1,
+                    }}
+                  >
+                    <i className="fa-solid fa-print"></i> ออก{docType}
+                  </button>
+                </FormSection>
               )}
-              <label
-                className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
-                style={{ color: '#1D4ED8' }}
-              >
-                <input
-                  type="checkbox"
-                  checked={showCompanyInfo}
-                  onChange={(e) => setShowCompanyInfo(e.target.checked)}
-                  className="w-3.5 h-3.5"
-                />
-                แสดงชื่อนิติบุคคล/เลขผู้เสียภาษีของร้าน
-              </label>
-              <label
-                className="flex items-center gap-2 text-xs mb-2.5 cursor-pointer"
-                style={{ color: '#1D4ED8' }}
-              >
-                <input
-                  type="checkbox"
-                  checked={showDisclaimer}
-                  onChange={(e) => setShowDisclaimer(e.target.checked)}
-                  className="w-3.5 h-3.5"
-                />
-                แสดงข้อความแจ้งเตือนตรวจเช็ครอบคัน
-              </label>
-              <button
-                onClick={issueDocument}
-                disabled={docType === TAX_DOC_TYPE && taxDocBlocked}
-                className="w-full rounded-xl py-2 text-sm font-semibold flex items-center justify-center gap-2"
-                style={{
-                  background: '#2563EB',
-                  color: '#fff',
-                  opacity: docType === TAX_DOC_TYPE && taxDocBlocked ? 0.45 : 1,
-                }}
-              >
-                <i className="fa-solid fa-print"></i> ออก{docType}
-              </button>
-            </FormSection>
-          )}
-          {/*
+              {/*
             MEMO — นอกกรอบที่ถูกปิดตอนใบงานล็อก โดยตั้งใจ.
 
             ด่านล็อกกันไม่ให้ตัวเลขของใบงานที่ปิดไปแล้วขยับ MEMO ไม่ใช่ตัวเลข
             ของใบงาน และคำถามเรื่องงานที่ปิดไปแล้วก็ยังโทรเข้ามาอยู่ดี
             ฐานข้อมูลก็ไม่ได้กันไว้เหมือนกัน (0082)
           */}
-          {memoAddAction && memoDeleteAction && (
-            <MemoSection
-              /*
+              {memoAddAction && memoDeleteAction && (
+                <MemoSection
+                  /*
                 Server-owned: จาก initialTicket ไม่ใช่ draft — เหมือนใบเซอร์วิส
                 ร่างในฟอร์มถูกหว่านครั้งเดียวตอนเปิดหน้า มันจึงไม่มีวันรู้จัก
                 ข้อความที่เพิ่งส่งไป หรือที่คนอื่นส่งเข้ามาระหว่างนี้
               */
-              memos={initialTicket.memos ?? []}
-              ticketId={initialTicket.id}
-              currentUserId={currentUserId}
-              canDeleteAny={canDeleteAnyMemo}
-              disabled={isNew}
-              disabledNote="บันทึกใบงานก่อน แล้วจึงเขียน MEMO ได้"
-              onAdd={memoAddAction}
-              onDelete={memoDeleteAction}
-              onDone={() => router.refresh()}
-            />
-          )}
-          {/*
+                  memos={initialTicket.memos ?? []}
+                  ticketId={initialTicket.id}
+                  currentUserId={currentUserId}
+                  canDeleteAny={canDeleteAnyMemo}
+                  disabled={isNew}
+                  disabledNote="บันทึกใบงานก่อน แล้วจึงเขียน MEMO ได้"
+                  onAdd={memoAddAction}
+                  onDelete={memoDeleteAction}
+                  onDone={() => router.refresh()}
+                />
+              )}
+              {/*
             ข้อมูลของช่าง sits at the very bottom, below the financial-document
             block. The ticket is filled top-to-bottom by whoever is with the
             customer — vehicle, products, extras, money, paperwork — and the
@@ -1906,68 +1948,76 @@ export function TicketDetail({
             roles open this screen; none of them should have to scroll past a
             section that is not theirs.
           */}
-          <div
-            style={
-              techFrozen ? { pointerEvents: 'none', opacity: 0.65, userSelect: 'text' } : undefined
-            }
-            aria-disabled={techFrozen || undefined}
-          >
-            <FormSection
-              step={5}
-              title="ข้อมูลของช่าง"
-              icon="fa-user-gear"
-              tone={SECTION_TONES.tech}
-              hint="(แยกตามชนิดสินค้า เพราะแต่ละชนิดใช้ช่างคนละคนและตัดสต็อกต่างกัน)"
-            >
-              <TechSection
-                t={t}
-                stock={stock}
-                attachmentUrlAction={attachmentUrlAction}
-                field={field}
-                technicians={options.technicians}
-                setTechnicians={opt('technicians')}
-                updateActualQty={updateActualQty}
-                confirmInstall={confirmInstall}
-                shareQcAlbum={shareQcAlbum}
-                shopName={shopName}
-              />
-              {techOpen && (
-                <p className="text-xs mt-1 flex items-start gap-1.5" style={{ color: '#4C7A3E' }}>
-                  <i className="fa-solid fa-lock-open mt-0.5"></i>
-                  <span>
-                    ยังกรอกข้อมูลของช่างได้แม้ใบงานปิดแล้ว —{' '}
-                    {reworkTicked(t.extras)
-                      ? 'ใบงานนี้ติ๊ก "แก้งาน" ไว้ จึงแก้จำนวนสินค้าที่ใช้จริงได้อีกครั้ง'
-                      : 'ยังกรอกจำนวนสินค้าที่ใช้จริงไม่ครบ'}{' '}
-                    (ราคาและการรับเงินยังล็อกอยู่)
-                  </span>
-                </p>
-              )}
-              {/* Its own save: the ticket-wide one is gone while locked. */}
-              {techOpen && techAction && (
-                <div className="flex items-center gap-3 mt-3">
-                  <button
-                    onClick={saveTech}
-                    disabled={savingTech}
-                    className="btn-primary rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2"
-                    style={{ opacity: savingTech ? 0.7 : 1 }}
-                  >
-                    <i
-                      className={`fa-solid ${savingTech ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}
-                    ></i>
-                    {savingTech ? 'กำลังบันทึก...' : 'บันทึกข้อมูลของช่าง'}
-                  </button>
-                  {techSaved && (
-                    <span
-                      className="text-xs font-semibold flex items-center gap-1.5"
+              <div
+                data-guard="tech"
+                style={
+                  techFrozen
+                    ? { pointerEvents: 'none', opacity: 0.65, userSelect: 'text' }
+                    : undefined
+                }
+                aria-disabled={techFrozen || undefined}
+              >
+                <FormSection
+                  step={5}
+                  title="ข้อมูลของช่าง"
+                  icon="fa-user-gear"
+                  tone={SECTION_TONES.tech}
+                  hint="(แยกตามชนิดสินค้า เพราะแต่ละชนิดใช้ช่างคนละคนและตัดสต็อกต่างกัน)"
+                >
+                  <TechSection
+                    t={t}
+                    stock={stock}
+                    attachmentUrlAction={attachmentUrlAction}
+                    field={field}
+                    technicians={options.technicians}
+                    setTechnicians={opt('technicians')}
+                    updateActualQty={updateActualQty}
+                    confirmInstall={confirmInstall}
+                    shareQcAlbum={shareQcAlbum}
+                    shopName={shopName}
+                  />
+                  {techOpen && (
+                    <p
+                      className="text-xs mt-1 flex items-start gap-1.5"
                       style={{ color: '#4C7A3E' }}
                     >
-                      <i className="fa-solid fa-circle-check"></i>บันทึกแล้ว
-                    </span>
+                      <i className="fa-solid fa-lock-open mt-0.5"></i>
+                      <span>
+                        ยังกรอกข้อมูลของช่างได้แม้ใบงานปิดแล้ว —{' '}
+                        {reworkTicked(t.extras)
+                          ? 'ใบงานนี้ติ๊ก "แก้งาน" ไว้ จึงแก้จำนวนสินค้าที่ใช้จริงได้อีกครั้ง'
+                          : 'ยังกรอกจำนวนสินค้าที่ใช้จริงไม่ครบ'}{' '}
+                        (ราคาและการรับเงินยังล็อกอยู่)
+                      </span>
+                    </p>
                   )}
-                </div>
-              )}
-            </FormSection>
+                  {/* Its own save: the ticket-wide one is gone while locked. */}
+                  {techOpen && techAction && (
+                    <div className="flex items-center gap-3 mt-3">
+                      <button
+                        onClick={saveTech}
+                        disabled={savingTech}
+                        className="btn-primary rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2"
+                        style={{ opacity: savingTech ? 0.7 : 1 }}
+                      >
+                        <i
+                          className={`fa-solid ${savingTech ? 'fa-spinner fa-spin' : 'fa-floppy-disk'}`}
+                        ></i>
+                        {savingTech ? 'กำลังบันทึก...' : 'บันทึกข้อมูลของช่าง'}
+                      </button>
+                      {techSaved && (
+                        <span
+                          className="text-xs font-semibold flex items-center gap-1.5"
+                          style={{ color: '#4C7A3E' }}
+                        >
+                          <i className="fa-solid fa-circle-check"></i>บันทึกแล้ว
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </FormSection>
+              </div>
+            </div>
           </div>
         </div>
 

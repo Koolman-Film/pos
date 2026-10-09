@@ -956,14 +956,22 @@ describe('TicketDetail — ข้อมูลของช่างหลัง�
     ),
   });
 
-  /** Guards are the greyed-out wrappers; the tech block has its own. */
-  const guards = (c: HTMLElement) => c.querySelectorAll('[aria-disabled="true"]').length;
+  /*
+    ถามว่า "ส่วนไหนถูกแช่แข็ง" ไม่ใช่ "มีกล่องกี่กล่อง".
+
+    เดิมนับจำนวน `[aria-disabled="true"]` ทั้งหน้า ซึ่งผูกกับจำนวน div โดยบังเอิญ
+    พอฟอร์มแตกเป็นสามกลุ่มเพื่อจัดสองคอลัมน์ ตัวเลขก็เปลี่ยนทั้งที่พฤติกรรม
+    เหมือนเดิมทุกอย่าง — คำถามจริงคือเงินแข็งไหม และช่างแข็งไหม
+  */
+  const frozen = (c: HTMLElement, part: 'form' | 'tech') =>
+    c.querySelectorAll(`[data-guard="${part}"][aria-disabled="true"]`).length > 0;
 
   it('leaves ข้อมูลของช่าง open while a quantity is still blank', () => {
     const { container } = render(<TicketDetail {...techProps(closedWith())} />);
     expect(screen.getByText(/ใบงานนี้ปิดงานแล้ว/)).toBeInTheDocument();
-    // One guard, not two: the money is frozen, the technician block is not.
-    expect(guards(container)).toBe(1);
+    // เงินแข็ง ช่างยังไม่แข็ง
+    expect(frozen(container, 'form')).toBe(true);
+    expect(frozen(container, 'tech')).toBe(false);
     expect(screen.getByText(/ยังกรอกจำนวนสินค้าที่ใช้จริงไม่ครบ/)).toBeInTheDocument();
     expect(screen.getByLabelText('จำนวนที่ใช้จริง ฟิล์ม 3M CR70')).toBeInTheDocument();
   });
@@ -972,7 +980,8 @@ describe('TicketDetail — ข้อมูลของช่างหลัง�
     const { container } = render(
       <TicketDetail {...techProps(closedWith({ items: [soldItem({ 'ฟิล์ม 3M CR70': 2 })] }))} />,
     );
-    expect(guards(container)).toBe(2);
+    expect(frozen(container, 'form')).toBe(true);
+    expect(frozen(container, 'tech')).toBe(true);
     expect(screen.queryByRole('button', { name: /บันทึกข้อมูลของช่าง/ })).toBeNull();
   });
 
@@ -983,9 +992,11 @@ describe('TicketDetail — ข้อมูลของช่างหลัง�
     const { container } = render(
       <TicketDetail {...techProps(closedWith({ items: [soldItem({ 'ฟิล์ม 3M CR70': 2 })] }))} />,
     );
-    expect(guards(container)).toBe(2);
+    expect(frozen(container, 'tech')).toBe(true);
     await user.click(screen.getByLabelText('แก้งาน'));
-    expect(guards(container)).toBe(1);
+    expect(frozen(container, 'tech')).toBe(false);
+    // เงินยังแข็งอยู่ — ติ๊กแก้งานปลดล็อกเฉพาะส่วนของช่าง
+    expect(frozen(container, 'form')).toBe(true);
     expect(screen.getByText(/ติ๊ก "แก้งาน" ไว้/)).toBeInTheDocument();
   });
 
@@ -1010,7 +1021,8 @@ describe('TicketDetail — ข้อมูลของช่างหลัง�
     const { container } = render(
       <TicketDetail {...techProps(makeTicket({ items: [soldItem()] }))} />,
     );
-    expect(guards(container)).toBe(0);
+    expect(frozen(container, 'form')).toBe(false);
+    expect(frozen(container, 'tech')).toBe(false);
     expect(screen.queryByRole('button', { name: /บันทึกข้อมูลของช่าง/ })).toBeNull();
   });
 });
