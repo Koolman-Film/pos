@@ -107,3 +107,49 @@ describe('PaymentsSection — หลักฐานการรับเงิ�
     expect(screen.queryByText(/ยังไม่ได้แนบหลักฐานการรับเงิน/)).toBeNull();
   });
 });
+
+/**
+ * รับเงินเกินยอด (ร้านแจ้ง 9 ต.ค. 2569).
+ *
+ * "ปัจจุบันแสดงแค่ชำระครบ และไม่ได้มีการแจ้งจำนวนเงินที่เกินมาเลย" — งาน 6,400
+ * ที่รับเงินมา 34,400 ขึ้นว่า "ชำระครบแล้ว" เหมือนใบที่รับมาพอดี พิมพ์ผิดหนึ่ง
+ * หลักจึงกลายเป็นสิ่งที่หน้าจอรับรองว่าถูกต้อง
+ */
+describe('PaymentsSection — รับเงินเกินยอด', () => {
+  function renderWith(total: number, paid: number) {
+    render(
+      <PaymentsSection
+        t={ticket([row({ amount: paid, attachments: ['cm/slip.jpg'] })])}
+        shop="cm"
+        paymentMethods={['เงินสด']}
+        addPayment={vi.fn()}
+        updatePayment={vi.fn()}
+        total={total}
+        paid={paid}
+      />,
+    );
+  }
+
+  it('บอกจำนวนที่เกิน แทนที่จะบอกว่าครบ', () => {
+    renderWith(6400, 34400);
+    expect(screen.getByText('รับเงินเกิน 28,000.00')).toBeInTheDocument();
+    expect(screen.queryByText('ชำระครบแล้ว')).toBeNull();
+  });
+
+  it('ขึ้นแถบเตือนพร้อมบอกว่าต้องทำอะไรต่อ', () => {
+    renderWith(6400, 34400);
+    expect(screen.getByRole('alert')).toHaveTextContent('รับเงินมาเกินยอดสุทธิ 28,000.00');
+  });
+
+  it('รับมาพอดียังเป็นชำระครบแล้วเหมือนเดิม', () => {
+    renderWith(6400, 6400);
+    expect(screen.getByText('ชำระครบแล้ว')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('ยังขาดอยู่ก็ยังบอกยอดคงเหลือเหมือนเดิม', () => {
+    renderWith(6400, 4000);
+    expect(screen.getByText('คงเหลือ 2,400.00')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
