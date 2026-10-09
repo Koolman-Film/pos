@@ -87,6 +87,8 @@ export type UpcomingTicket = {
   model: string;
   plate: string;
   serviceType: string;
+  /** จองผ่าน — ลูกค้ารายนี้มาจากทางไหน (ร้านขอ 9 ต.ค. 2569) */
+  bookingChannel?: string;
   categories: string[];
   /** สินค้าที่เลือกไว้แล้ว — empty until the counter picks one. */
   products: string[];
@@ -881,6 +883,22 @@ export function Dashboard({
                                 {t.products.join(', ')}
                               </p>
                             )}
+                            {/*
+                              จองผ่าน — บรรทัดของตัวเอง ไม่ต่อท้ายชื่อสินค้า.
+
+                              การ์ดใบนี้ถูกถ่ายรูปส่งต่อ ทุกอย่างจึงได้บรรทัด
+                              ของตัวเองและตัดคำแทนที่จะถูกตัดทิ้ง การเอาไปต่อ
+                              ท้ายชื่อสินค้าด้วย middot ก็อ่านเหมือนเป็นชื่อ
+                              สินค้าอีกชิ้นหนึ่ง
+                            */}
+                            {t.bookingChannel && (
+                              <p
+                                className="text-xs break-words"
+                                style={{ color: 'var(--booking)', marginLeft: '3rem' }}
+                              >
+                                จองผ่าน {t.bookingChannel}
+                              </p>
+                            )}
                           </div>
                           <span
                             className="row-action text-xs flex-shrink-0 mt-1"
@@ -948,7 +966,11 @@ export function Dashboard({
                       ท้ายบรรทัด เพราะบรรทัดนี้ถูก truncate ตัดท้าย — สิ่งที่
                       ยอมให้หายก่อนคือสิ่งที่สำคัญน้อยที่สุดในบรรทัด
                     */}
-                    {t.bookingChannel ? ' · จองผ่าน ' + t.bookingChannel : ''}
+                    {t.bookingChannel && (
+                      <span style={{ color: 'var(--booking)' }}>
+                        {' · จองผ่าน ' + t.bookingChannel}
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ink-soft)' }}>
                     {t.products.join(', ') || 'ยังไม่ระบุสินค้า'}

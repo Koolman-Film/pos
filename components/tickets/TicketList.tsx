@@ -456,7 +456,11 @@ export function TicketList({
                               บรรทัดนี้ถูก truncate ตัดท้าย และเลขที่ใบงานคือ
                               สิ่งที่คนใช้ค้นต่อ มันจึงต้องรอดก่อน
                             */}
-                            {t.bookingChannel ? ' · จองผ่าน ' + t.bookingChannel : ''}
+                            {t.bookingChannel && (
+                              <span style={{ color: 'var(--booking)' }}>
+                                {' · จองผ่าน ' + t.bookingChannel}
+                              </span>
+                            )}
                           </p>
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">

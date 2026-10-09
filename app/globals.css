@@ -45,6 +45,12 @@
      Both clear AA on --surface and --paper: 5.54/5.19 and 9.99/9.36. */
   --expense-group: #2f6f8f;
   --money-source: #5b2d7a;
+  /* จองผ่าน — ช่องทางที่ลูกค้าเข้ามา (ร้านขอ 9 ต.ค. 2569).
+
+     สีของตัวเอง ไม่ยืมสีที่มีความหมายอยู่แล้ว: น้ำเงินของ --revenue คือยอดขาย
+     และถ้าช่องทางใช้สีเดียวกัน สองอย่างก็อ่านเหมือนเป็นเรื่องเดียวกัน ค่าที่ใช้
+     เป็นคู่เดียวกับ --change-edit ซึ่งวัดคอนทราสต์มาแล้วทั้งสองธีม */
+  --booking: #1e4fb8;
   /* ประวัติการใช้งาน: ค่าเดิม (ขีดฆ่า) · ค่าใหม่ · คำว่า "แก้". AA on --paper in
      both themes: 5.47 / 5.85 / 6.86 here, 7.72 / 9.67 / 8.89 in dark. */
   --change-before: #b23a48;
@@ -95,6 +101,7 @@ html[data-theme='dark'] {
      them. On --surface and --paper: 8.87/9.73 and 4.93/5.41. */
   --expense-group: #8cc4de;
   --money-source: #a878c4;
+  --booking: #8db4ff;
   --change-before: #f08a96;
   --change-after: #8fcb7a;
   --change-edit: #8db4ff;

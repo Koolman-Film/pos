@@ -25,6 +25,8 @@ export type AppointmentTicket = {
   model: string;
   plate: string;
   serviceType: string;
+  /** จองผ่าน — เดินทางไปถึงการ์ดนัดหมายพร้อมกับแถว */
+  bookingChannel?: string;
   status: string;
   categories: string[];
   products: string[];
@@ -81,6 +83,7 @@ export function buildAppointments<T extends AppointmentTicket>(
       model: t.model,
       plate: t.plate,
       serviceType: t.serviceType,
+      bookingChannel: t.bookingChannel,
       categories: t.categories,
       products: t.products,
       dropOff: t.dropOff as Date,
