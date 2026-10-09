@@ -278,6 +278,8 @@ export function RevenueModule({
         ช่องทาง: l.channel,
         ชนิดสินค้า: l.category,
         สินค้า: l.product,
+        // ว่างเมื่อไม่มี — คอลัมน์ที่กรองหาแถวที่ยังมีงานค้างให้ตามต่อได้
+        สินค้าที่สนใจ: l.interested,
         สถานะงาน: l.status,
         ยอดขาย: l.amount,
         ...(canSeeCost ? { ต้นทุน: l.cost, กำไรขั้นต้น: l.amount - l.cost } : {}),
@@ -701,7 +703,19 @@ export function RevenueModule({
                     </div>
                   </td>
                   <td className="py-2">{l.category}</td>
-                  <td className="py-2">{l.product}</td>
+                  <td className="py-2">
+                    {l.product}
+                    {/*
+                      สินค้าที่สนใจ อยู่ใต้ของที่ขายได้ ไม่ใช่คอลัมน์ใหม่ —
+                      ส่วนใหญ่ว่าง คอลัมน์ที่ว่างเก้าในสิบแถวกินความกว้างของ
+                      ตารางไปเปล่า ๆ และดันคอลัมน์เงินให้แคบลง
+                    */}
+                    {l.interested && (
+                      <div className="text-xs" style={{ color: '#8A5A12' }}>
+                        สนใจ: {l.interested}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-2 text-right font-semibold">{fmt(l.amount)}</td>
                   <td className="py-2 text-xs">
                     {l.taxInvoiceNo ? (
@@ -773,7 +787,10 @@ export function RevenueModule({
                             <td>{r.line.car || '-'}</td>
                             <td>{r.line.bookingChannel || '-'}</td>
                             <td>{r.line.category}</td>
-                            <td>{r.line.product}</td>
+                            <td>
+                              {r.line.product}
+                              {r.line.interested ? ` + (สนใจ: ${r.line.interested})` : ''}
+                            </td>
                             <td style={{ textAlign: 'right' }}>{fmt(r.line.amount)}</td>
                             <td>{r.line.payment?.status ?? '-'}</td>
                             <td style={{ textAlign: 'right' }}>{r.paid ? fmt(r.paid) : ''}</td>
