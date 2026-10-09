@@ -100,7 +100,7 @@ export default async function DashboardPage({
         supabase
           .from('tickets')
           .select(
-            'id, shop_id, customer_name, plate, brand, model, service_type, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, interested, sold_price, discount_type, discount_value, revenue_kind), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
+            'id, shop_id, customer_name, plate, brand, model, service_type, booking_channel, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, interested, sold_price, discount_type, discount_value, revenue_kind), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
           )
           // Soft-deleted tickets (migration 0013) are out of every figure on this
           // screen — revenue, job counts, the calendar and the bookings window.
@@ -270,6 +270,7 @@ export default async function DashboardPage({
     brand: t.brand,
     model: t.model,
     serviceType: t.service_type,
+    bookingChannel: t.booking_channel ?? '',
     status: t.status,
     // 'รับแทน' = the customer paid here for another Finnix shop's job, so the
     // money is held, not earned (migration 0031).
@@ -805,6 +806,7 @@ export default async function DashboardPage({
     model: t.model,
     plate: t.plate,
     serviceType: t.serviceType,
+    bookingChannel: t.bookingChannel,
     categories: t.categories,
     products: t.products,
     status: t.status,
