@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { AttachmentField } from '@/components/tickets/detail/AttachmentField';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
@@ -92,6 +93,7 @@ function emptyPolicy(t: Ticket, plan?: InsurancePlan): InsurancePolicy {
     paidAmount: 0,
     paidAt: '',
     paidMethod: '',
+    paidAttachments: [],
     claims: [],
   };
 }
@@ -99,6 +101,7 @@ function emptyPolicy(t: Ticket, plan?: InsurancePlan): InsurancePolicy {
 export function InsuranceSection({
   t,
   payAccounts = [],
+  attachmentUrlAction,
   policies,
   forPlate,
   plans,
@@ -111,6 +114,8 @@ export function InsuranceSection({
   t: Ticket;
   /** แหล่งเงินของสาขานี้ — where the premium is received (0071). */
   payAccounts?: PayAccount[];
+  /** เปิดดูสลิปที่แนบไว้ — ไฟล์อยู่ใน bucket ส่วนตัว ต้องขอลิงก์ชั่วคราวจากเซิร์ฟเวอร์ */
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
   /**
    * From the SERVER copy of the ticket, like the service visits: the form seeds
    * its draft from props once, so a policy saved through `router.refresh()`
@@ -571,11 +576,30 @@ export function InsuranceSection({
                 </option>
               ))}
             </select>
-            <p className="text-xs" style={{ color: premiumDue > 0 ? '#8A5A12' : '#4C7A3E' }}>
+            <p className="text-xs mb-2" style={{ color: premiumDue > 0 ? '#8A5A12' : '#4C7A3E' }}>
               {premiumDue > 0
                 ? `ยังค้างค่าประกัน ${fmt(premiumDue)} — ยอดที่รับแล้วจะเข้ายอดขายตามวันที่รับเงิน`
                 : 'รับเงินครบแล้ว'}
             </p>
+            {/*
+              หลักฐานการรับเงิน — ที่เดียวกับการรับเงินของใบงาน (ร้านขอ 9 ต.ค. 2569).
+
+              ค่าประกันมักโอนเข้ามาหลังปิดงานไปแล้ว มันจึงเป็นก้อนที่อยู่ไกล
+              จากใบงานที่สุด และเป็นก้อนเดียวที่ไม่มีหลักฐานผูกไว้ ตอนกระทบยอด
+              ปลายเดือนจึงต้องไปไล่หาสลิปจากแชทเอาเอง
+
+              ไฟล์ขึ้นไปทันทีที่เลือก ไม่ได้รอกดบันทึก — เหมือน AttachmentField
+              ที่อื่นทุกที่ สลิปจากกล้องมือถือใหญ่เกินกว่าจะเดินทางไปกับ
+              Server Action
+            */}
+            <AttachmentField
+              label="แนบหลักฐานการรับเงิน"
+              paths={draft.paidAttachments ?? []}
+              onChange={(paths) => set('paidAttachments', paths)}
+              folder={t.shop}
+              urlAction={attachmentUrlAction}
+              emptyHint="ยังไม่ได้แนบสลิป"
+            />
           </div>
 
           <label className={labelCls} style={{ color: 'var(--ink-soft)' }}>

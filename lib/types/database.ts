@@ -454,6 +454,7 @@ export type Database = {
           notes: string
           paid_amount: number
           paid_at: string | null
+          paid_attachments: string[]
           paid_method: string
           plan_name: string
           plate: string
@@ -473,6 +474,7 @@ export type Database = {
           notes?: string
           paid_amount?: number
           paid_at?: string | null
+          paid_attachments?: string[]
           paid_method?: string
           plan_name?: string
           plate?: string
@@ -492,6 +494,7 @@ export type Database = {
           notes?: string
           paid_amount?: number
           paid_at?: string | null
+          paid_attachments?: string[]
           paid_method?: string
           plan_name?: string
           plate?: string

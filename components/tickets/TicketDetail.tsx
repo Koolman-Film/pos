@@ -1532,6 +1532,7 @@ export function TicketDetail({
                                 onDelete={deleteInsurancePolicy}
                                 onPrint={printInsuranceReceipt}
                                 payAccounts={payAccounts}
+                                attachmentUrlAction={attachmentUrlAction}
                                 onPrintClaim={printInsuranceClaim}
                               />
                             )
