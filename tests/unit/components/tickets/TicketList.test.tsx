@@ -169,3 +169,49 @@ describe('TicketList — วันที่รับงาน และ วั�
     expect(line).toBeInTheDocument();
   });
 });
+
+/**
+ * ป้าย "ยังไม่แนบหลักฐาน" บนแถว (ร้านขอ 9 ต.ค. 2569).
+ *
+ * "ป้องกันการลืม และช่วยให้ตรวจสอบย้อนหลังได้สะดวก" — คำถาม "ใบไหนรับเงินแล้ว
+ * แต่ยังไม่มีสลิป" เคยตอบได้ด้วยการเปิดใบงานทีละใบเท่านั้น
+ */
+describe('TicketList — ยังไม่แนบหลักฐานการรับเงิน', () => {
+  const withPayments = (payments: { amount: number; attachments?: string[] }[]) => ({
+    ...tickets[0],
+    dropOffDateObj: new Date(),
+    pickupDateObj: new Date(),
+    payments,
+  });
+
+  const renderRow = (payments: { amount: number; attachments?: string[] }[]) =>
+    render(
+      <TicketList
+        tickets={[withPayments(payments)]}
+        statuses={statuses}
+        canDo={() => true}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
+    );
+
+  it('รับเงินแล้วไม่มีสลิป ขึ้นป้าย', () => {
+    renderRow([{ amount: 5000 }]);
+    expect(screen.getByText('ยังไม่แนบหลักฐาน')).toBeInTheDocument();
+  });
+
+  it('มีสลิปครบแล้ว ไม่มีป้าย', () => {
+    renderRow([{ amount: 5000, attachments: ['cm/slip.jpg'] }]);
+    expect(screen.queryByText('ยังไม่แนบหลักฐาน')).toBeNull();
+  });
+
+  it('ยังไม่ได้รับเงินเลย ไม่มีป้าย', () => {
+    // ป้ายที่ขึ้นตั้งแต่ยังไม่มีอะไรให้ลืม คือป้ายที่อยู่ตลอดเวลาจนไม่มีใครอ่าน
+    renderRow([]);
+    expect(screen.queryByText('ยังไม่แนบหลักฐาน')).toBeNull();
+  });
+
+  it('ขาดหลายแถว บอกจำนวนไปด้วย', () => {
+    renderRow([{ amount: 3000 }, { amount: 2000, attachments: ['cm/a.jpg'] }, { amount: 1000 }]);
+    expect(screen.getByText(/ยังไม่แนบหลักฐาน/)).toHaveTextContent('2');
+  });
+});
