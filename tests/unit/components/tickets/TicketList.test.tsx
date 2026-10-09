@@ -215,3 +215,31 @@ describe('TicketList — ยังไม่แนบหลักฐานกา�
     expect(screen.getByText(/ยังไม่แนบหลักฐาน/)).toHaveTextContent('2');
   });
 });
+
+/**
+ * จองผ่าน บนแถว (ร้านขอ 9 ต.ค. 2569).
+ *
+ * "เพื่อให้รู้ว่าลูกค้าแต่ละรายมาจากไหน" — ร้านจ่ายค่าโฆษณาหลายทาง และคำถามว่า
+ * ทางไหนได้ผลเริ่มจากการเห็นมันติดอยู่กับงานจริง ไม่ใช่ต้องเปิดใบงานทีละใบ
+ */
+describe('TicketList — จองผ่าน', () => {
+  const renderWith = (bookingChannel?: string) =>
+    render(
+      <TicketList
+        tickets={[{ ...tickets[0], bookingChannel }]}
+        statuses={statuses}
+        canDo={() => true}
+        accessibleShops={[{ id: 'cm', name: 'CM' }]}
+      />,
+    );
+
+  it('ขึ้นต่อท้ายเลขที่ใบงาน', () => {
+    renderWith('Walk-in');
+    expect(screen.getAllByText(/จองผ่าน Walk-in/).length).toBeGreaterThan(0);
+  });
+
+  it('ใบที่ยังไม่ได้ระบุ ไม่ขึ้นตัวคั่นลอย ๆ', () => {
+    renderWith('');
+    expect(screen.queryByText(/จองผ่าน/)).toBeNull();
+  });
+});
