@@ -43,6 +43,8 @@ export function PaymentsSection({
     แล้วตั้งใจจะแนบทีหลังจึงลืมได้ฟรี ๆ
   */
   const missing = countMissingEvidence(t.payments);
+  /** ยอดที่รับมาเกินกว่าที่ต้องเก็บ — 0 เมื่อพอดีหรือยังขาด */
+  const over = Math.max(paid - total, 0);
 
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
@@ -170,6 +172,19 @@ export function PaymentsSection({
         สีเหลืองไม่ใช่สีแดง: ยังไม่แนบสลิปไม่ได้แปลว่าบันทึกผิด แปลว่ายังทำไม่
         เสร็จ — สีแดงในแอปนี้แปลว่ามีอะไรไม่ถูกต้อง
       */}
+      {over > 0 && (
+        <p
+          className="text-xs mt-3 px-2.5 py-2 rounded-lg flex items-start gap-1.5"
+          style={{ background: '#FBF1DA', color: '#8A5A12' }}
+          role="alert"
+        >
+          <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+          <span>
+            รับเงินมาเกินยอดสุทธิ {fmt(over)} — ตรวจยอดที่กรอกอีกครั้ง
+            หรือถ้ารับเกินจริงต้องคืนลูกค้า
+          </span>
+        </p>
+      )}
       {missing > 0 && (
         <p
           className="text-xs mt-3 px-2.5 py-2 rounded-lg flex items-start gap-1.5"
@@ -186,11 +201,25 @@ export function PaymentsSection({
         <span style={{ color: 'var(--ink-soft)' }}>
           ยอดสุทธิ {fmt(total)} &middot; ชำระแล้ว {fmt(paid)}
         </span>
+        {/*
+          รับเกินไม่ใช่ "ครบ" (ร้านแจ้ง 9 ต.ค. 2569).
+
+          เดิมเทียบแค่ total - paid <= 0 ใบที่รับเงินมา 34,400 สำหรับงาน 6,400
+          จึงขึ้นว่า "ชำระครบแล้ว" เหมือนใบที่รับมาพอดี — พิมพ์ผิดหนึ่งหลัก
+          กลายเป็นสิ่งที่หน้าจอรับรองว่าถูกต้อง
+
+          ส่วนเกินเป็นได้สองอย่าง: พิมพ์ผิด หรือรับเกินจริงแล้วต้องคืนลูกค้า
+          ทั้งสองอย่างต้องมีคนตัดสิน ระบบจึงบอกจำนวนแล้วหยุด ไม่เดาแทน
+        */}
         <span
           className="font-semibold"
-          style={{ color: total - paid <= 0 ? '#4C7A3E' : '#B23A48' }}
+          style={{ color: over > 0 ? '#8A5A12' : total - paid <= 0 ? '#4C7A3E' : '#B23A48' }}
         >
-          {total - paid <= 0 ? 'ชำระครบแล้ว' : `คงเหลือ ${fmt(total - paid)}`}
+          {over > 0
+            ? `รับเงินเกิน ${fmt(over)}`
+            : total - paid <= 0
+              ? 'ชำระครบแล้ว'
+              : `คงเหลือ ${fmt(total - paid)}`}
         </span>
       </div>
     </div>

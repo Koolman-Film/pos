@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // TicketDetail calls useRouter(); there is no app-router context under jsdom, so
@@ -1433,5 +1433,73 @@ describe('TicketDetail — เลขที่เอกสาร PEAK ทีล�
     fireEvent.change(field(1), { target: { value: 'IV6809-0099' } });
     fireEvent.blur(field(1));
     await vi.waitFor(() => expect(p.finnixDocAction).toHaveBeenCalled());
+  });
+});
+
+/**
+ * พิมพ์ = บันทึกก่อนเสมอ (ร้านแจ้ง 9 ต.ค. 2569).
+ *
+ * "พนักงานกรอกข้อมูลไปแล้วกดพิมพ์เอกสาร โดยที่ยังไม่ได้มีการบันทึกข้อมูล ทำให้มี
+ * เอกสารออกมาถูกต้อง แต่ในระบบไม่มีข้อมูลจริง" — กระดาษที่ยื่นให้ลูกค้าคือสิ่งที่
+ * ยืนยันกับคนนอก ระบบที่ไม่มีข้อมูลนั้นคือระบบที่เถียงกับกระดาษของตัวเอง
+ */
+describe('TicketDetail — บันทึกก่อนพิมพ์', () => {
+  const sold = {
+    category: 'ฟิล์มกรองแสง',
+    booked: '',
+    bookedPrice: 0,
+    sold: 'ฟิล์ม 3M CR70',
+    soldPrice: 6400,
+    positions: [],
+  };
+
+  /** jsdom ไม่มี window.print จริง — ดักไว้เพื่อดูว่าถูกเรียกหรือไม่ */
+  function stubPrint() {
+    const print = vi.fn();
+    Object.defineProperty(window, 'print', { value: print, writable: true });
+    return print;
+  }
+
+  it('แก้ข้อมูลแล้วกดพิมพ์ ระบบบันทึกให้ก่อน', async () => {
+    const user = userEvent.setup();
+    const print = stubPrint();
+    const props = baseProps(makeTicket({ items: [sold] }));
+    render(<TicketDetail {...props} />);
+
+    // แก้อะไรสักอย่างให้ฟอร์มเป็น dirty — เหมือนที่พนักงานทำก่อนกดพิมพ์
+    await user.type(screen.getByLabelText('หมายเหตุสำหรับ ฟิล์มกรองแสง'), 'ลูกค้าขอด่วน');
+
+    await user.click(screen.getByRole('button', { name: /ใบงานขาย/ }));
+    expect(props.saveAction).toHaveBeenCalledTimes(1);
+    // และพิมพ์จริงหลังจากที่บันทึกผ่านแล้ว
+    await waitFor(() => expect(print).toHaveBeenCalled());
+  });
+
+  it('บันทึกไม่ผ่าน = ไม่พิมพ์', async () => {
+    const user = userEvent.setup();
+    const print = stubPrint();
+    const props = {
+      ...baseProps(makeTicket({ items: [sold] })),
+      saveAction: vi.fn(async () => ({ ok: false, error: 'เน็ตหลุด' })),
+    };
+    render(<TicketDetail {...props} />);
+
+    await user.type(screen.getByLabelText('หมายเหตุสำหรับ ฟิล์มกรองแสง'), 'ลูกค้าขอด่วน');
+    await user.click(screen.getByRole('button', { name: /ใบงานขาย/ }));
+
+    expect(props.saveAction).toHaveBeenCalledTimes(1);
+    // เอกสารของงานที่ระบบไม่มี คือสิ่งที่ทั้งเรื่องนี้พยายามกันไม่ให้เกิด
+    expect(print).not.toHaveBeenCalled();
+    expect(await screen.findByText(/เน็ตหลุด/)).toBeInTheDocument();
+  });
+
+  it('ไม่ได้แก้อะไร กดพิมพ์ได้เลย ไม่บันทึกซ้ำ', async () => {
+    const user = userEvent.setup();
+    stubPrint();
+    const props = baseProps(makeTicket({ items: [sold] }));
+    render(<TicketDetail {...props} />);
+
+    await user.click(screen.getByRole('button', { name: /ใบงานขาย/ }));
+    expect(props.saveAction).not.toHaveBeenCalled();
   });
 });
