@@ -228,6 +228,13 @@ export type InsurancePolicy = {
   paidAt: string;
   /** แหล่งเงินที่เงินเข้า — matched by name, like every other payment. */
   paidMethod: string;
+  /**
+   * หลักฐานการรับเงินค่าประกัน — storage path ไม่ใช่ชื่อไฟล์ (migration 0083).
+   *
+   * การรับเงินทุกทางในระบบแนบสลิปได้อยู่แล้ว ยกเว้นก้อนนี้ ซึ่งเป็นก้อนที่มัก
+   * โอนเข้ามาทีหลังสุด — ตอนกระทบยอดจึงเป็นก้อนเดียวที่ต้องไปไล่หาสลิปจากแชท
+   */
+  paidAttachments: string[];
   claims: InsuranceClaim[];
 };
 

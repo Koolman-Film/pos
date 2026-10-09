@@ -450,6 +450,7 @@ describe('TicketDetail — ใบเคลมประกัน ดึงข้�
     paidAmount: 0,
     paidAt: '',
     paidMethod: '',
+    paidAttachments: [],
     claims: [
       {
         id: 9,
@@ -1144,6 +1145,7 @@ describe('TicketDetail — ค่าประกันรับเงินข�
     paidAmount: 0,
     paidAt: '',
     paidMethod: '',
+    paidAttachments: [],
     claims: [],
     ...over,
   });

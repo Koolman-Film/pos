@@ -549,6 +549,7 @@ type InsurancePolicyRow = {
   paid_amount: number | null;
   paid_at: string | null;
   paid_method: string | null;
+  paid_attachments: string[] | null;
   starts_at: string | null;
   ends_at: string | null;
   notes: string;
@@ -572,7 +573,7 @@ type InsurancePolicyRow = {
 
 const POLICY_SELECT =
   'id, ticket_id, plate, plan_name, price, big_pieces, small_pieces, terms, ' +
-  'sold_at, starts_at, ends_at, notes, paid_amount, paid_at, paid_method, ' +
+  'sold_at, starts_at, ends_at, notes, paid_amount, paid_at, paid_method, paid_attachments, ' +
   'insurance_claims(id, claimed_at, big_used, small_used, detail, technician, ' +
   'received_at, received_time, delivered_at, delivered_time, service_visit_id, service_visits(visit_no))';
 
@@ -593,6 +594,7 @@ function toPolicy(p: InsurancePolicyRow): InsurancePolicy {
     paidAmount: Number(p.paid_amount || 0),
     paidAt: p.paid_at ?? '',
     paidMethod: p.paid_method ?? '',
+    paidAttachments: p.paid_attachments ?? [],
     claims: (p.insurance_claims ?? [])
       .map((c) => ({
         id: c.id,

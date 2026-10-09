@@ -58,6 +58,7 @@ const policy = (over: Partial<InsurancePolicy> = {}): InsurancePolicy => ({
   paidAmount: 0,
   paidAt: '',
   paidMethod: '',
+  paidAttachments: [],
   claims: [],
   ...over,
 });
@@ -267,5 +268,35 @@ describe('InsuranceSection', () => {
       forPlate: [policy(), policy({ id: 9, ticketId: 'JT-CM-00100', planName: 'ประกันปีก่อน' })],
     });
     expect(screen.getByText(/เคยทำประกันจากใบงานอื่นอีก 1 ฉบับ/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * หลักฐานการรับเงินค่าประกัน (ร้านขอ 9 ต.ค. 2569).
+ *
+ * การรับเงินทุกทางในระบบแนบสลิปได้ ยกเว้นก้อนนี้ ซึ่งเป็นก้อนที่มักโอนเข้ามา
+ * ทีหลังสุด — ตอนกระทบยอดปลายเดือนจึงเป็นก้อนเดียวที่ต้องไปไล่หาสลิปจากแชท
+ */
+describe('InsuranceSection — แนบหลักฐานการรับเงิน', () => {
+  it('มีช่องแนบไฟล์อยู่ในกล่องการรับเงินค่าประกัน', async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(screen.getByRole('button', { name: /บันทึกประกันฉบับใหม่/ }));
+    expect(screen.getByText('แนบหลักฐานการรับเงิน')).toBeInTheDocument();
+    expect(screen.getByText('ยังไม่ได้แนบสลิป')).toBeInTheDocument();
+  });
+
+  it('ไฟล์ที่แนบไว้แล้วขึ้นมาให้เห็น และส่งต่อไปตอนบันทึก', async () => {
+    const user = userEvent.setup();
+    const saved = policy({ paidAttachments: ['cm/slip-ประกัน.jpg'] });
+    const { onSave } = renderSection({ policies: [saved] });
+
+    await user.click(screen.getByRole('button', { name: /แก้ไข/ }));
+    expect(screen.getByText('slip-ประกัน.jpg')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^บันทึกประกัน$/ }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    // ไฟล์ต้องเดินทางไปกับกรมธรรม์ ไม่ใช่หายไปเพราะไม่มีใครส่งต่อ
+    expect(onSave.mock.calls[0][0].paidAttachments).toEqual(['cm/slip-ประกัน.jpg']);
   });
 });

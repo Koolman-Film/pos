@@ -37,6 +37,7 @@ const policy = (over: Partial<InsurancePolicy> = {}): InsurancePolicy => ({
   paidAmount: 0,
   paidAt: '',
   paidMethod: '',
+  paidAttachments: [],
   claims: [],
   ...over,
 });
