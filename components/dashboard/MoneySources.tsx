@@ -70,50 +70,65 @@ export function MoneySources({ data }: { data: MoneyOverview }) {
           การจัดการเงิน/บัญชี
         </p>
       )}
-      {branches.map((b, i) => (
-        /*
+      {/*
+        จอกว้าง = สาขาไหลสองคอลัมน์ (ร้านขอ 8 ต.ค. 2569).
+
+        หกสาขาเรียงลงมาทางเดียวทำให้การ์ดนี้สูง 800px และเป็นตัวกำหนดความสูงของ
+        ทั้งแถว — การ์ดอีกสองใบข้าง ๆ มีเนื้อหาสิบบรรทัด แต่ถูกยืดตามไปด้วย
+        พอแบ่งสองคอลัมน์ การ์ดก็เตี้ยลงครึ่งหนึ่ง และแถวทั้งแถวเตี้ยตาม
+
+        เส้นคั่นเปลี่ยนจาก "ทุกบล็อกยกเว้นอันแรก" เป็น "ทุกบล็อก" เมื่อแบ่ง
+        คอลัมน์ — เส้นบนของบล็อกแรกในคอลัมน์ที่สองไม่ได้คั่นอะไรเลย แต่ตัดสิน
+        จากลำดับอย่างเดียวบอกไม่ได้ว่าบล็อกไหนอยู่หัวคอลัมน์ไหน จึงให้ทุกอัน
+        มีเส้นเท่ากันแทนที่จะมีอันหนึ่งผิด
+      */}
+      <div className="grid grid-cols-1 2xl:grid-cols-2 gap-x-5">
+        {branches.map((b, i) => (
+          /*
           Each branch is a block with a rule above it and its own tinted
           heading. Five branches of four accounts is twenty near-identical rows,
           and with only whitespace between them the eye loses which total belongs
           to which shop — the rule is what makes the grouping readable at a
           glance rather than something to be counted out.
         */
-        <div
-          key={b.shop}
-          style={
-            i === 0 ? undefined : { borderTop: '1px solid rgba(255,255,255,.5)', paddingTop: 10 }
-          }
-        >
           <div
-            className="flex items-baseline justify-between gap-2 mb-1.5 px-2 py-1 rounded-lg"
-            style={{ color: 'var(--primary)', background: 'rgba(255,255,255,.55)' }}
+            key={b.shop}
+            className={i === 0 ? '' : 'mt-2.5 2xl:mt-0'}
+            style={
+              i === 0 ? undefined : { borderTop: '1px solid rgba(255,255,255,.5)', paddingTop: 10 }
+            }
           >
-            <p className="text-xs font-bold">{shortShopName(b.name)}</p>
-            <p className="text-xs font-bold">{fmt(b.total)}</p>
-          </div>
-          <div className="flex flex-col gap-1">
-            {b.accounts.map((a) => (
-              <div
-                key={a.id}
-                className="flex items-baseline justify-between gap-2 text-xs"
-                style={{ color: 'var(--primary)' }}
-              >
-                <span className="min-w-0" style={{ opacity: 0.85 }}>
-                  <i
-                    className={`fa-solid ${KIND_ICON[a.kind] ?? 'fa-sack-dollar'} mr-1.5`}
-                    style={{ opacity: 0.7 }}
-                  ></i>
-                  {a.name}
-                  {/* The account number is what makes a bank row identifiable at
+            <div
+              className="flex items-baseline justify-between gap-2 mb-1.5 px-2 py-1 rounded-lg"
+              style={{ color: 'var(--primary)', background: 'rgba(255,255,255,.55)' }}
+            >
+              <p className="text-xs font-bold">{shortShopName(b.name)}</p>
+              <p className="text-xs font-bold">{fmt(b.total)}</p>
+            </div>
+            <div className="flex flex-col gap-1">
+              {b.accounts.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-baseline justify-between gap-2 text-xs"
+                  style={{ color: 'var(--primary)' }}
+                >
+                  <span className="min-w-0" style={{ opacity: 0.85 }}>
+                    <i
+                      className={`fa-solid ${KIND_ICON[a.kind] ?? 'fa-sack-dollar'} mr-1.5`}
+                      style={{ opacity: 0.7 }}
+                    ></i>
+                    {a.name}
+                    {/* The account number is what makes a bank row identifiable at
                       a glance when a branch keeps two accounts at one bank. */}
-                  {a.accountNo && <span style={{ opacity: 0.6 }}> · {a.accountNo}</span>}
-                </span>
-                <span className="font-semibold flex-shrink-0">{fmt(a.balance)}</span>
-              </div>
-            ))}
+                    {a.accountNo && <span style={{ opacity: 0.6 }}> · {a.accountNo}</span>}
+                  </span>
+                  <span className="font-semibold flex-shrink-0">{fmt(a.balance)}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
