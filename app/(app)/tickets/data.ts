@@ -81,14 +81,14 @@ type ListRow = {
     discount_type: string | null;
     discount_value: number | null;
   }[];
-  ticket_payments: { amount: number }[];
+  ticket_payments: { amount: number; attachments: string[] | null }[];
   deleted_at: string | null;
   deleted_by: string | null;
 };
 
 const LIST_SELECT =
   'id, shop_id, customer_name, plate, brand, model, phone, color, car_type, booking_channel, service_type, status, tech_by_category, drop_off_date, pickup_date, deleted_at, deleted_by, ' +
-  'ticket_items(category, sold, booked, sold_price, discount_type, discount_value), ticket_payments(amount)';
+  'ticket_items(category, sold, booked, sold_price, discount_type, discount_value), ticket_payments(amount, attachments)';
 
 export async function loadTicketList(): Promise<TicketListRow[]> {
   const supabase = await createClient();
@@ -128,7 +128,11 @@ export async function loadTicketList(): Promise<TicketListRow[]> {
       discountType: (i.discount_type as 'percent' | 'amount' | null) || undefined,
       discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
     })),
-    payments: (t.ticket_payments ?? []).map((p) => ({ amount: Number(p.amount || 0) })),
+    payments: (t.ticket_payments ?? []).map((p) => ({
+      amount: Number(p.amount || 0),
+      // รายการใบงานติดป้าย "ยังไม่แนบหลักฐาน" จากค่านี้ — ต้องโหลดมาด้วย
+      attachments: p.attachments ?? [],
+    })),
     dropOffDateObj: t.drop_off_date ? new Date(t.drop_off_date) : null,
     pickupDateObj: t.pickup_date ? new Date(t.pickup_date) : null,
     techByCategory: (t.tech_by_category as Record<string, string[]>) || {},
@@ -180,7 +184,11 @@ export async function loadDeletedTicketList(): Promise<TicketListRow[]> {
       discountType: (i.discount_type as 'percent' | 'amount' | null) || undefined,
       discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
     })),
-    payments: (t.ticket_payments ?? []).map((p) => ({ amount: Number(p.amount || 0) })),
+    payments: (t.ticket_payments ?? []).map((p) => ({
+      amount: Number(p.amount || 0),
+      // รายการใบงานติดป้าย "ยังไม่แนบหลักฐาน" จากค่านี้ — ต้องโหลดมาด้วย
+      attachments: p.attachments ?? [],
+    })),
     dropOffDateObj: t.drop_off_date ? new Date(t.drop_off_date) : null,
     pickupDateObj: t.pickup_date ? new Date(t.pickup_date) : null,
     techByCategory: (t.tech_by_category as Record<string, string[]>) || {},

@@ -385,7 +385,13 @@ export type TicketListRow = {
     discountType?: 'percent' | 'amount';
     discountValue?: number;
   }[];
-  payments: { amount: number }[];
+  /**
+   * ยอดที่รับแล้ว และไฟล์แนบของแต่ละแถว.
+   *
+   * `attachments` ไม่ได้ใช้คำนวณเงิน แต่รายการใบงานติดป้าย "ยังไม่แนบหลักฐาน"
+   * จากมัน — คำถาม "ใบไหนยังขาดสลิป" ต้องตอบได้โดยไม่ต้องเปิดทีละใบ
+   */
+  payments: { amount: number; attachments?: string[] }[];
   dropOffDateObj?: Date | null;
   pickupDateObj?: Date | null;
   techByCategory?: Record<string, string[]>;

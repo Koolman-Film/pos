@@ -67,3 +67,43 @@ describe('PaymentsSection — วันที่รับเงิน', () => {
     expect(dateField(2)).toHaveValue('2026-06-01');
   });
 });
+
+/**
+ * เตือนเมื่อรับเงินแล้วแต่ยังไม่แนบหลักฐาน (ร้านขอ 9 ต.ค. 2569).
+ *
+ * "ป้องกันการลืม" — ช่องแนบไฟล์มีมาตั้งแต่ 0018 แต่ไม่เคยมีอะไรบอกว่าแถวไหน
+ * ยังว่าง คนกรอกยอดแล้วตั้งใจจะแนบทีหลังจึงลืมได้ฟรี ๆ
+ */
+describe('PaymentsSection — หลักฐานการรับเงิน', () => {
+  it('แถวที่รับเงินแล้วไม่มีไฟล์ ขึ้นคำเตือนที่แถวนั้น', () => {
+    renderSection([row({ attachments: [] })]);
+    expect(screen.getByText('ยังไม่ได้แนบหลักฐานการรับเงิน')).toBeInTheDocument();
+  });
+
+  it('แนบแล้วคำเตือนหายไป', () => {
+    renderSection([row({ attachments: ['cm/slip.jpg'] })]);
+    expect(screen.queryByText('ยังไม่ได้แนบหลักฐานการรับเงิน')).toBeNull();
+  });
+
+  it('แถวเปล่าไม่เตือน', () => {
+    // คำเตือนที่ขึ้นก่อนจะมีอะไรให้ลืม คือคำเตือนที่ติดอยู่ตลอดจนไม่มีใครอ่าน
+    renderSection([row({ amount: 0, attachments: [] })]);
+    expect(screen.queryByText('ยังไม่ได้แนบหลักฐานการรับเงิน')).toBeNull();
+  });
+
+  it('สรุปจำนวนแถวที่ยังขาดไว้ใต้ตาราง', () => {
+    renderSection([
+      row({ uid: 'a', attachments: [] }),
+      row({ uid: 'b', attachments: ['cm/slip.jpg'] }),
+      row({ uid: 'c', attachments: [] }),
+    ]);
+    expect(
+      screen.getByText(/มีการรับเงิน 2 รายการที่ยังไม่ได้แนบหลักฐานการรับเงิน/),
+    ).toBeInTheDocument();
+  });
+
+  it('แนบครบทุกแถว ไม่มีบรรทัดสรุป', () => {
+    renderSection([row({ attachments: ['cm/slip.jpg'] })]);
+    expect(screen.queryByText(/ยังไม่ได้แนบหลักฐานการรับเงิน/)).toBeNull();
+  });
+});

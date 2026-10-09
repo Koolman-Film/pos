@@ -300,3 +300,20 @@ describe('InsuranceSection — แนบหลักฐานการรับ�
     expect(onSave.mock.calls[0][0].paidAttachments).toEqual(['cm/slip-ประกัน.jpg']);
   });
 });
+
+describe('InsuranceSection — เตือนเมื่อรับเงินแล้วไม่มีหลักฐาน', () => {
+  it('รับค่าประกันไว้แล้วแต่ยังไม่แนบ ขึ้นคำเตือน', async () => {
+    const user = userEvent.setup();
+    renderSection({ policies: [policy({ paidAmount: 3000, paidAttachments: [] })] });
+    await user.click(screen.getByRole('button', { name: /แก้ไข/ }));
+    expect(screen.getByText('ยังไม่ได้แนบหลักฐานการรับเงิน')).toBeInTheDocument();
+  });
+
+  it('ยังไม่ได้รับเงิน ไม่เตือน — บอกแค่ว่ายังไม่มีไฟล์', async () => {
+    const user = userEvent.setup();
+    renderSection({ policies: [policy({ paidAmount: 0, paidAttachments: [] })] });
+    await user.click(screen.getByRole('button', { name: /แก้ไข/ }));
+    expect(screen.queryByText('ยังไม่ได้แนบหลักฐานการรับเงิน')).toBeNull();
+    expect(screen.getByText('ยังไม่ได้แนบสลิป')).toBeInTheDocument();
+  });
+});
