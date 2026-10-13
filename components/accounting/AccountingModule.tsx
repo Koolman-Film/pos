@@ -1437,7 +1437,17 @@ export function AccountingModule({
               <i className="fa-solid fa-circle-info mr-1"></i>ทุกรายการด้านบนใช้ &quot;จ่ายจาก&quot;
               &quot;สถานะ&quot; และไฟล์แนบเดียวกันตามที่กรอกด้านล่าง
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            {/*
+              สามคอลัมน์บนจอกว้าง (ร้านขอ 13 ต.ค. 2569).
+
+              การ์ดนี้กว้างเต็มหน้าอยู่แล้ว แต่ช่องกรอกยังเรียงสองคอลัมน์
+              ฟอร์มจึงสูงสามแถวและช่องแต่ละช่องกว้าง 720px ทั้งที่เป็นแค่
+              ช่องเลือกกับวันที่ — ความกว้างที่เหลือไม่ได้ทำให้เห็นอะไรเพิ่ม
+
+              วัดแล้วที่ 1700px: 259px → 136px และทุกช่องยังกว้าง 482px ซึ่ง
+              เกินพอสำหรับเนื้อหาที่ยาวที่สุดในนั้น
+            */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   จ่ายจาก
@@ -1491,7 +1501,7 @@ export function AccountingModule({
                 because it decides whether the amount is a cost or a receivable —
                 and it is one answer for the whole document, like the ticket.
               */}
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 xl:col-span-1">
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   ค่าใช้จ่ายนี้เป็นของใคร
                 </label>
@@ -1525,7 +1535,7 @@ export function AccountingModule({
                     : 'นับรวมเป็นค่าใช้จ่ายของสาขาตามปกติ'}
                 </p>
               </div>
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 xl:col-span-1">
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   แนบไฟล์หลักฐานการจ่าย (ใบเสร็จ/สลิป, เลือกได้หลายไฟล์)
                 </label>
