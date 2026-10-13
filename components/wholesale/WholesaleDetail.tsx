@@ -1240,7 +1240,7 @@ export function WholesaleDetail({
 
   return (
     <OptionManageProvider canManage={can('options.manage')}>
-      <div className="max-w-2xl fade-page">
+      <div className="max-w-2xl xl:max-w-[1360px] fade-page">
         <button
           onClick={goBack}
           className="text-sm mb-4 flex items-center gap-2 font-medium"
@@ -1249,32 +1249,48 @@ export function WholesaleDetail({
           <i className="fa-solid fa-arrow-left"></i>กลับไปรายการขายส่ง
         </button>
         <div className="card p-5 sm:p-7">
-          <div className="flex items-start justify-between mb-3">
-            {/*
+          {/*
+            จอกว้าง = ฟอร์มแบ่งสองคอลัมน์ (ร้านขอ 13 ต.ค. 2569).
+
+            ฟอร์มถูกหนีบไว้ที่ 672px ตั้งแต่ต้นแบบ หน้า PO หนึ่งใบจึงยาว 2,400px
+            และต้องเลื่อนตลอดเวลาที่กรอก ทั้งที่จอร้านกว้างพอจะวางสองคอลัมน์
+
+            แบ่งตามเรื่อง ไม่ใช่ตามความสูง: ซ้ายคือ "ของ" (ลูกค้า วันที่เปิด
+            รายการสินค้า หมายเหตุ) ขวาคือ "เงินกับเอกสาร" (วันส่ง กำหนดชำระ งวด
+            บัญชีรับ คืนของ ปรับราคา ยอดรวม การรับชำระ ออกเอกสาร) คนกรอกใบใหม่
+            ทำงานฝั่งซ้ายจนจบก่อน แล้วค่อยข้ามไปขวา
+
+            สามกล่องเรียงต่อกันตามลำดับเดิม ไม่ได้สลับที่กันใน DOM — บนมือถือ
+            ที่กริดไม่ทำงาน ลำดับจึงเหมือนเดิมทุกบรรทัด
+          */}
+          <div className="xl:grid xl:grid-cols-2 xl:gap-x-6 xl:items-start">
+            <div className="min-w-0">
+              <div className="flex items-start justify-between mb-3">
+                {/*
               Which branch the PO belongs to — a choice while it is new, a fact
               once it is saved. Somebody who can see several branches opens POs
               for all of them; before this it silently landed on whichever
               branch sorted first. An existing PO keeps its branch: the number,
               the stock it draws and the customer's paperwork all name it.
             */}
-            {isNew && shops.length > 1 ? (
-              // Buttons, like every other branch choice (ร้านแจ้ง 21 ก.ย. 2569).
-              <ShopButtons
-                label="สาขาที่เปิด PO"
-                shops={shops}
-                value={o.shop}
-                onChange={changeShop}
-              />
-            ) : (
-              <p
-                className="text-xs font-semibold flex items-center gap-1.5"
-                style={{ color: 'var(--primary)' }}
-              >
-                <i className="fa-solid fa-store"></i>
-                {shopName(o.shop, shops)}
-              </p>
-            )}
-            {/*
+                {isNew && shops.length > 1 ? (
+                  // Buttons, like every other branch choice (ร้านแจ้ง 21 ก.ย. 2569).
+                  <ShopButtons
+                    label="สาขาที่เปิด PO"
+                    shops={shops}
+                    value={o.shop}
+                    onChange={changeShop}
+                  />
+                ) : (
+                  <p
+                    className="text-xs font-semibold flex items-center gap-1.5"
+                    style={{ color: 'var(--primary)' }}
+                  >
+                    <i className="fa-solid fa-store"></i>
+                    {shopName(o.shop, shops)}
+                  </p>
+                )}
+                {/*
               สถานะเป็นผลของกิจกรรม ไม่ใช่ช่องให้กรอก (0081).
 
               ฐานข้อมูลคำนวณใหม่ทุกครั้งที่มีอะไรเกิดขึ้นกับ PO ใบนี้ — เพิ่ม
@@ -1285,277 +1301,285 @@ export function WholesaleDetail({
               สองการตัดสินใจที่ยังเป็นของคน — อนุมัติราคา และ ตัดหนี้สูญ — มีปุ่ม
               ของตัวเองอยู่ในหน้านี้
             */}
-            <span
-              aria-label="สถานะของ PO"
-              className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block"
-              style={{ background: st.bg || '#F1EDE7', color: st.text || '#6B5F55' }}
-            >
-              {o.status}
-            </span>
-          </div>
-          <div className="mb-5">
-            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--ink-soft)' }}>
-              ลูกค้า/ร้าน
-            </label>
-            <CustomerPicker
-              customerId={o.customerId}
-              customers={customers}
-              onSelect={(id) => field('customerId', id)}
-              onSaveCustomer={onSaveCustomer}
-            />
-            {/* Only where the branch has a sales team. Most branches sell
+                <span
+                  aria-label="สถานะของ PO"
+                  className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block"
+                  style={{ background: st.bg || '#F1EDE7', color: st.text || '#6B5F55' }}
+                >
+                  {o.status}
+                </span>
+              </div>
+              <div className="mb-5">
+                <label
+                  className="text-xs font-medium block mb-1"
+                  style={{ color: 'var(--ink-soft)' }}
+                >
+                  ลูกค้า/ร้าน
+                </label>
+                <CustomerPicker
+                  customerId={o.customerId}
+                  customers={customers}
+                  onSelect={(id) => field('customerId', id)}
+                  onSaveCustomer={onSaveCustomer}
+                />
+                {/* Only where the branch has a sales team. Most branches sell
                 wholesale through whoever is on the counter, and an empty picker
                 asking for a name nobody has is a field that gets ignored. */}
-            {/* Also shown to a manager when the branch has NO reps yet —
+                {/* Also shown to a manager when the branch has NO reps yet —
                 otherwise a new wholesale branch could never get its first one,
                 which is how Finnix North ended up with two names and no
                 phone numbers that anyone could reach. */}
-            {(branchSales.length > 0 || can('options.manage')) && (
-              <SalesPersonPicker
-                value={o.salesBy ?? ''}
-                shop={o.shop}
-                people={branchSales}
-                canManage={can('options.manage')}
-                onSelect={(name) => field('salesBy', name)}
-                onSavePerson={onSaveSalesPerson}
-                required={branchSales.length > 0}
-                accounts={staffAccounts}
-              />
-            )}
-            {/*
+                {(branchSales.length > 0 || can('options.manage')) && (
+                  <SalesPersonPicker
+                    value={o.salesBy ?? ''}
+                    shop={o.shop}
+                    people={branchSales}
+                    canManage={can('options.manage')}
+                    onSelect={(name) => field('salesBy', name)}
+                    onSavePerson={onSaveSalesPerson}
+                    required={branchSales.length > 0}
+                    accounts={staffAccounts}
+                  />
+                )}
+                {/*
               เปิดแทนได้ ยอดยังเป็นของเซลล์.
 
               The rep is often not the one at the keyboard. Saying plainly that the
               sale follows the name picked here — not the login — is what stops
               the office from crediting itself by accident.
             */}
-            {branchSales.length > 0 && (
-              <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
-                <i className="fa-solid fa-circle-info mr-1"></i>
-                ยอดขายของ PO นี้นับเป็นของพนักงานขายที่เลือก ไม่ใช่คนที่เปิด PO — ถ้าเปิดแทนเซลล์
-                ให้เลือกชื่อเซลล์เจ้าของลูกค้า
-              </p>
-            )}
-            {!isNew && (
-              <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-                <i className="fa-solid fa-user-pen mr-1"></i>
-                เปิด PO โดย {openerName}
-                {o.createdAt ? ` · ${fmtThaiDateLong(new Date(o.createdAt))}` : ''}
-              </p>
-            )}
-          </div>
-          {/*
+                {branchSales.length > 0 && (
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                    <i className="fa-solid fa-circle-info mr-1"></i>
+                    ยอดขายของ PO นี้นับเป็นของพนักงานขายที่เลือก ไม่ใช่คนที่เปิด PO —
+                    ถ้าเปิดแทนเซลล์ ให้เลือกชื่อเซลล์เจ้าของลูกค้า
+                  </p>
+                )}
+                {!isNew && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                    <i className="fa-solid fa-user-pen mr-1"></i>
+                    เปิด PO โดย {openerName}
+                    {o.createdAt ? ` · ${fmtThaiDateLong(new Date(o.createdAt))}` : ''}
+                  </p>
+                )}
+              </div>
+              {/*
             วันที่เปิด PO — today unless somebody says otherwise (ร้านขอ 21 ก.ย.
             2569). A PO agreed on the phone on Friday and typed in on Monday is
             a Friday PO; it used to become a Monday one with no way to correct
             it. The list's period filter and the invoice's reference date both
             read this day.
           */}
-          <div className="mb-5">
-            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-calendar-day mr-1.5"></i>วันที่เปิด PO
-            </label>
-            <ThaiDateInput
-              value={o.openedOn ?? (o.createdAt ? shopDayKey(new Date(o.createdAt)) : todayValue())}
-              onChange={(v) => field('openedOn', v)}
-              ariaLabel="วันที่เปิด PO"
-              className="field text-sm px-3 py-2 w-full"
-            />
-          </div>
-          <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.items)}>
-            <p className="text-xs font-semibold mb-3" style={{ color: PANEL.items.spine }}>
-              <i className="fa-solid fa-boxes-stacked mr-1.5"></i>รายการสินค้า
-            </p>
-            {o.items.map((it, idx) => (
-              <div
-                key={idx}
-                className="rounded-2xl p-3.5 mb-2.5"
-                style={{
-                  border:
-                    it.requestedPrice < it.listPrice
-                      ? '1px solid #C24B57'
-                      : '1px solid var(--line)',
-                }}
-              >
-                <div className="mb-2 flex gap-2 items-start">
-                  <div className="flex-1 min-w-0">
-                    <ProductPicker
-                      value={it.name}
-                      label="สินค้าในรายการ"
-                      placeholder="เลือกสินค้า... หรือพิมพ์ชื่อ/ชื่อย่อเพื่อค้นหา"
-                      options={
-                        // A product the branch no longer stocks still has to show
-                        // on the PO that sold it, or editing an old PO would
-                        // silently blank the line.
-                        it.name && !productOptions.some((p) => p.name === it.name)
-                          ? [...productOptions, { id: `kept-${idx}`, name: it.name, muted: true }]
-                          : productOptions
-                      }
-                      className="field text-sm px-3 py-2 w-full font-medium"
-                      onChange={(name) => selectProduct(idx, name)}
-                    />
-                  </div>
-                  <button
-                    onClick={() => removeItem(idx)}
-                    aria-label={`ลบรายการสินค้าที่ ${idx + 1}`}
-                    title="ลบรายการนี้"
-                    className="text-sm px-2 py-2 rounded-lg flex-shrink-0"
-                    style={{ color: '#B23A48' }}
+              <div className="mb-5">
+                <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-calendar-day mr-1.5"></i>วันที่เปิด PO
+                </label>
+                <ThaiDateInput
+                  value={
+                    o.openedOn ?? (o.createdAt ? shopDayKey(new Date(o.createdAt)) : todayValue())
+                  }
+                  onChange={(v) => field('openedOn', v)}
+                  ariaLabel="วันที่เปิด PO"
+                  className="field text-sm px-3 py-2 w-full"
+                />
+              </div>
+              <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.items)}>
+                <p className="text-xs font-semibold mb-3" style={{ color: PANEL.items.spine }}>
+                  <i className="fa-solid fa-boxes-stacked mr-1.5"></i>รายการสินค้า
+                </p>
+                {o.items.map((it, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-2xl p-3.5 mb-2.5"
+                    style={{
+                      border:
+                        it.requestedPrice < it.listPrice
+                          ? '1px solid #C24B57'
+                          : '1px solid var(--line)',
+                    }}
                   >
-                    <i className="fa-solid fa-trash"></i>
-                  </button>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      จำนวน
-                    </label>
-                    <input
-                      type="number"
-                      value={it.qty}
-                      onChange={(e) => updateItem(idx, 'qty', e.target.value)}
-                      className="field text-sm px-2.5 py-1.5 w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      ราคามาตรฐาน
-                    </label>
-                    <input
-                      type="number"
-                      value={it.listPrice}
-                      onChange={(e) => updateItem(idx, 'listPrice', e.target.value)}
-                      className="field text-sm px-2.5 py-1.5 w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      ราคาที่เสนอ
-                    </label>
-                    <input
-                      type="number"
-                      value={it.requestedPrice}
-                      onChange={(e) => updateItem(idx, 'requestedPrice', e.target.value)}
-                      className="field text-sm px-2.5 py-1.5 w-full"
-                    />
-                  </div>
-                </div>
-                {it.requestedPrice < it.listPrice && (
-                  <input
-                    placeholder="เหตุผลที่ให้ส่วนลด"
-                    value={it.reason}
-                    onChange={(e) => updateItem(idx, 'reason', e.target.value)}
-                    className="field text-xs px-2.5 py-1.5 w-full mt-2"
-                    style={{ color: '#B23A48' }}
-                  />
-                )}
-                {/*
+                    <div className="mb-2 flex gap-2 items-start">
+                      <div className="flex-1 min-w-0">
+                        <ProductPicker
+                          value={it.name}
+                          label="สินค้าในรายการ"
+                          placeholder="เลือกสินค้า... หรือพิมพ์ชื่อ/ชื่อย่อเพื่อค้นหา"
+                          options={
+                            // A product the branch no longer stocks still has to show
+                            // on the PO that sold it, or editing an old PO would
+                            // silently blank the line.
+                            it.name && !productOptions.some((p) => p.name === it.name)
+                              ? [
+                                  ...productOptions,
+                                  { id: `kept-${idx}`, name: it.name, muted: true },
+                                ]
+                              : productOptions
+                          }
+                          className="field text-sm px-3 py-2 w-full font-medium"
+                          onChange={(name) => selectProduct(idx, name)}
+                        />
+                      </div>
+                      <button
+                        onClick={() => removeItem(idx)}
+                        aria-label={`ลบรายการสินค้าที่ ${idx + 1}`}
+                        title="ลบรายการนี้"
+                        className="text-sm px-2 py-2 rounded-lg flex-shrink-0"
+                        style={{ color: '#B23A48' }}
+                      >
+                        <i className="fa-solid fa-trash"></i>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                          จำนวน
+                        </label>
+                        <input
+                          type="number"
+                          value={it.qty}
+                          onChange={(e) => updateItem(idx, 'qty', e.target.value)}
+                          className="field text-sm px-2.5 py-1.5 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                          ราคามาตรฐาน
+                        </label>
+                        <input
+                          type="number"
+                          value={it.listPrice}
+                          onChange={(e) => updateItem(idx, 'listPrice', e.target.value)}
+                          className="field text-sm px-2.5 py-1.5 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                          ราคาที่เสนอ
+                        </label>
+                        <input
+                          type="number"
+                          value={it.requestedPrice}
+                          onChange={(e) => updateItem(idx, 'requestedPrice', e.target.value)}
+                          className="field text-sm px-2.5 py-1.5 w-full"
+                        />
+                      </div>
+                    </div>
+                    {it.requestedPrice < it.listPrice && (
+                      <input
+                        placeholder="เหตุผลที่ให้ส่วนลด"
+                        value={it.reason}
+                        onChange={(e) => updateItem(idx, 'reason', e.target.value)}
+                        className="field text-xs px-2.5 py-1.5 w-full mt-2"
+                        style={{ color: '#B23A48' }}
+                      />
+                    )}
+                    {/*
                   ส่งไปแล้วเท่าไหร่ ของบรรทัดนี้ (0077).
 
                   ขึ้นเฉพาะเมื่อมีของออกไปแล้ว — PO ที่ยังไม่ได้ส่งไม่ต้องมี
                   ตัวเลข 0/200 มากวนสายตาในขั้นที่ยังคุยราคากันอยู่
                 */}
-                {(progressOf(idx)?.sent ?? 0) > 0 && (
-                  <p
-                    className="text-xs mt-2"
-                    style={{
-                      color: progressOf(idx).remaining > 0 ? '#8A5A12' : '#4C7A3E',
-                    }}
-                  >
-                    <i className="fa-solid fa-truck-fast mr-1"></i>
-                    ส่งแล้ว {progressOf(idx).sent}/{progressOf(idx).ordered}
-                    {progressOf(idx).remaining > 0
-                      ? ` · ค้างอีก ${progressOf(idx).remaining}`
-                      : ' · ครบแล้ว'}
-                  </p>
-                )}
-              </div>
-            ))}
-            <button
-              onClick={addItem}
-              className="btn-outline w-full text-sm rounded-2xl py-2.5 flex items-center justify-center gap-2 font-medium"
-            >
-              <i className="fa-solid fa-plus"></i>เพิ่มรายการสินค้า
-            </button>
-            {/*
+                    {(progressOf(idx)?.sent ?? 0) > 0 && (
+                      <p
+                        className="text-xs mt-2"
+                        style={{
+                          color: progressOf(idx).remaining > 0 ? '#8A5A12' : '#4C7A3E',
+                        }}
+                      >
+                        <i className="fa-solid fa-truck-fast mr-1"></i>
+                        ส่งแล้ว {progressOf(idx).sent}/{progressOf(idx).ordered}
+                        {progressOf(idx).remaining > 0
+                          ? ` · ค้างอีก ${progressOf(idx).remaining}`
+                          : ' · ครบแล้ว'}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                <button
+                  onClick={addItem}
+                  className="btn-outline w-full text-sm rounded-2xl py-2.5 flex items-center justify-center gap-2 font-medium"
+                >
+                  <i className="fa-solid fa-plus"></i>เพิ่มรายการสินค้า
+                </button>
+                {/*
               รอบส่งของ (0077).
 
               อยู่ใต้รายการสินค้า เพราะมันคือคำตอบของคำถามที่รายการสินค้าเพิ่ง
               ตั้งไว้ — ของพวกนี้ออกไปแล้วเท่าไหร่ เมื่อไหร่ และใครรับ
             */}
-            {(o.deliveries ?? []).length > 0 && (
-              <div className="mt-4">
-                <p className="text-sm font-semibold mb-2">
-                  <i className="fa-solid fa-truck-fast mr-1.5"></i>รอบส่งของ (
-                  {(o.deliveries ?? []).length})
-                </p>
-                {(o.deliveries ?? []).map((round, rIdx) => (
-                  <div
-                    key={round.id ?? round.uid ?? rIdx}
-                    className="rounded-2xl p-3 mb-2"
-                    style={{ border: '1px solid var(--line)', background: 'var(--surface-2)' }}
-                  >
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">
-                          รอบที่ {rIdx + 1} · {fmtThaiDayString(round.date)}
-                        </p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
-                          {round.note || 'ไม่ได้บันทึกข้อมูลการจัดส่ง'}
-                        </p>
-                        <ul className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
-                          {round.items.map((li, liIdx) => (
-                            <li key={li.itemUid || liIdx}>
-                              · {li.name || '(ไม่ทราบสินค้า)'} × {li.qty}
-                            </li>
-                          ))}
-                        </ul>
-                        {round.attachments.length > 0 && (
-                          <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-                            <i className="fa-solid fa-paperclip mr-1"></i>
-                            {round.attachments.map((p) => fileNameFromPath(p)).join(', ')}
-                          </p>
-                        )}
+                {(o.deliveries ?? []).length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold mb-2">
+                      <i className="fa-solid fa-truck-fast mr-1.5"></i>รอบส่งของ (
+                      {(o.deliveries ?? []).length})
+                    </p>
+                    {(o.deliveries ?? []).map((round, rIdx) => (
+                      <div
+                        key={round.id ?? round.uid ?? rIdx}
+                        className="rounded-2xl p-3 mb-2"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface-2)' }}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">
+                              รอบที่ {rIdx + 1} · {fmtThaiDayString(round.date)}
+                            </p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-soft)' }}>
+                              {round.note || 'ไม่ได้บันทึกข้อมูลการจัดส่ง'}
+                            </p>
+                            <ul className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                              {round.items.map((li, liIdx) => (
+                                <li key={li.itemUid || liIdx}>
+                                  · {li.name || '(ไม่ทราบสินค้า)'} × {li.qty}
+                                </li>
+                              ))}
+                            </ul>
+                            {round.attachments.length > 0 && (
+                              <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                                <i className="fa-solid fa-paperclip mr-1"></i>
+                                {round.attachments.map((p) => fileNameFromPath(p)).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                          {onDeleteDelivery && round.id && can('wholesale.updateStatus') && (
+                            <button
+                              onClick={() => removeDelivery(round)}
+                              aria-label={`ลบรอบส่งของรอบที่ ${rIdx + 1}`}
+                              title="ลบรอบนี้ ของจะกลับเข้าสต็อก"
+                              className="text-sm px-2 py-1.5 rounded-lg flex-shrink-0"
+                              style={{ color: '#B23A48' }}
+                            >
+                              <i className="fa-solid fa-trash"></i>
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      {onDeleteDelivery && round.id && can('wholesale.updateStatus') && (
-                        <button
-                          onClick={() => removeDelivery(round)}
-                          aria-label={`ลบรอบส่งของรอบที่ ${rIdx + 1}`}
-                          title="ลบรอบนี้ ของจะกลับเข้าสต็อก"
-                          className="text-sm px-2 py-1.5 rounded-lg flex-shrink-0"
-                          style={{ color: '#B23A48' }}
-                        >
-                          <i className="fa-solid fa-trash"></i>
-                        </button>
-                      )}
-                    </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
-          {hasDiscount && o.status === 'รออนุมัติราคา' && can('wholesale.priceApproval') && (
-            <div className="rounded-2xl p-4 mb-5" style={{ background: '#FBEAEC' }}>
-              <p className="text-sm font-semibold mb-3" style={{ color: '#B23A48' }}>
-                <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>มีส่วนลดรออนุมัติ
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={approvePrice}
-                  className="btn-primary flex-1 rounded-xl py-2 text-sm font-semibold"
-                >
-                  อนุมัติราคานี้
-                </button>
-                <button
-                  onClick={rejectPrice}
-                  className="btn-outline flex-1 rounded-xl py-2 text-sm font-medium"
-                >
-                  ปฏิเสธ
-                </button>
-              </div>
-            </div>
-          )}
-          {/*
+              {hasDiscount && o.status === 'รออนุมัติราคา' && can('wholesale.priceApproval') && (
+                <div className="rounded-2xl p-4 mb-5" style={{ background: '#FBEAEC' }}>
+                  <p className="text-sm font-semibold mb-3" style={{ color: '#B23A48' }}>
+                    <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>มีส่วนลดรออนุมัติ
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={approvePrice}
+                      className="btn-primary flex-1 rounded-xl py-2 text-sm font-semibold"
+                    >
+                      อนุมัติราคานี้
+                    </button>
+                    <button
+                      onClick={rejectPrice}
+                      className="btn-outline flex-1 rounded-xl py-2 text-sm font-medium"
+                    >
+                      ปฏิเสธ
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/*
             ใครตัดสินใจเรื่องราคา และเมื่อไหร่ (migration 0051).
 
             Before this the only evidence a discount had been agreed was a
@@ -1564,29 +1588,29 @@ export function WholesaleDetail({
             approved or rejected: a rejection somebody has to explain later is
             worth just as much as an approval.
           */}
-          {o.priceDecision && (
-            <p
-              className="text-xs mb-4"
-              style={{ color: o.priceDecision === 'อนุมัติ' ? '#3F6B33' : '#B23A48' }}
-            >
-              <i
-                className={`fa-solid ${
-                  o.priceDecision === 'อนุมัติ' ? 'fa-circle-check' : 'fa-circle-xmark'
-                } mr-1.5`}
-              ></i>
-              ราคานี้{o.priceDecision}แล้ว
-              {o.priceDecidedAt ? ` เมื่อ ${fmtThaiDayString(o.priceDecidedAt)}` : ''}
-              {priceDecidedByName ? ` โดย ${priceDecidedByName}` : ''}
-            </p>
-          )}
-          {hasDiscount && o.status === 'รออนุมัติราคา' && !can('wholesale.priceApproval') && (
-            <div className="rounded-2xl p-4 mb-5" style={{ background: '#FBF1DA' }}>
-              <p className="text-sm font-medium" style={{ color: '#8A5A12' }}>
-                <i className="fa-solid fa-clock mr-1.5"></i>มีส่วนลดรออนุมัติจากผู้บริหาร/แอดมิน
-              </p>
-            </div>
-          )}
-          {/*
+              {o.priceDecision && (
+                <p
+                  className="text-xs mb-4"
+                  style={{ color: o.priceDecision === 'อนุมัติ' ? '#3F6B33' : '#B23A48' }}
+                >
+                  <i
+                    className={`fa-solid ${
+                      o.priceDecision === 'อนุมัติ' ? 'fa-circle-check' : 'fa-circle-xmark'
+                    } mr-1.5`}
+                  ></i>
+                  ราคานี้{o.priceDecision}แล้ว
+                  {o.priceDecidedAt ? ` เมื่อ ${fmtThaiDayString(o.priceDecidedAt)}` : ''}
+                  {priceDecidedByName ? ` โดย ${priceDecidedByName}` : ''}
+                </p>
+              )}
+              {hasDiscount && o.status === 'รออนุมัติราคา' && !can('wholesale.priceApproval') && (
+                <div className="rounded-2xl p-4 mb-5" style={{ background: '#FBF1DA' }}>
+                  <p className="text-sm font-medium" style={{ color: '#8A5A12' }}>
+                    <i className="fa-solid fa-clock mr-1.5"></i>มีส่วนลดรออนุมัติจากผู้บริหาร/แอดมิน
+                  </p>
+                </div>
+              )}
+              {/*
             กำหนดชำระเงิน.
 
             Wholesale ships first and collects later, so every PO carries a
@@ -1595,7 +1619,7 @@ export function WholesaleDetail({
             goods because it is agreed when the order is taken, not when the
             money is chased.
           */}
-          {/*
+              {/*
             หมายเหตุ 2 แบบ (ร้านขอ 22 ก.ย. 2569). One note used to do both jobs
             and never printed, so nothing meant for the customer could reach
             their paperwork, and anything written for the shop was one "print
@@ -1603,39 +1627,43 @@ export function WholesaleDetail({
             say out loud who reads them. The old note keeps its meaning — the
             shop's — so nothing already written starts appearing on invoices.
           */}
-          <div className="mb-5">
-            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-comment mr-1.5"></i>หมายเหตุสำหรับลูกค้า
-            </label>
-            <textarea
-              aria-label="หมายเหตุสำหรับลูกค้า"
-              rows={2}
-              value={o.customerNote ?? ''}
-              onChange={(e) => field('customerNote', e.target.value)}
-              placeholder="เช่น ส่งของภายใน 3 วันทำการ สินค้ารับประกัน 1 ปี"
-              className="field text-sm px-3 py-2 w-full"
-            />
-            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-              พิมพ์ลงในใบแจ้งหนี้ ใบส่งของ ใบเสร็จ และใบรับคืนสินค้า
-            </p>
-          </div>
-          <div className="mb-5">
-            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-note-sticky mr-1.5"></i>หมายเหตุสำหรับร้าน
-            </label>
-            <textarea
-              aria-label="หมายเหตุสำหรับร้าน"
-              rows={2}
-              value={o.note ?? ''}
-              onChange={(e) => field('note', e.target.value)}
-              placeholder="เช่น ส่งของช่วงบ่าย ติดต่อหน้าร้านก่อน"
-              className="field text-sm px-3 py-2 w-full"
-            />
-            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-              เห็นเฉพาะในระบบ ไม่พิมพ์ลงเอกสารใด ๆ ที่ให้ลูกค้า
-            </p>
-          </div>
-          {/*
+              <div className="mb-5">
+                <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-comment mr-1.5"></i>หมายเหตุสำหรับลูกค้า
+                </label>
+                <textarea
+                  aria-label="หมายเหตุสำหรับลูกค้า"
+                  rows={2}
+                  value={o.customerNote ?? ''}
+                  onChange={(e) => field('customerNote', e.target.value)}
+                  placeholder="เช่น ส่งของภายใน 3 วันทำการ สินค้ารับประกัน 1 ปี"
+                  className="field text-sm px-3 py-2 w-full"
+                />
+                <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                  พิมพ์ลงในใบแจ้งหนี้ ใบส่งของ ใบเสร็จ และใบรับคืนสินค้า
+                </p>
+              </div>
+              <div className="mb-5">
+                <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-note-sticky mr-1.5"></i>หมายเหตุสำหรับร้าน
+                </label>
+                <textarea
+                  aria-label="หมายเหตุสำหรับร้าน"
+                  rows={2}
+                  value={o.note ?? ''}
+                  onChange={(e) => field('note', e.target.value)}
+                  placeholder="เช่น ส่งของช่วงบ่าย ติดต่อหน้าร้านก่อน"
+                  className="field text-sm px-3 py-2 w-full"
+                />
+                <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                  เห็นเฉพาะในระบบ ไม่พิมพ์ลงเอกสารใด ๆ ที่ให้ลูกค้า
+                </p>
+              </div>
+            </div>
+
+            {/* คอลัมน์ขวา — เงินกับเอกสาร */}
+            <div className="min-w-0">
+              {/*
             วันที่ส่งของ (ร้านขอ 24 ก.ย. 2569).
 
             Wholesale earns the sale on DELIVERY, so this one date decides
@@ -1649,644 +1677,650 @@ export function WholesaleDetail({
             claimed by ออกใบส่งของ (0054), which is the step that knows what
             physically left.
           */}
-          <div className="mb-5">
-            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-truck-fast mr-1.5"></i>วันที่ส่งของ
-            </label>
-            <ThaiDateInput
-              value={o.deliveredAt || ''}
-              onChange={(v) => field('deliveredAt', v)}
-              ariaLabel="วันที่ส่งของ"
-              className="field text-sm px-3 py-2 w-full"
-            />
-            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-              {o.deliveredAt
-                ? 'ของออกแล้วตามวันนี้ — PO ใบนี้เข้ายอดค้างรับบนแดชบอร์ด และเข้ารายงานรายได้ของเดือนนี้'
-                : 'เว้นว่าง = ยังไม่ได้ส่งของ PO ใบนี้จะยังไม่เข้ายอดค้างรับและยังไม่เข้ารายงานรายได้'}
-            </p>
-          </div>
-          <div className="mb-5">
-            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-calendar-check mr-1.5"></i>กำหนดชำระเงิน
-            </label>
-            <ThaiDateInput
-              value={o.dueAt || ''}
-              onChange={(v) => field('dueAt', v)}
-              ariaLabel="กำหนดชำระเงิน"
-              className="field text-sm px-3 py-2 w-full"
-            />
-            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-              {(o.installments ?? []).length > 0
-                ? 'ตั้งเป็นงวดไว้แล้ว — ช่องนี้คือวันสุดท้ายที่ทั้งใบต้องจบ ระบบเติมให้เองจากงวดสุดท้าย'
-                : 'พิมพ์ลงในใบแจ้งหนี้และใบส่งของ เว้นว่างได้ถ้ายังไม่ได้ตกลงวันกัน'}
-            </p>
-          </div>
-          {/*
+              <div className="mb-5">
+                <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-truck-fast mr-1.5"></i>วันที่ส่งของ
+                </label>
+                <ThaiDateInput
+                  value={o.deliveredAt || ''}
+                  onChange={(v) => field('deliveredAt', v)}
+                  ariaLabel="วันที่ส่งของ"
+                  className="field text-sm px-3 py-2 w-full"
+                />
+                <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                  {o.deliveredAt
+                    ? 'ของออกแล้วตามวันนี้ — PO ใบนี้เข้ายอดค้างรับบนแดชบอร์ด และเข้ารายงานรายได้ของเดือนนี้'
+                    : 'เว้นว่าง = ยังไม่ได้ส่งของ PO ใบนี้จะยังไม่เข้ายอดค้างรับและยังไม่เข้ารายงานรายได้'}
+                </p>
+              </div>
+              <div className="mb-5">
+                <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-calendar-check mr-1.5"></i>กำหนดชำระเงิน
+                </label>
+                <ThaiDateInput
+                  value={o.dueAt || ''}
+                  onChange={(v) => field('dueAt', v)}
+                  ariaLabel="กำหนดชำระเงิน"
+                  className="field text-sm px-3 py-2 w-full"
+                />
+                <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                  {(o.installments ?? []).length > 0
+                    ? 'ตั้งเป็นงวดไว้แล้ว — ช่องนี้คือวันสุดท้ายที่ทั้งใบต้องจบ ระบบเติมให้เองจากงวดสุดท้าย'
+                    : 'พิมพ์ลงในใบแจ้งหนี้และใบส่งของ เว้นว่างได้ถ้ายังไม่ได้ตกลงวันกัน'}
+                </p>
+              </div>
+              {/*
             งวดชำระ (0078).
 
             อยู่ใต้กำหนดชำระทั้งใบ เพราะมันคือสิ่งเดียวกันในรูปละเอียดขึ้น —
             มัดจำ 30% วันเปิด PO ที่เหลืออีก 30 วัน คือสองงวดที่มีชะตากรรมคนละ
             อย่าง และกำหนดชำระวันเดียวพูดแทนไม่ได้
           */}
-          <div className="mb-5">
-            <p className="text-xs font-medium mb-2" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-list-ol mr-1.5"></i>แบ่งชำระเป็นงวด
-            </p>
-            {schedule.length === 0 && (
-              <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
-                ไม่ได้แบ่งงวด — ใช้กำหนดชำระทั้งใบด้านบน
-              </p>
-            )}
-            {(o.installments ?? []).map((inst, idx) => {
-              const st = schedule.find((x) => x.uid === inst.uid);
-              return (
-                <div
-                  key={inst.uid || idx}
-                  className="rounded-xl p-2.5 mb-2"
-                  style={{ border: '1px solid var(--line)' }}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-medium" style={{ minWidth: '3.5rem' }}>
-                      งวดที่ {idx + 1}
-                    </span>
-                    <input
-                      type="number"
-                      aria-label={`จำนวนเงินงวดที่ ${idx + 1}`}
-                      value={inst.amount}
-                      onChange={(e) => updateInstallment(idx, 'amount', e.target.value)}
-                      className="field text-xs px-2.5 py-1.5 w-28"
-                    />
-                    <div className="flex-1">
-                      <ThaiDateInput
-                        ariaLabel={`กำหนดชำระงวดที่ ${idx + 1}`}
-                        value={inst.dueAt || ''}
-                        onChange={(v) => updateInstallment(idx, 'dueAt', v)}
+              <div className="mb-5">
+                <p className="text-xs font-medium mb-2" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-list-ol mr-1.5"></i>แบ่งชำระเป็นงวด
+                </p>
+                {schedule.length === 0 && (
+                  <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
+                    ไม่ได้แบ่งงวด — ใช้กำหนดชำระทั้งใบด้านบน
+                  </p>
+                )}
+                {(o.installments ?? []).map((inst, idx) => {
+                  const st = schedule.find((x) => x.uid === inst.uid);
+                  return (
+                    <div
+                      key={inst.uid || idx}
+                      className="rounded-xl p-2.5 mb-2"
+                      style={{ border: '1px solid var(--line)' }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-medium" style={{ minWidth: '3.5rem' }}>
+                          งวดที่ {idx + 1}
+                        </span>
+                        <input
+                          type="number"
+                          aria-label={`จำนวนเงินงวดที่ ${idx + 1}`}
+                          value={inst.amount}
+                          onChange={(e) => updateInstallment(idx, 'amount', e.target.value)}
+                          className="field text-xs px-2.5 py-1.5 w-28"
+                        />
+                        <div className="flex-1">
+                          <ThaiDateInput
+                            ariaLabel={`กำหนดชำระงวดที่ ${idx + 1}`}
+                            value={inst.dueAt || ''}
+                            onChange={(v) => updateInstallment(idx, 'dueAt', v)}
+                            className="field text-xs px-2.5 py-1.5 w-full"
+                          />
+                        </div>
+                        <button
+                          onClick={() => removeInstallment(idx)}
+                          aria-label={`ลบงวดที่ ${idx + 1}`}
+                          className="text-sm px-2 py-1.5 rounded-lg flex-shrink-0"
+                          style={{ color: '#B23A48' }}
+                        >
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
+                      <input
+                        placeholder="หมายเหตุของงวดนี้ เช่น มัดจำ"
+                        aria-label={`หมายเหตุงวดที่ ${idx + 1}`}
+                        value={inst.note ?? ''}
+                        onChange={(e) => updateInstallment(idx, 'note', e.target.value)}
                         className="field text-xs px-2.5 py-1.5 w-full"
                       />
+                      {st && (
+                        <p
+                          className="text-xs mt-1.5"
+                          style={{ color: st.outstanding > 0 ? '#8A5A12' : '#4C7A3E' }}
+                        >
+                          {st.outstanding > 0
+                            ? `รับแล้ว ${fmt(st.paid)} · ค้าง ${fmt(st.outstanding)}`
+                            : `รับครบแล้ว ${fmt(st.paid)}`}
+                        </p>
+                      )}
                     </div>
-                    <button
-                      onClick={() => removeInstallment(idx)}
-                      aria-label={`ลบงวดที่ ${idx + 1}`}
-                      className="text-sm px-2 py-1.5 rounded-lg flex-shrink-0"
-                      style={{ color: '#B23A48' }}
-                    >
-                      <i className="fa-solid fa-trash"></i>
-                    </button>
-                  </div>
-                  <input
-                    placeholder="หมายเหตุของงวดนี้ เช่น มัดจำ"
-                    aria-label={`หมายเหตุงวดที่ ${idx + 1}`}
-                    value={inst.note ?? ''}
-                    onChange={(e) => updateInstallment(idx, 'note', e.target.value)}
-                    className="field text-xs px-2.5 py-1.5 w-full"
-                  />
-                  {st && (
-                    <p
-                      className="text-xs mt-1.5"
-                      style={{ color: st.outstanding > 0 ? '#8A5A12' : '#4C7A3E' }}
-                    >
-                      {st.outstanding > 0
-                        ? `รับแล้ว ${fmt(st.paid)} · ค้าง ${fmt(st.outstanding)}`
-                        : `รับครบแล้ว ${fmt(st.paid)}`}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-            <button
-              onClick={addInstallment}
-              className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
-            >
-              <i className="fa-solid fa-plus"></i>เพิ่มงวดชำระ
-            </button>
-            {/*
+                  );
+                })}
+                <button
+                  onClick={addInstallment}
+                  className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
+                >
+                  <i className="fa-solid fa-plus"></i>เพิ่มงวดชำระ
+                </button>
+                {/*
               ไม่ใช่ด่าน เป็นคำเตือน. การปรับราคาหลังส่งของ (0051) ทำให้ยอด PO
               ขยับได้เสมอ กติกาที่บังคับให้เท่ากันจะกลายเป็นสิ่งที่ขวางการบันทึก
               งานจริง มากกว่าจะช่วยให้ตัวเลขถูก
             */}
-            {schedule.length > 0 && Math.abs(scheduleSum - total) > 0.005 && (
-              <p className="text-xs mt-2" style={{ color: '#8A5A12' }}>
-                <i className="fa-solid fa-triangle-exclamation mr-1"></i>
-                รวมทุกงวด {fmt(scheduleSum)} ไม่เท่ายอดสุทธิ {fmt(total)} — ต่างกัน{' '}
-                {fmt(Math.abs(scheduleSum - total))}
-              </p>
-            )}
-          </div>
-          {/*
+                {schedule.length > 0 && Math.abs(scheduleSum - total) > 0.005 && (
+                  <p className="text-xs mt-2" style={{ color: '#8A5A12' }}>
+                    <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+                    รวมทุกงวด {fmt(scheduleSum)} ไม่เท่ายอดสุทธิ {fmt(total)} — ต่างกัน{' '}
+                    {fmt(Math.abs(scheduleSum - total))}
+                  </p>
+                )}
+              </div>
+              {/*
             บัญชีรับชำระ (ร้านขอ 21 ก.ย. 2569) — which of this branch's แหล่งเงิน
             the ใบแจ้งหนี้ tells the customer to pay into. Beside the credit term
             because both are agreed when the order is taken. Left on the first
             option, the invoice prints the branch's ช่องทางการชำระเงิน as before.
           */}
-          <div className="mb-5">
-            <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-building-columns mr-1.5"></i>บัญชีรับชำระ
-            </label>
-            <select
-              aria-label="บัญชีรับชำระ"
-              value={o.payToAccountId ?? ''}
-              onChange={(e) =>
-                setO({ ...o, payToAccountId: e.target.value ? Number(e.target.value) : null })
-              }
-              className="field text-sm px-3 py-2 w-full"
-            >
-              <option value="">ใช้ช่องทางการชำระเงินของสาขา</option>
-              {shopPayAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {payAccountLine(a)}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-              พิมพ์ลงในใบแจ้งหนี้ ให้ลูกค้ารู้ว่าต้องโอนเงินเข้าบัญชีไหน — ตั้งชื่อและเลขบัญชีได้ที่
-              การจัดการเงิน/บัญชี
-            </p>
-          </div>
-          <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.returns)}>
-            <p className="text-xs font-semibold mb-3" style={{ color: PANEL.returns.spine }}>
-              <i className="fa-solid fa-rotate-left mr-1.5"></i>การคืนสินค้า
-            </p>
-            {o.returns.map((r, idx) => (
-              // flex-wrap เพราะแถวนี้มีห้าช่องแล้ว. On a narrow card the date and
-              // the bin drop to a second line instead of the bin being pushed off
-              // the right edge of the panel, where it was unreachable.
-              <div key={idx} className="flex flex-wrap gap-2 mb-2 items-start">
+              <div className="mb-5">
+                <label className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-building-columns mr-1.5"></i>บัญชีรับชำระ
+                </label>
                 <select
-                  value={returnValue(r)}
-                  aria-label="สินค้าที่รับคืน"
-                  onChange={(e) => {
-                    const picked = returnOptions.find((op) => op.value === e.target.value);
-                    updateReturnFields(idx, {
-                      item: picked?.name ?? '',
-                      itemUid: picked?.uid ?? '',
-                    });
-                  }}
-                  className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
+                  aria-label="บัญชีรับชำระ"
+                  value={o.payToAccountId ?? ''}
+                  onChange={(e) =>
+                    setO({ ...o, payToAccountId: e.target.value ? Number(e.target.value) : null })
+                  }
+                  className="field text-sm px-3 py-2 w-full"
                 >
-                  <option value="" disabled>
-                    เลือกสินค้าที่เคยซื้อ...
-                  </option>
-                  {returnOptions.map((op) => (
-                    <option key={op.value} value={op.value}>
-                      {op.label}
+                  <option value="">ใช้ช่องทางการชำระเงินของสาขา</option>
+                  {shopPayAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {payAccountLine(a)}
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
-                  value={r.qty}
-                  onChange={(e) => updateReturn(idx, 'qty', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 w-16"
-                />
-                <input
-                  placeholder="เหตุผล"
-                  value={r.reason}
-                  onChange={(e) => updateReturn(idx, 'reason', e.target.value)}
-                  className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
-                />
-                {/* The date the return reduces revenue on — see migration 0045. */}
-                <ThaiDateInput
-                  value={r.date || ''}
-                  onChange={(v) => updateReturn(idx, 'date', v)}
-                  ariaLabel={`วันที่รับคืนรายการที่ ${idx + 1}`}
-                  className="field text-xs px-2.5 py-1.5"
-                />
-                <button
-                  onClick={() => removeReturn(idx)}
-                  aria-label={`ลบรายการคืนสินค้าที่ ${idx + 1}`}
-                  title="ลบรายการนี้"
-                  className="text-xs px-2 rounded-lg flex-shrink-0"
-                  style={{ color: '#B23A48' }}
-                >
-                  <i className="fa-solid fa-trash"></i>
-                </button>
-                {/*
-                  ของกลับเข้าชั้นเมื่อยืนยันแล้วเท่านั้น (migration 0054).
-
-                  Writing down that a customer will return something and having
-                  it back on the rack are days apart. Until somebody ticks this,
-                  the goods are on a lorry and the count must not say otherwise.
-                */}
-                <div className="w-full">
-                  {r.receivedAt ? (
-                    <span className="text-xs" style={{ color: '#3F6B33' }}>
-                      <i className="fa-solid fa-circle-check mr-1"></i>
-                      รับของคืนแล้ว {fmtThaiDayString(r.receivedAt)} · คืนสต็อกแล้ว
-                    </span>
-                  ) : !savedReturnUids.has(r.uid ?? '') ? (
-                    <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                      บันทึก PO ก่อน จึงจะยืนยันรับของคืนได้
-                    </span>
-                  ) : can('wholesale.updateStatus') ? (
-                    <button
-                      onClick={() => confirmReturn(idx)}
-                      aria-label={`ยืนยันรับคืนรายการที่ ${idx + 1}`}
-                      className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
-                      style={{ color: '#3F6B33' }}
-                    >
-                      <i className="fa-solid fa-box-open mr-1.5"></i>ยืนยันว่าได้รับของคืนแล้ว
-                    </button>
-                  ) : (
-                    <span className="text-xs" style={{ color: '#8A5A12' }}>
-                      <i className="fa-regular fa-clock mr-1"></i>รอยืนยันว่าได้รับของคืน —
-                      ยังไม่คืนสต็อก
-                    </span>
-                  )}
-                </div>
+                <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                  พิมพ์ลงในใบแจ้งหนี้ ให้ลูกค้ารู้ว่าต้องโอนเงินเข้าบัญชีไหน —
+                  ตั้งชื่อและเลขบัญชีได้ที่ การจัดการเงิน/บัญชี
+                </p>
               </div>
-            ))}
-            {returnError && (
-              <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
-                {returnError}
-              </p>
-            )}
-            <button
-              onClick={addReturn}
-              className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
-            >
-              <i className="fa-solid fa-plus"></i>บันทึกการคืนสินค้า
-            </button>
-          </div>
-          <div className="mb-5">
-            <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-money-bill-transfer mr-1.5"></i>ปรับราคา
-              (กรณีเก็บเงินไม่ตรงยอดเรียกเก็บ แม้ส่งของแล้ว)
-            </p>
-            {o.adjustments.map((a, idx) => {
-              const st = a.status || ADJUSTMENT_APPROVED;
-              const approved = st === ADJUSTMENT_APPROVED;
-              const rejected = st === ADJUSTMENT_REJECTED;
-              const savedAdj = savedAdjustmentUids.has(a.uid ?? '');
-              return (
-                <div
-                  key={idx}
-                  className="rounded-xl p-2.5 mb-2"
-                  style={{
-                    border: '1px solid var(--line)',
-                    background: approved ? 'transparent' : 'var(--paper)',
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                    <span
-                      className="text-xs font-medium px-2 py-0.5 rounded-full"
-                      style={{
-                        background: approved ? '#E7F0E3' : rejected ? '#F7E2E4' : '#FBF0D9',
-                        color: approved ? '#4C7A3E' : rejected ? '#B23A48' : '#8A6A1F',
+              <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.returns)}>
+                <p className="text-xs font-semibold mb-3" style={{ color: PANEL.returns.spine }}>
+                  <i className="fa-solid fa-rotate-left mr-1.5"></i>การคืนสินค้า
+                </p>
+                {o.returns.map((r, idx) => (
+                  // flex-wrap เพราะแถวนี้มีห้าช่องแล้ว. On a narrow card the date and
+                  // the bin drop to a second line instead of the bin being pushed off
+                  // the right edge of the panel, where it was unreachable.
+                  <div key={idx} className="flex flex-wrap gap-2 mb-2 items-start">
+                    <select
+                      value={returnValue(r)}
+                      aria-label="สินค้าที่รับคืน"
+                      onChange={(e) => {
+                        const picked = returnOptions.find((op) => op.value === e.target.value);
+                        updateReturnFields(idx, {
+                          item: picked?.name ?? '',
+                          itemUid: picked?.uid ?? '',
+                        });
                       }}
+                      className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
                     >
-                      <i
-                        className={`fa-solid ${
-                          approved ? 'fa-circle-check' : rejected ? 'fa-circle-xmark' : 'fa-clock'
-                        } mr-1`}
-                      ></i>
-                      {st}
-                    </span>
-                    {rejected && a.rejectNote && (
-                      <span className="text-xs" style={{ color: '#B23A48' }}>
-                        {a.rejectNote}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
+                      <option value="" disabled>
+                        เลือกสินค้าที่เคยซื้อ...
+                      </option>
+                      {returnOptions.map((op) => (
+                        <option key={op.value} value={op.value}>
+                          {op.label}
+                        </option>
+                      ))}
+                    </select>
                     <input
                       type="number"
-                      placeholder="จำนวนที่ปรับลด"
-                      aria-label={`จำนวนที่ปรับลดรายการที่ ${idx + 1}`}
-                      value={a.amount}
-                      onChange={(e) => updateAdjustment(idx, 'amount', e.target.value)}
-                      className="field text-xs px-2.5 py-1.5 w-32"
+                      value={r.qty}
+                      onChange={(e) => updateReturn(idx, 'qty', e.target.value)}
+                      className="field text-xs px-2.5 py-1.5 w-16"
                     />
                     <input
-                      placeholder="เหตุผล เช่น ลูกค้าต่อรองราคาหลังส่งของ"
-                      value={a.reason}
-                      onChange={(e) => updateAdjustment(idx, 'reason', e.target.value)}
+                      placeholder="เหตุผล"
+                      value={r.reason}
+                      onChange={(e) => updateReturn(idx, 'reason', e.target.value)}
                       className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
                     />
+                    {/* The date the return reduces revenue on — see migration 0045. */}
+                    <ThaiDateInput
+                      value={r.date || ''}
+                      onChange={(v) => updateReturn(idx, 'date', v)}
+                      ariaLabel={`วันที่รับคืนรายการที่ ${idx + 1}`}
+                      className="field text-xs px-2.5 py-1.5"
+                    />
                     <button
-                      onClick={() => removeAdjustment(idx)}
-                      aria-label={`ลบรายการปรับราคาที่ ${idx + 1}`}
+                      onClick={() => removeReturn(idx)}
+                      aria-label={`ลบรายการคืนสินค้าที่ ${idx + 1}`}
                       title="ลบรายการนี้"
                       className="text-xs px-2 rounded-lg flex-shrink-0"
                       style={{ color: '#B23A48' }}
                     >
                       <i className="fa-solid fa-trash"></i>
                     </button>
+                    {/*
+                  ของกลับเข้าชั้นเมื่อยืนยันแล้วเท่านั้น (migration 0054).
+
+                  Writing down that a customer will return something and having
+                  it back on the rack are days apart. Until somebody ticks this,
+                  the goods are on a lorry and the count must not say otherwise.
+                */}
+                    <div className="w-full">
+                      {r.receivedAt ? (
+                        <span className="text-xs" style={{ color: '#3F6B33' }}>
+                          <i className="fa-solid fa-circle-check mr-1"></i>
+                          รับของคืนแล้ว {fmtThaiDayString(r.receivedAt)} · คืนสต็อกแล้ว
+                        </span>
+                      ) : !savedReturnUids.has(r.uid ?? '') ? (
+                        <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                          บันทึก PO ก่อน จึงจะยืนยันรับของคืนได้
+                        </span>
+                      ) : can('wholesale.updateStatus') ? (
+                        <button
+                          onClick={() => confirmReturn(idx)}
+                          aria-label={`ยืนยันรับคืนรายการที่ ${idx + 1}`}
+                          className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                          style={{ color: '#3F6B33' }}
+                        >
+                          <i className="fa-solid fa-box-open mr-1.5"></i>ยืนยันว่าได้รับของคืนแล้ว
+                        </button>
+                      ) : (
+                        <span className="text-xs" style={{ color: '#8A5A12' }}>
+                          <i className="fa-regular fa-clock mr-1"></i>รอยืนยันว่าได้รับของคืน —
+                          ยังไม่คืนสต็อก
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  {/* The decision, for whoever holds the same key that approves a
+                ))}
+                {returnError && (
+                  <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
+                    {returnError}
+                  </p>
+                )}
+                <button
+                  onClick={addReturn}
+                  className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
+                >
+                  <i className="fa-solid fa-plus"></i>บันทึกการคืนสินค้า
+                </button>
+              </div>
+              <div className="mb-5">
+                <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-money-bill-transfer mr-1.5"></i>ปรับราคา
+                  (กรณีเก็บเงินไม่ตรงยอดเรียกเก็บ แม้ส่งของแล้ว)
+                </p>
+                {o.adjustments.map((a, idx) => {
+                  const st = a.status || ADJUSTMENT_APPROVED;
+                  const approved = st === ADJUSTMENT_APPROVED;
+                  const rejected = st === ADJUSTMENT_REJECTED;
+                  const savedAdj = savedAdjustmentUids.has(a.uid ?? '');
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-xl p-2.5 mb-2"
+                      style={{
+                        border: '1px solid var(--line)',
+                        background: approved ? 'transparent' : 'var(--paper)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                        <span
+                          className="text-xs font-medium px-2 py-0.5 rounded-full"
+                          style={{
+                            background: approved ? '#E7F0E3' : rejected ? '#F7E2E4' : '#FBF0D9',
+                            color: approved ? '#4C7A3E' : rejected ? '#B23A48' : '#8A6A1F',
+                          }}
+                        >
+                          <i
+                            className={`fa-solid ${
+                              approved
+                                ? 'fa-circle-check'
+                                : rejected
+                                  ? 'fa-circle-xmark'
+                                  : 'fa-clock'
+                            } mr-1`}
+                          ></i>
+                          {st}
+                        </span>
+                        {rejected && a.rejectNote && (
+                          <span className="text-xs" style={{ color: '#B23A48' }}>
+                            {a.rejectNote}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        <input
+                          type="number"
+                          placeholder="จำนวนที่ปรับลด"
+                          aria-label={`จำนวนที่ปรับลดรายการที่ ${idx + 1}`}
+                          value={a.amount}
+                          onChange={(e) => updateAdjustment(idx, 'amount', e.target.value)}
+                          className="field text-xs px-2.5 py-1.5 w-32"
+                        />
+                        <input
+                          placeholder="เหตุผล เช่น ลูกค้าต่อรองราคาหลังส่งของ"
+                          value={a.reason}
+                          onChange={(e) => updateAdjustment(idx, 'reason', e.target.value)}
+                          className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
+                        />
+                        <button
+                          onClick={() => removeAdjustment(idx)}
+                          aria-label={`ลบรายการปรับราคาที่ ${idx + 1}`}
+                          title="ลบรายการนี้"
+                          className="text-xs px-2 rounded-lg flex-shrink-0"
+                          style={{ color: '#B23A48' }}
+                        >
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
+                      {/* The decision, for whoever holds the same key that approves a
                       below-standard price. A row the server has not seen yet can
                       only be saved first — the alternative is an error nobody
                       could act on. */}
-                  {canApprovePrice && !approved && (
-                    <div className="flex gap-2 mt-2 items-center flex-wrap">
-                      {!savedAdj ? (
-                        <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                          บันทึก PO ก่อน จึงจะอนุมัติได้
-                        </span>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => decideAdjustment(idx, 'approve')}
-                            aria-label={`อนุมัติการปรับราคารายการที่ ${idx + 1}`}
-                            className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
-                            style={{ color: '#4C7A3E' }}
-                          >
-                            <i className="fa-solid fa-circle-check mr-1.5"></i>อนุมัติการปรับราคา
-                          </button>
-                          {!rejected && (
-                            <button
-                              onClick={() => decideAdjustment(idx, 'reject')}
-                              aria-label={`ปฏิเสธการปรับราคารายการที่ ${idx + 1}`}
-                              className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
-                              style={{ color: '#B23A48' }}
-                            >
-                              ปฏิเสธ
-                            </button>
+                      {canApprovePrice && !approved && (
+                        <div className="flex gap-2 mt-2 items-center flex-wrap">
+                          {!savedAdj ? (
+                            <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                              บันทึก PO ก่อน จึงจะอนุมัติได้
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => decideAdjustment(idx, 'approve')}
+                                aria-label={`อนุมัติการปรับราคารายการที่ ${idx + 1}`}
+                                className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                                style={{ color: '#4C7A3E' }}
+                              >
+                                <i className="fa-solid fa-circle-check mr-1.5"></i>
+                                อนุมัติการปรับราคา
+                              </button>
+                              {!rejected && (
+                                <button
+                                  onClick={() => decideAdjustment(idx, 'reject')}
+                                  aria-label={`ปฏิเสธการปรับราคารายการที่ ${idx + 1}`}
+                                  className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                                  style={{ color: '#B23A48' }}
+                                >
+                                  ปฏิเสธ
+                                </button>
+                              )}
+                            </>
                           )}
-                        </>
+                        </div>
+                      )}
+                      {!canApprovePrice && st === ADJUSTMENT_PENDING && (
+                        <p className="text-xs mt-2" style={{ color: '#8A5A12' }}>
+                          <i className="fa-regular fa-clock mr-1.5"></i>รอผู้บริหาร/แอดมินอนุมัติ
+                          ยังไม่ลดยอดเรียกเก็บ
+                        </p>
                       )}
                     </div>
-                  )}
-                  {!canApprovePrice && st === ADJUSTMENT_PENDING && (
-                    <p className="text-xs mt-2" style={{ color: '#8A5A12' }}>
-                      <i className="fa-regular fa-clock mr-1.5"></i>รอผู้บริหาร/แอดมินอนุมัติ
-                      ยังไม่ลดยอดเรียกเก็บ
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-            {adjError && (
-              <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
-                {adjError}
-              </p>
-            )}
-            <button
-              onClick={addAdjustment}
-              className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
-            >
-              <i className="fa-solid fa-plus"></i>เพิ่มรายการปรับราคา
-            </button>
-            <p className="text-xs mt-2" style={{ color: 'var(--ink-faint)' }}>
-              ใส่ตัวเลขบวกเพื่อลดยอดเรียกเก็บ ใส่ค่าติดลบหากต้องปรับเพิ่ม (เช่น เก็บเงินขาดตอนแรก)
-            </p>
-          </div>
-          <div className="rounded-2xl p-4 mb-5" style={{ background: 'var(--paper)' }}>
-            {hasBreakdown && (
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: 'var(--ink-soft)' }}>ยอดสินค้ารวม</span>
-                <span className="font-medium">{fmt(itemsTotal)}</span>
-              </div>
-            )}
-            {o.returns.length > 0 && (
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: 'var(--ink-soft)' }}>
-                  การคืนสินค้า ({o.returns.length} รายการ)
-                </span>
-                <span className="font-medium" style={{ color: '#B23A48' }}>
-                  -{fmt(returnsTotal)}
-                </span>
-              </div>
-            )}
-            {approvedAdjustmentCount > 0 && (
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: 'var(--ink-soft)' }}>
-                  ปรับราคา ({approvedAdjustmentCount} รายการ)
-                </span>
-                <span
-                  className="font-medium"
-                  style={{ color: adjustmentsTotal >= 0 ? '#B23A48' : '#4C7A3E' }}
+                  );
+                })}
+                {adjError && (
+                  <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
+                    {adjError}
+                  </p>
+                )}
+                <button
+                  onClick={addAdjustment}
+                  className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
                 >
-                  {adjustmentsTotal >= 0 ? '-' : '+'}
-                  {fmt(Math.abs(adjustmentsTotal))}
-                </span>
+                  <i className="fa-solid fa-plus"></i>เพิ่มรายการปรับราคา
+                </button>
+                <p className="text-xs mt-2" style={{ color: 'var(--ink-faint)' }}>
+                  ใส่ตัวเลขบวกเพื่อลดยอดเรียกเก็บ ใส่ค่าติดลบหากต้องปรับเพิ่ม (เช่น
+                  เก็บเงินขาดตอนแรก)
+                </p>
               </div>
-            )}
-            <div
-              className="flex justify-between text-sm mb-1"
-              style={hasBreakdown ? { borderTop: '1px solid var(--line)', paddingTop: 6 } : {}}
-            >
-              <span style={{ color: 'var(--ink-soft)' }}>ยอดสุทธิ</span>
-              <span className="font-semibold">{fmt(total)}</span>
-            </div>
-            <div className="flex justify-between text-sm mb-1">
-              <span style={{ color: 'var(--ink-soft)' }}>ชำระแล้ว</span>
-              <span className="font-semibold">{fmt(paid)}</span>
-            </div>
-            {/* A customer who has handed over a cheque is in a different
+              <div className="rounded-2xl p-4 mb-5" style={{ background: 'var(--paper)' }}>
+                {hasBreakdown && (
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: 'var(--ink-soft)' }}>ยอดสินค้ารวม</span>
+                    <span className="font-medium">{fmt(itemsTotal)}</span>
+                  </div>
+                )}
+                {o.returns.length > 0 && (
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: 'var(--ink-soft)' }}>
+                      การคืนสินค้า ({o.returns.length} รายการ)
+                    </span>
+                    <span className="font-medium" style={{ color: '#B23A48' }}>
+                      -{fmt(returnsTotal)}
+                    </span>
+                  </div>
+                )}
+                {approvedAdjustmentCount > 0 && (
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: 'var(--ink-soft)' }}>
+                      ปรับราคา ({approvedAdjustmentCount} รายการ)
+                    </span>
+                    <span
+                      className="font-medium"
+                      style={{ color: adjustmentsTotal >= 0 ? '#B23A48' : '#4C7A3E' }}
+                    >
+                      {adjustmentsTotal >= 0 ? '-' : '+'}
+                      {fmt(Math.abs(adjustmentsTotal))}
+                    </span>
+                  </div>
+                )}
+                <div
+                  className="flex justify-between text-sm mb-1"
+                  style={hasBreakdown ? { borderTop: '1px solid var(--line)', paddingTop: 6 } : {}}
+                >
+                  <span style={{ color: 'var(--ink-soft)' }}>ยอดสุทธิ</span>
+                  <span className="font-semibold">{fmt(total)}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span style={{ color: 'var(--ink-soft)' }}>ชำระแล้ว</span>
+                  <span className="font-semibold">{fmt(paid)}</span>
+                </div>
+                {/* A customer who has handed over a cheque is in a different
                 position from one who has sent nothing — but neither has paid,
                 so this figure sits outside the arithmetic. */}
-            {/* A reduction the customer has been promised but nobody has approved
+                {/* A reduction the customer has been promised but nobody has approved
                 is not off the bill yet. Saying so here is the difference between
                 a figure that looks wrong and one that explains itself. */}
-            {pendingAdjustments > 0 && (
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: 'var(--ink-soft)' }}>
-                  <i className="fa-regular fa-clock mr-1"></i>ปรับราคารออนุมัติ
-                </span>
-                <span className="font-semibold" style={{ color: '#B8860B' }}>
-                  {fmt(pendingAdjustments)}
-                </span>
-              </div>
-            )}
-            {reported > 0 && (
-              <div className="flex justify-between text-sm mb-1">
-                <span style={{ color: 'var(--ink-soft)' }}>
-                  <i className="fa-regular fa-clock mr-1"></i>แจ้งแล้ว รอยืนยัน
-                </span>
-                <span className="font-semibold" style={{ color: '#B8860B' }}>
-                  {fmt(reported)}
-                </span>
-              </div>
-            )}
-            <div
-              className="flex justify-between text-sm pt-1"
-              style={{ borderTop: '1px solid var(--line)' }}
-            >
-              <span style={{ color: 'var(--ink-soft)' }}>คงเหลือ</span>
-              <span
-                className="font-semibold"
-                style={{ color: total - paid <= 0 ? '#4C7A3E' : '#B23A48' }}
-              >
-                {total - paid <= 0 ? 'ชำระครบแล้ว' : fmt(total - paid)}
-              </span>
-            </div>
-          </div>
-          <div className="mb-5">
-            <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-money-bill-wave mr-1.5"></i>การรับชำระ
-            </p>
-            {o.payments.map((p, idx) => (
-              <PaymentRow
-                key={idx}
-                p={p}
-                idx={idx}
-                installments={o.installments ?? []}
-                methods={payableAccounts(payAccounts, o.shop).map((a) => a.name)}
-                onChange={updatePayment}
-                saved={savedPaymentUids.has(p.uid ?? '')}
-                canConfirm={canConfirmPayments}
-                panel={payPanel?.idx === idx ? payPanel : null}
-                onOpenPanel={openPayPanel}
-                onPanelChange={(patch) => setPayPanel(payPanel && { ...payPanel, ...patch })}
-                onSubmitPanel={submitPayPanel}
-                onCancelPanel={() => setPayPanel(null)}
-                error={payPanel?.idx === idx ? payError : ''}
-              />
-            ))}
-            <button
-              onClick={addPayment}
-              className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
-            >
-              <i className="fa-solid fa-plus"></i>เพิ่มรายการรับเงิน
-            </button>
-          </div>
-          <div className="rounded-2xl p-4 mb-5" style={{ border: '1px solid var(--line)' }}>
-            <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
-              <i className="fa-solid fa-file-invoice mr-1.5"></i>ออกเอกสาร
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {DOCS.map((d) => {
-                const allowed = docAllowed[d.key];
-                return (
-                  <button
-                    key={d.key}
-                    onClick={() => allowed && issueDocument(d.key)}
-                    disabled={!allowed}
-                    className="rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
-                    style={{
-                      background: allowed ? 'var(--primary)' : 'var(--line)',
-                      color: allowed ? '#fff' : 'var(--ink-faint)',
-                      cursor: allowed ? 'pointer' : 'not-allowed',
-                    }}
+                {pendingAdjustments > 0 && (
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: 'var(--ink-soft)' }}>
+                      <i className="fa-regular fa-clock mr-1"></i>ปรับราคารออนุมัติ
+                    </span>
+                    <span className="font-semibold" style={{ color: '#B8860B' }}>
+                      {fmt(pendingAdjustments)}
+                    </span>
+                  </div>
+                )}
+                {reported > 0 && (
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: 'var(--ink-soft)' }}>
+                      <i className="fa-regular fa-clock mr-1"></i>แจ้งแล้ว รอยืนยัน
+                    </span>
+                    <span className="font-semibold" style={{ color: '#B8860B' }}>
+                      {fmt(reported)}
+                    </span>
+                  </div>
+                )}
+                <div
+                  className="flex justify-between text-sm pt-1"
+                  style={{ borderTop: '1px solid var(--line)' }}
+                >
+                  <span style={{ color: 'var(--ink-soft)' }}>คงเหลือ</span>
+                  <span
+                    className="font-semibold"
+                    style={{ color: total - paid <= 0 ? '#4C7A3E' : '#B23A48' }}
                   >
-                    <i className={`fa-solid ${d.icon}`}></i>
-                    {d.label}
-                  </button>
-                );
-              })}
-            </div>
-            {/*
+                    {total - paid <= 0 ? 'ชำระครบแล้ว' : fmt(total - paid)}
+                  </span>
+                </div>
+              </div>
+              <div className="mb-5">
+                <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-money-bill-wave mr-1.5"></i>การรับชำระ
+                </p>
+                {o.payments.map((p, idx) => (
+                  <PaymentRow
+                    key={idx}
+                    p={p}
+                    idx={idx}
+                    installments={o.installments ?? []}
+                    methods={payableAccounts(payAccounts, o.shop).map((a) => a.name)}
+                    onChange={updatePayment}
+                    saved={savedPaymentUids.has(p.uid ?? '')}
+                    canConfirm={canConfirmPayments}
+                    panel={payPanel?.idx === idx ? payPanel : null}
+                    onOpenPanel={openPayPanel}
+                    onPanelChange={(patch) => setPayPanel(payPanel && { ...payPanel, ...patch })}
+                    onSubmitPanel={submitPayPanel}
+                    onCancelPanel={() => setPayPanel(null)}
+                    error={payPanel?.idx === idx ? payError : ''}
+                  />
+                ))}
+                <button
+                  onClick={addPayment}
+                  className="btn-outline w-full text-sm rounded-2xl py-2 flex items-center justify-center gap-2 font-medium"
+                >
+                  <i className="fa-solid fa-plus"></i>เพิ่มรายการรับเงิน
+                </button>
+              </div>
+              <div className="rounded-2xl p-4 mb-5" style={{ border: '1px solid var(--line)' }}>
+                <p className="text-xs font-medium mb-3" style={{ color: 'var(--ink-soft)' }}>
+                  <i className="fa-solid fa-file-invoice mr-1.5"></i>ออกเอกสาร
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {DOCS.map((d) => {
+                    const allowed = docAllowed[d.key];
+                    return (
+                      <button
+                        key={d.key}
+                        onClick={() => allowed && issueDocument(d.key)}
+                        disabled={!allowed}
+                        className="rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
+                        style={{
+                          background: allowed ? 'var(--primary)' : 'var(--line)',
+                          color: allowed ? '#fff' : 'var(--ink-faint)',
+                          cursor: allowed ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        <i className={`fa-solid ${d.icon}`}></i>
+                        {d.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/*
               แผงกรอกข้อมูลการจัดส่ง.
 
               Inline under the document buttons rather than a dialog: it is not
               an interruption, it is the second half of pressing ใบส่งของ, and
               the person filling it in wants the PO still in front of them.
             */}
-            {deliveryPanel && (
-              <div
-                className="rounded-xl p-3 mt-2"
-                style={{ border: '1px solid var(--line)', background: 'var(--surface-2)' }}
-              >
-                <p className="text-xs font-semibold mb-2">
-                  <i className="fa-solid fa-truck-fast mr-1.5"></i>ข้อมูลการจัดส่ง
-                </p>
-                <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
-                  ตัดสต็อกและนับเป็นยอดขายตามวันที่ของรอบนี้ จึงต้องมีหลักฐานติดไว้ด้วย —
-                  ส่งครบทุกรายการเมื่อไหร่ PO จะเป็น “จัดส่งแล้ว” เอง
-                </p>
-                {/*
+                {deliveryPanel && (
+                  <div
+                    className="rounded-xl p-3 mt-2"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface-2)' }}
+                  >
+                    <p className="text-xs font-semibold mb-2">
+                      <i className="fa-solid fa-truck-fast mr-1.5"></i>ข้อมูลการจัดส่ง
+                    </p>
+                    <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
+                      ตัดสต็อกและนับเป็นยอดขายตามวันที่ของรอบนี้ จึงต้องมีหลักฐานติดไว้ด้วย —
+                      ส่งครบทุกรายการเมื่อไหร่ PO จะเป็น “จัดส่งแล้ว” เอง
+                    </p>
+                    {/*
                   จำนวนที่ส่งรอบนี้ (0077).
 
                   ตั้งต้นที่ของที่ยังค้างทั้งหมด การส่งครั้งเดียวจบจึงยังเป็นการ
                   กดยืนยันครั้งเดียวเหมือนเดิม ส่วนการแบ่งส่งคือการแก้ตัวเลขลง
                 */}
-                <p className="text-xs font-medium mb-1">จำนวนที่ส่งรอบนี้</p>
-                <div className="mb-3 space-y-1.5">
-                  {progress.map((p) => (
-                    <div key={p.uid || p.name} className="flex items-center gap-2">
-                      <span className="text-xs flex-1 truncate" title={p.name}>
-                        {p.name || '(ยังไม่ได้เลือกสินค้า)'}
-                      </span>
-                      <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                        ค้าง {p.remaining}/{p.ordered}
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={p.remaining}
-                        aria-label={`จำนวนที่ส่ง ${p.name}`}
-                        value={deliveryPanel.qty[p.uid] ?? 0}
-                        onChange={(e) =>
-                          setDeliveryPanel({
-                            ...deliveryPanel,
-                            qty: { ...deliveryPanel.qty, [p.uid]: Number(e.target.value) },
-                          })
-                        }
-                        className="field text-sm px-2 py-1 w-20 text-right"
-                      />
+                    <p className="text-xs font-medium mb-1">จำนวนที่ส่งรอบนี้</p>
+                    <div className="mb-3 space-y-1.5">
+                      {progress.map((p) => (
+                        <div key={p.uid || p.name} className="flex items-center gap-2">
+                          <span className="text-xs flex-1 truncate" title={p.name}>
+                            {p.name || '(ยังไม่ได้เลือกสินค้า)'}
+                          </span>
+                          <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                            ค้าง {p.remaining}/{p.ordered}
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={p.remaining}
+                            aria-label={`จำนวนที่ส่ง ${p.name}`}
+                            value={deliveryPanel.qty[p.uid] ?? 0}
+                            onChange={(e) =>
+                              setDeliveryPanel({
+                                ...deliveryPanel,
+                                qty: { ...deliveryPanel.qty, [p.uid]: Number(e.target.value) },
+                              })
+                            }
+                            className="field text-sm px-2 py-1 w-20 text-right"
+                          />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <p className="text-xs font-medium">วันที่จัดส่ง</p>
-                <ThaiDateInput
-                  ariaLabel="วันที่จัดส่ง"
-                  value={deliveryPanel.date}
-                  onChange={(v) => setDeliveryPanel({ ...deliveryPanel, date: v })}
-                  className="field text-sm px-3 py-2 w-full mb-3"
-                />
-                <label className="text-xs font-medium" htmlFor="ws-delivery-note">
-                  ขนส่ง / เลขพัสดุ / ผู้รับ <span style={{ color: '#B23A48' }}>*</span>
-                </label>
-                <textarea
-                  id="ws-delivery-note"
-                  rows={2}
-                  value={deliveryPanel.note}
-                  onChange={(e) => setDeliveryPanel({ ...deliveryPanel, note: e.target.value })}
-                  placeholder="เช่น นิ่มซี่เส็ง เลขพัสดุ NMS123456 · คุณสมชายรับของ"
-                  className="field text-sm px-3 py-2 w-full mb-3"
-                />
-                <label className="text-xs font-medium" htmlFor="ws-delivery-files">
-                  แนบหลักฐาน (รูปใบส่งของที่เซ็นแล้ว / ใบรับของขนส่ง)
-                  <span style={{ color: '#B23A48' }}> *</span>
-                </label>
-                <input
-                  id="ws-delivery-files"
-                  type="file"
-                  multiple
-                  accept="image/*,application/pdf"
-                  onChange={(e) =>
-                    setDeliveryPanel({
-                      ...deliveryPanel,
-                      files: Array.from(e.target.files ?? []),
-                    })
-                  }
-                  className="field text-sm px-3 py-2 w-full"
-                />
-                {deliveryPanel.files.length > 0 && (
-                  <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
-                    <i className="fa-solid fa-paperclip mr-1"></i>
-                    {deliveryPanel.files.map((file) => file.name).join(', ')}
-                  </p>
+                    <p className="text-xs font-medium">วันที่จัดส่ง</p>
+                    <ThaiDateInput
+                      ariaLabel="วันที่จัดส่ง"
+                      value={deliveryPanel.date}
+                      onChange={(v) => setDeliveryPanel({ ...deliveryPanel, date: v })}
+                      className="field text-sm px-3 py-2 w-full mb-3"
+                    />
+                    <label className="text-xs font-medium" htmlFor="ws-delivery-note">
+                      ขนส่ง / เลขพัสดุ / ผู้รับ <span style={{ color: '#B23A48' }}>*</span>
+                    </label>
+                    <textarea
+                      id="ws-delivery-note"
+                      rows={2}
+                      value={deliveryPanel.note}
+                      onChange={(e) => setDeliveryPanel({ ...deliveryPanel, note: e.target.value })}
+                      placeholder="เช่น นิ่มซี่เส็ง เลขพัสดุ NMS123456 · คุณสมชายรับของ"
+                      className="field text-sm px-3 py-2 w-full mb-3"
+                    />
+                    <label className="text-xs font-medium" htmlFor="ws-delivery-files">
+                      แนบหลักฐาน (รูปใบส่งของที่เซ็นแล้ว / ใบรับของขนส่ง)
+                      <span style={{ color: '#B23A48' }}> *</span>
+                    </label>
+                    <input
+                      id="ws-delivery-files"
+                      type="file"
+                      multiple
+                      accept="image/*,application/pdf"
+                      onChange={(e) =>
+                        setDeliveryPanel({
+                          ...deliveryPanel,
+                          files: Array.from(e.target.files ?? []),
+                        })
+                      }
+                      className="field text-sm px-3 py-2 w-full"
+                    />
+                    {deliveryPanel.files.length > 0 && (
+                      <p className="text-xs mt-1.5" style={{ color: 'var(--ink-soft)' }}>
+                        <i className="fa-solid fa-paperclip mr-1"></i>
+                        {deliveryPanel.files.map((file) => file.name).join(', ')}
+                      </p>
+                    )}
+                    {deliveryError && (
+                      <p className="text-xs mt-2" style={{ color: '#B23A48' }} role="alert">
+                        {deliveryError}
+                      </p>
+                    )}
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={submitDelivery}
+                        disabled={deliveryBusy}
+                        className="flex-1 rounded-xl py-2 text-sm font-semibold"
+                        style={{
+                          background: 'var(--primary)',
+                          color: '#fff',
+                          opacity: deliveryBusy ? 0.6 : 1,
+                        }}
+                      >
+                        {deliveryBusy ? 'กำลังบันทึก…' : 'บันทึกการจัดส่ง แล้วพิมพ์ใบส่งของ'}
+                      </button>
+                      <button
+                        onClick={() => setDeliveryPanel(null)}
+                        disabled={deliveryBusy}
+                        className="btn-outline rounded-xl py-2 px-4 text-sm"
+                      >
+                        ยกเลิก
+                      </button>
+                    </div>
+                  </div>
                 )}
-                {deliveryError && (
-                  <p className="text-xs mt-2" style={{ color: '#B23A48' }} role="alert">
-                    {deliveryError}
-                  </p>
-                )}
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={submitDelivery}
-                    disabled={deliveryBusy}
-                    className="flex-1 rounded-xl py-2 text-sm font-semibold"
-                    style={{
-                      background: 'var(--primary)',
-                      color: '#fff',
-                      opacity: deliveryBusy ? 0.6 : 1,
-                    }}
-                  >
-                    {deliveryBusy ? 'กำลังบันทึก…' : 'บันทึกการจัดส่ง แล้วพิมพ์ใบส่งของ'}
-                  </button>
-                  <button
-                    onClick={() => setDeliveryPanel(null)}
-                    disabled={deliveryBusy}
-                    className="btn-outline rounded-xl py-2 px-4 text-sm"
-                  >
-                    ยกเลิก
-                  </button>
-                </div>
-              </div>
-            )}
-            {/*
+                {/*
               จ่าหน้ากล่องส่งของ.
 
               Outside the grid on purpose: the shop issues exactly four
@@ -2294,93 +2328,105 @@ export function WholesaleDetail({
               outside of a box, with no amounts on it. Grouping it with the
               invoice would suggest it is paperwork the customer keeps.
             */}
-            <button
-              onClick={() => doPrint('label')}
-              disabled={!o.customerId}
-              className="w-full mt-2 rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2 btn-outline"
-              style={{ cursor: o.customerId ? 'pointer' : 'not-allowed' }}
-            >
-              <i className="fa-solid fa-box"></i>พิมพ์จ่าหน้ากล่อง (A5 แนวนอน)
-            </button>
-            {!o.customerId && (
-              <p className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
-                ต้องเลือกลูกค้าก่อน จึงจะพิมพ์จ่าหน้ากล่องได้
-              </p>
-            )}
-            {DOCS.filter((d) => !docAllowed[d.key]).map((d) => (
-              <p key={d.key} className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
-                {d.blocked}
-              </p>
-            ))}
-            {/* The one document that changes the books as well as printing. */}
-            {o.deliveredAt && (
-              <p className="text-xs mt-2 font-medium" style={{ color: '#3F6B33' }}>
-                <i className="fa-solid fa-truck-fast mr-1.5"></i>
-                ส่งของแล้วเมื่อ {fmtThaiDayString(o.deliveredAt)} — นับเป็นยอดขายของวันนี้
-              </p>
-            )}
-            {/* หลักฐานที่บันทึกไว้ — the reason it was demanded is that somebody
+                <button
+                  onClick={() => doPrint('label')}
+                  disabled={!o.customerId}
+                  className="w-full mt-2 rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2 btn-outline"
+                  style={{ cursor: o.customerId ? 'pointer' : 'not-allowed' }}
+                >
+                  <i className="fa-solid fa-box"></i>พิมพ์จ่าหน้ากล่อง (A5 แนวนอน)
+                </button>
+                {!o.customerId && (
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                    ต้องเลือกลูกค้าก่อน จึงจะพิมพ์จ่าหน้ากล่องได้
+                  </p>
+                )}
+                {DOCS.filter((d) => !docAllowed[d.key]).map((d) => (
+                  <p key={d.key} className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                    {d.blocked}
+                  </p>
+                ))}
+                {/* The one document that changes the books as well as printing. */}
+                {o.deliveredAt && (
+                  <p className="text-xs mt-2 font-medium" style={{ color: '#3F6B33' }}>
+                    <i className="fa-solid fa-truck-fast mr-1.5"></i>
+                    ส่งของแล้วเมื่อ {fmtThaiDayString(o.deliveredAt)} — นับเป็นยอดขายของวันนี้
+                  </p>
+                )}
+                {/* หลักฐานที่บันทึกไว้ — the reason it was demanded is that somebody
                 would one day need to look at it. */}
-            {o.deliveryNote && (
-              <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
-                <i className="fa-solid fa-circle-info mr-1.5"></i>
-                {o.deliveryNote}
-              </p>
-            )}
-            {(o.deliveryAttachments ?? []).length > 0 && (
-              <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
-                <i className="fa-solid fa-paperclip mr-1.5"></i>
-                {(o.deliveryAttachments ?? []).map(fileNameFromPath).join(', ')}
-              </p>
-            )}
-          </div>
-          {total - paid > 0 && can('wholesale.badDebt') && (
-            <button
-              onClick={markBadDebt}
-              className="w-full mb-3 text-xs py-2 rounded-xl font-medium"
-              style={{ color: '#B23A48', border: '1px solid #C24B57' }}
-            >
-              <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>แจ้งตัดเป็นหนี้สูญ
-              (ต้องผู้บริหารอนุมัติ)
-            </button>
-          )}
-          {/*
+                {o.deliveryNote && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                    <i className="fa-solid fa-circle-info mr-1.5"></i>
+                    {o.deliveryNote}
+                  </p>
+                )}
+                {(o.deliveryAttachments ?? []).length > 0 && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                    <i className="fa-solid fa-paperclip mr-1.5"></i>
+                    {(o.deliveryAttachments ?? []).map(fileNameFromPath).join(', ')}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/*
+            ปุ่มที่ตัดสินชะตาของทั้งใบ อยู่เต็มความกว้างใต้สองคอลัมน์.
+
+            ตัดหนี้สูญ ลบ PO และ บันทึก ไม่ได้เป็นของคอลัมน์ไหน และการวางไว้
+            ท้ายคอลัมน์ใดคอลัมน์หนึ่งจะทำให้มันลอยอยู่กลางหน้า ข้าง ๆ ช่องที่
+            ยังกรอกไม่เสร็จ
+          */}
+            <div className="min-w-0 xl:col-span-2">
+              {total - paid > 0 && can('wholesale.badDebt') && (
+                <button
+                  onClick={markBadDebt}
+                  className="w-full mb-3 text-xs py-2 rounded-xl font-medium"
+                  style={{ color: '#B23A48', border: '1px solid #C24B57' }}
+                >
+                  <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>แจ้งตัดเป็นหนี้สูญ
+                  (ต้องผู้บริหารอนุมัติ)
+                </button>
+              )}
+              {/*
             ลบ PO. Only on a saved PO — there is nothing to delete while it is
             still a draft, and ยกเลิก below already throws a draft away. Sits
             apart from ยกเลิก/บันทึก so the two cannot be confused at a glance.
           */}
-          {!isNew && can('wholesale.delete') && onDeleteOrder && (
-            <button
-              onClick={deleteOrder}
-              className="w-full mb-3 text-xs py-2 rounded-xl font-medium"
-              style={{ color: '#B23A48', border: '1px solid #C24B57' }}
-            >
-              <i className="fa-solid fa-trash-can mr-1.5"></i>ลบ PO นี้
-            </button>
-          )}
-          {deleteError && (
-            <p className="text-xs mb-3 text-center" style={{ color: '#B23A48' }}>
-              {deleteError}
-            </p>
-          )}
-          {saveError && (
-            <p className="text-xs mb-3 text-center" style={{ color: '#B23A48' }} role="alert">
-              {saveError}
-            </p>
-          )}
-          <div className="flex gap-3">
-            <button
-              onClick={goBack}
-              className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
-            >
-              ยกเลิก
-            </button>
-            <button
-              onClick={save}
-              className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
-            >
-              <i className="fa-solid fa-floppy-disk"></i>บันทึก PO
-            </button>
+              {!isNew && can('wholesale.delete') && onDeleteOrder && (
+                <button
+                  onClick={deleteOrder}
+                  className="w-full mb-3 text-xs py-2 rounded-xl font-medium"
+                  style={{ color: '#B23A48', border: '1px solid #C24B57' }}
+                >
+                  <i className="fa-solid fa-trash-can mr-1.5"></i>ลบ PO นี้
+                </button>
+              )}
+              {deleteError && (
+                <p className="text-xs mb-3 text-center" style={{ color: '#B23A48' }}>
+                  {deleteError}
+                </p>
+              )}
+              {saveError && (
+                <p className="text-xs mb-3 text-center" style={{ color: '#B23A48' }} role="alert">
+                  {saveError}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={goBack}
+                  className="btn-outline flex-1 rounded-2xl py-3 text-sm font-medium"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={save}
+                  className="btn-primary flex-1 rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-floppy-disk"></i>บันทึก PO
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         {mounted &&
