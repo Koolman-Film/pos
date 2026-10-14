@@ -4,7 +4,9 @@ import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { fmt } from '@/lib/domain/format';
 import { LEGACY_METHOD_SUFFIX } from '@/lib/domain/payAccount';
 
+import { finnixDue, ticketFinnixTotal } from '@/lib/domain/finnixShare';
 import { countMissingEvidence, missingEvidence } from '@/lib/domain/paymentEvidence';
+import { FINNIX_OWNER, accountForLabel, ownerOf, type PayAccount } from '@/lib/domain/payAccount';
 
 import { AttachmentField } from './AttachmentField';
 
@@ -15,6 +17,7 @@ export function PaymentsSection({
   t,
   shop,
   paymentMethods,
+  payAccounts,
   attachmentUrlAction,
   addPayment,
   removePayment,
@@ -29,6 +32,13 @@ export function PaymentsSection({
   attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
   /** The branch's แหล่งเงิน by name — the payment lands in the account picked (0064). */
   paymentMethods: string[];
+  /**
+   * บัญชีของสาขานี้พร้อมเจ้าของเงิน (0069) — ใช้บอกว่าเงินก้อนไหนเข้า Finnix แล้ว.
+   *
+   * ไม่ได้ใช้เลือกบัญชี (นั่นคือ `paymentMethods`) แต่ใช้ตอบว่าชื่อที่เลือกไว้
+   * เป็นบัญชีของใคร ซึ่งเป็นคำถามคนละข้อ
+   */
+  payAccounts?: PayAccount[];
   addPayment: () => void;
   /** Drops the row entirely — see `removePayment` in TicketDetail for why. */
   removePayment?: (idx: number) => void;
@@ -45,6 +55,30 @@ export function PaymentsSection({
   const missing = countMissingEvidence(t.payments);
   /** ยอดที่รับมาเกินกว่าที่ต้องเก็บ — 0 เมื่อพอดีหรือยังขาด */
   const over = Math.max(paid - total, 0);
+
+  /*
+    รายได้ Finnix กับเงินที่เข้าบัญชี Finnix แล้ว (ร้านขอ 14 ต.ค. 2569).
+
+    "รายได้ finnix 5,000 · การรับเงินแหล่งรับเงินเป็นบัญชีที่ผูกกับ finnix แล้ว
+    2,000 · ให้คำนวณเป็นเหลือที่ต้องจ่ายคืน finnix อยู่ 3,000"
+
+    ไม่มีช่องให้ระบุว่าเงินก้อนไหนเป็นของใคร เพราะลูกค้าจ่ายเป็นก้อนเดียวโดยไม่
+    ได้บอกว่าจ่ายค่าอะไร สิ่งที่ตอบได้จริงคือเทียบสองยอด — และ "เข้า Finnix
+    แล้วเท่าไหร่" อ่านจากเจ้าของบัญชีที่รับเงิน (0069) ซึ่งตั้งไว้แล้วที่
+    การจัดการเงิน/บัญชี ไม่ต้องถามคนกรอกซ้ำที่นี่
+  */
+  const soldForFinnix = ticketFinnixTotal(t.items ?? []);
+  const intoFinnix =
+    payAccounts && soldForFinnix > 0.005
+      ? t.payments.reduce(
+          (n, p) =>
+            ownerOf(accountForLabel(payAccounts, shop, p.method)) === FINNIX_OWNER
+              ? n + Number(p.amount || 0)
+              : n,
+          0,
+        )
+      : 0;
+  const owedToFinnix = finnixDue(soldForFinnix, intoFinnix);
 
   // The heading lives in the FormSection wrapper — see detail/FormSection.tsx.
   return (
@@ -184,6 +218,35 @@ export function PaymentsSection({
             หรือถ้ารับเกินจริงต้องคืนลูกค้า
           </span>
         </p>
+      )}
+      {soldForFinnix > 0.005 && (
+        <div
+          className="text-xs mt-3 px-2.5 py-2 rounded-lg"
+          style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}
+          aria-label="สรุปรายได้ Finnix ของใบงานนี้"
+        >
+          <div className="flex justify-between gap-2">
+            <span style={{ color: 'var(--ink-soft)' }}>ขายเป็นรายได้ Finnix</span>
+            <span className="font-semibold">{fmt(soldForFinnix)}</span>
+          </div>
+          <div className="flex justify-between gap-2 mt-0.5">
+            <span style={{ color: 'var(--ink-soft)' }}>เข้าบัญชีของ Finnix แล้ว</span>
+            <span className="font-semibold">{fmt(intoFinnix)}</span>
+          </div>
+          <div
+            className="flex justify-between gap-2 mt-1 pt-1 font-bold"
+            style={{
+              borderTop: '1px solid var(--line)',
+              color:
+                owedToFinnix > 0.005 ? '#8A5A12' : owedToFinnix < -0.005 ? '#B23A48' : '#4C7A3E',
+            }}
+          >
+            <span>
+              {owedToFinnix < -0.005 ? 'เข้าบัญชี Finnix เกินยอดที่ขาย' : 'เหลือต้องจ่ายคืน Finnix'}
+            </span>
+            <span>{fmt(Math.abs(owedToFinnix))}</span>
+          </div>
+        </div>
       )}
       {missing > 0 && (
         <p

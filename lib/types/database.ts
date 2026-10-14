@@ -1637,6 +1637,7 @@ export type Database = {
           category: string
           discount_type: string | null
           discount_value: number | null
+          finnix_amount: number
           id: number
           interested: string
           interested_price: number
@@ -1653,6 +1654,7 @@ export type Database = {
           category: string
           discount_type?: string | null
           discount_value?: number | null
+          finnix_amount?: number
           id?: never
           interested?: string
           interested_price?: number
@@ -1669,6 +1671,7 @@ export type Database = {
           category?: string
           discount_type?: string | null
           discount_value?: number | null
+          finnix_amount?: number
           id?: never
           interested?: string
           interested_price?: number

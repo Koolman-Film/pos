@@ -9,6 +9,7 @@ import { OptionManageProvider } from '@/components/ui/optionManage';
 import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { fmtThaiDate, fmtThaiDateTime } from '@/lib/domain/format';
 import { resolveFilmPrice } from '@/lib/domain/filmPrice';
+import { branchShare } from '@/lib/domain/finnixShare';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { dateInputValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
@@ -73,21 +74,15 @@ export type SaveResult = {
   stockWarning?: string;
 };
 
-/** ยอดที่สาขาขายเอง — what a ใบกำกับภาษี from this branch could cover. */
+/**
+ * ยอดที่สาขาขายเอง — what a ใบกำกับภาษี from this branch could cover.
+ *
+ * ตั้งแต่ 0084 บรรทัดหนึ่งแบ่งกันได้ ของสาขาจึงไม่ใช่ "บรรทัดที่ไม่ใช่รับแทน"
+ * อีกต่อไป แต่เป็นผลรวมของส่วนที่เป็นของสาขาในทุกบรรทัด — ใบงานที่มีลำโพง
+ * 4,500 ซึ่ง 1,500 เป็นของ Finnix ยังออกใบกำกับภาษีได้ สำหรับ 3,000 ที่เหลือ
+ */
 function branchSells(items: Ticket['items']): number {
-  return items
-    .filter((i) => i.revenueKind !== 'รับแทน')
-    .reduce(
-      (n, i) =>
-        n +
-        itemNetPrice({
-          soldPrice: Number(i.soldPrice || 0),
-          discountType: i.discountType ?? undefined,
-          discountValue:
-            i.discountValue != null && i.discountValue !== '' ? Number(i.discountValue) : undefined,
-        }),
-      0,
-    );
+  return Math.round(items.reduce((n, i) => n + branchShare(i), 0) * 100) / 100;
 }
 
 /**
@@ -1094,9 +1089,15 @@ export function TicketDetail({
           bookedPrice: 0,
           sold: '',
           soldPrice: 0,
-          // A new line joins whichever side the job is on (0068). Marking a
-          // job รับแทน and then adding what was sold must not quietly put that
-          // money back into the branch's takings.
+          /*
+            A new line joins whichever side the job is on (0068). Marking a
+            job รับแทน and then adding what was sold must not quietly put that
+            money back into the branch's takings.
+
+            ธงยังตั้งไว้ เพราะบรรทัดใหม่ยังไม่มีราคา จึงยังไม่มีจำนวนเงินให้
+            ตั้ง — `finnixShare` อ่านธงเป็นคำตอบสำรองพอดี และพอมีราคาเมื่อไหร่
+            ปุ่มก็เขียนตัวเลขทับให้เอง (0084)
+          */
           revenueKind: t.revenueKind === 'รับแทน' ? 'รับแทน' : 'รายได้',
         },
       ],
@@ -1112,7 +1113,12 @@ export function TicketDetail({
       for a ใบกำกับภาษี to cover, and leaving it selected would leave the ออก…
       button offering the one document that is now refused.
     */
-    if (key === 'revenueKind' && docType === TAX_DOC_TYPE && branchSells(items) <= 0) {
+    // ตั้งแต่ 0084 สิ่งที่ย้ายเงินข้างคือ `finnixAmount` ไม่ใช่ธงอีกต่อไป
+    if (
+      (key === 'finnixAmount' || key === 'revenueKind') &&
+      docType === TAX_DOC_TYPE &&
+      branchSells(items) <= 0
+    ) {
       changeDocTypeTo('ใบเสร็จรับเงิน');
     }
   }
@@ -1664,6 +1670,7 @@ export function TicketDetail({
                     t={t}
                     shop={t.shop}
                     paymentMethods={paymentMethodOptions}
+                    payAccounts={payAccounts}
                     attachmentUrlAction={attachmentUrlAction}
                     addPayment={addPayment}
                     removePayment={removePayment}

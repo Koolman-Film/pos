@@ -34,6 +34,14 @@ export type TicketItem = {
    */
   revenueKind?: RevenueKind;
   /**
+   * บาทของบรรทัดนี้ที่เป็นรายได้ Finnix ส่วนที่เหลือเป็นของสาขา (migration 0084).
+   *
+   * แทนที่ธง `revenueKind` ซึ่งตอบได้แค่ทั้งบรรทัดหรือไม่เอาเลย — ของจริงมี
+   * กรณีที่ลำโพง 4,500 เป็นของ Finnix แค่ 1,500 ธงยังอยู่เพราะฐานข้อมูลคำนวณ
+   * มันจากตัวเลขนี้ให้ และของเก่าที่ยังไม่มีตัวเลขก็อ่านจากธงได้
+   */
+  finnixAmount?: number | string;
+  /**
    * เลขที่เอกสารใน PEAK ของรายการนี้ เมื่อเป็นรายได้ Finnix (migration 0073).
    *
    * Per line, not per job: Finnix issues its documents by ชนิดสินค้า, so a job

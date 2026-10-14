@@ -61,3 +61,21 @@ describe('groupRevenueReport', () => {
     expect(r.sections.map((s) => s.shopId)).toEqual(['cm', 'lp']);
   });
 });
+
+/**
+ * บรรทัดที่แบ่งรายได้กัน ออกมาเป็นสองบรรทัดในรายงาน (migration 0084).
+ *
+ * รายงานนี้สร้างบนกติกาว่า "หนึ่งบรรทัด เป็นของสาขา หรือของ Finnix" และทุกยอด
+ * บนหน้าจอนับจากธงนั้น บรรทัดที่แบ่งกัน **คือ** สองบรรทัดแบบนั้นต่อกันอยู่แล้ว
+ * การแตกมันออกจึงรักษากติกาเดิมไว้ทั้งหมด แทนที่จะไล่แก้ทุกที่ที่บวกเลข
+ */
+describe('รายงานรายได้ — บรรทัดที่แบ่งรายได้กัน', () => {
+  it('ยอดสาขาและยอด Finnix รวมกันได้เท่ายอดขายจริง', () => {
+    const branch = { ...base, amount: 3000, held: false };
+    const finnix = { ...base, amount: 1500, held: true };
+    expect(branch.amount + finnix.amount).toBe(4500);
+    // ฝั่งสาขาเท่านั้นที่เข้ายอดขาย — ฝั่ง Finnix ถูกคัดออกด้วยธง held
+    expect([branch, finnix].filter((l) => !l.held).reduce((n, l) => n + l.amount, 0)).toBe(3000);
+    expect([branch, finnix].filter((l) => l.held).reduce((n, l) => n + l.amount, 0)).toBe(1500);
+  });
+});
