@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { fetchAllRows, pagedData } from '@/lib/supabase/fetchAll';
+import { branchShare, finnixShare } from '@/lib/domain/finnixShare';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { summarizePayments, type PaymentSummary } from '@/lib/domain/docPayment';
 import { isReceived, orderTotal } from '@/lib/domain/orders';
@@ -122,7 +123,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
           .from('tickets')
           .select(
             'id, shop_id, customer_name, plate, brand, model, booking_channel, drop_off_date, revenue_kind, status, ' +
-              'ticket_items(category, sold, interested, sold_price, discount_type, discount_value, revenue_kind, finnix_doc_no), ' +
+              'ticket_items(category, sold, interested, sold_price, discount_type, discount_value, revenue_kind, finnix_doc_no, finnix_amount), ' +
               'ticket_payments(amount, method)',
           )
           .is('deleted_at', null)
@@ -204,6 +205,7 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       category: string;
       sold: string;
       interested: string | null;
+      finnix_amount: number | null;
       sold_price: number;
       revenue_kind: string | null;
       finnix_doc_no: string | null;
@@ -316,7 +318,17 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
       // A line with no product is a row somebody started and left; it has no
       // price and no name, and printing it would pad the report with blanks.
       if (!i.sold) continue;
-      lines.push({
+      const share = {
+        soldPrice: Number(i.sold_price || 0),
+        discountType: (i.discount_type as 'percent' | 'amount' | null) ?? undefined,
+        discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
+        finnixAmount: i.finnix_amount ?? undefined,
+        revenueKind: i.revenue_kind ?? undefined,
+      };
+      const forFinnix = finnixShare(share);
+      const forBranch = branchShare(share);
+
+      const base = {
         ticketId: t.id,
         shop: t.shop_id,
         soldAt,
@@ -325,26 +337,38 @@ export async function loadSaleLines(): Promise<SaleLine[]> {
         category: i.category || 'ไม่ระบุชนิด',
         product: i.sold,
         interested: i.interested ?? '',
-        amount: itemNetPrice({
-          soldPrice: Number(i.sold_price || 0),
-          discountType: (i.discount_type as 'percent' | 'amount' | null) ?? undefined,
-          discountValue: i.discount_value != null ? Number(i.discount_value) : undefined,
-        }),
-        cost: costLeft,
-        // ทีละรายการ ไม่ใช่ทั้งใบงาน (0068): one job can sell the branch’s own
-        // work alongside another branch’s, and the report has a line for each.
-        held: i.revenue_kind === 'รับแทน',
         taxInvoiceNo: taxNo(t.id),
         finnixDocNo: i.finnix_doc_no ?? '',
         paidIntoFinnix: finnixPaidOn.get(t.id) ?? 0,
         documents: docsByTicket.get(t.id) ?? [],
-        channel: 'ปลีก',
+        channel: 'ปลีก' as const,
         bookingChannel: t.booking_channel ?? '',
         car: carOf(t),
         payment: paymentForLine(t.id),
         status: t.status ?? '',
-      });
-      costLeft = 0;
+      };
+
+      /*
+        บรรทัดที่แบ่งกัน ออกมาเป็นสองบรรทัดในรายงาน (migration 0084).
+
+        รายงานนี้สร้างมาบนกติกาว่า "หนึ่งบรรทัด เป็นของสาขา หรือของ Finnix"
+        และทุกยอดบนหน้าจอนับจากธงนั้น การเติมคอลัมน์ที่สามเข้าไปแปลว่าต้องไล่
+        แก้ทุกที่ที่บวกเลข ซึ่งเป็นที่ที่พลาดแล้วไม่มีใครเห็น
+
+        บรรทัดที่แบ่งกัน **คือ** สองบรรทัดแบบนั้นต่อกันอยู่แล้ว การแตกมันออกจึง
+        รักษากติกาเดิมไว้ทั้งหมด และรายงานก็อ่านตรงกับความจริง: สินค้าชิ้นนี้
+        เข้าสาขาเท่านี้ เข้า Finnix เท่านี้
+
+        ต้นทุนติดไปกับบรรทัดของสาขาเท่านั้น — ไม่งั้นมันจะถูกนับสองรอบ
+      */
+      if (forBranch > 0.005 || forFinnix <= 0.005) {
+        lines.push({ ...base, amount: forBranch, cost: costLeft, held: false });
+        costLeft = 0;
+      }
+      if (forFinnix > 0.005) {
+        lines.push({ ...base, amount: forFinnix, cost: costLeft, held: true });
+        costLeft = 0;
+      }
     }
   }
 

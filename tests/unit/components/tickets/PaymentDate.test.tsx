@@ -153,3 +153,93 @@ describe('PaymentsSection — รับเงินเกินยอด', () =>
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+/**
+ * รายได้ Finnix เทียบกับเงินที่เข้าบัญชี Finnix (ร้านขอ 14 ต.ค. 2569).
+ *
+ * "รายได้ finnix 5,000 · การรับเงินแหล่งรับเงินเป็นบัญชีที่ผูกกับ finnix แล้ว
+ * 2,000 · ให้คำนวณเป็นเหลือที่ต้องจ่ายคืน finnix อยู่ 3,000"
+ */
+describe('PaymentsSection — เหลือต้องจ่ายคืน Finnix', () => {
+  const accounts = [
+    { id: 1, shop: 'cm', name: 'เงินสด', kind: 'cash', accountNo: '' },
+    {
+      id: 2,
+      shop: 'cm',
+      name: 'โอน Finnix',
+      kind: 'bank',
+      accountNo: '',
+      owner: 'Finnix' as const,
+    },
+  ];
+
+  const withFinnix = (payments: TicketPayment[]) =>
+    ({
+      shop: 'cm',
+      revenueKind: 'รายได้',
+      // ขายรวม 10,000 โดย 5,000 เป็นของ Finnix
+      items: [
+        { soldPrice: 6000, finnixAmount: 1500 },
+        { soldPrice: 4000, finnixAmount: 3500 },
+      ],
+      payments,
+    }) as unknown as Ticket;
+
+  function renderWith(payments: TicketPayment[]) {
+    render(
+      <PaymentsSection
+        t={withFinnix(payments)}
+        shop="cm"
+        paymentMethods={['เงินสด', 'โอน Finnix']}
+        payAccounts={accounts}
+        addPayment={vi.fn()}
+        updatePayment={vi.fn()}
+        total={10000}
+        paid={payments.reduce((n, p) => n + Number(p.amount || 0), 0)}
+      />,
+    );
+  }
+
+  it('หักเงินที่เข้าบัญชีของ Finnix แล้ว เหลือยอดที่ต้องคืน', () => {
+    renderWith([
+      row({ uid: 'a', method: 'โอน Finnix', amount: 2000 }),
+      row({ uid: 'b', method: 'เงินสด', amount: 3000 }),
+    ]);
+    const panel = screen.getByLabelText('สรุปรายได้ Finnix ของใบงานนี้');
+    expect(panel).toHaveTextContent('5,000.00');
+    expect(panel).toHaveTextContent('2,000.00');
+    expect(panel).toHaveTextContent('เหลือต้องจ่ายคืน Finnix');
+    expect(panel).toHaveTextContent('3,000.00');
+  });
+
+  it('เงินสดล้วน = ยังไม่ได้คืนสักบาท', () => {
+    renderWith([row({ method: 'เงินสด', amount: 10000 })]);
+    const panel = screen.getByLabelText('สรุปรายได้ Finnix ของใบงานนี้');
+    expect(panel).toHaveTextContent('เหลือต้องจ่ายคืน Finnix');
+    expect(panel).toHaveTextContent('5,000.00');
+  });
+
+  it('เข้าบัญชี Finnix เกินยอดที่ขาย บอกตรง ๆ ไม่ซ่อน', () => {
+    // เข้าบัญชี Finnix มากกว่าที่ขายเป็นของเขา แปลว่ามีอะไรผิด
+    renderWith([row({ method: 'โอน Finnix', amount: 6000 })]);
+    expect(screen.getByLabelText('สรุปรายได้ Finnix ของใบงานนี้')).toHaveTextContent(
+      'เข้าบัญชี Finnix เกินยอดที่ขาย',
+    );
+  });
+
+  it('ใบงานที่ไม่มีรายได้ Finnix เลย ไม่มีกล่องนี้', () => {
+    render(
+      <PaymentsSection
+        t={ticket([row({ amount: 6500 })])}
+        shop="cm"
+        paymentMethods={['เงินสด']}
+        payAccounts={accounts}
+        addPayment={vi.fn()}
+        updatePayment={vi.fn()}
+        total={6500}
+        paid={6500}
+      />,
+    );
+    expect(screen.queryByLabelText('สรุปรายได้ Finnix ของใบงานนี้')).toBeNull();
+  });
+});

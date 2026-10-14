@@ -35,6 +35,7 @@ import {
 } from '@/components/dashboard/receivables';
 import type { CalendarTicket } from '@/components/dashboard/JobCalendar';
 import { buildAppointments, type VisitDates } from '@/components/dashboard/appointments';
+import { branchShare, finnixShare } from '@/lib/domain/finnixShare';
 import { buildBranchComparison } from '@/components/dashboard/branchTotals';
 import {
   buildMoneySources,
@@ -100,7 +101,7 @@ export default async function DashboardPage({
         supabase
           .from('tickets')
           .select(
-            'id, shop_id, customer_name, plate, brand, model, service_type, booking_channel, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, interested, sold_price, discount_type, discount_value, revenue_kind), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
+            'id, shop_id, customer_name, plate, brand, model, service_type, booking_channel, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, interested, sold_price, discount_type, discount_value, revenue_kind, finnix_amount), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
           )
           // Soft-deleted tickets (migration 0013) are out of every figure on this
           // screen — revenue, job counts, the calendar and the bookings window.
@@ -283,14 +284,39 @@ export default async function DashboardPage({
     // (components/dashboard/productNames.ts).
     categories: [...new Set((t.ticket_items ?? []).map((i) => i.category).filter(Boolean))],
     products: productLabels(t.ticket_items ?? []),
-    items: (t.ticket_items ?? []).map((i) => ({
-      category: i.category,
-      // ทีละรายการ (0068) — the ticket-level flag is only the fallback now.
-      held: i.revenue_kind === 'รับแทน',
-      soldPrice: num(i.sold_price),
-      discountType: (i.discount_type ?? undefined) as 'percent' | 'amount' | undefined,
-      discountValue: i.discount_value == null ? undefined : num(i.discount_value),
-    })),
+    /*
+      บรรทัดที่แบ่งรายได้กัน กลายเป็นน้ำหนักสองก้อน (migration 0084).
+
+      `cashSales` แบ่งเงินที่รับมาให้แต่ละก้อนตามมูลค่า แล้วให้แต่ละก้อนพา
+      ธง held ของตัวเองไป — ก้อนที่เป็นของสาขากับก้อนที่เป็นของ Finnix จึงต้อง
+      เป็นคนละก้อน ไม่ใช่ก้อนเดียวที่มีธงเดียว
+    */
+    items: (t.ticket_items ?? []).flatMap((i) => {
+      const share = {
+        soldPrice: num(i.sold_price),
+        discountType: (i.discount_type ?? undefined) as 'percent' | 'amount' | undefined,
+        discountValue: i.discount_value == null ? undefined : num(i.discount_value),
+        finnixAmount: i.finnix_amount ?? undefined,
+        revenueKind: i.revenue_kind ?? undefined,
+      };
+      const forFinnix = finnixShare(share);
+      const forBranch = branchShare(share);
+      const parts: {
+        category: string;
+        held: boolean;
+        soldPrice: number;
+        discountType?: 'percent' | 'amount';
+        discountValue?: number;
+      }[] = [];
+      // น้ำหนักคือยอดสุทธิของก้อนนั้น จึงส่งเป็น soldPrice ที่ไม่มีส่วนลดซ้อน
+      if (forBranch > 0.005 || forFinnix <= 0.005) {
+        parts.push({ category: i.category, held: false, soldPrice: forBranch });
+      }
+      if (forFinnix > 0.005) {
+        parts.push({ category: i.category, held: true, soldPrice: forFinnix });
+      }
+      return parts;
+    }),
     payments: (t.ticket_payments ?? []).map((p) => ({
       amount: num(p.amount),
       method: p.method ?? '',
