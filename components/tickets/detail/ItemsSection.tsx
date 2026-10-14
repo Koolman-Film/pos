@@ -518,8 +518,18 @@ export function ItemsSection({
                   ใต้ช่องบอกว่าที่เหลือเป็นของสาขาเท่าไหร่ — เลขที่คนกรอกต้อง
                   เห็นคือผลของสิ่งที่เพิ่งพิมพ์ ไม่ใช่สิ่งที่พิมพ์ลงไป
                 */}
+                {/*
+                  สองช่องนี้อยู่คอลัมน์ขวา กว้างพอดีตัว (ร้านขอ 14 ต.ค. 2569).
+
+                  ทั้งคู่รับค่าสั้น ๆ — จำนวนเงินกับเลขเอกสาร — ช่องที่ลากยาว
+                  เต็มแผงจึงเป็นที่ว่างที่ไม่ได้ทำให้พิมพ์ง่ายขึ้นเลย และทำให้
+                  แผงรายการสินค้าสูงกว่าที่จำเป็น
+
+                  ชิดขวาเพื่อให้อยู่ใต้ปุ่ม รายได้สาขา/รายได้ Finnix ที่เป็นคน
+                  เปิดสองช่องนี้ขึ้นมา — ตามองลงมาตรง ๆ จากที่ที่เพิ่งกด
+                */}
                 {Number(it.soldPrice || 0) > 0 && finnixShare(it) > 0.005 && (
-                  <div className="mt-2">
+                  <div className="mt-2 ml-auto" style={{ maxWidth: '15rem' }}>
                     <label
                       className="text-xs block mb-1"
                       style={{ color: 'var(--ink-soft)' }}
@@ -552,7 +562,7 @@ export function ItemsSection({
                   has two of these.
                 */}
                 {finnixShare(it) > 0.005 && (
-                  <div className="mt-2">
+                  <div className="mt-2 ml-auto" style={{ maxWidth: '15rem' }}>
                     <label
                       className="text-xs block mb-1"
                       style={{ color: 'var(--ink-soft)' }}
