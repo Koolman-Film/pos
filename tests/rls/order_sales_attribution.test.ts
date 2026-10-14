@@ -146,10 +146,37 @@ describe('PO ขายส่ง — เซลล์เจ้าของยอ�
   });
 
   it('does not ask for a rep in a branch without a sales team', async () => {
-    const { error } = await asAdmin
-      .from('orders')
-      .insert({ id: 'WS-TEST-ATR4', shop_id: 'cm', status: 'รอจัดส่ง', sales_by: '' });
-    expect(error).toBeNull();
-    expect((await stored('WS-TEST-ATR4'))?.created_by).toBe(adminId);
+    /*
+      สร้างเงื่อนไข "สาขาที่ยังไม่มีเซลล์" เอง แทนที่จะเชื่อว่าสาขาหนึ่งยังไม่มี.
+
+      เทสต์นี้เคยยิงใส่สาขา cm ตรง ๆ โดยอาศัยว่าที่นั่นไม่มีใครในทะเบียนเซลล์
+      วันที่ร้านเพิ่มเซลล์คนแรกของ cm เข้าไปจริง ๆ เทสต์ก็แดงทันที ทั้งที่กฎที่
+      มันตรวจไม่ได้เปลี่ยนเลย — เป็นเทสต์ที่พังเพราะข้อมูล ไม่ใช่เพราะโค้ด
+
+      ปิดเซลล์ของสาขานั้นไว้ชั่วคราวแล้วเปิดคืน ไม่ลบของใคร
+    */
+    const { data: reps } = await admin
+      .from('sales_people')
+      .select('id')
+      .eq('shop_id', 'cm')
+      .eq('active', true);
+    const ids = (reps ?? []).map((r) => r.id);
+    if (ids.length > 0) {
+      assertNoError(
+        'pause cm reps',
+        (await admin.from('sales_people').update({ active: false }).in('id', ids)).error,
+      );
+    }
+    try {
+      const { error } = await asAdmin
+        .from('orders')
+        .insert({ id: 'WS-TEST-ATR4', shop_id: 'cm', status: 'รอจัดส่ง', sales_by: '' });
+      expect(error).toBeNull();
+      expect((await stored('WS-TEST-ATR4'))?.created_by).toBe(adminId);
+    } finally {
+      if (ids.length > 0) {
+        await admin.from('sales_people').update({ active: true }).in('id', ids);
+      }
+    }
   });
 });

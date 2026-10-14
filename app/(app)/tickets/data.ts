@@ -410,6 +410,7 @@ type DetailRow = {
     actual_qty: Record<string, number> | null;
     revenue_kind: string | null;
     finnix_doc_no: string | null;
+    finnix_amount: number | null;
     ticket_item_positions: { position: string; product: string; price: number }[];
   }[];
   ticket_payments: {
@@ -685,7 +686,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     .select(
       'id, shop_id, customer_name, phone, plate, car_type, brand, model, color, service_type, status, ' +
         'booking_channel, revenue_kind, tech_by_category, drop_off_date, pickup_date, extras, locked, pay_to_account_id, created_at, ' +
-        'ticket_items(id, category, booked, booked_price, sold, sold_price, interested, interested_price, discount_type, discount_value, actual_qty, revenue_kind, finnix_doc_no, ' +
+        'ticket_items(id, category, booked, booked_price, sold, sold_price, interested, interested_price, discount_type, discount_value, actual_qty, revenue_kind, finnix_doc_no, finnix_amount, ' +
         'ticket_item_positions(position, product, price)), ' +
         'ticket_payments(type, method, amount, paid_at, uid, attachments)',
     )
@@ -772,6 +773,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
       actualQtyMap: i.actual_qty ?? {},
       revenueKind: i.revenue_kind === 'รับแทน' ? ('รับแทน' as const) : ('รายได้' as const),
       finnixDocNo: i.finnix_doc_no ?? '',
+      finnixAmount: Number(i.finnix_amount || 0),
     })),
     payments: (t.ticket_payments ?? []).map((p) => ({
       type: p.type,

@@ -1,6 +1,8 @@
 import { dateInputValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
 
+import { branchShare, finnixShare, itemTotal, type ItemShare } from '@/lib/domain/finnixShare';
+
 import type { Ticket, TicketSavePayload } from './types';
 
 /**
@@ -32,13 +34,19 @@ const toISODate = (d: string) => (d ? dateInputValue(new Date(d + 'T00:00:00')) 
  * calling the whole thing held would lose that. The per-line flags carry the
  * real split.
  */
-export function ticketRevenueKind(
-  items: { soldPrice: number | string; revenueKind?: string }[],
-  formAnswer?: string,
-): 'รายได้' | 'รับแทน' {
+export function ticketRevenueKind(items: ItemShare[], formAnswer?: string): 'รายได้' | 'รับแทน' {
   const priced = items.filter((i) => Number(i.soldPrice || 0) > 0);
   if (priced.length === 0) return formAnswer === 'รับแทน' ? 'รับแทน' : 'รายได้';
-  return priced.every((i) => i.revenueKind === 'รับแทน') ? 'รับแทน' : 'รายได้';
+  /*
+    อ่านจากจำนวนเงิน ไม่ใช่จากธงของแต่ละบรรทัด (0084).
+
+    ตั้งแต่ 0084 ธงของบรรทัดถูกคำนวณจากตัวเลขในฐานข้อมูล ร่างบนหน้าจอจึงถือแต่
+    ตัวเลข — ถามธงตรงนี้จะได้คำตอบของเมื่อวานเสมอ
+
+    "ทั้งใบเป็นของ Finnix" คือทุกบรรทัดที่มีราคาไม่เหลือส่วนของสาขาเลย บรรทัด
+    ที่แบ่งกันทำให้ทั้งใบไม่ใช่ รับแทน ซึ่งถูก: ใบนี้หาเงินให้สาขาได้จริง
+  */
+  return priced.every((i) => branchShare(i) <= 0.005) ? 'รับแทน' : 'รายได้';
 }
 
 export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
@@ -107,7 +115,19 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
       // Blank/non-numeric entries are discarded rather than sent as NaN.
       // รายได้สาขา / รับแทน ของรายการนี้ (0068). Anything but the held word
       // is the branch's, so a draft from before the field existed reads right.
-      revenueKind: i.revenueKind === 'รับแทน' ? 'รับแทน' : 'รายได้',
+      // ฐานข้อมูลคำนวณธงจากตัวเลขนี้เองและหนีบเพดานให้ (0084) — ที่ส่งไปด้วย
+      // เป็นเพียงคำตอบเดียวกันที่คิดจากตัวเลขเดียวกัน จะได้ไม่มี payload ที่
+      // ขัดกับตัวเองไปถึงฐานข้อมูล
+      // บรรทัดที่ยังไม่มีราคาไม่มีเงินให้แบ่ง ธงที่ร่างถืออยู่จึงเป็นคำตอบเดียวที่มี
+      revenueKind:
+        itemTotal(i) <= 0.005
+          ? i.revenueKind === 'รับแทน'
+            ? 'รับแทน'
+            : 'รายได้'
+          : branchShare(i) <= 0.005
+            ? 'รับแทน'
+            : 'รายได้',
+      finnixAmount: finnixShare(i),
       finnixDocNo: (i.finnixDocNo ?? '').trim(),
       actualQty: Object.fromEntries(
         Object.entries(i.actualQtyMap ?? {})

@@ -3,6 +3,7 @@
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 import { ProductPicker, productDisplayFor } from '@/components/ui/ProductPicker';
 import { fmt } from '@/lib/domain/format';
+import { branchShare, finnixShare, itemTotal } from '@/lib/domain/finnixShare';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
 import type { StockRow, Ticket, TicketItem, TicketPosition } from '../types';
@@ -469,12 +470,23 @@ export function ItemsSection({
                           ['รับแทน', 'รายได้ Finnix'],
                         ] as const
                       ).map(([kind, label]) => {
-                        const on = (it.revenueKind ?? 'รายได้') === kind;
+                        /*
+                          ปุ่มตั้ง "จำนวนเงิน" ไม่ใช่ตั้งธงอีกต่อไป (0084).
+
+                          รายได้สาขา = ยอด Finnix เป็น 0 · รายได้ Finnix = ยอด
+                          Finnix เท่ากับทั้งบรรทัด ส่วนตัวเลขระหว่างกลางพิมพ์
+                          เองในช่องข้างล่าง ปุ่มจึงเป็นทางลัดของสองค่าที่ใช้
+                          บ่อยที่สุด ไม่ใช่ความจริงคนละชุดกับช่องกรอก
+                        */
+                        const mine = finnixShare(it);
+                        const on = kind === 'รับแทน' ? mine > 0.005 : mine <= 0.005;
                         return (
                           <button
                             key={kind}
                             type="button"
-                            onClick={() => updateItem(idx, 'revenueKind', kind)}
+                            onClick={() =>
+                              updateItem(idx, 'finnixAmount', kind === 'รับแทน' ? itemTotal(it) : 0)
+                            }
                             aria-pressed={on}
                             aria-label={`${label} รายการที่ ${idx + 1}`}
                             className="text-xs px-2.5 py-1 rounded-full font-semibold"
@@ -496,6 +508,41 @@ export function ItemsSection({
                   </div>
                 )}
                 {/*
+                  แบ่งกันได้ ไม่ใช่ทั้งก้อนหรือไม่เอาเลย (ร้านขอ 14 ต.ค. 2569).
+
+                  "บางกรณีการขายสินค้านี้อาจได้เป็นรายได้ Finnix ทั้งก้อน แบ่ง
+                  บางส่วนเป็นรายได้ Finnix บางส่วนเป็นรายได้สาขา" — ช่องนี้ขึ้น
+                  เฉพาะเมื่อมีส่วนของ Finnix อยู่แล้ว เพราะบรรทัดที่เป็นของสาขา
+                  ล้วนไม่มีอะไรให้แบ่ง และช่องที่ว่างอยู่ตลอดคือช่องที่ถูกข้าม
+
+                  ใต้ช่องบอกว่าที่เหลือเป็นของสาขาเท่าไหร่ — เลขที่คนกรอกต้อง
+                  เห็นคือผลของสิ่งที่เพิ่งพิมพ์ ไม่ใช่สิ่งที่พิมพ์ลงไป
+                */}
+                {Number(it.soldPrice || 0) > 0 && finnixShare(it) > 0.005 && (
+                  <div className="mt-2">
+                    <label
+                      className="text-xs block mb-1"
+                      style={{ color: 'var(--ink-soft)' }}
+                      htmlFor={`item-finnix-${idx}`}
+                    >
+                      ยอดที่เป็นรายได้ Finnix (บาท)
+                    </label>
+                    <input
+                      id={`item-finnix-${idx}`}
+                      type="number"
+                      aria-label={`ยอดรายได้ Finnix รายการที่ ${idx + 1}`}
+                      value={it.finnixAmount ?? ''}
+                      onChange={(e) => updateItem(idx, 'finnixAmount', e.target.value)}
+                      className="field text-xs px-2.5 py-1.5 w-full"
+                    />
+                    <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                      {branchShare(it) > 0.005
+                        ? `เหลือเป็นรายได้สาขา ${fmt(branchShare(it))}`
+                        : 'ทั้งรายการเป็นรายได้ Finnix'}
+                    </p>
+                  </div>
+                )}
+                {/*
                   เลขที่เอกสาร PEAK ของรายการนี้ (0073).
 
                   Under the button that made it Finnix's, because that is where
@@ -504,7 +551,7 @@ export function ItemsSection({
                   documents by ชนิดสินค้า, so a job with two of their products
                   has two of these.
                 */}
-                {it.revenueKind === 'รับแทน' && (
+                {finnixShare(it) > 0.005 && (
                   <div className="mt-2">
                     <label
                       className="text-xs block mb-1"
