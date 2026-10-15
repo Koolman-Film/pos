@@ -8,6 +8,9 @@
 > things this file used to say are no longer true, and are corrected below:
 > merging to `main` does **not** deploy (Vercel is not connected to git), and
 > `supabase db push` does **not** work (the stored database password is stale).
+>
+> **0077–0085** arrived later with `claude/service-schedule-compact` and are
+> **not yet applied** to production — release them in table order (rows 58–66).
 
 It began as the runbook for the batch that came out of the shop's trial run
 (branch `claude/post-trial-fixes-a16ecc`, now merged) and has grown one row per
@@ -31,7 +34,7 @@ into the Dashboard SQL Editor. Each file stamps its own version into
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
-`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 63 ในตารางข้างล่าง
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 67 ในตารางข้างล่าง
 (`release-0019` … `release-0085` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
@@ -301,8 +304,71 @@ In this order, as an admin:
 6. **A ticket's files** — attach a slip to a payment row and a QC photo, save,
    reopen, and preview both. Same three moving parts as step 4 but against the
    `ticket-attachments` bucket, which has its own policies.
+7. **MEMO ในใบงาน** (0082) — พิมพ์ข้อความหนึ่งบรรทัด แล้วเช็กว่าชื่อคนเขียนกับ
+   เวลาขึ้นถูก จากนั้นสั่งพิมพ์ใบเสนอราคาและยืนยันว่า**ข้อความไม่อยู่บนกระดาษ**
+8. **รายได้ Finnix แบบแบ่งยอด** (0084) — ใส่ยอด Finnix บางส่วนในรายการสินค้า
+   หนึ่งบรรทัด แล้วเช็กสามที่ว่าตรงกัน: กล่องสรุปใต้การรับเงิน · ตาราง
+   รายได้ Finnix ในโมดูลรายได้ · และยอดขายของสาขาที่ต้องเหลือเฉพาะส่วนที่เหลือ
+9. **วันที่ส่งงานก่อนวันรับงาน** (0085) — ลองตั้งให้ผิดแล้วกดบันทึก ต้องถูก
+   ปฏิเสธพร้อมคำอธิบาย ไม่ใช่บันทึกผ่าน
 
-## 4. Known follow-ups, not blockers
+## 4. หลังขึ้นระบบ — งานที่ต้องทำด้วยมือ
+
+ไฟล์ SQL ทำให้โครงสร้างถูกต้อง แต่มีบางอย่างที่ระบบเดาแทนไม่ได้ ต้องมีคนตอบ
+รายการนี้คือทั้งหมดที่ค้างอยู่ เรียงตามความเร่งด่วน
+
+### ก่อนใช้งานจริงวันแรก
+
+1. **ตั้งเจ้าของของแหล่งเงินแต่ละบัญชี** (0069) — การจัดการเงิน/บัญชี → แต่ละ
+   บัญชีเลือก สาขา หรือ Finnix ตั้งต้นเป็น "สาขา" ทุกใบ ถ้าบัญชีที่เงินของ
+   Finnix เข้าจริงยังไม่ถูกตั้ง ยอด "เหลือต้องจ่ายคืน Finnix" บนใบงาน (0084)
+   จะขึ้นเต็มจำนวนเสมอ เพราะระบบมองว่ายังไม่มีเงินเข้าไปเลยสักบาท
+
+2. **ตั้งชนิดของบัญชีเครื่องรูดบัตร (EDC)** (0064) — บัญชีที่ชนิดยังไม่ถูกตั้ง
+   จะเลือกเป็นแหล่งรับเงินไม่ได้
+
+3. **ชื่อแหล่งเงินที่ซ้ำกัน** — ถ้ามีสองบัญชีชื่อเดียวกันในสาขาเดียวกัน การจับคู่
+   ชื่อจะเลือกใบแรกที่เจอเสมอ เปลี่ยนชื่อให้ต่างกันก่อน
+
+4. **ผูกบัญชีเข้าระบบของเซลล์ขายส่ง** (0058) — ที่หน้า PO ไม่งั้นเซลล์จะเห็น
+   กำหนดชำระของทั้งสาขาแทนที่จะเห็นเฉพาะของตัวเอง
+
+### ภายในสัปดาห์แรก
+
+5. **เติมวันที่ส่งของให้ PO ที่ยังค้างชำระ** (0076) — PO ที่ไม่มีวันส่งของจะไม่
+   เข้ายอดค้างรับและไม่เข้ารายงานรายได้ หาใบที่ต้องเติมด้วย:
+
+   ```sql
+   select id, status, created_at::date
+     from pos.orders
+    where deleted_at is null and delivered_at is null
+      and status in ('ค้างชำระ', 'จัดส่งแล้ว', 'ปิดงานแล้ว')
+    order by created_at;
+   ```
+
+6. **เติมการรับเงินค่าประกันของกรมธรรม์เดิม** (0071) — กรมธรรม์ที่ขายก่อนรันไฟล์
+   มียอดรับเงินเป็น 0 ทั้งหมด เพราะตอนนั้นยังไม่มีช่องให้กรอก
+
+7. **ใบงานที่วันส่งงานอยู่ก่อนวันรับงาน** (0085) — ใบพวกนี้ยังเปิดอ่านได้ แต่จะ
+   บันทึกไม่ได้จนกว่าจะแก้วันที่ หาไว้ล่วงหน้าได้ด้วย:
+
+   ```sql
+   select id, drop_off_date, pickup_date
+     from pos.tickets
+    where deleted_at is null and pickup_date <= drop_off_date
+    order by drop_off_date;
+   ```
+
+### ไม่ต้องทำอะไร แต่ควรรู้
+
+8. **สถานะ PO เก่าไม่ถูกไล่คำนวณใหม่** (0081) — สถานะจะขยับมาถูกต้องเมื่อมี
+   กิจกรรมถัดไปเกิดกับใบนั้น (บันทึกรายการ รับเงิน ส่งของ) ถ้าอยากให้ไล่ปรับ
+   ทั้งหมดในครั้งเดียว ขอสคริปต์เพิ่มได้ — ตั้งใจไม่ใส่มาในไฟล์ เพราะมันจะทำให้
+   สถานะของ PO เก่าหลายใบขยับพร้อมกันโดยไม่มีใครดู
+
+9. **ใบงานเก่าที่ปิดแล้วยังไม่ถูกล็อก** — ดูหัวข้อถัดไป
+
+## 5. Known follow-ups, not blockers
 
 - **Old closed tickets are not locked.** The flag is set on save, so tickets
   finished before this release stay editable until someone saves them. To lock
