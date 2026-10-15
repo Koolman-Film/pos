@@ -1503,3 +1503,60 @@ describe('TicketDetail — บันทึกก่อนพิมพ์', () =>
     expect(props.saveAction).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * วันที่ส่งงานต้องไม่อยู่ก่อนวันที่รับงาน (ร้านขอ 15 ต.ค. 2569).
+ *
+ * ฐานข้อมูลปฏิเสธเหมือนกัน (0085) แต่ข้อความจากตรงนั้นมาถึงตอนที่คนกดบันทึกไป
+ * แล้ว การหยุดไว้ตรงนี้ทำให้เขายังอยู่กับช่องที่ต้องแก้
+ */
+describe('TicketDetail — ลำดับวันที่รับงาน/ส่งงาน', () => {
+  const dated = (dropOff: string, pickup: string) =>
+    makeTicket({
+      dropOffDateObj: new Date(`${dropOff}+07:00`),
+      pickupDateObj: new Date(`${pickup}+07:00`),
+    });
+
+  it('ส่งก่อนรับ ขึ้นคำเตือนใต้ช่อง และบันทึกไม่ได้', async () => {
+    const user = userEvent.setup();
+    const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
+    render(
+      <TicketDetail
+        {...baseProps(dated('2026-10-15T09:00', '2026-09-17T16:00'))}
+        saveAction={saveAction}
+      />,
+    );
+
+    expect(screen.getAllByText(/วันที่ส่งงานต้องอยู่หลังวันที่รับงาน/).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    expect(saveAction).not.toHaveBeenCalled();
+  });
+
+  it('วันเดียวกันแต่เวลาส่งหลังเวลารับ บันทึกได้', async () => {
+    const user = userEvent.setup();
+    const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
+    render(
+      <TicketDetail
+        {...baseProps(dated('2026-10-15T09:00', '2026-10-15T16:00'))}
+        saveAction={saveAction}
+      />,
+    );
+
+    expect(screen.queryByText(/วันที่ส่งงานต้องอยู่หลังวันที่รับงาน/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    expect(saveAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('เวลาเท่ากันเป๊ะ ก็ยังไม่ผ่าน', async () => {
+    const user = userEvent.setup();
+    const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
+    render(
+      <TicketDetail
+        {...baseProps(dated('2026-10-15T09:00', '2026-10-15T09:00'))}
+        saveAction={saveAction}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    expect(saveAction).not.toHaveBeenCalled();
+  });
+});

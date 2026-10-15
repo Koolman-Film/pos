@@ -38,7 +38,8 @@ async function seed() {
     customer_name: 'คุณ ทดสอบวันที่',
     status: 'จองแล้ว',
     drop_off_date: RECEIVED_ON,
-    pickup_date: RECEIVED_ON,
+    // วันส่งงานต้องอยู่หลังวันรับงาน (0085) — วันเดียวกันแต่คนละเวลา
+    pickup_date: `${RECEIVED_ON}T17:00:00+07:00`,
   });
   assertNoError('seed ticket', error);
 
