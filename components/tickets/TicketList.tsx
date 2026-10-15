@@ -11,7 +11,7 @@ import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
 import { rememberTicketFilter } from '@/lib/browser/ticketFilter';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
-import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
+import { DEFAULT_PERIOD, isInPeriod, spanOverlapsPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { ticketTotal } from '@/lib/domain/tickets';
 import { amountTerms, matchesSearch } from '@/lib/domain/search';
@@ -167,7 +167,27 @@ export function TicketList({
       ]),
     );
   } else {
-    scoped = scoped.filter((t) => inSelectedPeriod(t.dropOffDateObj));
+    /*
+      งานที่ "อยู่ในช่วง" ไม่ใช่แค่งานที่รับเข้ามาในช่วง (ร้านขอ 15 ต.ค. 2569).
+
+      เดิมกรองด้วยวันรับงานอย่างเดียว กด "วันนี้" จึงเห็นแต่ใบที่เปิดวันนี้ ส่วน
+      รถที่รับมาเมื่อวานและยังไม่ได้ส่งคืนหายไปจากรายการ ทั้งที่มันคือรถที่ยัง
+      อยู่ในร้านและเป็นงานที่ต้องทำวันนี้
+
+      ใช้กติกาเดียวกันทุกช่วง ไม่ใช่เฉพาะ "วันนี้" — กฎสองแบบในปุ่มสี่ปุ่มที่
+      อยู่ติดกัน คือกฎที่ไม่มีใครจำได้ว่าอันไหนใช้ตอนไหน งานที่คาบเดือนจึงขึ้น
+      ทั้งสองเดือน ซึ่งถูก: มันถูกทำในทั้งสองเดือนจริง ๆ
+    */
+    scoped = scoped.filter((t) =>
+      spanOverlapsPeriod(
+        t.dropOffDateObj,
+        t.pickupDateObj,
+        period,
+        periodValue,
+        rangeStart,
+        rangeEnd,
+      ),
+    );
   }
 
   const visible = statusFilter === 'all' ? scoped : scoped.filter((t) => t.status === statusFilter);
