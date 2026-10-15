@@ -107,6 +107,48 @@ export function isInPeriod(
  *
  * `todayKey` is passed in for the same reason `periodCaption` takes `now`.
  */
+/**
+ * งานกินเวลาคาบช่วงที่เลือกไหม (ร้านขอ 15 ต.ค. 2569).
+ *
+ * `isInPeriod` ถามถึงวันเดียว ซึ่งถูกสำหรับเงิน: ค่าใช้จ่ายเกิดวันเดียว เงิน
+ * เข้าวันเดียว แต่ "งาน" กินเวลา — รับรถวันจันทร์ ส่งวันพุธ และวันอังคารรถก็
+ * ยังอยู่ที่ร้าน
+ *
+ * เดิมรายการใบงานกรองด้วยวันรับงานอย่างเดียว กด "วันนี้" จึงเห็นแต่งานที่รับ
+ * เข้ามาวันนี้ ส่วนรถที่ค้างอยู่ในร้านจากเมื่อวานหายไปทั้งที่ยังทำอยู่ — ซึ่ง
+ * เป็นคนละคำถามกับที่คนเปิดหน้านี้ถาม
+ *
+ * ไม่มีวันส่ง = งานหนึ่งวัน ช่วงจึงเป็นวันรับวันเดียว · วันส่งก่อนวันรับ (ข้อมูล
+ * ผิด) ก็ยังอ่านเป็นช่วงได้ โดยเอาวันที่น้อยกว่าเป็นต้นช่วง
+ */
+export function spanOverlapsPeriod(
+  from: Date | string | null | undefined,
+  to: Date | string | null | undefined,
+  period: string,
+  periodValue: string,
+  rangeStart: string,
+  rangeEnd: string,
+): boolean {
+  const a = from ? shopDayKey(new Date(from)) : '';
+  const b = to ? shopDayKey(new Date(to)) : '';
+  // ไม่มีวันเลย = วางไว้ในช่วงไหนไม่ได้ ซึ่ง `isInPeriod` ตอบว่า "เอาไว้ก่อน"
+  if (!a && !b) return true;
+  const start = a && b ? (a < b ? a : b) : a || b;
+  const end = a && b ? (a < b ? b : a) : a || b;
+
+  const { from: winFrom, to: winTo } = periodBounds(
+    period,
+    periodValue,
+    rangeStart,
+    rangeEnd,
+    shopDayKey(new Date()),
+  );
+  if (!winFrom && !winTo) return true;
+  if (winTo && start > winTo) return false;
+  if (winFrom && end < winFrom) return false;
+  return true;
+}
+
 export function periodBounds(
   period: string,
   periodValue: string,
