@@ -29,7 +29,8 @@ function ticket(id: string) {
     customer_name: 'ทดสอบเลขใบงาน',
     status: 'จองแล้ว',
     drop_off_date: now,
-    pickup_date: now,
+    // วันส่งงานต้องอยู่หลังวันรับงาน (0085)
+    pickup_date: new Date(Date.parse(now) + 3600000).toISOString(),
   };
 }
 

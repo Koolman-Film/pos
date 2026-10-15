@@ -6,6 +6,7 @@ import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { PHONE_HINT, PhoneInput, PhoneOwnersWarning } from '@/components/ui/PhoneField';
 import { ShopButtons } from '@/components/ui/ShopButtons';
 import { findPhoneOwners } from '@/lib/domain/phone';
+import { PICKUP_ORDER_ERROR, pickupBeforeDropOff } from '@/lib/domain/ticketDates';
 
 import { TicketCustomerPicker } from '../TicketCustomerPicker';
 import { BRAND_TH, MODEL_TH, type RetailCustomer, type Ticket } from '../types';
@@ -105,6 +106,17 @@ export function VehicleInfoSection({
             value={t.pickupDateObj}
             onChange={(v) => field('pickupDateObj', v)}
           />
+          {/*
+            บอกทันทีที่เลือกผิด ไม่ใช่ตอนกดบันทึก — ตาคนยังอยู่ที่ช่องนี้พอดี
+            ส่วนด่านจริงอยู่ที่ฐานข้อมูล (0085) เพราะหน้าจอไม่ใช่สิ่งเดียวที่
+            เขียนข้อมูลได้
+          */}
+          {pickupBeforeDropOff(t.dropOffDateObj, t.pickupDateObj) && (
+            <p className="text-xs mt-1" style={{ color: '#B23A48' }} role="alert">
+              <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+              {PICKUP_ORDER_ERROR}
+            </p>
+          )}
         </div>
       </div>
       <div className="mb-3">

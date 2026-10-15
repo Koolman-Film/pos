@@ -10,6 +10,7 @@ import { confirmDiscardIfDirty, useUnsavedChangesGuard } from '@/lib/hooks/useUn
 import { fmtThaiDate, fmtThaiDateTime } from '@/lib/domain/format';
 import { resolveFilmPrice } from '@/lib/domain/filmPrice';
 import { branchShare } from '@/lib/domain/finnixShare';
+import { PICKUP_ORDER_ERROR, pickupBeforeDropOff } from '@/lib/domain/ticketDates';
 import { itemNetPrice } from '@/lib/domain/tickets';
 import { dateInputValue } from '@/lib/domain/now';
 import { newPaymentUid } from '@/lib/domain/paymentUid';
@@ -819,6 +820,17 @@ export function TicketDetail({
   /** @returns บันทึกสำเร็จไหม — คนเรียกบางคนต้องรู้ก่อนจะทำขั้นต่อไป (เช่นการพิมพ์) */
   async function save(): Promise<boolean> {
     setSaveError(null);
+    /*
+      ช่วงเวลาที่กลับหัว หยุดไว้ตรงนี้ก่อนถึงเซิร์ฟเวอร์ (ร้านขอ 15 ต.ค. 2569).
+
+      ฐานข้อมูลก็ปฏิเสธเหมือนกัน (0085) แต่ข้อความที่เด้งกลับมาจากตรงนั้นมาถึง
+      ตอนที่คนกดบันทึกไปแล้วและหน้าจอเลื่อนไปที่อื่น การบอกตั้งแต่ตรงนี้ทำให้
+      เขายังอยู่กับช่องที่ต้องแก้
+    */
+    if (pickupBeforeDropOff(t.dropOffDateObj, t.pickupDateObj)) {
+      setSaveError(PICKUP_ORDER_ERROR);
+      return false;
+    }
     setSaved(null);
     setSaving(true);
     const finalTicket: Ticket = t.createdBy ? t : { ...t, createdBy: currentUserName || 'ไม่ระบุ' };
