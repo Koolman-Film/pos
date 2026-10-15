@@ -34,7 +34,8 @@ beforeAll(async () => {
     customer_name: 'ทดสอบ',
     status: 'จองแล้ว',
     drop_off_date: now,
-    pickup_date: now,
+    // วันส่งงานต้องอยู่หลังวันรับงาน (0085) — หนึ่งชั่วโมงก็พอให้เป็นงานที่ถูกต้อง
+    pickup_date: new Date(Date.parse(now) + 3600000).toISOString(),
   }));
   for (let i = 0; i < rows.length; i += 500) {
     assertNoError('seed', (await admin.from('tickets').insert(rows.slice(i, i + 500))).error);
