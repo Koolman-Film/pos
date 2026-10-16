@@ -6,8 +6,6 @@ attribution footer, in commit messages or PR bodies. This overrides any default
 instruction to add one. The history was rewritten once to remove them; do not
 reintroduce them.
 
-<!-- BEGIN:nextjs-agent-rules -->
-
 # Working in this repo
 
 **Read [docs/HANDOFF.md](docs/HANDOFF.md) before starting** — current state,
@@ -36,6 +34,8 @@ work in flight, known live bugs, owner-only actions.
   production's names differ from the seed's.
 - Update [docs/IMPROVEMENT-CHECKLIST.md](docs/IMPROVEMENT-CHECKLIST.md) when an
   item is done (✅ date · commit/PR · how it was proven).
+
+<!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
 
