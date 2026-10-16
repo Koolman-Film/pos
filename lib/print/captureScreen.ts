@@ -34,8 +34,7 @@ export async function captureElement(
     backgroundColor: options.background,
     pixelRatio: options.pixelRatio ?? 2,
     // กรองทีละโหนด: ปุ่มและตัวควบคุมไม่ได้เป็นส่วนหนึ่งของรายงาน
-    filter: (el) =>
-      !(el instanceof HTMLElement) || el.getAttribute(HIDE_IN_CAPTURE) === null,
+    filter: (el) => !(el instanceof HTMLElement) || el.getAttribute(HIDE_IN_CAPTURE) === null,
   });
   return { dataUrl, width: node.scrollWidth, height: node.scrollHeight };
 }
