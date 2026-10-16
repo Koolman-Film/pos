@@ -400,47 +400,65 @@ describe('DailyReportView — ที่มาของจำนวน', () => {
 });
 
 /**
- * กล่องต้องอยู่ในจอ (ร้านเจอ 2 ต.ค. 2569).
+ * กล่องต้องอยู่ในจอ และต้องไม่ถูกอะไรตัด (ร้านเจอซ้ำ 2 และ 16 ต.ค. 2569).
  *
- * ตั้งต้นให้กล่องชิดขวาของตัวเลขเพราะตัวเลขส่วนใหญ่อยู่ชิดขวาของตาราง แต่ตัวเลข
- * บนการ์ดสรุปอยู่ชิดซ้ายของหน้า กล่องเลยกางทะลุไปทับแถบเมนูจนอ่านชื่อใบงานไม่ได้
- * เหลือแต่ตัวเลขเงิน — ข้อมูลอยู่ครบมาตลอด แต่คนอ่านมองไม่เห็น
+ * รอบแรก: กล่องกางไปนอนใต้แถบเมนู อ่านชื่อใบงานไม่ได้
+ * รอบสอง: กล่องถูก `overflow-x-auto` ของตารางตัด บางใบว่างเปล่าทั้งกล่อง
+ *
+ * วิธีแก้สุดท้ายคือแขวนกล่องไว้ที่ body แล้ววางด้วยพิกัดของหน้าต่าง จึงไม่เหลือ
+ * บรรพบุรุษให้ตัด และตำแหน่งยังถูกหนีบให้อยู่ในคอลัมน์เนื้อหาเหมือนเดิม
  */
-describe('DailyReportView — กล่องที่มาต้องไม่ล้นจอ', () => {
-  const rect = (left: number, right: number) =>
-    ({ left, right, top: 0, bottom: 0, width: right - left, height: 0 }) as DOMRect;
+describe('DailyReportView — กล่องที่มาต้องไม่ล้นจอและไม่ถูกตัด', () => {
+  const rect = (left: number, right: number, top = 100, bottom = 120) =>
+    ({ left, right, top, bottom, width: right - left, height: bottom - top }) as DOMRect;
 
-  it('ล้นขอบซ้าย ถูกเลื่อนกลับเข้ามา', async () => {
+  const openPanel = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
+    return screen.findByRole('dialog');
+  };
+
+  it('แขวนไว้ที่ body ไม่ได้อยู่ใต้ตารางที่มี overflow', async () => {
+    /*
+      นี่คือรอบที่สอง: กล่องอยู่ครบทุกพิกเซล แต่ถูกกล่องที่เลื่อนได้ของตารางตัด
+      จนมองไม่เห็น การเลื่อนตำแหน่งแก้ไม่ได้ ต้องออกไปจากกล่องนั้นเลย
+    */
+    const user = userEvent.setup();
+    renderView();
+    const panel = await openPanel(user);
+    expect(panel.closest('table')).toBeNull();
+    expect(panel.parentElement).toBe(document.body);
+    // jsdom ไม่ได้โหลด Tailwind คลาสจึงเป็นสิ่งเดียวที่ยืนยันได้ว่าวางแบบ fixed
+    expect(panel.className).toContain('fixed');
+  });
+
+  it('ล้นขอบซ้าย ถูกดันกลับเข้ามา', async () => {
     const user = userEvent.setup();
     const spy = vi
       .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockReturnValue(rect(-120, 120));
     try {
       renderView();
-      await user.click(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
-      const panel = await screen.findByRole('dialog');
-      // -120 + 128 = 8 — ขอบซ้ายพอดีกับระยะขอบที่เผื่อไว้
-      expect(panel.style.transform).toBe('translateX(128px)');
+      const panel = await openPanel(user);
+      // ขอบซ้ายไม่ต่ำกว่าระยะขอบที่เผื่อไว้ ไม่ว่าตัวเลขจะอยู่ตรงไหน
+      expect(parseFloat(panel.style.left)).toBeGreaterThanOrEqual(8);
     } finally {
       spy.mockRestore();
     }
   });
 
-  it('อยู่ในจอแต่ไปนอนใต้แถบเมนู ก็ยังต้องเลื่อน', async () => {
+  it('อยู่ในจอแต่จะไปนอนใต้แถบเมนู ก็ยังต้องดันเข้ามา', async () => {
     /*
       ด่านรอบแรกหนีบไว้กับขอบหน้าต่างอย่างเดียว กล่องเลยผ่านด่านทั้งที่ไปนอนอยู่
-      ใต้แถบเมนูที่ลอยทับซ้ายมืออยู่ — อ่านไม่ได้เหมือนเดิม พื้นที่อ่านได้คือ
-      คอลัมน์เนื้อหา ไม่ใช่หน้าต่าง
+      ใต้แถบเมนูที่ลอยทับซ้ายมืออยู่ — พื้นที่อ่านได้คือคอลัมน์เนื้อหา
     */
     const user = userEvent.setup();
     const spy = vi
       .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockImplementation(function (this: HTMLElement) {
-        // แถบเมนูกว้าง 256 — เนื้อหาเริ่มที่ 256 ส่วนกล่องกางไปอยู่ที่ 70
+        // แถบเมนูกว้าง 256 — เนื้อหาเริ่มที่ 256 ส่วนตัวเลขอยู่ที่ 70
         return this.tagName === 'MAIN' ? rect(256, 1000) : rect(70, 310);
       });
     try {
-      // ต้องมีคอลัมน์เนื้อหาจริง ๆ ให้กล่องวัด เหมือนที่ layout ของแอปมีให้
       render(
         <main>
           <DailyReportView
@@ -453,25 +471,26 @@ describe('DailyReportView — กล่องที่มาต้องไม�
           />
         </main>,
       );
-      await user.click(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
-      const panel = await screen.findByRole('dialog');
-      // 70 + 194 = 264 — ขอบซ้ายของเนื้อหา บวกระยะขอบที่เผื่อไว้
-      expect(panel.style.transform).toBe('translateX(194px)');
+      const panel = await openPanel(user);
+      expect(parseFloat(panel.style.left)).toBeGreaterThanOrEqual(264);
     } finally {
       spy.mockRestore();
     }
   });
 
-  it('อยู่ในจออยู่แล้ว ไม่ต้องเลื่อน', async () => {
+  it('ข้างล่างไม่พอ ก็พลิกขึ้นไปข้างบน', async () => {
+    // ยืนยันกางลงล่างทั้งที่ชนขอบจอ คือกล่องที่อ่านได้ครึ่งเดียว
     const user = userEvent.setup();
     const spy = vi
       .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect(200, 440));
+      .mockImplementation(function (this: HTMLElement) {
+        // ตัวเลขอยู่เกือบก้นจอ (jsdom สูง 768)
+        return this.tagName === 'MAIN' ? rect(0, 1024, 0, 768) : rect(200, 440, 740, 760);
+      });
     try {
       renderView();
-      await user.click(screen.getByRole('button', { name: 'ดูที่มาของ4 งาน' }));
-      const panel = await screen.findByRole('dialog');
-      expect(panel.style.transform).toBe('');
+      const panel = await openPanel(user);
+      expect(parseFloat(panel.style.top)).toBeLessThan(740);
     } finally {
       spy.mockRestore();
     }
