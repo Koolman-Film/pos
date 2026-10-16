@@ -1,84 +1,91 @@
 # Handoff
 
-_Last updated 2026-09-30. Update this file at the end of every working session._
+_Last updated 2026-10-16. Update this file at the end of every working session._
 
 ## Where things stand
 
-- **Production** (`finnixpos.kool-man.com`) runs `main` at `6c9c8a8`, and its database has
-  every migration through **0076**. On 2026-09-30 the production schema matched a
-  migrations-built database on all six schema categories (`supabase/snippets/fingerprint.sql`).
-- **Since the 28 Sep deploy:** 29 real tickets were numbered by the database (0076). Each
-  branch continued exactly from its old series, with no gaps and no duplicates.
-- **CI** is green on `main`. Local results on 2026-09-27: 1,115 unit, 84 integration,
-  102 RLS and 29 e2e tests. Two RLS tests fail only on a newer local PostgREST; see
-  checklist 2.12 and 3.12.
-- **Improvement plan** ([IMPROVEMENT-CHECKLIST.md](./IMPROVEMENT-CHECKLIST.md)):
-  - Phase 0 and items 1.1–1.4 are done and deployed.
-  - **1.5 is open and urgent.**
-  - Phase 2 has not started. It waits for the owner's go-ahead.
+- **Production** (`finnixpos.kool-man.com`) runs `main` at `593fbe9` (deployment
+  `pos-qb5y9mqvj`), and its database has every migration through **0085**. On 2026-10-16
+  the production schema matched a migrations-built database on all six schema categories
+  (`supabase/snippets/fingerprint.sql`).
+- **16 Oct release (PR #9, fai's `service-schedule-compact`):** 0077–0085 — delivery
+  rounds, installments, delivery integrity, returns tied to lines, automatic PO status,
+  ticket MEMO, insurance payment evidence, Finnix amounts, delivery-after-intake rule.
+  Applied one file per transaction with `npx supabase db query --linked -f`, rehearsed
+  first on a production-shaped 0076 database (the original 0077/0080 failed there and
+  were fixed before release).
+- **Backup and revert for that release:** schema `pos_backup_20261016` holds the 11
+  touched tables and every pos function/trigger/policy definition at 0076.
+  `supabase/snippets/revert-0077-0085.sql` restores 0076 behaviour from it (proven
+  locally to restore functions and triggers byte-identically). App rollback:
+  `vercel promote pos-1cd367gec-vivatchais-projects.vercel.app --yes`.
+- **Data fix after the release:** 16 POs that were marked delivered before rounds
+  existed got one full round (`supabase/snippets/fix-legacy-po-rounds-2026-10-16.sql`),
+  so 0081 keeps their status. Only WS-FN-0007 changed: เสร็จสิ้น → ค้างชำระ (฿3,000
+  unpaid), agreed by the owner. No stock moved; revenue dates unchanged.
+- **CI** is green on `main`. Local 2026-10-16: 1,341 unit, 84 integration, 29 e2e;
+  RLS 137/149 locally — the 12 failures are local PostgREST masking error messages
+  ("Something went wrong") and also fail on the old `main`; CI passes all of them.
+- **1.5** (POs failing with `invalid input syntax for type numeric: ""`): no occurrences
+  in the Vercel logs 9–16 Oct. Whether it is actually fixed was not checked.
 
-## Do first: 1.5, new wholesale POs fail to save (live)
+## Open after the 16 Oct release
 
-Finnix North staff have been unable to save some new POs since at least 28 Sep:
+**fai's should-fix list** (from the review of PR #9, not yet done):
 
-- **The error:** `invalid input syntax for type numeric: ""`, logged 22 times, most recently
-  30 Sep 11:13 Bangkok.
-- **The cause:** a cleared qty or price field in the PO form reaches `save_order_children`
-  as `""`.
-- **The side effect:** the PO header is saved first, in a separate step, so every failed
-  attempt leaves an empty PO. There are 23 so far. Five of them are still live in the list
-  as รออนุมัติราคา: **WS-FN-0043 … 0047**.
+- 0081 matches PO statuses by Thai name (`order_auto_status`, `lib/domain/orders.ts`,
+  `WholesaleDetail.tsx`) — against the repo rule. Store the role on `ws_statuses`.
+- `saveOrder` always writes the client's `status`; after a partial delivery a sales user
+  without `wholesale.updateStatus` can't save the PO.
+- `deductDeliveryStock`, `confirmOrderReturn`, `storedOrderShelfEffect` ignore Supabase
+  `error`s; stock claim + movement should be one RPC.
+- `apply_order_auto_status` is SECURITY DEFINER, granted to `authenticated`, with no shop
+  check and no row lock; `save_order_children` / `delete_order_delivery` don't lock the
+  order row; delivery tables allow direct DML that bypasses the RPC guards.
+- UTC day keys: `actions.ts` `p_saved_on`, dashboard default month; `revenue/data.ts`
+  `soldAt` slices a UTC timestamp.
+- Unpriced 'รับแทน' lines save `finnix_amount = 0` and later flip to branch revenue.
+- Memo load ignores `error`; unused `inSelectedPeriod` in `TicketList.tsx` (lint).
+- The 0084 backfill relies on `current_user_can()` returning NULL (not false) outside the
+  app, which skips the 0066 lock guard. It worked; it is fragile.
 
-Full evidence and the fix are in checklist **1.5**. The fix is small:
+**Data the shop should look at:**
 
-- coerce the numeric inputs;
-- add a regression test;
-- ship through a PR and deploy with the owner's OK.
+- 19 open tickets have pickup ≤ drop-off. Since 0085 they can't be saved until the date
+  is corrected in the form (`select id from pos.tickets where pickup_date <= drop_off_date
+and deleted_at is null and not locked`). 8 more are locked.
+- 4 POs whose status disagrees with their data and will be re-derived on next edit:
+  WS-FN-0004 (เสร็จสิ้น, nothing paid → ค้างชำระ), WS-FN-0042 (delivered, still
+  รออนุมัติราคา → ค้างชำระ), WS-FN-0041 (delivered, total 0, รอจัดส่ง → เสร็จสิ้น),
+  WS-FN-0020 (pending price adjustment, รอจัดส่ง → รออนุมัติราคา).
 
-Ask the owner before touching the five empty POs.
+**fai's branch:** `claude/service-schedule-compact` landed as PR #9 rebased, so its
+commits are on `main` under new hashes. fai should reset that branch to `main` (not
+merge `main` into it) before continuing.
 
-## In flight: the developer's branch
-
-`origin/claude/service-schedule-compact` (by fai.phairin, last pushed 28 Sep) has 3 commits
-that are not on `main`, and **no PR yet**:
-
-- **0077** `order_deliveries`: a wholesale PO can be delivered in several rounds, with
-  revenue on each round's date.
-- **0078** `order_installments`: wholesale payment in installments, with an alert per
-  installment, and invoices that print the schedule.
-- a fix to how wholesale receivables and overdue amounts are counted.
-
-The branch already contains `main` and brings its own `release-0077/0078.sql` and
-GO-LIVE update. To land it:
-
-1. The developer opens a PR, and CI must pass.
-2. Review it with the lessons in [DEPLOYMENT.md → Hard-won lessons](./DEPLOYMENT.md#hard-won-lessons)
-   in mind. It rewrites `wholesale/actions.ts` (it will conflict with the 1.5 fix) and
-   `revenue/data.ts` (recall 1.4). Check any backfill against production-shaped data.
-3. Release 0077, then 0078, then deploy the app.
-
-**Migration numbers:** 0077 and 0078 are taken by that branch. **The next free number
-is 0079.**
+**Migration numbers:** prod is at 0085. **The next free number is 0086.**
 
 ## Owner actions pending (not code)
 
-| When                  | What                                                                                                                                                                                                                              |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| now (was due ~30 Sep) | Drop the snapshot `pos_backup_20260923` on production (`drop schema pos_backup_20260923 cascade;`). It is irreversible, so the owner confirms it.                                                                                 |
-| ~4 Oct                | Drop `pos_backup_20260927` the same way.                                                                                                                                                                                          |
-| now                   | Decide what to do with the empty POs WS-FN-0043 … 0047 (see 1.5).                                                                                                                                                                 |
-| once                  | Re-run any revenue report or export taken between ~17:00 and ~22:45 on 27 Sep (1.4).                                                                                                                                              |
-| once                  | The bookkeeper records payments for the 11 insurance policies sold before 0071 (฿48,000).                                                                                                                                         |
-| once                  | Delete the merged branches `claude/post-trial-fixes-a16ecc` and `claude/daily-financial-report-de4a25` (0 commits ahead of `main`) once the developer agrees. **Not** `claude/service-schedule-compact`, which has unmerged work. |
-| sometime              | Supabase Auth: turn on leaked-password protection; align the password minimum (2.11).                                                                                                                                             |
-| before Phase 2        | Decide D1 (editing confirmed payments), and give the go-ahead for Phase 2.                                                                                                                                                        |
+| When                  | What                                                                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| now (was due ~30 Sep) | Drop the snapshot `pos_backup_20260923` on production (`drop schema pos_backup_20260923 cascade;`). It is irreversible, so the owner confirms it.      |
+| now (was due ~4 Oct)  | Drop `pos_backup_20260927` the same way.                                                                                                               |
+| ~23 Oct               | Drop `pos_backup_20261016` once the 16 Oct release has run a week without trouble. Until then it is the revert path.                                   |
+| now                   | Decide what to do with the empty POs WS-FN-0043 … 0047 (see 1.5).                                                                                      |
+| once                  | Re-run any revenue report or export taken between ~17:00 and ~22:45 on 27 Sep (1.4).                                                                   |
+| once                  | The bookkeeper records payments for the 11 insurance policies sold before 0071 (฿48,000).                                                              |
+| once                  | Decide with fai whether to delete `claude/service-schedule-compact` (its work is on `main` via PR #9). The two merged branches were deleted on 16 Oct. |
+| sometime              | Supabase Auth: turn on leaked-password protection; align the password minimum (2.11).                                                                  |
+| before Phase 2        | Decide D1 (editing confirmed payments), and give the go-ahead for Phase 2.                                                                             |
 
 ## Next steps, in order
 
-1. **1.5** hotfix, above.
-2. Review and release the developer's 0077/0078 branch.
-3. **3.14**: stop logging expected rejections as errors. They are 30 of the 52 failures
-   logged on 28–30 Sep and bury real ones.
+1. Watch the Vercel logs for a few days after the 16 Oct release.
+2. fai's should-fix list above, starting with the Thai-name status matching and the
+   stale `status` written by `saveOrder`.
+3. Confirm 1.5 is fixed (or fix it), then **3.14**: stop logging expected rejections as
+   errors.
 4. **Phase 2**, database guardrails, starting with 2.1 and 2.2. Every new rule needs a test
    proving the real screen path still works.
 5. The rest of Phase 3 (release-process automation), then Phases 4–5.
@@ -108,7 +115,9 @@ is 0079.**
   - Phase 0 and items 1.1–1.4;
   - branch protection turned on;
   - SheetJS vendored.
-- 30 Sep: this handoff.
+- 30 Sep: handoff written.
+- 16 Oct: fai's branch reviewed, fixed and released as 0077–0085 (PR #9); legacy-PO
+  delivery rounds backfilled.
 
 For the detail of each migration, see [RELEASE-post-trial-fixes.md](./RELEASE-post-trial-fixes.md).
 For each checklist item's proof, see the ✅ lines in the checklist.
