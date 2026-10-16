@@ -23,12 +23,28 @@ alter table order_returns
 comment on column order_returns.item_uid is
   'บรรทัดของ order_items ที่ของชิ้นนี้ถูกคืนกลับมา (0080). ว่าง = อ้างด้วยชื่อสินค้าแบบเดิม';
 
+create index if not exists order_returns_item_uid_idx
+  on order_returns (order_id, item_uid)
+  where item_uid <> '';
+
+/*
+  ดัชนีมาก่อน backfill (DDL ก่อน UPDATE).
+  ตารางนี้มี constraint trigger แบบ deferred (activity_log_lines, 0061): UPDATE
+  ทิ้งงานค้างไว้จนถึง commit และระหว่างนั้น CREATE INDEX / CREATE TRIGGER /
+  ALTER TABLE บนตารางเดียวกันใน transaction เดียวกันจะล้มด้วย "pending trigger
+  events" — เกิดเฉพาะบนข้อมูลจริง เทสต์กับ seed ไม่เห็น. SET CONSTRAINTS ...
+  IMMEDIATE ให้งานค้างทำเสร็จทันทีหลังคำสั่ง ไฟล์ถัดไปที่รันใน transaction
+  เดียวกัน (GO-LIVE วางทั้งไฟล์ใน SQL Editor) จึงแตะตารางนี้ต่อได้
+*/
+
 /*
   ของเดิม: ผูกกับบรรทัดแรกที่ชื่อตรงกัน.
 
   ไม่ใช่การเดา — มันคือบรรทัดที่ `orderTotal` หยิบมาคิดราคาอยู่แล้วทุกครั้งที่
   คำนวณ ยอดของ PO ทุกใบจึงเท่าเดิมเป๊ะหลังไฟล์นี้
 */
+set constraints activity_log_lines immediate;
+
 update order_returns r
    set item_uid = coalesce(
      (
@@ -43,9 +59,7 @@ update order_returns r
    )
  where r.item_uid = '';
 
-create index if not exists order_returns_item_uid_idx
-  on order_returns (order_id, item_uid)
-  where item_uid <> '';
+set constraints activity_log_lines deferred;
 
 /*
   `save_order_children` ถือบรรทัดที่ของถูกคืนกลับมาด้วย.
