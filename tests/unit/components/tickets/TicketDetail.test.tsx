@@ -1517,12 +1517,13 @@ describe('TicketDetail — ลำดับวันที่รับงาน/�
       pickupDateObj: new Date(`${pickup}+07:00`),
     });
 
-  it('ส่งก่อนรับ ขึ้นคำเตือนใต้ช่อง และบันทึกไม่ได้', async () => {
+  it('ใบใหม่ที่ส่งก่อนรับ ขึ้นคำเตือนใต้ช่อง และบันทึกไม่ได้', async () => {
     const user = userEvent.setup();
     const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
     render(
       <TicketDetail
         {...baseProps(dated('2026-10-15T09:00', '2026-09-17T16:00'))}
+        isNew
         saveAction={saveAction}
       />,
     );
@@ -1547,7 +1548,23 @@ describe('TicketDetail — ลำดับวันที่รับงาน/�
     expect(saveAction).toHaveBeenCalledTimes(1);
   });
 
-  it('เวลาเท่ากันเป๊ะ ก็ยังไม่ผ่าน', async () => {
+  it('ใบใหม่ที่เวลาเท่ากันเป๊ะ ก็ยังไม่ผ่าน', async () => {
+    const user = userEvent.setup();
+    const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
+    render(
+      <TicketDetail
+        {...baseProps(dated('2026-10-15T09:00', '2026-10-15T09:00'))}
+        isNew
+        saveAction={saveAction}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    expect(saveAction).not.toHaveBeenCalled();
+  });
+
+  it('ใบเก่าที่วันที่ผิดมาแต่เดิม ยังขึ้นคำเตือน แต่บันทึกเรื่องอื่นได้ (0086)', async () => {
+    // ใบที่ผิดมาก่อนมีกติกา ต้องยังรับเงิน/แก้งานได้ ไม่ใช่ล็อกตายจนกว่าจะมีคนรู้วันจริง
+    // ส่วนการแก้วันที่ให้กลับหัวอีก ยังถูกหยุด — ดู datesBlockSave ใน ticketDates.test.ts
     const user = userEvent.setup();
     const saveAction = vi.fn(async (p: TicketSavePayload) => ({ ok: true, id: p.id }));
     render(
@@ -1556,7 +1573,9 @@ describe('TicketDetail — ลำดับวันที่รับงาน/�
         saveAction={saveAction}
       />,
     );
+
+    expect(screen.getAllByText(/วันที่ส่งงานต้องอยู่หลังวันที่รับงาน/).length).toBeGreaterThan(0);
     await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
-    expect(saveAction).not.toHaveBeenCalled();
+    expect(saveAction).toHaveBeenCalledTimes(1);
   });
 });
