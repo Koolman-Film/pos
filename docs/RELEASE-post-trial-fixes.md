@@ -9,8 +9,8 @@
 > merging to `main` does **not** deploy (Vercel is not connected to git), and
 > `supabase db push` does **not** work (the stored database password is stale).
 >
-> **0077–0085** arrived later with `claude/service-schedule-compact` and are
-> **not yet applied** to production — release them in table order (rows 58–66).
+> **0077–0085** arrived later with `claude/service-schedule-compact` and were
+> applied to production on 2026-10-16. **0086** (row 67) is not yet applied.
 
 It began as the runbook for the batch that came out of the shop's trial run
 (branch `claude/post-trial-fixes-a16ecc`, now merged) and has grown one row per
@@ -34,8 +34,8 @@ into the Dashboard SQL Editor. Each file stamps its own version into
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
-`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 67 ในตารางข้างล่าง
-(`release-0019` … `release-0085` และ `repair-categories-and-services.sql`)
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 68 ในตารางข้างล่าง
+(`release-0019` … `release-0086` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -122,7 +122,8 @@ it twice changes nothing, and each records its versions in
 | 64    | `supabase/release-0083.sql`                   | a normal connection                                 |
 | 65    | `supabase/release-0084.sql`                   | a normal connection                                 |
 | 66    | `supabase/release-0085.sql`                   | a normal connection                                 |
-| 67    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 67    | `supabase/release-0086.sql`                   | a normal connection                                 |
+| 68    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -349,8 +350,10 @@ In this order, as an admin:
 6. **เติมการรับเงินค่าประกันของกรมธรรม์เดิม** (0071) — กรมธรรม์ที่ขายก่อนรันไฟล์
    มียอดรับเงินเป็น 0 ทั้งหมด เพราะตอนนั้นยังไม่มีช่องให้กรอก
 
-7. **ใบงานที่วันส่งงานอยู่ก่อนวันรับงาน** (0085) — ใบพวกนี้ยังเปิดอ่านได้ แต่จะ
-   บันทึกไม่ได้จนกว่าจะแก้วันที่ หาไว้ล่วงหน้าได้ด้วย:
+7. **ใบงานที่วันส่งงานอยู่ก่อนวันรับงาน** (0085, ผ่อนใน 0086) — ใบพวกนี้ยังเปิด
+   อ่านได้ และตั้งแต่ 0086 บันทึกเรื่องอื่นได้ตามปกติตราบที่ไม่แตะวันที่ (ก่อน 0086
+   บันทึกอะไรไม่ได้เลยจนกว่าจะแก้วันที่) หน้าใบงานขึ้นคำเตือนข้างช่องวันที่ให้คน
+   ที่รู้วันจริงแก้ได้ หาไว้ล่วงหน้าได้ด้วย:
 
    ```sql
    select id, drop_off_date, pickup_date

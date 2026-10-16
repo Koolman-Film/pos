@@ -34,3 +34,27 @@ export function pickupBeforeDropOff(
   if (!usable(dropOff) || !usable(pickup)) return false;
   return pickup.getTime() <= dropOff.getTime();
 }
+
+function sameInstant(a: Date | null | undefined, b: Date | null | undefined): boolean {
+  if (!usable(a) || !usable(b)) return !usable(a) && !usable(b);
+  return a.getTime() === b.getTime();
+}
+
+/**
+ * ปุ่มบันทึกต้องหยุดไหม — กลับหัว **และ** เป็นใบใหม่หรือมีคนแก้วันที่.
+ *
+ * ใบที่วันที่ผิดมาตั้งแต่ก่อนมีกติกา (0085) ยังต้องรับเงินและแก้อย่างอื่นได้
+ * ไม่ใช่ล็อกตายจนกว่าจะมีคนรู้วันจริง (0086). ส่วนคำเตือนข้างช่องยังขึ้นเสมอ
+ * เพื่อให้คนที่เปิดมาเห็นและแก้ได้ถ้ารู้
+ *
+ * @param stored วันที่ตามที่อยู่ในฐานข้อมูลตอนเปิดใบ — null สำหรับใบใหม่
+ */
+export function datesBlockSave(
+  stored: { dropOff: Date | null | undefined; pickup: Date | null | undefined } | null,
+  dropOff: Date | null | undefined,
+  pickup: Date | null | undefined,
+): boolean {
+  if (!pickupBeforeDropOff(dropOff, pickup)) return false;
+  if (!stored) return true;
+  return !sameInstant(stored.dropOff, dropOff) || !sameInstant(stored.pickup, pickup);
+}

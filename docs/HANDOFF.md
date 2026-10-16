@@ -52,7 +52,8 @@ _Last updated 2026-10-16. Update this file at the end of every working session._
 **Data the shop should look at:**
 
 - 19 open tickets have pickup ≤ drop-off. Since 0085 they can't be saved until the date
-  is corrected in the form (`select id from pos.tickets where pickup_date <= drop_off_date
+  is corrected in the form; **0086** (PR open, not released) lets them save as long as
+  the dates are not touched. The 7 active ones were sent to the shop on 16 Oct (`select id from pos.tickets where pickup_date <= drop_off_date
 and deleted_at is null and not locked`). 8 more are locked.
 - 4 POs whose status disagrees with their data and will be re-derived on next edit:
   WS-FN-0004 (เสร็จสิ้น, nothing paid → ค้างชำระ), WS-FN-0042 (delivered, still
@@ -63,7 +64,7 @@ and deleted_at is null and not locked`). 8 more are locked.
 commits are on `main` under new hashes. fai should reset that branch to `main` (not
 merge `main` into it) before continuing.
 
-**Migration numbers:** prod is at 0085. **The next free number is 0086.**
+**Migration numbers:** prod is at 0085. **The next free number is 0087** (0086 is on an open PR).
 
 ## Owner actions pending (not code)
 
