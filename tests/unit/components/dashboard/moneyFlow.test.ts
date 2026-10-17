@@ -277,3 +277,69 @@ describe('buildMoneySources — แหล่งเงินที่ยังไ
     expect(b.unmatched.map((u) => u.label)).toEqual(['ใหญ่', 'เล็ก']);
   });
 });
+
+/**
+ * ค่าประกันที่รับเงินแล้ว ต้องนับเป็นเงินเข้าด้วย (ร้านเจอ 17 ต.ค. 2569).
+ *
+ * บัญชีเครื่องรูดบัตรใบเดียวกันอ่านได้สองค่า: หน้าการจัดการเงิน/บัญชีบอก 0
+ * ส่วนการ์ด "เงินอยู่ที่ไหนบ้าง" บนแดชบอร์ดบอก −12,000 — เพราะการ์ดนับเงินเข้า
+ * แค่สามทาง (ใบงาน · PO · ค่าใช้จ่าย) ขณะที่หน้าการจัดการเงินนับสี่ ค่าประกัน
+ * ที่รูดบัตรเข้ามาจึงหายไปจากฝั่งเดียว แล้วยอดโอนออกที่นับครบก็ลากบัญชีติดลบ
+ *
+ * `buildMoneySources` ไม่เคยผิด — มันคำนวณจากสิ่งที่ถูกป้อนให้ สิ่งที่ผิดคือ
+ * ชุดข้อมูลที่ป้อน เทสต์นี้จึงพิสูจน์ว่าเงินเข้าทาง "ค่าประกัน" ถ้าถูกป้อนมา
+ * มันเข้ายอดคงเหลือจริง และบัญชีที่โอนออกหมดต้องลงเอยที่ศูนย์ ไม่ใช่ติดลบ
+ */
+describe('buildMoneySources — ค่าประกันที่เข้าบัญชี', () => {
+  const shops = [{ id: 'cm', name: 'เชียงใหม่' }];
+  const accounts = [
+    {
+      id: 1,
+      shop: 'cm',
+      name: 'K-bank เครื่องรูด',
+      kind: 'edc',
+      accountNo: '',
+      openingBalance: 0,
+      openedAt: '2026-01-01',
+      matchNames: [],
+      sortOrder: 1,
+    },
+    {
+      id: 2,
+      shop: 'cm',
+      name: 'K-bank คูลมาน',
+      kind: 'bank',
+      accountNo: '',
+      openingBalance: 0,
+      openedAt: '2026-01-01',
+      matchNames: [],
+      sortOrder: 2,
+    },
+  ];
+
+  it('รูดบัตรจ่ายค่าประกันแล้วโอนออกหมด ยอดต้องเป็นศูนย์ ไม่ใช่ติดลบ', () => {
+    const movements = [
+      { shop: 'cm', source: 'K-bank เครื่องรูด', amount: 20000, on: '2026-10-05' },
+      // ค่าประกันที่รับเงินแล้ว — ก้อนที่การ์ดเคยมองไม่เห็น
+      { shop: 'cm', source: 'K-bank เครื่องรูด', amount: 12000, on: '2026-10-06' },
+    ];
+    const transfers = [
+      { shop: 'cm', fromAccountId: 1, toAccountId: 2, amount: 32000, on: '2026-10-07' },
+    ];
+    const out = buildMoneySources(shops, accounts, movements, transfers);
+    const edc = out.branches[0].accounts.find((a) => a.id === 1)!;
+    expect(edc.inflow).toBe(32000);
+    expect(edc.balance).toBe(0);
+  });
+
+  it('ขาดก้อนค่าประกันไป บัญชีจะติดลบเท่ากับก้อนที่หาย — อาการที่ร้านเจอ', () => {
+    const movements = [
+      { shop: 'cm', source: 'K-bank เครื่องรูด', amount: 20000, on: '2026-10-05' },
+    ];
+    const transfers = [
+      { shop: 'cm', fromAccountId: 1, toAccountId: 2, amount: 32000, on: '2026-10-07' },
+    ];
+    const out = buildMoneySources(shops, accounts, movements, transfers);
+    expect(out.branches[0].accounts.find((a) => a.id === 1)!.balance).toBe(-12000);
+  });
+});

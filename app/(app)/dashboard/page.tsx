@@ -202,7 +202,11 @@ export default async function DashboardPage({
       (from, to) =>
         supabase
           .from('insurance_policies')
-          .select('id, ticket_id, plate, plan_name, price, sold_at, ends_at, paid_amount, paid_at')
+          .select(
+            // `paid_method` คือแหล่งเงินที่ค่าประกันเข้า — การ์ด "เงินอยู่ที่ไหนบ้าง"
+            // ต้องใช้ ไม่ใช่แค่หน้าเตือนประกันหมดอายุ (0071)
+            'id, ticket_id, plate, plan_name, price, sold_at, ends_at, paid_amount, paid_at, paid_method',
+          )
           .order('ends_at', { ascending: true })
           .order('id')
           .range(from, to),
@@ -440,6 +444,8 @@ export default async function DashboardPage({
     /** การรับเงินค่าประกัน (0071) — its own, on its own day. */
     paid_amount: number | null;
     paid_at: string | null;
+    /** แหล่งเงินที่ค่าประกันเข้า — การ์ดเงินคงเหลือต้องใช้ */
+    paid_method: string | null;
   };
   const policies = ((policyRows ?? []) as unknown as PolicyRow[]).filter((p) =>
     inShop(shopByTicketId.get(p.ticket_id) ?? ''),
@@ -599,6 +605,26 @@ export default async function DashboardPage({
           on: day(p.clearedAt ?? p.paidAt),
         })),
     ),
+    /*
+      ค่าประกันที่รับเงินแล้ว (0071) — เงินก้อนที่ไม่ได้เดินผ่าน `ticket_payments`.
+
+      กรมธรรม์มักถูกซื้อหลังใบงานปิดและล็อกไปแล้ว การรับเงินจึงเป็นของกรมธรรม์
+      เอง อยู่คนละตาราง การ์ดนี้เคยนับแค่สามทาง (ใบงาน · PO · ค่าใช้จ่าย) ค่า
+      ประกันที่รูดบัตรเข้ามาจึงหายไปจากยอดคงเหลือ ขณะที่หน้าการจัดการเงิน/บัญชี
+      นับครบสี่ทาง — บัญชีเดียวกันเลยอ่านได้สองค่าคนละหน้าจอ และบัญชีที่โอนออก
+      หมดกลายเป็นติดลบเท่ากับค่าประกันที่หายไป (ร้านเจอ 17 ต.ค. 2569)
+
+      สี่ทางนี้ต้องตรงกับ `loadMoneyData` เสมอ ถ้าเพิ่มทางที่ห้าเมื่อไหร่
+      ต้องเพิ่มทั้งสองที่พร้อมกัน
+    */
+    ...policies
+      .filter((p) => p.paid_method && p.paid_at && num(p.paid_amount) > 0)
+      .map((p) => ({
+        shop: shopByTicketId.get(p.ticket_id) ?? '',
+        source: p.paid_method as string,
+        amount: num(p.paid_amount),
+        on: (p.paid_at ?? '').slice(0, 10),
+      })),
     // Out of the drawer it went, whoever the bill belonged to — a จ่ายแทน
     // expense is still money that physically left this branch, which is the
     // question this card answers.
