@@ -103,6 +103,8 @@ const ACCEPTED_ABSENCES: Record<string, string> = {
     'phones are typed without dashes now (ร้านขอ 15 ก.ย. 2569); the ticket phone field shows 0812345678 and the rule beside its label',
   'ช่องทางการชำระเงิน (แสดงในใบแจ้งหนี้)':
     'since migration 0064 the branch payment channels are printed text only; every payment picker lists the แหล่งเงิน, so the setting is relabelled ข้อความช่องทางการชำระเงินในใบแจ้งหนี้ and says so',
+  รายละเอียดการชำระเงิน:
+    'divergence: ใบเสร็จและใบกำกับภาษีเลิกพิมพ์แหล่งรับเงิน (ร้านขอ 27 ต.ค. 2569) — บัญชีที่เงินไปลงเป็นเรื่องฝั่งร้าน ไม่ใช่สิ่งที่ใบเสร็จรับรอง เหลือหัวข้อเดียวคือ การชำระเงิน แล้วไล่วันที่กับจำนวนเงิน จึงไม่มีหัวข้อย่อยให้ตั้งชื่ออีก',
   'เลือกวิธีชำระ...':
     'a wholesale payment now picks the แหล่งเงิน the money lands in (migration 0064), in Book งาน and ขายส่ง alike, so the prompt reads เลือกแหล่งเงินที่เงินเข้า; เช็ค is its own tick box',
   'เลือกแหล่งจ่ายเงิน...':

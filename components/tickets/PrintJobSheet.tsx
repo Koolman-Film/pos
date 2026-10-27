@@ -2126,12 +2126,6 @@ export function PrintJobSheet({
     */
     const docPaid = isTaxInvoice && total > 0 ? (paid * docTotal) / total : paid;
     const docPrefix = docPrefixFor(docType);
-    // Only the channels money actually arrived by, in the order it arrived.
-    // The shop's full list used to print with empty boxes beside the unused
-    // ones, which is a form to fill in — a receipt records what happened. Read
-    // off the payments rather than the shop's configured list, so a channel
-    // dropped from จัดการสิทธิ์ after the fact still appears on the old receipt.
-    const usedChannels = [...new Set(receivedPayments.map((p) => p.method).filter(Boolean))];
 
     // One row per product, with the positions it covers folded into a quantity.
     const lines = docItems
@@ -2413,10 +2407,9 @@ export function PrintJobSheet({
             })()}
 
           {/*
-            2:1, not 50/50. A channel here is the shop's full deposit line —
-            "ธนาคารกสิกรไทย เลขบัญชี 236-1-38053-6 ชื่อบัญชี หจก.คูลมาน ลำปาง" —
-            and half a page wrapped it across three lines. The signature needs a
-            line and two words; the money needs the room.
+            2:1, not 50/50. ใบเสนอราคาพิมพ์บัญชีรับชำระเต็มบรรทัด — "ธนาคาร
+            กสิกรไทย เลขบัญชี 236-1-38053-6 ชื่อบัญชี หจก.คูลมาน ลำปาง" — และ
+            ครึ่งหน้าทำให้มันตกบรรทัดสามท่อน ส่วนลายเซ็นต้องการแค่เส้นกับสองคำ
           */}
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', marginBottom: 12 }}>
             {/* บัญชีรับชำระ (0062): where the quotation asks the money to go. */}
@@ -2448,47 +2441,25 @@ export function PrintJobSheet({
                   fontSize: 11,
                 }}
               >
-                <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>
-                  {bi('ช่องทางการชำระเงิน', 'Payment Method')}
-                </p>
                 {/*
-                  Only the channels the money actually came in by. Printing the
-                  shop's whole list with empty boxes beside it said nothing —
-                  a receipt records what happened, it is not a form to fill in.
+                  วันที่กับจำนวนเงิน ไม่มีแหล่งรับเงิน (ร้านขอ 27 ต.ค. 2569).
+
+                  แหล่งรับเงินคือบัญชีของร้านที่เงินก้อนนั้นไปลง — "กสิกร
+                  ออมทรัพย์", "เครื่องรูด 80740799" — มันเป็นเรื่องของบัญชีฝั่ง
+                  ร้าน ไม่ใช่สิ่งที่ใบเสร็จรับรอง สิ่งที่ลูกค้าถือใบนี้ไว้เพื่อ
+                  พิสูจน์คือ จ่ายไปเมื่อไหร่ และจ่ายไปเท่าไหร่
+
+                  ชนิดการชำระ ("ชำระมัดจำ") ก็หายไปด้วยตามที่ขอ — ยอดกับวันที่
+                  เรียงกันอยู่แล้วบอกได้ว่าก้อนไหนมาก่อน
                 */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
-                  {usedChannels.map((m) => (
-                    <span key={m} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          width: 13,
-                          height: 13,
-                          border: '1.5px solid #333',
-                          borderRadius: 2,
-                          textAlign: 'center',
-                          lineHeight: '11px',
-                          fontSize: 11,
-                          fontWeight: 'bold',
-                          flexShrink: 0,
-                        }}
-                      >
-                        ✓
-                      </span>
-                      {m}
-                    </span>
-                  ))}
-                </div>
-                {receivedPayments.length > 0 && (
-                  <p style={{ margin: '6px 0 0', fontSize: 10, fontWeight: 'bold' }}>
-                    {bi('รายละเอียดการชำระเงิน', 'Payment Details')}
-                  </p>
-                )}
+                <p style={{ margin: '0 0 5px', fontWeight: 'bold' }}>
+                  {bi('การชำระเงิน', 'Payment')}
+                </p>
                 {receivedPayments.map((p, pi) => (
-                  <p key={pi} style={{ margin: '2px 0 0', fontSize: 10, color: '#444' }}>
-                    {paymentLabel(p.type)} {fmt(Number(p.amount || 0))} บาท
-                    {p.method ? ` (${p.method})` : ''}
-                    {p.date ? ` · ${fmtThaiDate(new Date(p.date))}` : ''}
+                  <p key={pi} style={{ margin: '2px 0 0', fontSize: 11, color: '#444' }}>
+                    {p.date ? fmtThaiDate(new Date(p.date)) : '-'}
+                    {' · '}
+                    {fmt(Number(p.amount || 0))} บาท
                   </p>
                 ))}
                 <p style={{ margin: '5px 0 0', fontWeight: 'bold' }}>
