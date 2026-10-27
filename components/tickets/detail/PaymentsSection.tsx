@@ -8,7 +8,7 @@ import { finnixDue, ticketFinnixTotal } from '@/lib/domain/finnixShare';
 import { countMissingEvidence, missingEvidence } from '@/lib/domain/paymentEvidence';
 import { FINNIX_OWNER, accountForLabel, ownerOf, type PayAccount } from '@/lib/domain/payAccount';
 
-import { AttachmentField } from './AttachmentField';
+import { AttachmentField } from '@/components/ui/AttachmentField';
 
 import type { Ticket, TicketPayment } from '../types';
 

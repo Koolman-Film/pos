@@ -1,9 +1,9 @@
-# Release runbook — post-trial fixes (migrations 0012–0085)
+# Release runbook — post-trial fixes (migrations 0012–0086)
 
 Branch: `claude/service-schedule-compact` (pushed to origin)
 
 ชุดแรกของไฟล์นี้คือ 0012–0037 ที่ออกมาจากการทดลองใช้ ตั้งแต่นั้นมีงานตามมาอีก
-หลายชุดจนถึง 0085 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
+หลายชุดจนถึง 0086 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
 ไว้ให้หมดแล้ว
 
 This is the batch that came out of the shop's trial run. [DEPLOYMENT.md](./DEPLOYMENT.md)
@@ -27,7 +27,7 @@ work FIRST (step 2) — the new code reads columns that do not exist yet, so a
 deploy that lands before the migrations will 500 on the ticket list, the
 dashboard and the accounting page.
 
-## 2. Database — migrations 0012–0085
+## 2. Database — migrations 0012–0086
 
 ```bash
 npx supabase login                       # personal access token, once
@@ -37,8 +37,8 @@ npx supabase db push                     # applies 0012 … 0037 only
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
-`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 67 ในตารางข้างล่าง
-(`release-0019` … `release-0085` และ `repair-categories-and-services.sql`)
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 68 ในตารางข้างล่าง
+(`release-0019` … `release-0086` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -125,7 +125,8 @@ it twice changes nothing, and each records its versions in
 | 64    | `supabase/release-0083.sql`                   | a normal connection                                 |
 | 65    | `supabase/release-0084.sql`                   | a normal connection                                 |
 | 66    | `supabase/release-0085.sql`                   | a normal connection                                 |
-| 67    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 67    | `supabase/release-0086.sql`                   | a normal connection                                 |
+| 68    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -306,6 +307,11 @@ In this order, as an admin:
    รายได้ Finnix ในโมดูลรายได้ · และยอดขายของสาขาที่ต้องเหลือเฉพาะส่วนที่เหลือ
 9. **วันที่ส่งงานก่อนวันรับงาน** (0085) — ลองตั้งให้ผิดแล้วกดบันทึก ต้องถูก
    ปฏิเสธพร้อมคำอธิบาย ไม่ใช่บันทึกผ่าน
+10. **หลักฐานใน PO ขายส่ง** (0086) — แนบสลิปในรายการรับเงิน กด บันทึก PO
+    **ปิดหน้าแล้วเปิดใหม่** แล้วกดชื่อไฟล์ ต้องเห็นรูป ส่วนหลักฐานการจัดส่งของ
+    รอบส่งของ ให้กดชื่อไฟล์ดูเช่นกัน ทั้งสองที่ยิงเข้า bucket
+    `wholesale-attachments` ซึ่งมี policy ของตัวเอง — การเปิดหน้าใหม่คือ
+    หัวใจของข้อนี้ ของเดิมมันดู "สำเร็จ" ทุกครั้งจนกว่าจะรีเฟรช
 
 ## 4. หลังขึ้นระบบ — งานที่ต้องทำด้วยมือ
 
@@ -356,12 +362,18 @@ In this order, as an admin:
 
 ### ไม่ต้องทำอะไร แต่ควรรู้
 
-8. **สถานะ PO เก่าไม่ถูกไล่คำนวณใหม่** (0081) — สถานะจะขยับมาถูกต้องเมื่อมี
+8. **สลิปของ PO ที่แนบไว้ก่อนหน้านี้ ไม่มีให้กู้** (0086) — ช่องแนบหลักฐาน
+   การชำระเงินในใบ PO ไม่เคยอัปโหลดไฟล์จริงสักใบ มันเก็บแค่ชื่อไฟล์ไว้บนหน้าจอ
+   แล้วทิ้งตอนรีเฟรช ตัวไฟล์จึงอยู่ที่เครื่องหรือแชทของคนที่แนบเท่านั้น ถ้าต้อง
+   ใช้ย้อนหลัง ต้องขอจากคนนั้นแล้วแนบใหม่ (หลักฐาน**การจัดส่ง**ไม่กระทบ — ของ
+   พวกนั้นอัปโหลดจริงมาตลอด แค่เปิดดูไม่ได้ ตอนนี้เปิดได้แล้ว)
+
+9. **สถานะ PO เก่าไม่ถูกไล่คำนวณใหม่** (0081) — สถานะจะขยับมาถูกต้องเมื่อมี
    กิจกรรมถัดไปเกิดกับใบนั้น (บันทึกรายการ รับเงิน ส่งของ) ถ้าอยากให้ไล่ปรับ
    ทั้งหมดในครั้งเดียว ขอสคริปต์เพิ่มได้ — ตั้งใจไม่ใส่มาในไฟล์ เพราะมันจะทำให้
    สถานะของ PO เก่าหลายใบขยับพร้อมกันโดยไม่มีใครดู
 
-9. **ใบงานเก่าที่ปิดแล้วยังไม่ถูกล็อก** — ดูหัวข้อถัดไป
+10. **ใบงานเก่าที่ปิดแล้วยังไม่ถูกล็อก** — ดูหัวข้อถัดไป
 
 ## 5. Known follow-ups, not blockers
 
@@ -384,10 +396,6 @@ In this order, as an admin:
   ticket form is reordered and the installation sheet is now a table, so most
   images differ. Regenerate with `npm run test:e2e:update-snapshots` (it resets
   the LOCAL database — it does not touch anything hosted).
-- **Wholesale PO attachments are still filenames.** The same defect the ticket
-  slips had; deliberately left for now, since nobody reported it during the
-  trial. `components/wholesale/WholesaleDetail.tsx` is the one remaining caller
-  that stores `File.name`.
 - **No RLS/e2e coverage yet** for `expense_attachments`, `tickets`’ soft-delete columns,
   `ticket_items.interested` or the lock trigger. The lock trigger was proved by
   hand against a real database, inside a transaction that was rolled back.

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { AttachmentField } from '@/components/tickets/detail/AttachmentField';
+import { AttachmentField } from '@/components/ui/AttachmentField';
 
 /**
  * The ticket's slips and QC photos are real files now. What this pins down is
@@ -55,7 +55,21 @@ describe('AttachmentField', () => {
         folder="cm"
       />,
     );
-    expect(screen.getByTitle('ดู slip.jpg')).toBeInTheDocument();
+    expect(screen.getByText('slip.jpg')).toBeInTheDocument();
+  });
+
+  it('does not offer a file to open when nothing can sign a link for it', () => {
+    // A chip that looks pressable and does nothing is worse than one that does
+    // not: the person clicks it twice, then goes looking for the file by hand.
+    render(
+      <AttachmentField
+        label="แนบสลิป"
+        paths={['cm/already-saved.jpg']}
+        onChange={vi.fn()}
+        folder="cm"
+      />,
+    );
+    expect(screen.getByTitle('already-saved.jpg')).toBeDisabled();
   });
 
   it('previews through the signed URL the action returns', async () => {

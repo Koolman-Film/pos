@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AttachmentField } from '@/components/tickets/detail/AttachmentField';
+import { AttachmentField } from '@/components/ui/AttachmentField';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 
 import { fmt, fmtThaiDate } from '@/lib/domain/format';

@@ -41,7 +41,9 @@ import {
   payAccountLine,
   type PayAccount,
 } from '@/lib/domain/payAccount';
-import { uploadAttachments, discardAttachments, fileNameFromPath } from '@/lib/storage/attachments';
+import { uploadAttachments, discardAttachments } from '@/lib/storage/attachments';
+import { AttachmentField } from '@/components/ui/AttachmentField';
+import { AttachmentLinks } from '@/components/ui/AttachmentLinks';
 
 import { CustomerPicker } from './CustomerPicker';
 import { SalesPersonPicker } from './SalesPersonPicker';
@@ -173,6 +175,7 @@ export function WholesaleDetail({
   onSaveCustomer,
   onSaveSalesPerson,
   onBack,
+  attachmentUrlAction,
 }: {
   order: WsOrder;
   /**
@@ -196,6 +199,13 @@ export function WholesaleDetail({
   staffNames?: Record<string, string>;
   /** พนักงานขายของทุกสาขาที่ผู้ใช้เข้าถึงได้ — filtered to `o.shop` in the picker. */
   salesPeople?: SalesPerson[];
+  /**
+   * ขอลิงก์เปิดไฟล์ที่แนบไว้ — bucket เป็นแบบส่วนตัว จึงเปิดตรง ๆ ไม่ได้ (0086).
+   *
+   * ไม่ส่งมา (เช่นในเทสต์) ชื่อไฟล์จะยังแสดงอยู่ แต่กดไม่ได้ ดีกว่าปุ่มที่กดแล้ว
+   * ไม่เกิดอะไรขึ้น
+   */
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
   isNew?: boolean;
   onBack?: () => void;
   onSaveOrder?: (order: WsOrder, isNew: boolean) => Promise<void> | void;
@@ -1534,12 +1544,20 @@ export function WholesaleDetail({
                                 </li>
                               ))}
                             </ul>
-                            {round.attachments.length > 0 && (
-                              <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-                                <i className="fa-solid fa-paperclip mr-1"></i>
-                                {round.attachments.map((p) => fileNameFromPath(p)).join(', ')}
-                              </p>
-                            )}
+                            {/*
+                              หลักฐานของรอบนี้ — กดแล้วเปิดดูได้ ไม่ใช่ชื่อไฟล์เฉย ๆ.
+
+                              ระบบบังคับให้แนบก่อนจึงจะบันทึกรอบส่งของได้ (0055)
+                              แล้วพิมพ์ชื่อไฟล์ออกมาทิ้งไว้ — bucket เป็นแบบ
+                              ส่วนตัว คนที่กลับมาตรวจย้อนหลังจึงเปิดดูไม่ได้เลย
+                              สักทาง (ร้านเจอ 26 ต.ค. 2569)
+                            */}
+                            <div className="mt-1">
+                              <AttachmentLinks
+                                paths={round.attachments}
+                                urlAction={attachmentUrlAction}
+                              />
+                            </div>
                           </div>
                           {onDeleteDelivery && round.id && can('wholesale.updateStatus') && (
                             <button
@@ -2165,6 +2183,8 @@ export function WholesaleDetail({
                     onSubmitPanel={submitPayPanel}
                     onCancelPanel={() => setPayPanel(null)}
                     error={payPanel?.idx === idx ? payError : ''}
+                    folder={`${o.shop}/${o.id}`}
+                    attachmentUrlAction={attachmentUrlAction}
                   />
                 ))}
                 <button
@@ -2361,12 +2381,12 @@ export function WholesaleDetail({
                     {o.deliveryNote}
                   </p>
                 )}
-                {(o.deliveryAttachments ?? []).length > 0 && (
-                  <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
-                    <i className="fa-solid fa-paperclip mr-1.5"></i>
-                    {(o.deliveryAttachments ?? []).map(fileNameFromPath).join(', ')}
-                  </p>
-                )}
+                <div className="mt-1">
+                  <AttachmentLinks
+                    paths={o.deliveryAttachments ?? []}
+                    urlAction={attachmentUrlAction}
+                  />
+                </div>
               </div>
             </div>
 
@@ -2874,6 +2894,8 @@ function PaymentRow({
   onSubmitPanel,
   onCancelPanel,
   error,
+  folder,
+  attachmentUrlAction,
 }: {
   p: WsPayment;
   idx: number;
@@ -2890,6 +2912,9 @@ function PaymentRow({
   onSubmitPanel: () => void;
   onCancelPanel: () => void;
   error: string;
+  /** โฟลเดอร์ใน bucket — สาขา/เลข PO ให้ไฟล์เรียงตามใบที่มันเป็นหลักฐานให้ */
+  folder: string;
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
 }) {
   const st = p.status || PAYMENT_RECEIVED;
   const received = st === PAYMENT_RECEIVED;
@@ -3058,55 +3083,22 @@ function PaymentRow({
           </div>
         </div>
       )}
-      <div className="flex flex-col gap-1.5">
-        <label
-          className="text-xs flex items-center gap-1.5 flex-1 field px-2.5 py-1.5 cursor-pointer"
-          style={{ color: 'var(--ink-soft)' }}
-        >
-          <i className="fa-solid fa-paperclip"></i>
-          แนบหลักฐานการชำระเงิน (เลือกได้หลายไฟล์)...
-          <input
-            type="file"
-            accept="image/*,.pdf"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              if (files.length)
-                onChange(idx, 'attachments', [
-                  ...(p.attachments || []),
-                  ...files.map((fl) => fl.name),
-                ]);
-              e.target.value = '';
-            }}
-          />
-        </label>
-        {(p.attachments || []).length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {p.attachments.map((fn, fi) => (
-              <span
-                key={fi}
-                className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                style={{ background: 'var(--paper)', color: '#4C7A3E' }}
-              >
-                <i className="fa-solid fa-circle-check"></i>
-                {fn}
-                <i
-                  className="fa-solid fa-xmark cursor-pointer"
-                  style={{ color: '#B23A48' }}
-                  onClick={() =>
-                    onChange(
-                      idx,
-                      'attachments',
-                      p.attachments.filter((_, fi2) => fi2 !== fi),
-                    )
-                  }
-                ></i>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      {/*
+        หลักฐานการชำระเงิน — ไฟล์จริง ไม่ใช่ชื่อไฟล์ (0086).
+
+        ของเดิมเป็นช่องแนบปลอม: มันเก็บ `file.name` ลง state แล้วทิ้งตัวไฟล์
+        ไป และ `order_payments` ก็ไม่มีคอลัมน์ให้เก็บด้วยซ้ำ ชิปเขียวจึงขึ้น
+        ครบทุกครั้ง แล้วหายไปตอนรีเฟรช — คนกรอกเชื่อว่าแนบแล้ว ทั้งที่ไม่เคยมี
+        ไฟล์ไหนขึ้นไปเลย ตัวเดียวกับที่ใบงานใช้แนบสลิป ต่างแค่ bucket
+      */}
+      <AttachmentField
+        label="แนบหลักฐานการชำระเงิน (เลือกได้หลายไฟล์)..."
+        paths={p.attachments || []}
+        onChange={(next) => onChange(idx, 'attachments', next)}
+        folder={folder}
+        bucket="wholesale-attachments"
+        urlAction={attachmentUrlAction}
+      />
       {canConfirm && !panel && (
         <div className="flex gap-2 mt-2.5">
           {!saved ? (

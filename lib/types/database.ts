@@ -920,6 +920,7 @@ export type Database = {
       }
       order_payments: {
         Row: {
+          attachments: string[]
           installment_uid: string
           is_cheque: boolean
           bounce_note: string
@@ -940,6 +941,7 @@ export type Database = {
           paid_at: string
         }
         Insert: {
+          attachments?: string[]
           installment_uid?: string
           is_cheque?: boolean
           bounce_note?: string
@@ -960,6 +962,7 @@ export type Database = {
           paid_at: string
         }
         Update: {
+          attachments?: string[]
           installment_uid?: string
           is_cheque?: boolean
           bounce_note?: string
