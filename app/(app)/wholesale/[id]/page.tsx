@@ -11,6 +11,7 @@ import {
   confirmOrderPayment,
   confirmOrderReturn,
   deleteOrder,
+  getWholesaleAttachmentUrl,
   recordOrderDelivery,
   saveOrderDelivery,
   deleteOrderDelivery,
@@ -84,6 +85,7 @@ export default async function WholesaleDetailPage({ params }: { params: Promise<
       onSaveCustomer={saveCustomer}
       onSaveSalesPerson={saveSalesPerson}
       updateOptionListAction={updateOptionListAction}
+      attachmentUrlAction={getWholesaleAttachmentUrl}
     />
   );
 }

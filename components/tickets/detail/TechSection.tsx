@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 import { NO_QTY_CATEGORY, qtyProducts } from '@/lib/domain/techQty';
 
-import { AttachmentField } from './AttachmentField';
+import { AttachmentField } from '@/components/ui/AttachmentField';
 
 import type { StockRow, Ticket } from '../types';
 

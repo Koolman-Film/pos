@@ -33,7 +33,7 @@ export const ORDER_SELECT = `
   order_deliveries(id, uid, delivered_at, note, attachments, stock_deducted_at, order_delivery_items(item_uid, item_name, qty)),
   order_returns(item_name, item_uid, qty, reason, returned_at, uid, received_at),
   order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
-  order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, is_cheque, installment_uid, cleared_at, bounced_at, bounce_note),
+  order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, is_cheque, installment_uid, cleared_at, bounced_at, bounce_note, attachments),
   order_installments(uid, seq, due_at, amount, note)
 `;
 
@@ -123,6 +123,7 @@ export type OrderRow = {
         cleared_at: string | null;
         bounced_at: string | null;
         bounce_note: string;
+        attachments: string[] | null;
       }[]
     | null;
 };
@@ -215,7 +216,7 @@ export function mapOrder(row: OrderRow): WsOrder {
       clearedAt: p.cleared_at ?? '',
       bouncedAt: p.bounced_at ?? '',
       bounceNote: p.bounce_note ?? '',
-      attachments: [],
+      attachments: p.attachments ?? [],
     })),
   };
 }
