@@ -953,6 +953,44 @@ describe('WholesaleDetail — การรับเงินแบบเช็�
     expect(sheet.textContent).toContain('ยังไม่ได้ขึ้นเงิน');
     expect(sheet.textContent).toContain('หนี้จะถูกตัดเมื่อเช็คขึ้นเงิน');
   });
+
+  /*
+    ใบเสร็จบอกแค่ จ่ายวันไหน และจ่ายเท่าไหร่ (ร้านขอ 27 ต.ค. 2569).
+
+    แหล่งรับเงินคือบัญชีฝั่งร้านที่เงินก้อนนั้นไปลง ลูกค้าไม่ได้ถือใบนี้ไว้
+    เพื่อรู้เรื่องนั้น — ส่วนรายละเอียดเช็คอยู่ต่อ เพราะนั่นคือตัวเช็คที่
+    ลูกค้ายื่นมาเอง ไม่ใช่บัญชีของร้าน
+  */
+  it('ใบเสร็จไม่บอกว่าเงินเข้าบัญชีไหนของร้าน', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...chequeOrder,
+            payments: [
+              {
+                ...chequePayment,
+                method: 'กสิกร ออมทรัพย์',
+                chequeNo: '',
+                chequeBank: '',
+                chequeDate: '',
+              },
+            ],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /ใบเสร็จรับเงิน/ }));
+    const sheet = document.querySelector('.print-area') as HTMLElement;
+    expect(sheet.textContent).not.toContain('กสิกร ออมทรัพย์');
+    // วันที่กับยอดยังต้องอยู่ครบ — นั่นคือทั้งหมดที่ใบเสร็จรับรอง
+    expect(sheet.textContent).toContain('1 ก.ย. 2569');
+    expect(sheet.textContent).toContain('20,000.00');
+  });
 });
 
 /**

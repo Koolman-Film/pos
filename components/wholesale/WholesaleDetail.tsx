@@ -2746,9 +2746,16 @@ export function WholesaleDetail({
                       {receiptPayments.map((p, idx) => (
                         <tr key={idx}>
                           <td style={{ padding: '3px 6px' }}>
-                            {p.date ? fmtThaiDayString(p.date) : '-'} &middot; {p.method}
-                            {/* เลขที่เช็ค ธนาคาร และวันที่หน้าเช็ค.
+                            {/*
+                              วันที่อย่างเดียว ไม่มีแหล่งรับเงิน (ร้านขอ 27 ต.ค.
+                              2569) — บัญชีที่เงินไปลงเป็นเรื่องของฝั่งร้าน ไม่ใช่
+                              สิ่งที่ใบเสร็จรับรองให้ลูกค้า
+                            */}
+                            {p.date ? fmtThaiDayString(p.date) : '-'}
+                            {/* เลขที่เช็ค ธนาคาร และวันที่หน้าเช็ค — อยู่ต่อ.
 
+                                นี่ไม่ใช่แหล่งรับเงิน แต่เป็นตัวเช็คที่ลูกค้า
+                                ยื่นมาเอง และใบเสร็จคือที่เดียวที่บันทึกไว้
                                 A receipt that says only "รับเงินแล้ว 50,000"
                                 against a cheque dated next month is read by
                                 each side as meaning something different. These
