@@ -40,6 +40,27 @@ async function setOrderStatusInternal(orderId: string, status: string) {
 }
 
 /**
+ * ลิงก์อายุหนึ่งนาที สำหรับเปิดหลักฐานที่แนบไว้ใน PO — ใบส่งของที่เซ็นแล้ว หรือ
+ * สลิปการชำระเงิน
+ *
+ * bucket `wholesale-attachments` เป็นแบบส่วนตัว (0055) ทางนี้จึงเป็นทางเดียวที่
+ * เปิดไฟล์ได้ ตัวตนถูกตรวจซ้ำที่นี่ตาม C2 และ storage RLS ตรวจสิทธิ์โมดูล
+ * ขายส่งอีกครั้งตอนลิงก์ถูกใช้ — เหมือนที่ใบงานกับค่าใช้จ่ายทำ
+ */
+export async function getWholesaleAttachmentUrl(
+  path: string,
+): Promise<{ url?: string; error?: string }> {
+  const session = await getSessionContext();
+  if (!session.hasNav('wholesale')) return { error: 'ไม่มีสิทธิ์ในโมดูลขายส่ง' };
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage
+    .from('wholesale-attachments')
+    .createSignedUrl(path, 60);
+  if (error) return { error: error.message };
+  return { url: data?.signedUrl };
+}
+
+/**
  * Persist a PO and all its child rows. Creating a *new* order additionally
  * requires `wholesale.createNew`; editing an existing one only requires a valid
  * session (the sensitive transitions have their own gated actions below).
