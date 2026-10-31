@@ -69,6 +69,8 @@ const mixedExpenses = [
     source: 'เงินสดย่อย',
     amount: 150,
     status: 'จ่ายแล้ว',
+    // จ่ายแล้วต้องมีวันที่จ่าย — ยอดคงเหลือทุกใบสร้างจากกระแสเงินที่เรียงตามเวลา
+    dateObj: new Date(),
   },
   {
     id: 4,
@@ -152,6 +154,68 @@ describe('AccountingModule totals', () => {
     // 10,000 topped up, 150 paid from เงินสดย่อย → 9,850.
     renderAccounting();
     expect(screen.getByText('9,850.00')).toBeInTheDocument();
+  });
+
+  /*
+    การ์ดนี้กับแดชบอร์ดต้องตอบเท่ากันเสมอ (ร้านเจอ 31 ต.ค. 2569).
+
+    ของเดิมการ์ดถามแค่ "จ่ายแล้วหรือยัง" ส่วนฝั่งการจัดการเงินถามวันที่จ่ายด้วย
+    แถวที่ติดจ่ายแล้วแต่ไม่มีวันที่จึงถูกนับข้างเดียว แล้วบัญชีเดียวกันอ่านได้
+    สองตัวเลข
+  */
+  it('ไม่นับแถวที่ติดจ่ายแล้วแต่ไม่มีวันที่ — เหมือนที่ฝั่งการจัดการเงินไม่นับ', () => {
+    render(
+      <AccountingModule
+        expenses={[
+          {
+            id: 9,
+            shop: 'cm',
+            desc: 'พี่ซื้อน้ำแข็ง',
+            category: 'สวัสดิการพนักงาน',
+            source: 'เงินสดย่อย',
+            amount: 100,
+            status: 'จ่ายแล้ว',
+            dateObj: null,
+          },
+        ]}
+        pettyCash={[{ id: 1, shop: 'cm', type: 'เติมเงิน', amount: 10000 }]}
+        accessibleShops={SHOPS}
+      />,
+    );
+    const card = screen.getByText('เงินสดย่อยคงเหลือ').closest('.card') as HTMLElement;
+    expect(within(card).getByText('10,000.00')).toBeInTheDocument();
+  });
+
+  it('บอกออกมาว่ามีเงินที่ยังไม่ถูกนับ แทนที่จะปล่อยให้หายเงียบ ๆ', () => {
+    // ยอดที่ไม่ครบโดยไม่บอก คือยอดที่คนอ่านเอาไปกระทบบัญชีจริงแล้วหาไม่เจอว่า
+    // หายไปไหน — ตัวเลขที่บอกว่าตัวเองไม่ครบ ยังตามต่อได้
+    render(
+      <AccountingModule
+        expenses={[
+          {
+            id: 9,
+            shop: 'cm',
+            desc: 'พี่ซื้อน้ำแข็ง',
+            category: 'สวัสดิการพนักงาน',
+            source: 'เงินสดย่อย',
+            amount: 100,
+            status: 'จ่ายแล้ว',
+            dateObj: null,
+          },
+        ]}
+        pettyCash={[{ id: 1, shop: 'cm', type: 'เติมเงิน', amount: 10000 }]}
+        accessibleShops={SHOPS}
+      />,
+    );
+    const card = screen.getByText('เงินสดย่อยคงเหลือ').closest('.card') as HTMLElement;
+    expect(within(card).getByText(/1 รายการติดจ่ายแล้วแต่ไม่ได้ลงวันที่/)).toBeInTheDocument();
+    expect(within(card).getByText(/100.00/)).toBeInTheDocument();
+  });
+
+  it('ไม่เตือนเมื่อทุกแถวลงวันที่ครบ', () => {
+    renderAccounting();
+    const card = screen.getByText('เงินสดย่อยคงเหลือ').closest('.card') as HTMLElement;
+    expect(within(card).queryByText(/ไม่ได้ลงวันที่/)).not.toBeInTheDocument();
   });
 
   it('lists both the paid and the pending row', () => {
