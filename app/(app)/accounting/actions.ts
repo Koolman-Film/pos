@@ -30,6 +30,25 @@ import type {
  * prototype's row edit/delete controls sit behind.
  */
 
+/**
+ * ทุกหน้าที่ยอดจะเปลี่ยนเมื่อค่าใช้จ่ายหนึ่งแถวขยับ (ร้านเจอ 31 ต.ค. 2569).
+ *
+ * เดิมการเพิ่ม/แก้/ลบค่าใช้จ่าย ล้างแคชแค่ `/accounting` ที่เดียว หน้าค่าใช้จ่าย
+ * จึงอัปเดตทันที ส่วนแดชบอร์ดกับการจัดการเงิน/บัญชี ยังเสิร์ฟหน้าที่เรนเดอร์ไว้
+ * ก่อนหน้านั้น — บัญชีเดียวกันอ่านได้สองตัวเลข ต่างกันเท่ากับรายการที่เพิ่งลงไป
+ * พอดี ซึ่งอ่านเหมือนระบบคำนวณผิด ทั้งที่มันแค่ยังไม่ได้คำนวณใหม่
+ *
+ * `topupCash` ล้างสามหน้านี้มาตั้งแต่ 0056 อยู่แล้ว เงินที่จ่ายออกขยับยอดเดียว
+ * กับเงินที่เติมเข้า จึงต้องล้างชุดเดียวกัน ไม่ใช่ชุดที่สั้นกว่า
+ */
+function revalidateMoneyScreens() {
+  revalidatePath('/accounting');
+  revalidatePath('/money');
+  revalidatePath('/dashboard');
+  // รายงานการเงินรายวัน สรุปจากกระแสเงินชุดเดียวกัน
+  revalidatePath('/daily-report');
+}
+
 export async function addExpense(input: NewExpenseInput): Promise<void> {
   const session = await getSessionContext();
   if (!session.canDo('accounting.addExpense')) throw new Error('forbidden');
@@ -78,7 +97,7 @@ export async function addExpense(input: NewExpenseInput): Promise<void> {
     if (attachErr) throw attachErr;
   }
 
-  revalidatePath('/accounting');
+  revalidateMoneyScreens();
 }
 
 /**
@@ -105,7 +124,7 @@ export async function addExpenseAttachments(
     })),
   );
   if (error) return { ok: false, error: error.message };
-  revalidatePath('/accounting');
+  revalidateMoneyScreens();
   return { ok: true };
 }
 
@@ -150,7 +169,7 @@ export async function deleteExpenseAttachment(
   const { error } = await supabase.from('expense_attachments').delete().eq('id', attachmentId);
   if (error) return { ok: false, error: error.message };
   if (row?.storage_path) await removeUnreferencedReceipts(supabase, [row.storage_path]);
-  revalidatePath('/accounting');
+  revalidateMoneyScreens();
   return { ok: true };
 }
 
@@ -199,10 +218,7 @@ export async function topupCash(input: TopupInput): Promise<{ ok: boolean; error
   });
   if (error) return { ok: false, error: error.message.replace(/^forbidden:\s*/, '') };
 
-  revalidatePath('/accounting');
-  // The same money now moves the register and the dashboard card.
-  revalidatePath('/money');
-  revalidatePath('/dashboard');
+  revalidateMoneyScreens();
   return { ok: true };
 }
 
@@ -230,7 +246,7 @@ export async function updateExpense(input: UpdateExpenseInput): Promise<void> {
     .eq('id', input.id);
   if (error) throw error;
 
-  revalidatePath('/accounting');
+  revalidateMoneyScreens();
 }
 
 export async function deleteExpense(id: number): Promise<void> {
@@ -255,7 +271,7 @@ export async function deleteExpense(id: number): Promise<void> {
   // must not undo the delete the user asked for.
   await removeUnreferencedReceipts(supabase, paths);
 
-  revalidatePath('/accounting');
+  revalidateMoneyScreens();
 }
 
 /**
