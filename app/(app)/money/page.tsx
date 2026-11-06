@@ -53,6 +53,7 @@ export default async function MoneyPage() {
         amount: t.amount,
         movedAt: t.on,
         note: t.note,
+        fee: t.fee,
       }))}
       reconciliations={money.reconciliations}
       pendingTopups={money.pendingTopups}

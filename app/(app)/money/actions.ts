@@ -253,6 +253,17 @@ export type SaveTransferInput = {
   amount: number;
   movedAt: string;
   note: string;
+  /**
+   * ค่าธรรมเนียมที่โดนหักระหว่างทาง (0087).
+   *
+   * เงินจากเครื่องรูดบัตรเข้าธนาคารโดนหักทุกครั้ง ซึ่งเป็นค่าใช้จ่ายของร้าน
+   * เดิมต้องไปเปิดหน้าค่าใช้จ่ายบันทึกเองอีกรายการ สองขั้นที่ต้องจำว่าคู่กัน
+   * และวันไหนลืมขั้นที่สอง ยอดบัญชีก็เกินจริงอยู่เท่านั้น
+   */
+  fee?: number;
+  feeCategory?: string;
+  /** บัญชีที่ค่าธรรมเนียมถูกหัก — ว่าง = บัญชีปลายทาง. */
+  feeAccountId?: number | null;
 };
 
 /**
@@ -280,6 +291,21 @@ export async function saveMoneyTransfer(
   if (input.fromAccountId && input.fromAccountId === input.toAccountId) {
     return { ok: false, error: 'โอนเข้าแหล่งเงินเดียวกันไม่ได้' };
   }
+  const fee = Number(input.fee ?? 0);
+  if (fee < 0) return { ok: false, error: 'ค่าธรรมเนียมติดลบไม่ได้' };
+  /*
+    ค่าธรรมเนียมที่กินการโอนทั้งก้อน คือการกรอกสลับช่อง.
+
+    ฐานข้อมูลปฏิเสธด้วย check constraint อยู่แล้ว (0087) — ด่านนี้มีไว้ให้คนที่
+    หน้าจอได้ประโยคที่ทำอะไรต่อได้ แทนที่จะเป็นข้อความ constraint violation
+  */
+  if (fee > 0 && fee >= input.amount) {
+    return { ok: false, error: 'ค่าธรรมเนียมต้องน้อยกว่าจำนวนเงินที่โอน' };
+  }
+  const feeAccountId = input.feeAccountId ?? input.toAccountId ?? input.fromAccountId;
+  if (fee > 0 && !feeAccountId) {
+    return { ok: false, error: 'ค่าธรรมเนียมต้องระบุว่าหักจากแหล่งเงินไหน' };
+  }
 
   const supabase = await createClient();
 
@@ -292,7 +318,18 @@ export async function saveMoneyTransfer(
     trigger (0043) enforces it too — this check exists to give the person at the
     screen a sentence they can act on instead of a constraint violation.
   */
-  const ends = [input.fromAccountId, input.toAccountId].filter((id): id is number => id !== null);
+  /*
+    ไม่ซ้ำ: บัญชีที่หักค่าธรรมเนียมตั้งต้นเป็นบัญชีปลายทาง ซึ่งแปลว่า id เดียวกัน
+    จะอยู่ในลิสต์สองครั้ง แล้วการนับจำนวนแถวที่เป็นเจ้าของจะไม่มีวันเท่ากัน —
+    การโอนที่ถูกต้องทุกใบจะถูกปฏิเสธว่า ไม่ได้อยู่ในสาขานี้
+  */
+  const ends = [
+    ...new Set(
+      [input.fromAccountId, input.toAccountId, fee > 0 ? feeAccountId : null].filter(
+        (id): id is number => id !== null && id !== undefined,
+      ),
+    ),
+  ];
   if (ends.length > 0) {
     const { data: owned } = await supabase
       .from('money_accounts')
@@ -304,14 +341,23 @@ export async function saveMoneyTransfer(
     }
   }
 
-  const { error } = await supabase.from('money_transfers').insert({
-    shop_id: input.shop,
-    from_account_id: input.fromAccountId,
-    to_account_id: input.toAccountId,
-    amount: input.amount,
-    moved_at: input.movedAt,
-    note: input.note.trim(),
-    created_by: session.userId,
+  /*
+    การโอนกับค่าใช้จ่ายของมัน เกิดพร้อมกันหรือไม่เกิดเลย (0087).
+
+    เขียนสองคำสั่งจากที่นี่จะมีช่วงที่การโอนมีอยู่แต่ค่าธรรมเนียมยังไม่มี และถ้า
+    คำสั่งที่สองพลาด ไม่มีอะไรย้อนคำสั่งแรกให้ — ซึ่งคือปัญหาเดียวกับที่ร้านทำ
+    ด้วยมืออยู่ แค่เร็วขึ้น RPC ทำทั้งคู่ในทรานแซกชันเดียว
+  */
+  const { error } = await supabase.rpc('save_money_transfer', {
+    p_shop: input.shop,
+    p_from_account_id: input.fromAccountId,
+    p_to_account_id: input.toAccountId,
+    p_amount: input.amount,
+    p_moved_at: input.movedAt,
+    p_note: input.note.trim(),
+    p_fee: fee,
+    p_fee_category: input.feeCategory ?? '',
+    p_fee_account_id: fee > 0 ? (feeAccountId ?? null) : null,
   });
   if (error) return { ok: false, error: error.message };
   return done();
@@ -321,7 +367,9 @@ export async function deleteMoneyTransfer(id: number): Promise<{ ok: boolean; er
   const session = await authorize();
   if (!session) return { ok: false, error: REFUSED };
   const supabase = await createClient();
-  const { error } = await supabase.from('money_transfers').delete().eq('id', id);
+  // ค่าธรรมเนียมที่ค้างอยู่หลังการโอนถูกลบ คือค่าใช้จ่ายที่ไม่มีเหตุการณ์รองรับ
+  // และไม่มีใครรู้ว่ามาจากไหน — แย่กว่าลืมบันทึก เพราะมันดูถูกต้อง (0087)
+  const { error } = await supabase.rpc('delete_money_transfer', { p_id: id });
   if (error) return { ok: false, error: error.message };
   return done();
 }
