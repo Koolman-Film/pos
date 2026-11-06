@@ -1,24 +1,17 @@
+import { summarisePendingCheques } from '@/lib/domain/cheques';
 import { PAYMENT_REPORTED } from '@/lib/domain/orders';
 
 import type { WsOrder } from './types';
 
 /**
- * เงินที่แจ้งแล้วแต่ยังไม่ยืนยัน — ส่วนใหญ่คือเช็คลงวันที่ล่วงหน้า.
+ * เงินที่แจ้งแล้วแต่ยังไม่ยืนยัน ของ PO ที่หน้าจอถืออยู่ — ส่วนใหญ่คือเช็ค
+ * ลงวันที่ล่วงหน้า
  *
- * Wholesale is paid mostly by post-dated cheque, so the shop is always holding
- * paper that is not yet money. Once the date on the face of each cheque is
- * recorded (migration 0048) two questions become answerable, and both of them
- * matter more than the totals they are made of:
- *
- *   - เดือนหน้าจะมีเงินเข้าเท่าไหร่ — what is coming, and when.
- *   - ใบไหนเลยกำหนดแล้วยังไม่ยืนยัน — which cheque somebody has to chase.
- *
- * The second is the reason this exists. A cheque that came due last week and
- * was never confirmed is either money nobody banked or a cheque that bounced
- * without anyone recording it; either way it is invisible in every other view,
- * because a payment that is not counted simply leaves the customer looking
- * like a slow payer.
+ * กฎว่าใบไหนเลยกำหนด และเรียงอย่างไร อยู่ที่ `lib/domain/cheques.ts` ที่เดียว
+ * เพราะหน้า การจัดการเงิน/บัญชี ถามคำถามเดียวกันนี้จากตารางดิบ ไม่ได้ถามจาก
+ * `WsOrder` ที่หน้ารายการ PO ถืออยู่ ไฟล์นี้จึงเหลือหน้าที่เดียว: แปลงรูป
  */
+
 export type PendingCheque = {
   orderId: string;
   shop: string;
@@ -49,13 +42,12 @@ export type PendingChequeSummary = {
  * Both dates are `YYYY-MM-DD`, which compares correctly as a string.
  */
 export function pendingCheques(orders: WsOrder[], today: string): PendingChequeSummary {
-  const rows: PendingCheque[] = [];
+  const rows = [];
   for (const o of orders) {
     for (const p of o.payments) {
       if (p.status !== PAYMENT_REPORTED) continue;
       const amount = Number(p.amount || 0);
       if (amount <= 0) continue;
-      const due = p.chequeDate || p.date || '';
       rows.push({
         orderId: o.id,
         shop: o.shop,
@@ -64,19 +56,10 @@ export function pendingCheques(orders: WsOrder[], today: string): PendingChequeS
         method: p.method,
         chequeNo: p.chequeNo ?? '',
         chequeBank: p.chequeBank ?? '',
-        due,
-        // A row with no date at all is not overdue — it is undated, and calling
-        // it late would send somebody chasing a cheque that may not be due yet.
-        overdue: !!due && due < today,
+        due: p.chequeDate || p.date || '',
       });
     }
   }
-  // Earliest first, which puts everything overdue at the top on its own. Undated
-  // rows sort last: they carry no claim about when the money is expected.
-  rows.sort((a, b) => (a.due || '9999-12-31').localeCompare(b.due || '9999-12-31'));
-  return {
-    rows,
-    total: rows.reduce((n, r) => n + r.amount, 0),
-    overdueTotal: rows.reduce((n, r) => n + (r.overdue ? r.amount : 0), 0),
-  };
+  const out = summarisePendingCheques(rows, today);
+  return { rows: out.rows, total: out.total, overdueTotal: out.overdueTotal };
 }

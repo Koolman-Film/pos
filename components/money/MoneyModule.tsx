@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { SavedToast } from '@/components/ui/SavedToast';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
+import { summarisePendingCheques } from '@/lib/domain/cheques';
 import { fmt, fmtThaiDayString, shortShopName } from '@/lib/domain/format';
 import { dateInputValue, todayValue } from '@/lib/domain/now';
 import { nonPayableReason } from '@/lib/domain/payAccount';
@@ -13,7 +14,7 @@ import {
   type MoneyAccount,
   type MoneyOverview,
 } from '@/components/dashboard/moneyFlow';
-import type { PendingTopup } from '@/app/(app)/money/data';
+import type { PendingChequeRecord, PendingTopup } from '@/app/(app)/money/data';
 
 import {
   bindMoneyLabel,
@@ -105,6 +106,7 @@ export function MoneyModule({
   transfers,
   reconciliations,
   pendingTopups = [],
+  pendingCheques = [],
 }: {
   shops: { id: string; name: string }[];
   accounts: MoneyAccount[];
@@ -113,6 +115,8 @@ export function MoneyModule({
   reconciliations: ReconciliationRow[];
   /** เติมเงินสดย่อยจากหน้าค่าใช้จ่ายที่ยังไม่เข้ายอดเงิน (0056). */
   pendingTopups?: PendingTopup[];
+  /** เช็คที่รับมาแล้วแต่ยังขึ้นเงินไม่ได้ — ยังไม่ใช่ยอดคงเหลือของบัญชีใด. */
+  pendingCheques?: PendingChequeRecord[];
 }) {
   const [shop, setShop] = useState(shops[0]?.id ?? '');
   const [draft, setDraft] = useState<SaveAccountInput | null>(null);
@@ -121,6 +125,17 @@ export function MoneyModule({
   const [busy, setBusy] = useState(false);
 
   const branch = overview.branches.find((b) => b.shop === shop);
+  /*
+    เช็คของสาขานี้ที่ยังขึ้นเงินไม่ได้ (ร้านแจ้ง 6 พ.ย. 2569).
+
+    กฎว่าใบไหนเลยกำหนด เรียงอย่างไร และรวมยอดอย่างไร อยู่ที่
+    `lib/domain/cheques.ts` ตัวเดียวกับที่หน้ารายการ PO ใช้ — ไม่งั้นหน้าสองหน้า
+    จะตอบคำถาม "ใบไหนต้องตาม" ต่างกัน
+  */
+  const cheques = summarisePendingCheques(
+    pendingCheques.filter((c) => c.shop === shop),
+    todayValue(),
+  );
   // Same order as the table and the dashboard card, so every dropdown on the
   // screen lists the accounts the way the shop arranged them.
   const shopAccounts = accounts.filter((a) => a.shop === shop).sort(byAccountOrder);
@@ -636,6 +651,87 @@ export function MoneyModule({
         )}
       </div>
 
+      {/* ------------------------------------- เช็คที่ยังขึ้นเงินไม่ได้ -- */}
+      {cheques.rows.length > 0 && (
+        <div className="card p-5 mb-4" style={{ borderLeft: '3px solid #8A5A12' }}>
+          <p className="font-semibold mb-1">
+            <i className="fa-solid fa-hourglass-half mr-2" style={{ color: '#8A5A12' }}></i>
+            เช็คและเงินที่รอเรียกเก็บ
+          </p>
+          {/*
+            บอกให้ชัดว่ามันไม่ได้อยู่ในยอดข้างบน.
+
+            นี่คือทั้งเหตุผลที่หัวข้อนี้มีอยู่ และข้อที่เข้าใจผิดได้ง่ายที่สุด —
+            ถ้าร้านอ่านแล้วคิดว่าเป็นเงินที่ใช้ได้ หัวข้อนี้จะอันตรายกว่าไม่มี
+          */}
+          <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
+            เช็คที่รับมาแล้วแต่ยังขึ้นเงินไม่ได้ — <b>ไม่ได้รวมอยู่ในยอดคงเหลือข้างบน</b>{' '}
+            เงินจะเข้าบัญชีที่ระบุไว้ ก็ต่อเมื่อกด &quot;ยืนยันเงินเข้า&quot; ในใบ PO
+            และลงวันที่ของวันที่เงินเข้าจริง ไม่ใช่วันที่หน้าเช็ค
+          </p>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 mb-3">
+            <span className="text-sm">
+              รวม <b>{fmt(cheques.total)}</b>
+            </span>
+            <span className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+              ยังไม่ถึงวันที่หน้าเช็ค <b>{fmt(cheques.upcomingTotal)}</b>
+            </span>
+            {cheques.overdueTotal > 0 && (
+              <span className="text-sm" style={{ color: '#B23A48' }}>
+                <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+                ถึงกำหนดแล้วยังไม่ยืนยัน <b>{fmt(cheques.overdueTotal)}</b>
+              </span>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ color: 'var(--ink-soft)', textAlign: 'left' }}>
+                  <th style={{ padding: '6px 8px' }}>ขึ้นเงินได้</th>
+                  <th style={{ padding: '6px 8px' }}>เช็ค</th>
+                  <th style={{ padding: '6px 8px' }}>ลูกค้า / PO</th>
+                  <th style={{ padding: '6px 8px' }}>เข้าบัญชี</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right' }}>จำนวนเงิน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cheques.rows.map((c, i) => (
+                  <tr
+                    key={`${c.orderId}-${c.chequeNo}-${i}`}
+                    style={{ borderTop: '1px solid var(--line)' }}
+                  >
+                    <td style={{ padding: '6px 8px', color: c.overdue ? '#B23A48' : undefined }}>
+                      {c.due ? fmtThaiDayString(c.due) : 'ไม่ได้ลงวันที่'}
+                      {c.overdue && ' · เลยกำหนด'}
+                    </td>
+                    <td style={{ padding: '6px 8px' }}>
+                      {c.chequeNo || '—'}
+                      {c.chequeBank ? ` · ${c.chequeBank}` : ''}
+                    </td>
+                    <td style={{ padding: '6px 8px' }}>
+                      {c.customerName || '—'}
+                      <Link
+                        href={`/wholesale/${c.orderId}`}
+                        className="ml-1.5"
+                        style={{ color: 'var(--primary)' }}
+                      >
+                        {c.orderId}
+                      </Link>
+                    </td>
+                    <td style={{ padding: '6px 8px', color: 'var(--ink-soft)' }}>
+                      {c.method || '—'}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>
+                      {fmt(c.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* ---------------------------------------------- โอน / ฝากเงิน -- */}
       <div className="card p-5 mb-4">
         <p className="font-semibold mb-1">
@@ -945,6 +1041,19 @@ function AccountEditor({
                 </option>
               ))}
             </select>
+            {/*
+              ตอบคำถาม "ทำไมไม่มีเช็ค" ตรงจุดที่คนถาม (ร้านถาม 6 พ.ย. 2569).
+
+              ร้านเปิดกล่องนี้เพื่อจะสร้างแหล่งเงินชื่อเช็ค ซึ่งเป็นสิ่งที่ไม่ควร
+              สร้าง — เช็คยังไม่ใช่เงิน และถ้ามันกลายเป็นบัญชีหนึ่ง เงินที่ขึ้น
+              เช็คได้แล้วจะไปกองอยู่ในนั้นแทนที่จะเข้าบัญชีธนาคารจริง ประโยคนี้
+              จึงบอกด้วยว่าเช็คไปอยู่ตรงไหนแทน ไม่ใช่แค่บอกว่าไม่มี
+            */}
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+              ไม่มีประเภท &quot;เช็ค&quot; เพราะเช็คที่รับมายังไม่ใช่เงินในบัญชีไหน —
+              ตอนบันทึกรับเช็คในใบ PO ให้เลือกบัญชีที่เงินจะเข้าเมื่อขึ้นเงินได้
+              ระบบจะพักไว้ในหัวข้อ &quot;เช็คและเงินที่รอเรียกเก็บ&quot; จนกว่าจะกดยืนยันเงินเข้า
+            </p>
           </div>
           <div>
             <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
