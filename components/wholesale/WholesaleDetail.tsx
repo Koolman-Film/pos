@@ -42,6 +42,7 @@ import {
   type PayAccount,
 } from '@/lib/domain/payAccount';
 import { uploadAttachments, discardAttachments } from '@/lib/storage/attachments';
+import { bankOptions } from '@/lib/domain/banks';
 import { AttachmentField } from '@/components/ui/AttachmentField';
 import { AttachmentLinks } from '@/components/ui/AttachmentLinks';
 
@@ -3069,13 +3070,27 @@ function PaymentRow({
               onChange={(e) => onChange(idx, 'chequeNo', e.target.value)}
               className="field text-xs px-2.5 py-1.5 flex-1"
             />
-            <input
-              placeholder="ธนาคาร"
+            {/*
+              ธนาคารเลือกจากรายการ ไม่ใช่พิมพ์เอง (ร้านขอ 6 พ.ย. 2569).
+
+              ช่องพิมพ์เปล่าทำให้ธนาคารเดียวกันถูกบันทึกได้หลายแบบ — "กสิกรไทย",
+              "KBANK", "ธ.กสิกร" — แล้วเช็คของธนาคารเดียวกันก็ไม่รวมกันในรายการ
+              เช็คค้างรับ ส่วนชื่อที่พิมพ์ไว้ก่อนหน้านี้ยังอยู่ในรายการให้เลือก
+              การเปิดใบเก่ามาแก้เรื่องอื่นจึงไม่ล้างธนาคารทิ้ง
+            */}
+            <select
               aria-label="ธนาคารของเช็ค"
               value={p.chequeBank ?? ''}
               onChange={(e) => onChange(idx, 'chequeBank', e.target.value)}
               className="field text-xs px-2.5 py-1.5 flex-1"
-            />
+            >
+              <option value="">เลือกธนาคาร...</option>
+              {bankOptions(p.chequeBank).map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
