@@ -56,6 +56,7 @@ export default async function MoneyPage() {
       }))}
       reconciliations={money.reconciliations}
       pendingTopups={money.pendingTopups}
+      pendingCheques={money.pendingCheques}
     />
   );
 }
