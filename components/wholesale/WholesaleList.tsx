@@ -29,6 +29,8 @@ import { deliveryProgress, hasUndelivered } from '@/lib/domain/deliveries';
 import { isWsFlag, matchesWsFlag, WS_FLAG_LABELS, type WsFlag } from '@/lib/alerts/wholesale';
 
 import { pendingCheques } from './cheques';
+import { buildSalesReport, type SalesReportGroupBy } from './salesReport';
+import { WholesaleReport } from './WholesaleReport';
 
 import {
   customerName,
@@ -151,6 +153,15 @@ export function WholesaleList({
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());
   const [productFilter, setProductFilter] = useState('all');
+  /*
+    รายงานเป็นอีกมุมของชุดข้อมูลเดียวกัน ไม่ใช่หน้าที่สอง (ร้านขอ 6 พ.ย. 2569).
+
+    ตัวกรองทุกตัวด้านบนใช้ร่วมกัน — สาขา ช่วงเวลา ลูกค้า สินค้า เซลล์ สถานะ —
+    ถ้าแยกเป็นหน้าของตัวเอง มันจะมีตัวกรองชุดที่สองที่ตั้งไม่ตรงกันได้ แล้ว
+    ตัวเลขสองหน้าก็จะไม่ตรงกันโดยที่ไม่มีใครผิด
+  */
+  const [view, setView] = useState<'list' | 'report'>('list');
+  const [groupBy, setGroupBy] = useState<SalesReportGroupBy>('customer');
   const [saleFilter, setSaleFilter] = useState(initialSale || 'all');
   const [search, setSearch] = useSearchFromUrl(initialSearch);
 
@@ -291,7 +302,14 @@ export function WholesaleList({
       ),
     );
 
+  const report = buildSalesReport(visible, { groupBy, customers, today: flagToday });
+  const periodText = periodCaption(period, periodValue, rangeStart, rangeEnd, new Date()).replace(
+    'สรุปข้อมูล',
+    'ช่วงที่ดูอยู่:',
+  );
+
   function exportExcel() {
+    if (view === 'report') return exportReportExcel();
     const wb = XLSX.utils.book_new();
     if (exportGroups.length === 0) {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([]), 'ขายส่ง');
@@ -318,6 +336,38 @@ export function WholesaleList({
     }
     XLSX.writeFile(wb, `wholesale-orders-${exportStamp()}.xlsx`);
   }
+  /*
+    ชีตเดียว ไม่ใช่ชีตละกลุ่ม.
+
+    รายงานนี้ถูกเอาไปทำต่อ — กรองเอง รวมเอง ทำ pivot — ซึ่งทำกับตารางเดียวที่มี
+    คอลัมน์กลุ่มอยู่ในแถวได้ แต่ทำกับยี่สิบชีตไม่ได้ (ไฟล์ของหน้ารายการแยกชีต
+    ตามลูกค้า เพราะมันคือสำเนาของสิ่งที่เห็นบนจอ คนละงานกัน)
+  */
+  function exportReportExcel() {
+    const groupHead = groupBy === 'customer' ? 'ลูกค้า' : 'พนักงานขาย';
+    const otherHead = groupBy === 'customer' ? 'พนักงานขาย' : 'ลูกค้า';
+    const data = report.groups.flatMap((g) =>
+      g.rows.map((r) => ({
+        [groupHead]: g.label,
+        'เลขที่ PO': r.orderId,
+        สาขา: shopName(r.shop, accessibleShops),
+        วันที่เปิด: r.openedOn,
+        วันที่ส่งของ: r.deliveredAt,
+        [otherHead]: r.counterpart,
+        สถานะ: r.status,
+        กำหนดชำระ: r.dueAt,
+        เลยกำหนด: r.overdue ? 'ใช่' : '',
+        ยอดสุทธิ: r.total,
+        ชำระแล้ว: r.paid,
+        'แจ้งแล้ว รอยืนยัน': r.reported,
+        ค้างชำระ: r.outstanding,
+      })),
+    );
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'สรุปการขาย');
+    XLSX.writeFile(wb, `wholesale-sales-report-${exportStamp()}.xlsx`);
+  }
+
   function exportPDF() {
     window.print();
   }
@@ -432,6 +482,40 @@ export function WholesaleList({
               </select>
             )}
           </div>
+          {/*
+            สลับมุมมอง ไม่ใช่เปลี่ยนหน้า — ตัวกรองด้านบนยังเป็นชุดเดิมทั้งหมด
+          */}
+          <div className="flex gap-2 flex-wrap items-center">
+            <div className="flex gap-1">
+              {(
+                [
+                  ['list', 'รายการ'],
+                  ['report', 'รายงานสรุป'],
+                ] as const
+              ).map(([key, text]) => (
+                <button
+                  key={key}
+                  onClick={() => setView(key)}
+                  className={`text-xs px-3.5 py-2 rounded-lg font-semibold ${
+                    view === key ? 'pill-active' : 'pill-inactive'
+                  }`}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+            {view === 'report' && (
+              <select
+                aria-label="จัดกลุ่มรายงานตาม"
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as SalesReportGroupBy)}
+                className="field text-xs px-2.5 py-2"
+              >
+                <option value="customer">แยกตามลูกค้า</option>
+                <option value="sales">แยกตามพนักงานขาย</option>
+              </select>
+            )}
+          </div>
           {can('wholesale.export') && (
             <div className="flex gap-2">
               <button
@@ -449,39 +533,41 @@ export function WholesaleList({
             </div>
           )}
         </div>
-        <div className="flex gap-2 mb-5 flex-wrap">
-          <button
-            onClick={() => setFilter('all')}
-            className={`text-xs px-3.5 py-1.5 rounded-full font-semibold ${
-              filter === 'all' ? 'pill-active' : 'pill-inactive'
-            }`}
-          >
-            ทั้งหมด {scoped.length}
-          </button>
-          {Object.keys(wsStatuses).map((s) => (
+        {view === 'list' && (
+          <div className="flex gap-2 mb-5 flex-wrap">
             <button
-              key={s}
-              onClick={() => setFilter(s)}
+              onClick={() => setFilter('all')}
               className={`text-xs px-3.5 py-1.5 rounded-full font-semibold ${
-                filter === s ? 'pill-active' : 'pill-inactive'
+                filter === 'all' ? 'pill-active' : 'pill-inactive'
               }`}
             >
-              {s} {scoped.filter((o) => o.status === s).length}
+              ทั้งหมด {scoped.length}
             </button>
-          ))}
-          {/* ขึ้นเฉพาะเมื่อมีของค้างส่งจริง ชิปที่กดแล้วได้ศูนย์ไม่ได้ช่วยใคร */}
-          {scoped.some(owes) && (
-            <button
-              onClick={() => setFilter(UNDELIVERED)}
-              className={`text-xs px-3.5 py-1.5 rounded-full font-semibold ${
-                filter === UNDELIVERED ? 'pill-active' : 'pill-inactive'
-              }`}
-            >
-              <i className="fa-solid fa-truck-fast mr-1.5"></i>
-              {UNDELIVERED} {scoped.filter(owes).length}
-            </button>
-          )}
-        </div>
+            {Object.keys(wsStatuses).map((s) => (
+              <button
+                key={s}
+                onClick={() => setFilter(s)}
+                className={`text-xs px-3.5 py-1.5 rounded-full font-semibold ${
+                  filter === s ? 'pill-active' : 'pill-inactive'
+                }`}
+              >
+                {s} {scoped.filter((o) => o.status === s).length}
+              </button>
+            ))}
+            {/* ขึ้นเฉพาะเมื่อมีของค้างส่งจริง ชิปที่กดแล้วได้ศูนย์ไม่ได้ช่วยใคร */}
+            {scoped.some(owes) && (
+              <button
+                onClick={() => setFilter(UNDELIVERED)}
+                className={`text-xs px-3.5 py-1.5 rounded-full font-semibold ${
+                  filter === UNDELIVERED ? 'pill-active' : 'pill-inactive'
+                }`}
+              >
+                <i className="fa-solid fa-truck-fast mr-1.5"></i>
+                {UNDELIVERED} {scoped.filter(owes).length}
+              </button>
+            )}
+          </div>
+        )}
         {/*
           บอกว่ากำลังกรองอะไรอยู่ และกดออกได้.
 
@@ -637,61 +723,74 @@ export function WholesaleList({
             )}
           </div>
         )}
-        <div className="flex flex-col gap-2.5">
-          {(shopFilter === 'all'
-            ? accessibleShops
-            : accessibleShops.filter((s) => s.id === shopFilter)
-          ).map((shop) => {
-            const shopOrders = visible.filter((o) => o.shop === shop.id);
-            if (shopOrders.length === 0) return null;
-            return (
-              <div key={shop.id}>
-                {shopFilter === 'all' && (
-                  <p
-                    className="text-xs font-bold uppercase tracking-wide mt-3 mb-2 first:mt-0"
-                    style={{ color: 'var(--primary)' }}
-                  >
-                    {shop.name} ({shopOrders.length})
-                  </p>
-                )}
-                <div className="flex flex-col gap-2.5">
-                  {shopOrders.map((o) => {
-                    const st = wsStatuses[o.status] || {};
-                    return (
-                      <div
-                        key={o.id}
-                        onClick={() => router.push(`/wholesale/${o.id}`)}
-                        className="group rounded-2xl flex items-stretch justify-between cursor-pointer gap-3 overflow-hidden hover:shadow-md transition"
-                        style={{ border: '1px solid var(--line)' }}
-                      >
+        {view === 'report' && (
+          <WholesaleReport
+            report={report}
+            groupBy={groupBy}
+            shops={
+              shopFilter === 'all'
+                ? accessibleShops
+                : accessibleShops.filter((s) => s.id === shopFilter)
+            }
+            caption={periodText}
+          />
+        )}
+        {view === 'list' && (
+          <div className="flex flex-col gap-2.5">
+            {(shopFilter === 'all'
+              ? accessibleShops
+              : accessibleShops.filter((s) => s.id === shopFilter)
+            ).map((shop) => {
+              const shopOrders = visible.filter((o) => o.shop === shop.id);
+              if (shopOrders.length === 0) return null;
+              return (
+                <div key={shop.id}>
+                  {shopFilter === 'all' && (
+                    <p
+                      className="text-xs font-bold uppercase tracking-wide mt-3 mb-2 first:mt-0"
+                      style={{ color: 'var(--primary)' }}
+                    >
+                      {shop.name} ({shopOrders.length})
+                    </p>
+                  )}
+                  <div className="flex flex-col gap-2.5">
+                    {shopOrders.map((o) => {
+                      const st = wsStatuses[o.status] || {};
+                      return (
                         <div
-                          className="status-bar"
-                          style={{ background: st.dot || '#B5AAA1' }}
-                        ></div>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between flex-1 min-w-0 gap-1.5 sm:gap-3 py-3 pr-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold truncate">
-                              {customerName(o.customerId, customers)}
-                            </p>
-                            <p
-                              className="text-xs mt-0.5 truncate"
-                              style={{ color: 'var(--ink-soft)' }}
-                            >
-                              {o.id}
-                              {/* Only where the branch records sellers at all,
+                          key={o.id}
+                          onClick={() => router.push(`/wholesale/${o.id}`)}
+                          className="group rounded-2xl flex items-stretch justify-between cursor-pointer gap-3 overflow-hidden hover:shadow-md transition"
+                          style={{ border: '1px solid var(--line)' }}
+                        >
+                          <div
+                            className="status-bar"
+                            style={{ background: st.dot || '#B5AAA1' }}
+                          ></div>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between flex-1 min-w-0 gap-1.5 sm:gap-3 py-3 pr-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold truncate">
+                                {customerName(o.customerId, customers)}
+                              </p>
+                              <p
+                                className="text-xs mt-0.5 truncate"
+                                style={{ color: 'var(--ink-soft)' }}
+                              >
+                                {o.id}
+                                {/* Only where the branch records sellers at all,
                                   so branches that do not are unchanged. */}
-                              {(sellerNames.length > 0 || hasUnassigned) && (
-                                <span style={{ color: 'var(--ink-faint)' }}>
-                                  {' · '}
-                                  <i className="fa-solid fa-user-tie mr-1"></i>
-                                  {o.salesBy || 'ไม่ระบุ'}
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3 flex-shrink-0">
-                            <div className="text-right">
-                              {/*
+                                {(sellerNames.length > 0 || hasUnassigned) && (
+                                  <span style={{ color: 'var(--ink-faint)' }}>
+                                    {' · '}
+                                    <i className="fa-solid fa-user-tie mr-1"></i>
+                                    {o.salesBy || 'ไม่ระบุ'}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              <div className="text-right">
+                                {/*
                                 สถานะเป็นป้าย ไม่ใช่ช่องให้เลือกอีกต่อไป (0081).
 
                                 ระบบคำนวณจากสิ่งที่เกิดขึ้นกับ PO จริง ๆ —
@@ -702,29 +801,30 @@ export function WholesaleList({
                                 สองการตัดสินใจที่ยังเป็นของคน (อนุมัติราคา,
                                 ตัดหนี้สูญ) มีปุ่มของตัวเองอยู่ในหน้า PO
                               */}
-                              <span
-                                className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block"
-                                style={{
-                                  background: st.bg || '#F1EDE7',
-                                  color: st.text || '#6B5F55',
-                                }}
-                              >
-                                {o.status}
-                              </span>
-                              <p className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
-                                {fmt(orderTotal(o))} บาท
-                              </p>
-                              <p
-                                className="text-xs mt-0.5"
-                                style={{
-                                  color: orderTotal(o) - orderPaid(o) <= 0 ? '#4C7A3E' : '#B23A48',
-                                }}
-                              >
-                                {orderTotal(o) - orderPaid(o) <= 0
-                                  ? 'ชำระครบแล้ว'
-                                  : `ค้างชำระ ${fmt(orderTotal(o) - orderPaid(o))}`}
-                              </p>
-                              {/*
+                                <span
+                                  className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block"
+                                  style={{
+                                    background: st.bg || '#F1EDE7',
+                                    color: st.text || '#6B5F55',
+                                  }}
+                                >
+                                  {o.status}
+                                </span>
+                                <p className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                                  {fmt(orderTotal(o))} บาท
+                                </p>
+                                <p
+                                  className="text-xs mt-0.5"
+                                  style={{
+                                    color:
+                                      orderTotal(o) - orderPaid(o) <= 0 ? '#4C7A3E' : '#B23A48',
+                                  }}
+                                >
+                                  {orderTotal(o) - orderPaid(o) <= 0
+                                    ? 'ชำระครบแล้ว'
+                                    : `ค้างชำระ ${fmt(orderTotal(o) - orderPaid(o))}`}
+                                </p>
+                                {/*
                                 ส่งไปแล้วเท่าไหร่ (0077).
 
                                 PO ที่ส่งไปแล้วบางส่วนเคยหน้าตาเหมือน PO ที่ยัง
@@ -734,32 +834,33 @@ export function WholesaleList({
                                 ขึ้นเฉพาะใบที่ส่งไปแล้วบางส่วน: ใบที่ยังไม่ส่งเลย
                                 หรือส่งครบแล้ว สถานะบอกครบอยู่แล้ว
                               */}
-                              {(() => {
-                                const p = deliveryProgress(o.items, o.deliveries ?? []);
-                                const sent = p.reduce((n, x) => n + x.sent, 0);
-                                const ordered = p.reduce((n, x) => n + x.ordered, 0);
-                                if (sent <= 0 || sent >= ordered) return null;
-                                return (
-                                  <p className="text-xs mt-0.5" style={{ color: '#8A5A12' }}>
-                                    <i className="fa-solid fa-truck-fast mr-1"></i>
-                                    ส่งแล้ว {sent}/{ordered}
-                                  </p>
-                                );
-                              })()}
+                                {(() => {
+                                  const p = deliveryProgress(o.items, o.deliveries ?? []);
+                                  const sent = p.reduce((n, x) => n + x.sent, 0);
+                                  const ordered = p.reduce((n, x) => n + x.ordered, 0);
+                                  if (sent <= 0 || sent >= ordered) return null;
+                                  return (
+                                    <p className="text-xs mt-0.5" style={{ color: '#8A5A12' }}>
+                                      <i className="fa-solid fa-truck-fast mr-1"></i>
+                                      ส่งแล้ว {sent}/{ordered}
+                                    </p>
+                                  );
+                                })()}
+                              </div>
+                              <span className="row-action pr-2" style={{ color: 'var(--primary)' }}>
+                                <i className="fa-solid fa-chevron-right text-xs"></i>
+                              </span>
                             </div>
-                            <span className="row-action pr-2" style={{ color: 'var(--primary)' }}>
-                              <i className="fa-solid fa-chevron-right text-xs"></i>
-                            </span>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
       {/* `mounted`, not `typeof document`: the latter is false on the server but
           true on the first client render, so hydration finds a .print-area the
@@ -768,39 +869,113 @@ export function WholesaleList({
         createPortal(
           <div className="print-area">
             <h2>
-              รายการขายส่ง
+              {view === 'report' ? 'รายงานสรุปการขาย — ขายส่ง' : 'รายการขายส่ง'}
               {custFilter !== 'all' ? ' — ' + customerName(Number(custFilter), customers) : ''}
             </h2>
             <p>วันที่พิมพ์: {fmtThaiDate(new Date())}</p>
-            {exportGroups.map((g) => (
-              <div key={g.customerId} style={{ marginBottom: 16 }}>
-                <h3>{customerName(g.customerId, customers)}</h3>
+            {/*
+              กระดาษต้องเป็นสิ่งเดียวกับที่อยู่บนจอ.
+
+              ปุ่ม PDF คือ window.print() ของมุมมองที่เปิดอยู่ ถ้ากระดาษพิมพ์
+              รายการออกมาเสมอ คนที่กดพิมพ์ตอนดูรายงานจะได้เอกสารที่ไม่ใช่สิ่งที่
+              เขากำลังอ่าน แล้วก็ไม่มีทางพิมพ์รายงานได้เลย
+            */}
+            {view === 'report' && (
+              <>
+                <p>{periodText}</p>
+                {report.groups.map((g) => (
+                  <div key={g.key} style={{ marginBottom: 16 }}>
+                    <h3>
+                      {g.label} — {g.orders} ใบ
+                    </h3>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>เลขที่ PO</th>
+                          <th>เปิดเมื่อ</th>
+                          <th>{groupBy === 'customer' ? 'พนักงานขาย' : 'ลูกค้า'}</th>
+                          <th>สถานะ</th>
+                          <th>กำหนดชำระ</th>
+                          <th style={{ textAlign: 'right' }}>ยอดสุทธิ</th>
+                          <th style={{ textAlign: 'right' }}>ชำระแล้ว</th>
+                          <th style={{ textAlign: 'right' }}>ค้างชำระ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.rows.map((r) => (
+                          <tr key={r.orderId}>
+                            <td>{r.orderId}</td>
+                            <td>{r.openedOn ? fmtThaiDayString(r.openedOn) : '—'}</td>
+                            <td>{r.counterpart}</td>
+                            <td>{r.status}</td>
+                            <td>
+                              {r.dueAt ? fmtThaiDayString(r.dueAt) : '—'}
+                              {r.overdue ? ' (เลยกำหนด)' : ''}
+                            </td>
+                            <td style={{ textAlign: 'right' }}>{fmt(r.total)}</td>
+                            <td style={{ textAlign: 'right' }}>{fmt(r.paid)}</td>
+                            <td style={{ textAlign: 'right' }}>{fmt(r.outstanding)}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <th colSpan={5} style={{ textAlign: 'left' }}>
+                            รวม
+                          </th>
+                          <th style={{ textAlign: 'right' }}>{fmt(g.total)}</th>
+                          <th style={{ textAlign: 'right' }}>{fmt(g.paid)}</th>
+                          <th style={{ textAlign: 'right' }}>{fmt(g.outstanding)}</th>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
                 <table>
-                  <thead>
-                    <tr>
-                      <th>เลขที่ PO</th>
-                      <th>สาขา</th>
-                      <th>สถานะ</th>
-                      <th style={{ textAlign: 'right' }}>ยอดสุทธิ</th>
-                      <th style={{ textAlign: 'right' }}>ชำระแล้ว</th>
-                      <th style={{ textAlign: 'right' }}>คงเหลือ</th>
-                    </tr>
-                  </thead>
                   <tbody>
-                    {g.orders.map((o) => (
-                      <tr key={o.id}>
-                        <td>{o.id}</td>
-                        <td>{shopName(o.shop, accessibleShops)}</td>
-                        <td>{o.status}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(orderTotal(o))}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(orderPaid(o))}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(orderTotal(o) - orderPaid(o))}</td>
-                      </tr>
-                    ))}
+                    <tr>
+                      <th style={{ textAlign: 'left' }}>รวมทั้งรายงาน ({report.orders} ใบ)</th>
+                      <th style={{ textAlign: 'right' }}>{fmt(report.total)}</th>
+                      <th style={{ textAlign: 'right' }}>{fmt(report.paid)}</th>
+                      <th style={{ textAlign: 'right' }}>{fmt(report.outstanding)}</th>
+                    </tr>
                   </tbody>
                 </table>
-              </div>
-            ))}
+                {report.overdueOutstanding > 0 && (
+                  <p>ในยอดค้างชำระนี้ เลยกำหนดชำระแล้ว {fmt(report.overdueOutstanding)}</p>
+                )}
+              </>
+            )}
+            {view === 'list' &&
+              exportGroups.map((g) => (
+                <div key={g.customerId} style={{ marginBottom: 16 }}>
+                  <h3>{customerName(g.customerId, customers)}</h3>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>เลขที่ PO</th>
+                        <th>สาขา</th>
+                        <th>สถานะ</th>
+                        <th style={{ textAlign: 'right' }}>ยอดสุทธิ</th>
+                        <th style={{ textAlign: 'right' }}>ชำระแล้ว</th>
+                        <th style={{ textAlign: 'right' }}>คงเหลือ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.orders.map((o) => (
+                        <tr key={o.id}>
+                          <td>{o.id}</td>
+                          <td>{shopName(o.shop, accessibleShops)}</td>
+                          <td>{o.status}</td>
+                          <td style={{ textAlign: 'right' }}>{fmt(orderTotal(o))}</td>
+                          <td style={{ textAlign: 'right' }}>{fmt(orderPaid(o))}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            {fmt(orderTotal(o) - orderPaid(o))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
           </div>,
           document.body,
         )}
