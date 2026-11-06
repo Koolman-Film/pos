@@ -2333,6 +2333,24 @@ export type Database = {
         }
         Returns: undefined
       }
+      save_money_transfer: {
+        Args: {
+          p_amount: number
+          p_fee?: number
+          p_fee_account_id?: number | null
+          p_fee_category?: string
+          p_from_account_id: number | null
+          p_moved_at: string
+          p_note: string
+          p_shop: string
+          p_to_account_id: number | null
+        }
+        Returns: number
+      }
+      delete_money_transfer: {
+        Args: { p_id: number }
+        Returns: undefined
+      }
       save_insurance_policy: {
         Args: { p_claims: Json; p_id: number; p_policy: Json; p_ticket_id: string }
         Returns: number
