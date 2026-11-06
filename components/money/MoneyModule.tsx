@@ -48,6 +48,8 @@ export type TransferRow = {
   amount: number;
   movedAt: string;
   note: string;
+  /** ค่าธรรมเนียมที่โดนหักระหว่างทาง — บันทึกเป็นค่าใช้จ่ายให้แล้ว (0087). */
+  fee?: number;
 };
 
 export type ReconciliationRow = {
@@ -224,6 +226,8 @@ export function MoneyModule({
     amount: '',
     movedAt: dateInputValue(new Date()),
     note: '',
+    fee: '',
+    feeAccountId: '' as string,
   });
 
   async function submitTransfer() {
@@ -236,8 +240,10 @@ export function MoneyModule({
           amount: Number(transfer.amount) || 0,
           movedAt: transfer.movedAt,
           note: transfer.note,
+          fee: Number(transfer.fee) || 0,
+          feeAccountId: transfer.feeAccountId ? Number(transfer.feeAccountId) : null,
         }),
-      'บันทึกการโอนเงินแล้ว',
+      Number(transfer.fee) > 0 ? 'บันทึกการโอนเงินและค่าธรรมเนียมแล้ว' : 'บันทึกการโอนเงินแล้ว',
     );
     if (ok) {
       setTransfer({
@@ -246,6 +252,8 @@ export function MoneyModule({
         amount: '',
         movedAt: dateInputValue(new Date()),
         note: '',
+        fee: '',
+        feeAccountId: '',
       });
     }
   }
@@ -821,6 +829,66 @@ export function MoneyModule({
             />
           </div>
         </div>
+        {/*
+          ค่าธรรมเนียมอยู่ในฟอร์มเดียวกับการโอน (ร้านขอ 6 พ.ย. 2569).
+
+          เงินจากเครื่องรูดบัตรเข้าธนาคารโดนหักทุกครั้ง วิธีเดิมคือบันทึกการโอน
+          เต็มจำนวนที่นี่ แล้วไปเปิดหน้าค่าใช้จ่ายบันทึกค่าธรรมเนียมอีกรายการ
+          สองขั้นที่ต้องจำว่าคู่กัน และวันไหนลืมขั้นที่สอง ยอดบัญชีจะเกินจริง
+          อยู่เท่าค่าธรรมเนียม โดยไม่มีอะไรบนหน้าจอบอกว่าขาดอะไรไป
+
+          เว้นว่างไว้ = ไม่มีค่าธรรมเนียม ฟอร์มจึงไม่ได้ยาวขึ้นสำหรับการฝากเงินสด
+          ธรรมดาที่ไม่มีใครหักอะไร
+        */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+          <div>
+            <label className={label} style={labelStyle}>
+              ค่าธรรมเนียม (ถ้ามี)
+            </label>
+            <input
+              type="number"
+              aria-label="ค่าธรรมเนียมการโอน"
+              value={transfer.fee}
+              onChange={(e) => setTransfer({ ...transfer, fee: e.target.value })}
+              placeholder="0"
+              className={field}
+            />
+          </div>
+          {Number(transfer.fee) > 0 && (
+            <>
+              <div>
+                <label className={label} style={labelStyle}>
+                  หักจากแหล่งเงิน
+                </label>
+                <select
+                  aria-label="ค่าธรรมเนียมหักจากแหล่งเงิน"
+                  value={transfer.feeAccountId}
+                  onChange={(e) => setTransfer({ ...transfer, feeAccountId: e.target.value })}
+                  className={field}
+                >
+                  {/* ปกติธนาคารปลายทางเป็นคนหัก จึงเป็นค่าตั้งต้น */}
+                  <option value="">ใช้บัญชีปลายทาง</option>
+                  {shopAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <p className="text-xs pb-2" style={{ color: 'var(--ink-faint)' }}>
+                  ระบบจะบันทึกเป็นค่าใช้จ่ายกลุ่ม <b>ค่าธรรมเนียม/ภาษี</b> ให้เอง
+                  {Number(transfer.amount) > Number(transfer.fee) && (
+                    <>
+                      {' '}
+                      — เข้าบัญชีจริง <b>{fmt(Number(transfer.amount) - Number(transfer.fee))}</b>
+                    </>
+                  )}
+                </p>
+              </div>
+            </>
+          )}
+        </div>
         <button
           onClick={submitTransfer}
           disabled={busy}
@@ -845,6 +913,9 @@ export function MoneyModule({
                     {accountName(t.fromAccountId)} → {accountName(t.toAccountId)}
                     {t.note && (
                       <span style={{ color: 'var(--ink-faint)' }}> &middot; {t.note}</span>
+                    )}
+                    {!!t.fee && t.fee > 0 && (
+                      <span style={{ color: '#8A5A12' }}> &middot; ค่าธรรมเนียม {fmt(t.fee)}</span>
                     )}
                   </span>
                   <span className="font-semibold flex-shrink-0">{fmt(t.amount)}</span>

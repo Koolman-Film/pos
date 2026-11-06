@@ -1,9 +1,9 @@
-# Release runbook — post-trial fixes (migrations 0012–0086)
+# Release runbook — post-trial fixes (migrations 0012–0087)
 
 Branch: `claude/service-schedule-compact` (pushed to origin)
 
 ชุดแรกของไฟล์นี้คือ 0012–0037 ที่ออกมาจากการทดลองใช้ ตั้งแต่นั้นมีงานตามมาอีก
-หลายชุดจนถึง 0086 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
+หลายชุดจนถึง 0087 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
 ไว้ให้หมดแล้ว
 
 This is the batch that came out of the shop's trial run. [DEPLOYMENT.md](./DEPLOYMENT.md)
@@ -27,7 +27,7 @@ work FIRST (step 2) — the new code reads columns that do not exist yet, so a
 deploy that lands before the migrations will 500 on the ticket list, the
 dashboard and the accounting page.
 
-## 2. Database — migrations 0012–0086
+## 2. Database — migrations 0012–0087
 
 ```bash
 npx supabase login                       # personal access token, once
@@ -37,8 +37,8 @@ npx supabase db push                     # applies 0012 … 0037 only
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
-`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 68 ในตารางข้างล่าง
-(`release-0019` … `release-0086` และ `repair-categories-and-services.sql`)
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 69 ในตารางข้างล่าง
+(`release-0019` … `release-0087` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -126,7 +126,8 @@ it twice changes nothing, and each records its versions in
 | 65    | `supabase/release-0084.sql`                   | a normal connection                                 |
 | 66    | `supabase/release-0085.sql`                   | a normal connection                                 |
 | 67    | `supabase/release-0086.sql`                   | a normal connection                                 |
-| 68    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 68    | `supabase/release-0087.sql`                   | a normal connection                                 |
+| 69    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -312,6 +313,12 @@ In this order, as an admin:
     รอบส่งของ ให้กดชื่อไฟล์ดูเช่นกัน ทั้งสองที่ยิงเข้า bucket
     `wholesale-attachments` ซึ่งมี policy ของตัวเอง — การเปิดหน้าใหม่คือ
     หัวใจของข้อนี้ ของเดิมมันดู "สำเร็จ" ทุกครั้งจนกว่าจะรีเฟรช
+11. **ค่าธรรมเนียมการโอน** (0087) — การจัดการเงิน/บัญชี → โอน/ฝากเงิน ใส่
+    ค่าธรรมเนียมลงไปด้วย แล้วเช็กสามที่: ยอดบัญชีปลายทางต้องเพิ่มเท่ายอดโอน
+    **ลบ**ค่าธรรมเนียม · มีรายการใหม่ในหน้าค่าใช้จ่ายกลุ่ม ค่าธรรมเนียม/ภาษี ·
+    และบรรทัดการโอนบอกค่าธรรมเนียมกำกับไว้
+12. **เช็คที่รอเรียกเก็บ** — หน้าเดียวกัน ต้องมีหัวข้อ "เช็คและเงินที่รอเรียกเก็บ"
+    ถ้าสาขานั้นมีเช็คค้าง และยอดคงเหลือข้างบนต้อง**ไม่**รวมมันเข้าไป
 
 ## 4. หลังขึ้นระบบ — งานที่ต้องทำด้วยมือ
 

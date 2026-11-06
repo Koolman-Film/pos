@@ -102,6 +102,7 @@ type TransferRow = {
   from_account_id: number | null;
   to_account_id: number | null;
   amount: number | string | null;
+  fee: number | string | null;
   moved_at: string;
   note: string | null;
 };
@@ -115,7 +116,8 @@ type ReconciliationRow = {
   note: string | null;
 };
 
-export type MoneyTransferRecord = MoneyTransfer & { id: number; note: string };
+/** `fee` มีค่าใช้จ่ายของตัวเองอยู่แล้ว (0087) — ไม่ได้หักซ้ำในยอดการโอน. */
+export type MoneyTransferRecord = MoneyTransfer & { id: number; note: string; fee: number };
 
 export type MoneyReconciliationRecord = {
   id: number;
@@ -218,7 +220,7 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
       (from, to) =>
         supabase
           .from('money_transfers')
-          .select('id, shop_id, from_account_id, to_account_id, amount, moved_at, note')
+          .select('id, shop_id, from_account_id, to_account_id, amount, moved_at, note, fee')
           .order('moved_at', { ascending: false })
           .order('id', { ascending: false })
           .range(from, to) as unknown as Page<TransferRow>,
@@ -475,6 +477,7 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
       fromAccountId: t.from_account_id,
       toAccountId: t.to_account_id,
       amount: num(t.amount),
+      fee: num(t.fee),
       on: t.moved_at,
       note: t.note ?? '',
     })),
