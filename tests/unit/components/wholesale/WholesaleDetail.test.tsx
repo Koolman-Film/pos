@@ -889,6 +889,50 @@ describe('WholesaleDetail — การรับเงินแบบเช็�
     expect(screen.getByLabelText('วันที่หน้าเช็ค')).toHaveValue('2026-10-15');
   });
 
+  /*
+    ธนาคารเลือกจากรายการ ไม่ใช่พิมพ์เอง (ร้านขอ 6 พ.ย. 2569).
+
+    ช่องพิมพ์เปล่าทำให้ธนาคารเดียวกันถูกบันทึกได้หลายแบบ แล้วเช็คของธนาคาร
+    เดียวกันก็ไม่รวมกันในรายการเช็คค้างรับ
+  */
+  it('ธนาคารเป็น dropdown ของธนาคารไทย', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={chequeOrder} canDo={() => true} />);
+
+    const bank = screen.getByLabelText('ธนาคารของเช็ค');
+    expect(bank.tagName).toBe('SELECT');
+    const names = within(bank)
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(names).toContain('กสิกรไทย');
+    expect(names).toContain('ไทยพาณิชย์');
+    expect(names).toContain('ออมสิน');
+
+    await user.selectOptions(bank, 'ไทยพาณิชย์');
+    expect(bank).toHaveValue('ไทยพาณิชย์');
+  });
+
+  it('ชื่อธนาคารที่พิมพ์ไว้ก่อนมี dropdown ยังอยู่ในรายการ', () => {
+    // ถ้ามันหลุดไป การเปิดใบเก่ามาแก้ยอดเงินจะล้างธนาคารของเช็คทิ้งโดยไม่มีใคร
+    // ตั้งใจ — หลักฐานว่าเป็นเช็คของธนาคารไหน หายไปพร้อมกับการกดบันทึก
+    render(<WholesaleDetail order={chequeOrder} canDo={() => true} />);
+    const bank = screen.getByLabelText('ธนาคารของเช็ค');
+    expect(within(bank).getByRole('option', { name: 'KBANK' })).toBeInTheDocument();
+    expect(bank).toHaveValue('KBANK');
+  });
+
+  it('เลือกธนาคารแล้ว ค่าไปถึงตอนบันทึก PO', async () => {
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn();
+    render(<WholesaleDetail order={chequeOrder} canDo={() => true} onSaveOrder={onSaveOrder} />);
+
+    await user.selectOptions(screen.getByLabelText('ธนาคารของเช็ค'), 'กรุงเทพ');
+    await user.click(screen.getByRole('button', { name: 'บันทึก PO' }));
+
+    const sent = onSaveOrder.mock.calls[0][0] as WsOrder;
+    expect(sent.payments[0].chequeBank).toBe('กรุงเทพ');
+  });
+
   it('ซ่อนปุ่มยืนยันเงินเข้าเมื่อไม่มีสิทธิ์', () => {
     render(
       <WholesaleDetail
