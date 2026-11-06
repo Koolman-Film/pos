@@ -10,7 +10,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
   `save_money_transfer` ใน SQL
 */
 
-const rpc = vi.hoisted(() => vi.fn(async () => ({ error: null })));
+// ระบุชนิดอาร์กิวเมนต์ไว้ ไม่งั้น `mock.calls[0][1]` เป็น tuple ว่างในสายตา tsc
+const rpc = vi.hoisted(() =>
+  vi.fn(async (_name: string, _args: Record<string, unknown>) => ({ error: null })),
+);
 /** บัญชีที่สาขานี้เป็นเจ้าของ — ใช้ตอบด่าน "แหล่งเงินอยู่ในสาขานี้ไหม". */
 const owned = vi.hoisted(() => ({ ids: [1, 2, 3] as number[] }));
 
