@@ -739,6 +739,61 @@ export function PrintJobSheet({
     );
   }
 
+  /**
+   * หัววันของใบงานขายที่ถูกแยกตามวันส่ง.
+   *
+   * กรอบเดียวกับ `jobDates()` แต่พูดถึงของในใบนี้เท่านั้น — ใบที่ลิสต์เฉพาะ
+   * ของที่ส่งวันที่ 7 แล้วพาดหัวว่ารับงานวันที่ 30 คือใบที่อ่านแล้วเข้าใจผิด
+   * ทันที วันของทั้งใบงานยังอยู่เป็นบรรทัดเล็กข้างล่าง เพราะมันคือวันที่รถเข้า
+   * มาครั้งแรก ซึ่งเป็นสิ่งที่การรับประกันนับจากมัน
+   */
+  function saleGroupDates(g: { day: string; received: string }) {
+    const day = (v: string) => (v ? fmtThaiDate(new Date(`${v}T00:00:00`)) : '-');
+    const jobDay = (d: Date | null | undefined) => {
+      if (!d) return '-';
+      const clock = hhmm(d);
+      return `${fmtThaiDate(d)}${clock ? ' ' + clock : ''}`;
+    };
+    return (
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 14,
+            fontWeight: 'bold',
+            border: '1.5px solid #666',
+            borderRadius: 6,
+            padding: '4px 10px',
+          }}
+        >
+          วันที่รับงาน (ของในใบนี้): {day(g.received)}
+        </span>
+        <span
+          style={{
+            fontSize: 17,
+            fontWeight: 'bold',
+            border: '2px solid #D8A83A',
+            borderRadius: 6,
+            padding: '4px 12px',
+            background: '#FFF7DD',
+          }}
+        >
+          วันที่ส่งงาน (ของในใบนี้): {g.day ? day(g.day) : 'ยังไม่ได้นัด'}
+        </span>
+        <span style={{ width: '100%', textAlign: 'right', fontSize: 10, color: '#777' }}>
+          ทั้งใบงาน: รับ {jobDay(t.dropOffDateObj)} &middot; ส่ง {jobDay(t.pickupDateObj)}
+        </span>
+      </div>
+    );
+  }
+
   let content: React.ReactNode = null;
 
   if (printMode === 'job') {
@@ -1200,62 +1255,98 @@ export function PrintJobSheet({
   } else if (printMode === 'sale') {
     content = (
       <div className="print-area">
-        {/* One page block, so fitPrintPages() can shrink it to A4 when a ticket
-            carries enough products and notes to spill onto a second sheet. */}
-        <div className="print-page">
-          <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานขาย</h1>
-          <div style={{ textAlign: 'right', marginBottom: 16 }}>
-            <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
-            {jobDates()}
-            <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
-            <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
-              บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
-            </p>
-          </div>
-          <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>{shopName(t.shop)}</p>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '4px 28px',
-              fontSize: 13,
-              marginBottom: 8,
-            }}
-          >
-            <span>
-              ชื่อลูกค้า: <b>{t.customer}</b>
-            </span>
-            <span>
-              เบอร์โทร: <b>{t.phone}</b>
-            </span>
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '4px 22px',
-              fontSize: 13,
-              marginBottom: 10,
-            }}
-          >
-            <span>
-              ยี่ห้อรถ: <b>{t.brand}</b>
-            </span>
-            <span>
-              รุ่นรถ: <b>{t.model}</b>
-            </span>
-            <span>
-              สีรถ: <b>{t.color}</b>
-            </span>
-            <span>
-              ทะเบียนรถ/เลขถัง: <b>{t.plate}</b>
-            </span>
-            <span>
-              ประเภทรถ: <b>{t.carType}</b>
-            </span>
-          </div>
-          <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-          {/*
+        {/*
+          ของที่ส่งมอบคนละวัน = คนละใบ ไม่ใช่หัวข้อสองอันในใบเดียว (ร้านแจ้ง
+          7 พ.ย. 2569).
+
+          รอบแรกผมแยกเป็นหัวข้อในใบเดียวกัน ซึ่งตอบผิดคำถาม — ใบงานขายคือ
+          กระดาษที่ยื่นให้ลูกค้าตอนรับของ ลูกค้าที่มารับของวันที่ 7 ได้ใบที่
+          พาดหัวว่าส่งวันที่ 2 และลิสต์ของที่เขารับไปแล้วเมื่อห้าวันก่อนติดมา
+          ด้วย หัวข้อคั่นกลางไม่ได้ทำให้มันเป็นเอกสารของวันที่ 7
+
+          แต่ละใบเป็น `.print-page` ของตัวเอง fitPrintPages() จึงย่อทีละใบ และ
+          เครื่องพิมพ์ขึ้นหน้าใหม่ให้เอง — ทางเดียวกับที่ใบงานติดตั้งแยกหน้า
+          ตามชนิดสินค้าอยู่แล้ว
+
+          ใบงานที่ส่งรอบเดียว (ซึ่งเป็นเกือบทั้งหมด) ได้กลุ่มเดียว เอกสารจึง
+          ออกมาเหมือนเดิมทุกตัวอักษร
+        */}
+        {saleGroups.map((g, gi) => {
+          const groupItems = g.items;
+          const groupCats = [...new Set(groupItems.map((i) => i.category))];
+          const groupTotals: Record<string, number> = {};
+          for (const i of groupItems) {
+            groupTotals[i.category] = (groupTotals[i.category] || 0) + itemNetPrice(mapItem(i));
+          }
+          const groupTotal = groupItems.reduce((sum, i) => sum + itemNetPrice(mapItem(i)), 0);
+          /** แยกจริงหรือเปล่า — ใบเดียวต้องไม่มีคำว่า "ใบนี้" โผล่มาที่ไหนเลย */
+          const split = saleGroups.length > 1;
+          return (
+            <div
+              key={g.day || 'ยังไม่ได้นัด'}
+              className="print-page"
+              style={gi > 0 ? { pageBreakBefore: 'always' } : {}}
+            >
+              <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานขาย</h1>
+              <div style={{ textAlign: 'right', marginBottom: 16 }}>
+                <p style={{ margin: '0 0 6px', fontSize: 12 }}>
+                  เลขที่เอกสาร: {t.id}
+                  {split && ` · ใบที่ ${gi + 1}/${saleGroups.length}`}
+                </p>
+                {split ? saleGroupDates(g) : jobDates()}
+                <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+                  จองผ่าน: {t.bookingChannel || '-'}
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
+                  บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
+                </p>
+              </div>
+              <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>
+                {shopName(t.shop)}
+              </p>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '4px 28px',
+                  fontSize: 13,
+                  marginBottom: 8,
+                }}
+              >
+                <span>
+                  ชื่อลูกค้า: <b>{t.customer}</b>
+                </span>
+                <span>
+                  เบอร์โทร: <b>{t.phone}</b>
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '4px 22px',
+                  fontSize: 13,
+                  marginBottom: 10,
+                }}
+              >
+                <span>
+                  ยี่ห้อรถ: <b>{t.brand}</b>
+                </span>
+                <span>
+                  รุ่นรถ: <b>{t.model}</b>
+                </span>
+                <span>
+                  สีรถ: <b>{t.color}</b>
+                </span>
+                <span>
+                  ทะเบียนรถ/เลขถัง: <b>{t.plate}</b>
+                </span>
+                <span>
+                  ประเภทรถ: <b>{t.carType}</b>
+                </span>
+              </div>
+              <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
+              {/*
             A ticket carrying film AND audio printed as two headings that looked
             like the rest of the page, so nobody could tell at a glance that the
             job had two halves — or spot that one of them was missing. The strip
@@ -1263,62 +1354,32 @@ export function PrintJobSheet({
             numbered to match and ruled down the side so they read as units.
             None of it appears for a single-category ticket, which needs no map.
           */}
-          {categories.length > 1 && (
-            <div
-              style={{
-                border: '1.5px solid #333',
-                borderRadius: 6,
-                padding: '6px 10px',
-                marginBottom: 12,
-                display: 'flex',
-                gap: '4px 14px',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                fontSize: 12,
-              }}
-            >
-              <span style={{ fontWeight: 'bold' }}>งานนี้มี {categories.length} ชนิดสินค้า</span>
-              {categories.map((cat, ci) => (
-                <span key={cat} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={stepBadge}>{ci + 1}</span>
-                  {cat} <b>{fmt(categoryTotals[cat] || 0)}</b>
-                </span>
-              ))}
-            </div>
-          )}
-          {saleGroups.map((g) => (
-            <div key={g.day || 'ยังไม่ได้นัด'}>
-              {/*
-                หัวกลุ่มขึ้นเฉพาะตอนมีหลายวัน — ใบที่ส่งรอบเดียวไม่ต้องมีหัวข้อ
-                มาบอกสิ่งที่หัวเอกสารบอกไปแล้ว
-              */}
-              {saleGroups.length > 1 && (
+              {groupCats.length > 1 && (
                 <div
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline',
-                    gap: 10,
                     border: '1.5px solid #333',
                     borderRadius: 6,
-                    padding: '5px 10px',
-                    margin: '0 0 10px',
-                    background: '#F2F2F2',
-                    fontSize: 13,
-                    fontWeight: 'bold',
+                    padding: '6px 10px',
+                    marginBottom: 12,
+                    display: 'flex',
+                    gap: '4px 14px',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    fontSize: 12,
                   }}
                 >
-                  <span>
-                    ส่งงาน {g.day ? fmtThaiDate(new Date(`${g.day}T00:00:00`)) : 'ยังไม่ได้นัด'}
-                    <span style={{ fontWeight: 'normal', fontSize: 11, marginLeft: 8 }}>
-                      รับงาน {g.received ? fmtThaiDate(new Date(`${g.received}T00:00:00`)) : '-'}
-                    </span>
+                  <span style={{ fontWeight: 'bold' }}>
+                    {split ? 'ใบนี้มี' : 'งานนี้มี'} {groupCats.length} ชนิดสินค้า
                   </span>
-                  {/* ยอดของวันนั้น — แยกวันแล้วไม่บอกว่าวันนั้นเท่าไหร่ ก็ต้องบวกเองอยู่ดี */}
-                  <span>{fmt(g.items.reduce((sum, i) => sum + itemNetPrice(mapItem(i)), 0))}</span>
+                  {groupCats.map((cat, ci) => (
+                    <span key={cat} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={stepBadge}>{ci + 1}</span>
+                      {cat} <b>{fmt(groupTotals[cat] || 0)}</b>
+                    </span>
+                  ))}
                 </div>
               )}
-              {g.items.map((i, idx) => {
+              {groupItems.map((i, idx) => {
                 let rows: { label: string | null; product: string }[];
                 if (i.positions && i.positions.length) {
                   const grouped: Record<string, string[]> = {};
@@ -1333,7 +1394,7 @@ export function PrintJobSheet({
                 } else {
                   rows = [{ label: null, product: i.sold }];
                 }
-                const multi = categories.length > 1;
+                const multi = groupCats.length > 1;
                 return (
                   <div
                     key={idx}
@@ -1364,7 +1425,7 @@ export function PrintJobSheet({
                       >
                         {multi && (
                           <span style={{ ...stepBadge, width: 20, height: 20, lineHeight: '18px' }}>
-                            {categories.indexOf(i.category) + 1}
+                            {groupCats.indexOf(i.category) + 1}
                           </span>
                         )}
                         <span style={{ borderBottom: '2px solid #333', paddingBottom: 2 }}>
@@ -1410,185 +1471,217 @@ export function PrintJobSheet({
                   </div>
                 );
               })}
-            </div>
-          ))}
-          <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-          <div style={{ fontSize: 12, marginBottom: 16 }}>
-            <p style={{ fontWeight: 'bold', marginBottom: 6 }}>ข้อมูลการชำระเงิน</p>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span>ยอดสุทธิ</span>
-              <span>{fmt(total)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span>ชำระแล้ว</span>
-              <span>{fmt(paid)}</span>
-            </div>
-            {/*
+              <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
+              <div style={{ fontSize: 12, marginBottom: 16 }}>
+                <p style={{ fontWeight: 'bold', marginBottom: 6 }}>ข้อมูลการชำระเงิน</p>
+                {/*
+              เงินในระบบผูกกับใบงานทั้งใบ ไม่ได้ผูกกับรายการ การแบ่งว่า "ยอดที่
+              ชำระแล้วเป็นของวันไหน" จึงเป็นการเดา ใบนี้บอกยอดของงานในใบนี้
+              ตรง ๆ แล้วบอกฐานะของทั้งใบงานแยกไว้ พร้อมเขียนกำกับว่าอันไหนเป็น
+              อันไหน — ตัวเลขที่ไม่มีป้ายคือตัวเลขที่ถูกอ่านผิด
+            */}
+                {split && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: 6,
+                      paddingBottom: 4,
+                      borderBottom: '1px solid #CCC',
+                      fontWeight: 'bold',
+                      fontSize: 13,
+                    }}
+                  >
+                    <span>
+                      ยอดงานในใบนี้
+                      {g.day ? ` (ส่งงาน ${fmtThaiDate(new Date(`${g.day}T00:00:00`))})` : ''}
+                    </span>
+                    <span>{fmt(groupTotal)}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                  <span>{split ? `ยอดสุทธิทั้งใบงาน ${t.id}` : 'ยอดสุทธิ'}</span>
+                  <span>{fmt(total)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                  <span>ชำระแล้ว</span>
+                  <span>{fmt(paid)}</span>
+                </div>
+                {/*
             Every receipt on its own line — "ชำระมัดจำ (โอนเงิน) 3,000.00" — not
             just when there are several of them. A single figure says how much
             arrived but not on what terms or through which channel, and that is
             what the customer and the shop end up arguing about.
           */}
-            {receivedPayments.length > 0 && (
-              <div style={{ margin: '0 0 8px 12px' }}>
-                {receivedPayments.map((p, pi) => (
-                  <div
-                    key={pi}
-                    style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}
-                  >
-                    <span>
-                      {paymentLabel(p.type)}
-                      {p.method ? ` (${p.method})` : ''}
-                      {p.date ? ` · ${fmtThaiDate(new Date(p.date))}` : ''}
-                    </span>
-                    <span>{fmt(Number(p.amount || 0))}</span>
+                {receivedPayments.length > 0 && (
+                  <div style={{ margin: '0 0 8px 12px' }}>
+                    {receivedPayments.map((p, pi) => (
+                      <div
+                        key={pi}
+                        style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}
+                      >
+                        <span>
+                          {paymentLabel(p.type)}
+                          {p.method ? ` (${p.method})` : ''}
+                          {p.date ? ` · ${fmtThaiDate(new Date(p.date))}` : ''}
+                        </span>
+                        <span>{fmt(Number(p.amount || 0))}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-            {total - paid <= 0 ? (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  fontWeight: 'bold',
-                  color: '#2F7A4F',
-                }}
-              >
-                <span>ชำระครบแล้ว</span>
-                <span>-</span>
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontWeight: 900,
-                  fontSize: 20,
-                  color: '#B23A48',
-                  border: '3px solid #B23A48',
-                  borderRadius: 8,
-                  padding: '8px 14px',
-                  background: '#FBEAEC',
-                }}
-              >
-                <span>ค้างชำระ</span>
-                <span>{fmt(total - paid)}</span>
-              </div>
-            )}
-            {t.items.some((i) => i.interested) && (
-              // Only the TOTAL is green — it is the one number the shop wants to
-              // catch the eye. The breakdown under it is working shown, and in ink
-              // it reads as detail rather than as three more highlighted figures.
-              //
-              // `print-gain` rather than an inline colour: @media print flattens
-              // every colour inside .print-area to ink, so an inline value here
-              // would look right on screen and print black (see app/globals.css).
-              <div style={{ marginTop: 8 }}>
-                <div
-                  className="print-gain"
-                  style={{ display: 'flex', justifyContent: 'space-between', color: '#2F7A4F' }}
-                >
-                  <span>ส่วนต่างเชียร์ขาย (Cheer-up)</span>
-                  <span>
-                    {(() => {
-                      const cu = t.items.reduce(
-                        (s, i) =>
-                          i.interested
-                            ? s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0))
-                            : s,
-                        0,
-                      );
-                      return (cu >= 0 ? '+' : '') + fmt(cu);
-                    })()}
-                  </span>
-                </div>
-                {/*
+                )}
+                {total - paid <= 0 ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontWeight: 'bold',
+                      color: '#2F7A4F',
+                    }}
+                  >
+                    <span>ชำระครบแล้ว</span>
+                    <span>-</span>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontWeight: 900,
+                      fontSize: 20,
+                      color: '#B23A48',
+                      border: '3px solid #B23A48',
+                      borderRadius: 8,
+                      padding: '8px 14px',
+                      background: '#FBEAEC',
+                    }}
+                  >
+                    <span>{split ? 'ค้างชำระ (ทั้งใบงาน)' : 'ค้างชำระ'}</span>
+                    <span>{fmt(total - paid)}</span>
+                  </div>
+                )}
+                {groupItems.some((i) => i.interested) && (
+                  // Only the TOTAL is green — it is the one number the shop wants to
+                  // catch the eye. The breakdown under it is working shown, and in ink
+                  // it reads as detail rather than as three more highlighted figures.
+                  //
+                  // `print-gain` rather than an inline colour: @media print flattens
+                  // every colour inside .print-area to ink, so an inline value here
+                  // would look right on screen and print black (see app/globals.css).
+                  <div style={{ marginTop: 8 }}>
+                    <div
+                      className="print-gain"
+                      style={{ display: 'flex', justifyContent: 'space-between', color: '#2F7A4F' }}
+                    >
+                      <span>ส่วนต่างเชียร์ขาย (Cheer-up)</span>
+                      <span>
+                        {(() => {
+                          const cu = groupItems.reduce(
+                            (s, i) =>
+                              i.interested
+                                ? s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0))
+                                : s,
+                            0,
+                          );
+                          return (cu >= 0 ? '+' : '') + fmt(cu);
+                        })()}
+                      </span>
+                    </div>
+                    {/*
                 The figure alone does not say what it was measured against, so
                 each baseline product is listed with its price — short name
                 first, the same way the item rows above read, and grouped under
                 its category so a ticket carrying film AND audio does not read as
                 one undifferentiated list.
               */}
-                {[...new Set(t.items.filter((i) => i.interested).map((i) => i.category))].map(
-                  (cat) => {
-                    const rows = t.items.filter((i) => i.interested && i.category === cat);
-                    const catDiff = rows.reduce(
-                      (s, i) => s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0)),
-                      0,
-                    );
-                    return (
-                      <div key={cat} style={{ marginTop: 3 }}>
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: 11,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                          }}
-                        >
-                          <span>{cat || 'ไม่ระบุชนิดสินค้า'}</span>
-                          <span>
-                            {catDiff >= 0 ? '+' : ''}
-                            {fmt(catDiff)}
-                          </span>
-                        </p>
-                        {rows.map((i, ci) => {
-                          const stockMatch = stock.find((s) => s.name === i.interested);
-                          const short = stockMatch?.shortName || i.interested;
-                          return (
-                            <p
-                              key={ci}
-                              style={{ margin: '1px 0 0 10px', fontSize: 10, color: '#999' }}
-                            >
-                              จาก <b>{short}</b>
-                              {stockMatch?.shortName ? ` (${i.interested})` : ''} &middot;{' '}
-                              {fmt(Number(i.interestedPrice || 0))}
-                            </p>
-                          );
-                        })}
-                      </div>
-                    );
-                  },
+                    {[
+                      ...new Set(groupItems.filter((i) => i.interested).map((i) => i.category)),
+                    ].map((cat) => {
+                      const rows = groupItems.filter((i) => i.interested && i.category === cat);
+                      const catDiff = rows.reduce(
+                        (s, i) => s + (Number(i.soldPrice || 0) - Number(i.interestedPrice || 0)),
+                        0,
+                      );
+                      return (
+                        <div key={cat} style={{ marginTop: 3 }}>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 11,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <span>{cat || 'ไม่ระบุชนิดสินค้า'}</span>
+                            <span>
+                              {catDiff >= 0 ? '+' : ''}
+                              {fmt(catDiff)}
+                            </span>
+                          </p>
+                          {rows.map((i, ci) => {
+                            const stockMatch = stock.find((s) => s.name === i.interested);
+                            const short = stockMatch?.shortName || i.interested;
+                            return (
+                              <p
+                                key={ci}
+                                style={{ margin: '1px 0 0 10px', fontSize: 10, color: '#999' }}
+                              >
+                                จาก <b>{short}</b>
+                                {stockMatch?.shortName ? ` (${i.interested})` : ''} &middot;{' '}
+                                {fmt(Number(i.interestedPrice || 0))}
+                              </p>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-          <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-          {categories.includes(WRAP_CATEGORY) && wrapOptionsBlock()}
-          {notesBlock(null)}
-          {extrasBlock(16)}
-          <div style={{ display: 'flex', gap: 12 }}>
-            <div
-              style={{ flex: 1, border: '1.5px solid #555', borderRadius: 6, padding: '10px 12px' }}
-            >
-              <p
-                style={{
-                  margin: '0 0 8px',
-                  fontWeight: 'bold',
-                  fontSize: 13,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span
+              <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
+              {groupCats.includes(WRAP_CATEGORY) && wrapOptionsBlock()}
+              {notesBlock(null)}
+              {extrasBlock(16)}
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div
                   style={{
-                    display: 'inline-block',
-                    width: 16,
-                    height: 16,
-                    border: '2px solid #D8722A',
-                    borderRadius: 3,
-                    flexShrink: 0,
+                    flex: 1,
+                    border: '1.5px solid #555',
+                    borderRadius: 6,
+                    padding: '10px 12px',
                   }}
-                ></span>
-                ส่งมอบงาน
-              </p>
-              <p style={{ margin: 0, fontSize: 11 }}>วันที่ ....................................</p>
+                >
+                  <p
+                    style={{
+                      margin: '0 0 8px',
+                      fontWeight: 'bold',
+                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        width: 16,
+                        height: 16,
+                        border: '2px solid #D8722A',
+                        borderRadius: 3,
+                        flexShrink: 0,
+                      }}
+                    ></span>
+                    ส่งมอบงาน
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11 }}>
+                    วันที่ ....................................
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
     );
   } else if (printMode === 'offsite') {
