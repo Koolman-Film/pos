@@ -389,9 +389,12 @@ body {
 
   ตัวเล็กลงกับช่องไฟแคบลง แลกมาด้วยที่ว่างให้ `.nw` บังคับไม่ให้ขึ้นบรรทัดใหม่
   ในช่องที่การขึ้นบรรทัดใหม่ทำลายความหมาย — เลขเอกสาร วันที่ และจำนวนเงิน
+
+  11px ได้เพราะกระดาษเป็นแนวนอน (ดู @page report-page) — ตอนยังเป็นแนวตั้ง
+  10px ก็ยังแน่นจนชื่อสินค้าแตกบรรทัด
 */
 .print-area table.report-table {
-  font-size: 10px;
+  font-size: 11px;
 }
 .print-area table.report-table th,
 .print-area table.report-table td {
@@ -404,7 +407,50 @@ body {
 }
 .print-area table.report-table tr.section-head th {
   text-align: center;
-  background: #e4e4e4 !important;
+}
+/*
+  สีบนกระดาษ ให้เหมือนบนจอ (ร้านขอ 7 พ.ย. 2569).
+
+  กฎข้างบนที่แบนทุกอย่างเป็นหมึกดำ มีไว้ให้เครื่องพิมพ์สีกับขาวดำได้เอกสารที่
+  อ่านได้เหมือนกัน ซึ่งถูกสำหรับใบเสร็จและใบส่งของ — แต่รายงานนี้ใช้สีทำงาน
+  จริง: แถบสามหัวข้อบอกว่าช่องไหนเป็นเรื่องไหน และสีสถานะแยกเงินที่เข้าแล้ว
+  ออกจากเงินที่ยังรอ พอเป็นขาวดำ ต้องไล่อ่านคำในทุกช่องแทน
+
+  `print-color-adjust: exact` เพราะเบราว์เซอร์ตัดพื้นหลังทิ้งตอนพิมพ์เป็นค่า
+  ตั้งต้น — ไม่มีบรรทัดนี้ แถบหัวข้อจะหายไปเงียบ ๆ บนกระดาษ แล้วสิบคอลัมน์ก็
+  กลับไปเป็นตารางแบนเหมือนเดิม
+*/
+.print-area.sales-report,
+.print-area.sales-report * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.print-area.sales-report .sec-order {
+  /* !important เพราะ `.print-area th` ข้างล่างก็ !important — ถ้าไม่ใส่ หัวตาราง
+     ทุกช่องจะกลับไปเทาเหมือนกันหมด แล้วแถบสามหัวข้อก็หายไป */
+  background: #eef1f6 !important;
+}
+.print-area.sales-report .sec-pay {
+  background: #edf4ea !important;
+}
+.print-area.sales-report .sec-bal {
+  background: #fbeff1 !important;
+}
+.print-area.sales-report tr.section-head th {
+  font-weight: 700;
+}
+/*
+  สามสีนี้ชนะกฎหมึกดำได้เพราะสามคลาส — ไม่ต้องเพิ่ม !important แข่งกัน
+  เป็นชุดเดียวกับที่ใช้บนจอ: เขียว = เงินเข้าแล้ว · เหลือง = ยังรอ · แดง = ต้องตาม
+*/
+.print-area.sales-report .ink-paid {
+  color: #2f6b33 !important;
+}
+.print-area.sales-report .ink-wait {
+  color: #8a5a12 !important;
+}
+.print-area.sales-report .ink-due {
+  color: #b23a48 !important;
 }
 /*
   ชื่อลูกค้า/เซลล์ ต้องกวาดตาเจอ.
@@ -413,7 +459,7 @@ body {
   เหมือนข้อความรอบข้างบังคับให้อ่านทุกบรรทัดเพื่อหาว่าตารางนี้ของใคร
 */
 .print-area h3.report-group {
-  background: #f2f2f2;
+  background: #f3eef0;
   border-left: 4px solid #7a2333;
   padding: 4px 8px;
   margin: 0 0 6px;
@@ -468,6 +514,23 @@ body {
   }
   .print-area.offsite-form {
     page: offsite-page;
+  }
+  /*
+    รายงานสรุปการขาย — A4 แนวนอน (ร้านขอ 7 พ.ย. 2569).
+
+    สิบคอลัมน์ใต้สามหัวข้อ ไม่เคยพอดี A4 แนวตั้ง ผลคือเลขเอกสารถูกหั่นกลางคำ
+    และชื่อสินค้าแตกเป็นห้าบรรทัด — กระดาษแนวนอนให้ความกว้างเพิ่มขึ้นราว 40%
+    ซึ่งคือที่ที่สิบคอลัมน์ต้องการพอดี
+
+    ขอบ 1cm ไม่ใช่ 2cm ตามหน้าอื่น: เอกสารนี้เป็นตารางสำหรับอ่าน ไม่ใช่
+    จดหมายที่ต้องมีที่ว่างให้เซ็น
+  */
+  @page report-page {
+    size: A4 landscape;
+    margin: 1cm;
+  }
+  .print-area.sales-report {
+    page: report-page;
   }
   /*
     จ่าหน้ากล่องส่งของ — A5 แนวนอน.

@@ -4,7 +4,7 @@ import Link from 'next/link';
 
 import { fmt, fmtQty, fmtThaiDayString } from '@/lib/domain/format';
 
-import { paymentStatusText } from './salesReport';
+import { payInk, paymentStatusText } from './salesReport';
 import type {
   SalesReport,
   SalesReportGroup,
@@ -357,9 +357,12 @@ function OrderRows({
   );
 }
 
+/** สีสถานะ ชุดเดียวกับที่กระดาษใช้ — `payInk` เป็นคนตัดสิน ทั้งสองที่จึงตรงกันเสมอ. */
+const INK = { 'ink-paid': '#3F6B33', 'ink-wait': '#8A5A12', 'ink-due': '#B23A48' };
+
 function PaymentCells({ pay }: { pay: SalesReportRow['payments'][number] }) {
   const text = paymentStatusText(pay);
-  const tone = pay.settled ? '#3F6B33' : text === 'เช็คเด้ง' ? '#B23A48' : '#8A5A12';
+  const tone = INK[payInk(pay) as keyof typeof INK];
   return (
     <>
       <td style={{ ...cell, whiteSpace: 'nowrap' }}>
