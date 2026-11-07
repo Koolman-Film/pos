@@ -411,6 +411,8 @@ type DetailRow = {
     revenue_kind: string | null;
     finnix_doc_no: string | null;
     finnix_amount: number | null;
+    received_at: string | null;
+    delivered_at: string | null;
     ticket_item_positions: { position: string; product: string; price: number }[];
   }[];
   ticket_payments: {
@@ -686,7 +688,7 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
     .select(
       'id, shop_id, customer_name, phone, plate, car_type, brand, model, color, service_type, status, ' +
         'booking_channel, revenue_kind, tech_by_category, drop_off_date, pickup_date, extras, locked, pay_to_account_id, created_at, ' +
-        'ticket_items(id, category, booked, booked_price, sold, sold_price, interested, interested_price, discount_type, discount_value, actual_qty, revenue_kind, finnix_doc_no, finnix_amount, ' +
+        'ticket_items(id, category, booked, booked_price, sold, sold_price, interested, interested_price, discount_type, discount_value, actual_qty, revenue_kind, finnix_doc_no, finnix_amount, received_at, delivered_at, ' +
         'ticket_item_positions(position, product, price)), ' +
         'ticket_payments(type, method, amount, paid_at, uid, attachments)',
     )
@@ -774,6 +776,9 @@ export async function loadTicket(id: string): Promise<Ticket | null> {
       revenueKind: i.revenue_kind === 'รับแทน' ? ('รับแทน' as const) : ('รายได้' as const),
       finnixDocNo: i.finnix_doc_no ?? '',
       finnixAmount: Number(i.finnix_amount || 0),
+      // ว่าง = ใช้วันของใบงาน (0089) — ไม่ใช่ "ไม่มีวัน"
+      receivedAt: i.received_at ?? '',
+      deliveredAt: i.delivered_at ?? '',
     })),
     payments: (t.ticket_payments ?? []).map((p) => ({
       type: p.type,
