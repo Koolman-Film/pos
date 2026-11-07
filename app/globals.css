@@ -380,6 +380,44 @@ body {
   padding: 6px 8px;
   text-align: left;
 }
+/*
+  รายงานสรุปการขาย บนกระดาษ (ร้านแจ้ง 7 พ.ย. 2569).
+
+  สิบคอลัมน์ใต้สามหัวข้อ กว้างกว่าที่ตารางปกติเผื่อไว้ ผลคือเลขที่ PO ถูกตัด
+  กลางคำเป็น "WS-NT-" / "0002" และชื่อพนักงานขายแตกเป็นสามบรรทัด ซึ่งอ่านแล้ว
+  เหมือนข้อมูลผิดมากกว่าตารางแน่น
+
+  ตัวเล็กลงกับช่องไฟแคบลง แลกมาด้วยที่ว่างให้ `.nw` บังคับไม่ให้ขึ้นบรรทัดใหม่
+  ในช่องที่การขึ้นบรรทัดใหม่ทำลายความหมาย — เลขเอกสาร วันที่ และจำนวนเงิน
+*/
+.print-area table.report-table {
+  font-size: 10px;
+}
+.print-area table.report-table th,
+.print-area table.report-table td {
+  padding: 3px 5px;
+  line-height: 1.25;
+  vertical-align: top;
+}
+.print-area table.report-table .nw {
+  white-space: nowrap;
+}
+.print-area table.report-table tr.section-head th {
+  text-align: center;
+  background: #e4e4e4 !important;
+}
+/*
+  ชื่อลูกค้า/เซลล์ ต้องกวาดตาเจอ.
+
+  รายงานยาวหลายหน้าถูกอ่านด้วยการหาชื่อ ไม่ใช่อ่านทีละบรรทัด หัวข้อที่หน้าตา
+  เหมือนข้อความรอบข้างบังคับให้อ่านทุกบรรทัดเพื่อหาว่าตารางนี้ของใคร
+*/
+.print-area h3.report-group {
+  background: #f2f2f2;
+  border-left: 4px solid #7a2333;
+  padding: 4px 8px;
+  margin: 0 0 6px;
+}
 .print-area table.compact-table {
   font-size: 9px;
 }

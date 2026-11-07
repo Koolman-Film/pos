@@ -84,7 +84,8 @@ describe('WholesaleList — รายงานสรุปการขาย', (
     const user = renderList(ORDERS);
     expect(screen.queryByText('ยอดขายรวม')).not.toBeInTheDocument();
     await openReport(user);
-    expect(screen.getByText('ยอดขายรวม')).toBeInTheDocument();
+    // ถามเฉพาะตัวบนจอ — .print-area มีคำเดียวกันอยู่ในแถวยอดรวมของกระดาษ
+    expect(within(onScreen()).getByText('ยอดขายรวม')).toBeInTheDocument();
   });
 
   it('สรุปยอดขาย ชำระแล้ว และค้างชำระ ไว้บนสุด', async () => {
@@ -134,5 +135,94 @@ describe('WholesaleList — รายงานสรุปการขาย', (
     const user = renderList([po('WS-CM-0004', 'cm', { dueAt: '' })]);
     await openReport(user);
     expect(within(onScreen()).queryByText(/เลยกำหนดชำระแล้ว/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * สามหัวข้อในตาราง (ร้านขอ 7 พ.ย. 2569).
+ *
+ * การสั่งซื้อ · การชำระเงิน · จำนวนเงินคงค้างชำระ — สามเรื่องนี้ถูกอ่านคนละเวลา
+ * และคนละคน คนดูว่าขายอะไรไป คนดูว่าเก็บเงินได้หรือยัง และคนที่ต้องโทรไปทวง
+ */
+describe('รายงานสรุปการขาย — สามหัวข้อ', () => {
+  const WITH_PAYMENTS = [
+    po('WS-CM-0010', 'cm', {
+      customerId: 1,
+      deliveredAt: '2026-09-12',
+      items: [
+        { name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 4, listPrice: 2500, requestedPrice: 2500, reason: '' },
+      ],
+      payments: [
+        { amount: 4000, method: 'เงินสด', status: 'รับเงินแล้ว', date: '2026-09-20' },
+        {
+          amount: 3000,
+          method: 'กรุงเทพ',
+          status: 'แจ้งแล้ว',
+          date: '2026-09-25',
+          isCheque: true,
+          chequeBank: 'BBL',
+          chequeNo: '0038119',
+        },
+      ],
+    }),
+  ];
+
+  const table = () => within(onScreen()).getByRole('table');
+
+  it('หัวข้อทั้งสามอยู่เหนือกลุ่มคอลัมน์ของมัน', async () => {
+    const user = renderList(WITH_PAYMENTS);
+    await openReport(user);
+    const head = within(table()).getByText('1. การสั่งซื้อ');
+    expect(head).toHaveAttribute('colspan', '4');
+    expect(within(table()).getByText('2. การชำระเงิน')).toHaveAttribute('colspan', '4');
+    expect(within(table()).getByText('3. จำนวนเงินคงค้างชำระ')).toHaveAttribute('colspan', '2');
+  });
+
+  it('การสั่งซื้อ บอกวันที่ส่งของและสินค้า ไม่ใช่แค่ยอดเงิน', async () => {
+    // "ขายอะไรไป" เป็นคำถามที่รายงานเดิมตอบไม่ได้เลย ทั้งที่ชื่อว่ารายงานการขาย
+    const user = renderList(WITH_PAYMENTS);
+    await openReport(user);
+    expect(within(table()).getByText('ฟิล์ม 3M CRM (ม้วน) × 4')).toBeInTheDocument();
+    expect(within(table()).getAllByText('12 ก.ย. 2569').length).toBeGreaterThan(0);
+  });
+
+  it('การชำระเงิน แยกเป็นครั้ง ๆ พร้อมวันที่ วิธี และสถานะ', async () => {
+    const user = renderList(WITH_PAYMENTS);
+    await openReport(user);
+    // ถามในตัวตาราง ไม่ใช่แถวรวม ซึ่งมีคำว่า "ชำระแล้ว" เป็นป้ายกำกับยอดด้วย
+    const body = table().querySelector('tbody') as HTMLElement;
+    expect(within(body).getByText('ชำระแล้ว')).toBeInTheDocument();
+    expect(within(body).getByText('รอยืนยันเงินเข้า')).toBeInTheDocument();
+    // เช็คต้องอ่านว่าเป็นเช็ค ไม่ใช่ชื่อบัญชีที่จะเอาไปขึ้น ซึ่งอ่านแล้วเหมือนเงินเข้าแล้ว
+    expect(within(table()).getByText(/เช็ค BBL เลขที่ 0038119/)).toBeInTheDocument();
+  });
+
+  it('เงินที่จ่ายมาแล้วแต่รอยืนยัน ไม่หายไปในยอดค้าง', async () => {
+    /*
+      ลูกค้าที่ยื่นเช็คเต็มจำนวนมาแล้ว อยู่คนละสถานะกับลูกค้าที่ยังไม่ส่งอะไรมาเลย
+      แต่ทั้งคู่เคยโผล่เป็นยอดค้างก้อนเดียวกัน แล้วก็โดนตามเหมือนกัน
+    */
+    const user = renderList(WITH_PAYMENTS);
+    await openReport(user);
+    // 10,000 − 4,000 ที่รับแล้ว = 6,000 ค้าง ในนั้นเป็นเช็ครอยืนยัน 3,000
+    expect(figure('ค้างชำระ')).toContain('6,000.00');
+    expect(figure('รอยืนยันเงินเข้า')).toContain('3,000.00');
+    // เหลือที่ยังไม่มีใครส่งอะไรมาเลย 3,000 — ยอดที่ต้องโทรหาลูกค้าจริง ๆ
+    expect(figure('ค้างสุทธิ (หักที่รอยืนยัน)')).toContain('3,000.00');
+  });
+
+  it('ใบที่ยังไม่จ่ายเลย บอกตรง ๆ ไม่ใช่ปล่อยช่องว่าง', async () => {
+    const user = renderList([po('WS-CM-0011', 'cm')]);
+    await openReport(user);
+    expect(within(table()).getByText('ยังไม่มีการชำระเงิน')).toBeInTheDocument();
+  });
+
+  it('แถวรวมของกลุ่ม มีคำกำกับว่าตัวเลขคือยอดอะไร', async () => {
+    // ตัวเลขเปล่า ๆ ใต้ตารางยาว บังคับให้นับคอลัมน์ขึ้นไปหาหัวตาราง
+    const user = renderList(WITH_PAYMENTS);
+    await openReport(user);
+    const foot = table().querySelector('tfoot') as HTMLElement;
+    expect(within(foot).getByText(/รวม 1 ใบ/)).toBeInTheDocument();
+    expect(within(foot).getByText('ชำระแล้ว')).toBeInTheDocument();
   });
 });

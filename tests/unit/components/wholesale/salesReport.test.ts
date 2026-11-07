@@ -192,3 +192,81 @@ describe('buildSalesReport — การจัดกลุ่ม', () => {
     expect(out.outstanding).toBe(0);
   });
 });
+
+/**
+ * สามหัวข้อในรายงาน (ร้านขอ 7 พ.ย. 2569).
+ *
+ * การสั่งซื้อ ต้องบอกว่าขายอะไรไป การชำระเงิน ต้องบอกเป็นครั้ง ๆ ว่าจ่ายมา
+ * เมื่อไหร่และเงินถึงร้านหรือยัง ส่วนยอดค้าง ต้องแยกส่วนที่รอยืนยันออกมา
+ */
+describe('buildSalesReport — รายละเอียดสามหัวข้อ', () => {
+  const withPayments = (over: Partial<WsOrder> = {}) =>
+    po({
+      id: 'WS-CM-0100',
+      items: [
+        { name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 4, listPrice: 2500, requestedPrice: 2500, uid: 'u1' },
+      ],
+      payments: [
+        { amount: 3000, method: 'กรุงเทพ', status: 'แจ้งแล้ว', date: '2026-10-20' },
+        { amount: 4000, method: 'เงินสด', status: 'รับเงินแล้ว', date: '2026-10-05' },
+      ],
+      ...over,
+    } as unknown as Partial<WsOrder> & { id: string });
+
+  it('หอบรายการสินค้ามาด้วย — ไม่งั้น "การสั่งซื้อ" ตอบไม่ได้ว่าขายอะไร', () => {
+    const [row] = build([withPayments()]).groups[0].rows;
+    expect(row.items).toEqual([{ name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 4 }]);
+  });
+
+  it('การชำระเงินเรียงตามวันที่ ไม่ใช่ตามลำดับที่บันทึก', () => {
+    // คนอ่านไล่จากครั้งแรกไปครั้งล่าสุด ลำดับที่พนักงานพิมพ์เข้าไปไม่ได้แปลว่าอะไร
+    const [row] = build([withPayments()]).groups[0].rows;
+    expect(row.payments.map((p) => p.paidAt)).toEqual(['2026-10-05', '2026-10-20']);
+  });
+
+  it('บอกว่าเงินถึงร้านหรือยัง แยกจากชื่อสถานะ', () => {
+    const [row] = build([withPayments()]).groups[0].rows;
+    expect(row.payments.map((p) => p.settled)).toEqual([true, false]);
+  });
+
+  it('เช็คอ่านว่าเป็นเช็ค ไม่ใช่ชื่อบัญชีที่จะเอาไปขึ้น', () => {
+    /*
+      `method` ของเช็คคือแหล่งเงินปลายทาง อ่านเดี่ยว ๆ แล้วเหมือนเงินเข้าแล้ว
+      ทั้งที่กระดาษยังอยู่ในลิ้นชัก
+    */
+    const [row] = build([
+      withPayments({
+        payments: [
+          {
+            amount: 3000,
+            method: 'กรุงเทพ',
+            status: 'แจ้งแล้ว',
+            date: '2026-10-20',
+            isCheque: true,
+            chequeBank: 'BBL',
+            chequeNo: '0038119',
+          },
+        ],
+      } as unknown as Partial<WsOrder>),
+    ]).groups[0].rows;
+    expect(row.payments[0].method).toBe('เช็ค BBL เลขที่ 0038119');
+  });
+
+  it('ค้างสุทธิ = ค้างชำระ ลบส่วนที่รอยืนยันเงินเข้า', () => {
+    /*
+      ลูกค้าที่ยื่นเช็คเต็มจำนวนมาแล้ว อยู่คนละสถานะกับลูกค้าที่ยังไม่ส่งอะไรมา
+      สองยอดนี้สั่งงานคนละอย่าง: ยอดรอยืนยันต้องไปตามคนในร้านให้กดยืนยัน ส่วน
+      ยอดสุทธิคือยอดที่ต้องโทรหาลูกค้า
+    */
+    const out = build([withPayments()]);
+    expect(out.outstanding).toBe(6000);
+    expect(out.reported).toBe(3000);
+    expect(out.netOutstanding).toBe(3000);
+    expect(out.groups[0].netOutstanding).toBe(3000);
+  });
+
+  it('ใบที่ยังไม่จ่ายเลย ค้างสุทธิเท่ากับค้างทั้งบิล', () => {
+    const out = build([po({ id: 'WS-CM-0101' })]);
+    expect(out.netOutstanding).toBe(10000);
+  });
+});
