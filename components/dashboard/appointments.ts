@@ -56,6 +56,14 @@ export type VisitDates = {
   toTime?: string;
   /** What the visit is for — printed under the row when there is one. */
   detail?: string;
+  /**
+   * ครั้งที่ — `service_visits.visit_no` (เคลมประกัน ไม่มี).
+   *
+   * ใช้ตัดนัดที่ผ่านไปแล้วออกจากตารางนัด การนับจำนวนแถวแทนเลขครั้ง พังทันทีที่
+   * เลขครั้งไม่เรียงติดกัน — ร้านบันทึกครั้งที่ 1 กับ 3 ไว้ จำนวนแถวได้ 2 ระบบ
+   * จึงยังวาดนัดครั้งที่ 3 ที่เข้ามาแล้วค้างไว้บนการ์ด
+   */
+  no?: number;
 };
 
 /**
@@ -163,12 +171,41 @@ export function buildAppointments<T extends AppointmentTicket>(
     */
     const service = t.extras['Service'];
     if (service?.checked) {
-      const done = (visitsByTicket.get(t.id) ?? []).length;
+      const recorded = visitsByTicket.get(t.id) ?? [];
+      /*
+        เข้ามาแล้วครั้งไหนบ้าง — อ่านจากเลขครั้ง ไม่ใช่จำนวนแถว.
+
+        ของเดิมนับจำนวนแถวแล้วตัดนัดที่เลขน้อยกว่าหรือเท่ากันออก ซึ่งถูกเฉพาะ
+        ตอนที่เลขครั้งเรียง 1, 2, 3 ติดกันพอดี ร้านที่บันทึกครั้งที่ 1 กับ 3 ไว้
+        (ครั้งที่ 2 ลูกค้าไม่ได้มา) ได้จำนวนแถว 2 ระบบจึงยังวาดนัดครั้งที่ 3 ที่
+        เข้ามาแล้ว ค้างอยู่บนการ์ดตลอดไป
+
+        แถวเก่าที่ไม่มีเลขครั้งมาด้วย ถอยไปใช้กฎเดิม เพื่อไม่ให้ผู้เรียกที่ยัง
+        ไม่ได้ส่งเลขมา เห็นนัดที่ผ่านไปแล้วโผล่กลับมาทั้งชุด
+      */
+      const visitNos = new Set(recorded.map((v) => v.no).filter((n): n is number => !!n));
+      const done = visitNos.size === recorded.length ? 0 : recorded.length;
+      /*
+        วันที่มีคนเข้ามาจริงแล้ว ไม่ต้องมีนัดของวันนั้นซ้ำอีก (ร้านเจอ 7 พ.ย. 2569).
+
+        นัดคือแผน ส่วนการเข้ารับบริการคือสิ่งที่เกิดขึ้นจริง — รถคันเดียวเข้ามา
+        วันเดียว การแสดงทั้งสองอันทำให้การ์ดอ่านได้ว่ามีรถสองคัน ต่างกันแค่อัน
+        หนึ่งมีเวลากำกับ อันหนึ่งไม่มี หลักเดียวกับที่แถวการจองถูกตัดเมื่อมี
+        การเข้ารับบริการวันเดียวกันอยู่แล้ว
+      */
+      const recordedDays = new Set(
+        recorded
+          .map((v) => asDate(v.from, v.fromTime) ?? asDate(v.to, v.toTime))
+          .filter((d): d is Date => !!d)
+          .map(shopDayKey),
+      );
       const saved = Array.isArray(service.schedule) ? service.schedule : [];
       const count = Number(service.serviceCount) || saved.length;
       for (const s of buildServiceSchedule(String(service.serviceDate ?? ''), count, saved)) {
         const at = asDate(s.date);
-        if (s.no <= done || !at) continue;
+        if (!at) continue;
+        if (visitNos.has(s.no) || s.no <= done) continue;
+        if (recordedDays.has(shopDayKey(at))) continue;
         visits.push({
           t,
           appt: at,

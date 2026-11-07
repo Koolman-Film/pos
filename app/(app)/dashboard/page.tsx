@@ -795,6 +795,9 @@ export default async function DashboardPage({
       to: v.delivered_at ?? '',
       fromTime: v.received_time ?? '',
       toTime: v.delivered_time ?? '',
+      // เลขครั้ง เดินทางไปด้วย: ตารางนัดตัดนัดที่ผ่านไปแล้วด้วยเลขนี้ ไม่ใช่
+      // ด้วยจำนวนแถว ซึ่งพังเมื่อเลขครั้งไม่เรียงติดกัน
+      no: v.visit_no ?? undefined,
     });
     visitsByTicket.set(v.ticket_id, list);
   }
