@@ -425,17 +425,6 @@ body {
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
-.print-area.sales-report .sec-order {
-  /* !important เพราะ `.print-area th` ข้างล่างก็ !important — ถ้าไม่ใส่ หัวตาราง
-     ทุกช่องจะกลับไปเทาเหมือนกันหมด แล้วแถบสามหัวข้อก็หายไป */
-  background: #eef1f6 !important;
-}
-.print-area.sales-report .sec-pay {
-  background: #edf4ea !important;
-}
-.print-area.sales-report .sec-bal {
-  background: #fbeff1 !important;
-}
 .print-area.sales-report tr.section-head th {
   font-weight: 700;
 }
@@ -451,6 +440,90 @@ body {
 }
 .print-area.sales-report .ink-due {
   color: #b23a48 !important;
+}
+
+/*
+  สามหัวข้อของรายงานสรุปการขาย แยกด้วยเส้นกรอบ (ร้านขอ 7 พ.ย. 2569).
+
+  เดิมทุกเซลล์ในหัวข้อมีพื้นสีอ่อน ๆ ซึ่งแข่งกับตัวหนังสือที่อยู่บนมัน และยิ่ง
+  คอลัมน์เยอะ หน้าก็ยิ่งกลายเป็นแถบสีสามแถบที่ตัวเลขจมอยู่ข้างใน เส้นกรอบทำ
+  งานเดียวกัน — บอกว่าช่องไหนเป็นเรื่องไหน — โดยไม่แตะพื้นที่ที่ตัวเลขอยู่
+  และเข้มได้โดยไม่ทำให้อ่านยากขึ้น พื้นสีจึงเหลือไว้ที่แถวหัวข้ออย่างเดียว
+
+  กฎชุดเดียว ใช้ทั้งบนจอและบนกระดาษ (`.report-sections` อยู่บนตารางทั้งสองใบ)
+  ไม่ใช่สีสองชุดที่ต้องจำว่าต้องแก้ทั้งคู่ทุกครั้ง
+
+  เส้นวิ่งทั้งแนวตั้งของตาราง รวมแถวรวมด้วย: กรอบที่ขาดตรงแถวสุดท้าย ทำให้
+  ยอดรวมดูเหมือนหลุดออกมาจากกลุ่มที่มันสรุป
+*/
+.report-sections {
+  --sec-order: #3a5a8c;
+  --sec-pay: #2f6b3f;
+  --sec-bal: #b23a48;
+}
+.report-sections .sec-order {
+  border-left: 2px solid var(--sec-order);
+  border-right: 2px solid var(--sec-order);
+}
+.report-sections .sec-pay {
+  border-left: 2px solid var(--sec-pay);
+  border-right: 2px solid var(--sec-pay);
+}
+.report-sections .sec-bal {
+  border-left: 2px solid var(--sec-bal);
+  border-right: 2px solid var(--sec-bal);
+}
+/*
+  เส้นในของกลุ่มไม่ต้องมี — ช่องที่อยู่กลางกลุ่มมีเพื่อนบ้านเป็นพวกเดียวกัน
+  เส้นแนวตั้งทุกช่องจะทำให้ตารางเป็นตะแกรง แทนที่จะเป็นสามกล่อง
+*/
+.report-sections .sec-order + .sec-order,
+.report-sections .sec-pay + .sec-pay,
+.report-sections .sec-bal + .sec-bal {
+  border-left: none;
+}
+.report-sections .sec-order:has(+ .sec-order),
+.report-sections .sec-pay:has(+ .sec-pay),
+.report-sections .sec-bal:has(+ .sec-bal) {
+  border-right: none;
+}
+/* ปิดกล่องหัวบนล่าง — สามเส้นที่เหลือทำให้มันเป็นกล่อง ไม่ใช่แค่เส้นสองข้าง */
+.report-sections tr.section-head .sec-order {
+  border-top: 2px solid var(--sec-order);
+  background: #e4eaf3;
+}
+.report-sections tr.section-head .sec-pay {
+  border-top: 2px solid var(--sec-pay);
+  background: #e2efe5;
+}
+.report-sections tr.section-head .sec-bal {
+  border-top: 2px solid var(--sec-bal);
+  background: #f8e3e6;
+}
+.report-sections tbody tr:last-child .sec-order,
+.report-sections tfoot tr:last-child .sec-order {
+  border-bottom: 2px solid var(--sec-order);
+}
+.report-sections tbody tr:last-child .sec-pay,
+.report-sections tfoot tr:last-child .sec-pay {
+  border-bottom: 2px solid var(--sec-pay);
+}
+.report-sections tbody tr:last-child .sec-bal,
+.report-sections tfoot tr:last-child .sec-bal {
+  border-bottom: 2px solid var(--sec-bal);
+}
+/*
+  บนกระดาษ `.print-area th` ใส่พื้นเทาแบบ !important ให้หัวตารางทุกใบ สีหัวข้อ
+  จึงต้อง !important เท่ากัน ไม่งั้นสามกล่องจะกลายเป็นเทาเหมือนกันหมด
+*/
+.print-area .report-sections tr.section-head .sec-order {
+  background: #e4eaf3 !important;
+}
+.print-area .report-sections tr.section-head .sec-pay {
+  background: #e2efe5 !important;
+}
+.print-area .report-sections tr.section-head .sec-bal {
+  background: #f8e3e6 !important;
 }
 /*
   ชื่อลูกค้า/เซลล์ ต้องกวาดตาเจอ.

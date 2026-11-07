@@ -509,6 +509,35 @@ export function WholesaleList({
                 {hasUnassigned && <option value="unassigned">ไม่ระบุ</option>}
               </select>
             )}
+            {/*
+              สถานะ — เป็นช่องเลือก เฉพาะตอนดูรายงาน (ร้านขอ 7 พ.ย. 2569).
+
+              ตัวกรองสถานะมีอยู่แล้วและรายงานก็ฟังมันอยู่แล้ว แต่มันเป็นแถวชิป
+              ที่ขึ้นเฉพาะมุมมองรายการ พอสลับมาดูรายงานจึงไม่มีทางเลือกว่าจะดู
+              เฉพาะใบที่ค้างชำระ ทั้งที่นั่นคือคำถามหลักที่คนเปิดรายงานนี้ถาม
+
+              `filter` ตัวเดียวกับชิป ไม่ใช่สถานะชุดที่สอง — สลับมุมมองไปมาแล้ว
+              สิ่งที่กรองไว้ยังเป็นอันเดิม ซึ่งเป็นกติกาเดียวกับตัวกรองอื่นทั้งแถว
+
+              ชิปยังอยู่ในมุมมองรายการ เพราะมันพกจำนวนใบมาด้วย ซึ่งช่องเลือก
+              บอกไม่ได้โดยไม่ยืดจนอ่านยาก
+            */}
+            {view === 'report' && (
+              <select
+                value={filter}
+                aria-label="กรองตามสถานะ"
+                onChange={(e) => setFilter(e.target.value)}
+                className="field text-sm px-3.5 py-2"
+              >
+                <option value="all">ทุกสถานะ</option>
+                {Object.keys(wsStatuses).map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+                {scoped.some(owes) && <option value={UNDELIVERED}>{UNDELIVERED}</option>}
+              </select>
+            )}
           </div>
           {/*
             สลับมุมมอง ไม่ใช่เปลี่ยนหน้า — ตัวกรองด้านบนยังเป็นชุดเดิมทั้งหมด
@@ -926,7 +955,7 @@ export function WholesaleList({
                       {g.label} — {g.orders} ใบ · ค้างชำระ {fmt(g.outstanding)} จากยอดขาย{' '}
                       {fmt(g.total)}
                     </h3>
-                    <table className="report-table">
+                    <table className="report-table report-sections">
                       <thead>
                         <tr className="section-head">
                           <th className="sec-order" colSpan={4}>
@@ -1082,7 +1111,7 @@ export function WholesaleList({
                   คอลัมน์ขึ้นไปหาหัวตาราง ซึ่งอยู่คนละหน้ากระดาษไปแล้ว
                   (ร้านแจ้ง 7 พ.ย. 2569) ตารางนี้จึงพกชื่อยอดมาเอง
                 */}
-                <table className="report-table">
+                <table className="report-table report-sections">
                   <tbody>
                     <tr>
                       <th style={{ textAlign: 'left' }}>รวมทั้งรายงาน ({report.orders} ใบ)</th>
