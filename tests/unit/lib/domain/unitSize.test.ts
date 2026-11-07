@@ -4,6 +4,7 @@ import {
   DEFAULT_UNIT_LABEL,
   FILM_SUB_UNIT,
   hasUnitSize,
+  readsSizeFromName,
   roundTo,
   toSellingUnits,
   toSubUnits,
@@ -91,6 +92,31 @@ describe('unitSizeOf — ค่าที่กรอกไว้ กับ ช�
 
   it('หมวดอื่นที่กรอกขนาดไว้เอง ยังใช้ได้ — ด่านกันแค่การเดาจากชื่อ', () => {
     expect(unitSizeOf({ name: 'สายไฟ (ม้วน)', category: 'เครื่องเสียง', unitSize: 100 })).toBe(100);
+  });
+
+  it('ฟิล์มกันรอย ก็เขียนขนาดไว้ท้ายชื่อเหมือนกัน', () => {
+    expect(unitSizeOf({ name: 'TPU กันรอยเกรดพรีเมียม (120)', category: 'ฟิล์มกันรอย' })).toBe(120);
+  });
+
+  it('ฟอร์มสต็อกสัญญาเฉพาะที่ใบคืนสินค้าทำได้จริง', () => {
+    /*
+      `readsSizeFromName` คือคำถามที่ฟอร์มถามก่อนขึ้นว่า "อ่านจากชื่อสินค้าได้
+      250" ถ้ามันตอบคนละอย่างกับ `unitSizeOf` ฟอร์มจะสัญญาสิ่งที่ใบคืนไม่ทำ
+      แล้วคนก็จะเว้นช่องไว้เพราะเชื่อว่าระบบรู้แล้ว
+    */
+    expect(readsSizeFromName(film())).toBe(true);
+    expect(readsSizeFromName({ name: 'ลำโพงคู่ JBL Stage (2)', category: 'เครื่องเสียง' })).toBe(
+      false,
+    );
+    expect(readsSizeFromName({ name: 'ฟิล์ม 3M CRM (ม้วน)', category: FILM })).toBe(false);
+  });
+
+  it('เทียบชื่อหมวดตรงตัว ไม่ใช่แค่มีคำว่าฟิล์ม', () => {
+    /*
+      หมวดที่ร้านตั้งเพิ่มวันหลัง เช่น "อุปกรณ์ติดฟิล์ม" จะเข้าเงื่อนไขแบบหลวม ๆ
+      ทันที ทั้งที่ไม่ได้ขายเป็นม้วน — "ใบปาด (3)" จะกลายเป็นม้วนละ 3 ตร.ฟ.
+    */
+    expect(unitSizeOf({ name: 'ใบปาดน้ำ (3)', category: 'อุปกรณ์ติดฟิล์ม' })).toBe(0);
   });
 });
 

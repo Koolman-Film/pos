@@ -29,7 +29,12 @@ import { deliveryProgress, hasUndelivered } from '@/lib/domain/deliveries';
 import { isWsFlag, matchesWsFlag, WS_FLAG_LABELS, type WsFlag } from '@/lib/alerts/wholesale';
 
 import { pendingCheques } from './cheques';
-import { buildSalesReport, paymentStatusText, type SalesReportGroupBy } from './salesReport';
+import {
+  buildSalesReport,
+  payInk,
+  paymentStatusText,
+  type SalesReportGroupBy,
+} from './salesReport';
 import { WholesaleReport } from './WholesaleReport';
 
 import {
@@ -890,7 +895,9 @@ export function WholesaleList({
           server never sent and React logs a mismatch. */}
       {mounted &&
         createPortal(
-          <div className="print-area">
+          // `sales-report` เปิดทั้งกระดาษแนวนอนและสีให้รายงาน — มุมมองรายการยัง
+          // เป็น A4 แนวตั้งขาวดำเหมือนเดิม เพราะมันเป็นคนละเอกสาร
+          <div className={view === 'report' ? 'print-area sales-report' : 'print-area'}>
             <h2>
               {view === 'report' ? 'รายงานสรุปการขาย — ขายส่ง' : 'รายการขายส่ง'}
               {custFilter !== 'all' ? ' — ' + customerName(Number(custFilter), customers) : ''}
@@ -922,27 +929,33 @@ export function WholesaleList({
                     <table className="report-table">
                       <thead>
                         <tr className="section-head">
-                          <th colSpan={4}>1. การสั่งซื้อ</th>
-                          <th colSpan={4}>2. การชำระเงิน</th>
-                          <th colSpan={2}>3. จำนวนเงินคงค้างชำระ</th>
+                          <th className="sec-order" colSpan={4}>
+                            1. การสั่งซื้อ
+                          </th>
+                          <th className="sec-pay" colSpan={4}>
+                            2. การชำระเงิน
+                          </th>
+                          <th className="sec-bal" colSpan={2}>
+                            3. จำนวนเงินคงค้างชำระ
+                          </th>
                         </tr>
                         <tr>
-                          <th className="nw">เลขที่ PO</th>
-                          <th className="nw">วันที่ส่งของ</th>
-                          <th>สินค้า</th>
-                          <th className="nw" style={{ textAlign: 'right' }}>
+                          <th className="nw sec-order">เลขที่ PO</th>
+                          <th className="nw sec-order">วันที่ส่งของ</th>
+                          <th className="sec-order">สินค้า</th>
+                          <th className="nw sec-order" style={{ textAlign: 'right' }}>
                             จำนวนเงิน
                           </th>
-                          <th className="nw">วันที่ชำระ</th>
-                          <th>วิธีการชำระ</th>
-                          <th className="nw" style={{ textAlign: 'right' }}>
+                          <th className="nw sec-pay">วันที่ชำระ</th>
+                          <th className="sec-pay">วิธีการชำระ</th>
+                          <th className="nw sec-pay" style={{ textAlign: 'right' }}>
                             จำนวนที่ชำระ
                           </th>
-                          <th className="nw">สถานะ</th>
-                          <th className="nw" style={{ textAlign: 'right' }}>
+                          <th className="nw sec-pay">สถานะ</th>
+                          <th className="nw sec-bal" style={{ textAlign: 'right' }}>
                             รอยืนยันเงินเข้า
                           </th>
-                          <th className="nw" style={{ textAlign: 'right' }}>
+                          <th className="nw sec-bal" style={{ textAlign: 'right' }}>
                             คงค้างสุทธิ
                           </th>
                         </tr>
@@ -957,12 +970,14 @@ export function WholesaleList({
                               <td className="nw" style={{ textAlign: 'right' }}>
                                 {fmt(p.amount)}
                               </td>
-                              <td className="nw">{paymentStatusText(p)}</td>
+                              {/* เขียว = เงินเข้าแล้ว · เหลือง = ยังรอ ·
+                                  แดง = เช็คเด้ง ชุดเดียวกับบนจอ */}
+                              <td className={'nw ' + payInk(p)}>{paymentStatusText(p)}</td>
                             </>
                           );
                           return [
                             <tr key={r.orderId}>
-                              <td className="nw" rowSpan={span}>
+                              <td className="nw sec-order" rowSpan={span}>
                                 {r.orderId}
                                 {accessibleShops.length > 1 && (
                                   <span style={{ display: 'block' }}>
@@ -977,10 +992,10 @@ export function WholesaleList({
                                   {r.counterpart}
                                 </span>
                               </td>
-                              <td className="nw" rowSpan={span}>
+                              <td className="nw sec-order" rowSpan={span}>
                                 {r.deliveredAt ? fmtThaiDayString(r.deliveredAt) : 'ยังไม่ส่ง'}
                               </td>
-                              <td rowSpan={span}>
+                              <td className="sec-order" rowSpan={span}>
                                 {r.items.length === 0
                                   ? '—'
                                   : r.items.map((it, i) => (
@@ -989,21 +1004,40 @@ export function WholesaleList({
                                       </span>
                                     ))}
                               </td>
-                              <td className="nw" rowSpan={span} style={{ textAlign: 'right' }}>
+                              <td
+                                className="nw sec-order"
+                                rowSpan={span}
+                                style={{ textAlign: 'right' }}
+                              >
                                 {fmt(r.total)}
                               </td>
                               {r.payments.length === 0 ? (
-                                <td colSpan={4}>ยังไม่มีการชำระเงิน</td>
+                                <td className="sec-pay" colSpan={4}>
+                                  ยังไม่มีการชำระเงิน
+                                </td>
                               ) : (
                                 payCells(r.payments[0])
                               )}
-                              <td className="nw" rowSpan={span} style={{ textAlign: 'right' }}>
+                              <td
+                                className={'nw sec-bal' + (r.reported > 0.005 ? ' ink-wait' : '')}
+                                rowSpan={span}
+                                style={{ textAlign: 'right' }}
+                              >
                                 {r.reported > 0.005 ? fmt(r.reported) : '—'}
                               </td>
-                              <td className="nw" rowSpan={span} style={{ textAlign: 'right' }}>
+                              <td
+                                className={
+                                  'nw sec-bal' + (r.netOutstanding > 0.005 ? ' ink-due' : '')
+                                }
+                                rowSpan={span}
+                                style={{ textAlign: 'right' }}
+                              >
                                 {fmt(r.netOutstanding)}
                                 {r.outstanding > 0.005 && r.dueAt && (
-                                  <span style={{ display: 'block' }}>
+                                  <span
+                                    className={r.overdue ? 'ink-due' : ''}
+                                    style={{ display: 'block' }}
+                                  >
                                     กำหนด {fmtThaiDayString(r.dueAt)}
                                     {r.overdue ? ' (เลยกำหนด)' : ''}
                                   </span>
@@ -1015,25 +1049,27 @@ export function WholesaleList({
                               .map((p, i) => <tr key={`${r.orderId}-p${i}`}>{payCells(p)}</tr>),
                           ];
                         })}
-                        {/* แถวรวมของกลุ่ม — ตัวเลขทุกตัวมีคำกำกับว่าคือยอดอะไร */}
+                        {/* แถวรวมของกลุ่ม — ตัวเลขทุกตัวมีคำกำกับว่าคือยอดอะไร
+                            และยังอยู่ในแถบสีของหัวข้อตัวเอง แถบสีที่ขาดตรงแถว
+                            สุดท้าย ทำให้ยอดรวมดูเหมือนหลุดออกมาจากกลุ่ม */}
                         <tr>
-                          <th colSpan={3} style={{ textAlign: 'left' }}>
+                          <th className="sec-order" colSpan={3} style={{ textAlign: 'left' }}>
                             รวม {g.orders} ใบ
                           </th>
-                          <th className="nw" style={{ textAlign: 'right' }}>
+                          <th className="nw sec-order" style={{ textAlign: 'right' }}>
                             {fmt(g.total)}
                           </th>
-                          <th colSpan={2} style={{ textAlign: 'right' }}>
+                          <th className="sec-pay" colSpan={2} style={{ textAlign: 'right' }}>
                             ชำระแล้ว
                           </th>
-                          <th className="nw" style={{ textAlign: 'right' }}>
+                          <th className="nw sec-pay" style={{ textAlign: 'right' }}>
                             {fmt(g.paid)}
                           </th>
-                          <th></th>
-                          <th className="nw" style={{ textAlign: 'right' }}>
+                          <th className="sec-pay"></th>
+                          <th className="nw sec-bal" style={{ textAlign: 'right' }}>
                             {fmt(g.reported)}
                           </th>
-                          <th className="nw" style={{ textAlign: 'right' }}>
+                          <th className="nw sec-bal" style={{ textAlign: 'right' }}>
                             {fmt(g.netOutstanding)}
                           </th>
                         </tr>
