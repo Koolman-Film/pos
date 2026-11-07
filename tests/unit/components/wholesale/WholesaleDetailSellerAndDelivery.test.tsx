@@ -219,9 +219,77 @@ describe('WholesaleDetail — คืนสินค้าไม่เต็ม�
     expect(screen.getAllByText('-720.00').length).toBeGreaterThan(0);
   });
 
-  it('บอกวิธีคืนไม่เต็มหน่วย ตรงที่คนกำลังจะกรอก', () => {
-    // ความรู้ว่าม้วนละกี่ตารางฟุตไม่มีอยู่ในระบบ มีแต่ในหัวคนที่รับของคืน
+  it('สินค้าที่ยังไม่ได้ตั้งขนาดต่อหน่วย บอกวิธีหาร และบอกว่าไปตั้งที่ไหน', () => {
+    // ปล่อยให้หารมือต่อไปโดยไม่บอกว่าเลิกหารได้ยังไง คือครึ่งเดียวของคำตอบ
     renderPO(withReturn);
-    expect(screen.getByText(/คืนไม่เต็มหน่วย/)).toHaveTextContent('300 ÷ 500');
+    const hint = screen.getByText(/ปริมาณต่อหน่วย/);
+    expect(hint).toHaveTextContent('300 ÷ 500');
+    expect(hint).toHaveTextContent('สต็อกสินค้า');
+  });
+});
+
+/**
+ * ตั้งขนาดต่อหน่วยที่สินค้าแล้ว ใบคืนถามเป็นตารางฟุตเลย (ร้านเลือก 7 พ.ย. 2569).
+ *
+ * ทางเลือกอีกทางคือให้กรอก "คืนมา 300 จาก 500" ที่แถวนั้นทุกครั้ง ร้านเลือกเก็บ
+ * ที่สินค้า เพราะขนาดม้วนเป็นคุณสมบัติของสินค้า ไม่ใช่ของเหตุการณ์การคืน
+ */
+describe('WholesaleDetail — ตั้งปริมาณต่อหน่วยไว้ที่สินค้าแล้ว', () => {
+  const SIZED_STOCK = [
+    {
+      id: 11,
+      name: 'ฟิล์ม 3M CRM (ม้วน)',
+      shortName: '3M CRM',
+      shop: 'cm',
+      qty: 9,
+      sellPrice: 1200,
+      unitSize: 500,
+      unitLabel: 'ตร.ฟ.',
+    },
+  ];
+
+  const sized = po({
+    id: 'WS-CM-0088',
+    shop: 'cm',
+    items: [
+      { name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 2, listPrice: 1200, requestedPrice: 1200, uid: 'u1' },
+    ],
+    returns: [
+      {
+        item: 'ฟิล์ม 3M CRM (ม้วน)',
+        itemUid: 'u1',
+        qty: 0.6,
+        reason: 'ของชำรุด',
+        date: '2026-11-07',
+      },
+    ],
+  } as unknown as Partial<WsOrder>);
+
+  const renderSized = () => renderPO(sized, { stock: SIZED_STOCK });
+
+  it('ช่องจำนวนถามเป็นตารางฟุต ไม่ใช่สัดส่วนของม้วน', () => {
+    renderSized();
+    // 0.6 ม้วน ที่เก็บไว้ กลับมาเป็น 300 ตร.ฟ. ซึ่งคือตัวเลขที่คนวัดของได้มา
+    expect(screen.getByLabelText('จำนวนที่คืนรายการที่ 1 (ตร.ฟ.)')).toHaveValue(300);
+  });
+
+  it('พิมพ์ตารางฟุตลงไป ระบบหารเป็นจำนวนม้วนให้เอง', async () => {
+    const user = renderSized();
+    const qty = screen.getByLabelText('จำนวนที่คืนรายการที่ 1 (ตร.ฟ.)');
+    await user.clear(qty);
+    await user.type(qty, '250');
+    // 250 ÷ 500 = 0.5 ม้วน × 1,200 = 600 — คนกรอกไม่ต้องหารเอง
+    expect(screen.getByText(/คืนเงิน/)).toHaveTextContent('0.50 × 1,200.00 = 600.00');
+  });
+
+  it('แสดงทั้งตารางฟุตและจำนวนหน่วย เพื่อให้จับได้ว่าตั้งขนาดม้วนผิด', () => {
+    renderSized();
+    expect(screen.getByText(/คืนมา/)).toHaveTextContent('คืนมา 300 ตร.ฟ. = 0.6 หน่วย');
+  });
+
+  it('ไม่ต้องสอนวิธีหารอีก เมื่อไม่มีแถวไหนต้องหารเอง', () => {
+    // ประโยคสอนหารที่ขัดกับช่องกรอกตรงหน้า คือตัวหนังสือที่ทำให้คนลังเล
+    renderSized();
+    expect(screen.queryByText(/ปริมาณต่อหน่วย/)).not.toBeInTheDocument();
   });
 });

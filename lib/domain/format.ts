@@ -137,6 +137,18 @@ function convertGroup(str: string): string {
   return s;
 }
 
+/**
+ * จำนวนของ ไม่ใช่จำนวนเงิน — ทศนิยมเท่าที่มีจริง.
+ *
+ * `fmt` บังคับสองตำแหน่งเสมอ ซึ่งถูกสำหรับเงิน แต่ทำให้ "คืนมา 300 ตร.ฟ."
+ * กลายเป็น "300.00 ตร.ฟ." คือตำแหน่งทศนิยมที่ไม่ได้บอกอะไรเลยสองตัว ส่วนของ
+ * ที่คืนไม่เต็มหน่วยก็ยังต้องเห็นเศษของมันอยู่ (0.6 ม้วน) จึงปัดที่สี่ตำแหน่ง
+ * เท่ากับที่ `roundTo` ใช้แปลงหน่วย
+ */
+export function fmtQty(n: number | null | undefined): string {
+  return Number(n || 0).toLocaleString('th-TH', { maximumFractionDigits: 4 });
+}
+
 export function thaiBahtText(num: number): string {
   const n = Math.round(Number(num) || 0);
   if (n === 0) return 'ศูนย์บาทถ้วน';
