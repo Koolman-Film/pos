@@ -48,6 +48,18 @@ export type TicketItem = {
    * with two of their products has two numbers (ร้านเลือก 26 ก.ย. 2569).
    */
   finnixDocNo?: string;
+  /**
+   * วันที่รับงาน/ส่งงานของบรรทัดนี้ — ว่าง = ใช้วันของใบงาน (migration 0089).
+   *
+   * ของที่ลูกค้ากลับมาซื้อเพิ่มทีหลัง ถูกเพิ่มลงในใบงานใบเดิม แต่มันไม่ได้ส่ง
+   * มอบวันเดียวกับงานแรก สองช่องนี้คือที่ที่ความจริงข้อนั้นอยู่ได้ โดยไม่ต้อง
+   * แตกประวัติของรถคันเดียวออกเป็นหลายใบ
+   *
+   * ว่างคือคำตอบที่ถูกสำหรับงานที่ทำรอบเดียว ซึ่งเป็นงานส่วนใหญ่ — ไม่ใช่
+   * ข้อมูลที่ขาด
+   */
+  receivedAt?: string;
+  deliveredAt?: string;
 };
 
 export type TicketPayment = {
@@ -519,6 +531,9 @@ export type TicketSavePayload = {
     revenueKind: RevenueKind;
     /** เลขที่เอกสาร PEAK ของรายการนี้ (migration 0073). */
     finnixDocNo: string;
+    /** วันของบรรทัดนี้ — ว่าง = ใช้วันของใบงาน (migration 0089). */
+    receivedAt: string;
+    deliveredAt: string;
   }[];
   payments: {
     type: string;

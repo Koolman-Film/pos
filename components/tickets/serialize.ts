@@ -129,6 +129,15 @@ export function serializeTicket(t: Ticket, isNew: boolean): TicketSavePayload {
             : 'รายได้',
       finnixAmount: finnixShare(i),
       finnixDocNo: (i.finnixDocNo ?? '').trim(),
+      /*
+        วันของบรรทัดนี้ — ว่างคือ "ใช้วันของใบงาน" (0089).
+
+        ผ่าน `toISODate` เหมือนวันที่รับเงิน ด้วยเหตุผลเดียวกัน: `toISOString`
+        ตรง ๆ บนเที่ยงคืนตามเวลาไทย จะรายงานเป็น 17:00 ของเมื่อวาน แล้ววันก็
+        เดินถอยหลังหนึ่งวันทุกครั้งที่บันทึก
+      */
+      receivedAt: toISODate(i.receivedAt || ''),
+      deliveredAt: toISODate(i.deliveredAt || ''),
       actualQty: Object.fromEntries(
         Object.entries(i.actualQtyMap ?? {})
           .map(([name, qty]) => [name, Number(qty)] as const)

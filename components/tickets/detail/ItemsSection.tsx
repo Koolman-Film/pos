@@ -1,11 +1,15 @@
 'use client';
 
+import { useState } from 'react';
+
 import { ManagedMultiChipPicker } from '@/components/ui/ManagedMultiChipPicker';
 import { ProductPicker, productDisplayFor } from '@/components/ui/ProductPicker';
-import { fmt } from '@/lib/domain/format';
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
+import { fmt, fmtThaiDayString } from '@/lib/domain/format';
 import { branchShare, finnixShare, itemTotal } from '@/lib/domain/finnixShare';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
+import { itemDates } from '../itemDates';
 import type { StockRow, Ticket, TicketItem, TicketPosition } from '../types';
 
 /**
@@ -600,6 +604,12 @@ export function ItemsSection({
                 ) : null}
               </div>
             )}
+            <ItemJobDates
+              item={it}
+              idx={idx}
+              job={{ dropOff: t.dropOffDateObj, pickup: t.pickupDateObj }}
+              onChange={(fields) => updateItemFields(idx, fields)}
+            />
           </div>
         );
       })}
@@ -609,6 +619,123 @@ export function ItemsSection({
       >
         <i className="fa-solid fa-plus"></i>เพิ่มสินค้าในคันนี้
       </button>
+    </div>
+  );
+}
+
+/**
+ * วันรับงาน/ส่งงานของรายการนี้ (migration 0089, ร้านแจ้ง 7 พ.ย. 2569).
+ *
+ * ลูกค้ากลับมาซื้อเพิ่มทีหลัง แล้วรายการนั้นถูกเพิ่มลงในใบงานใบเดิม — ของสอง
+ * ชิ้นในใบเดียวกันจึงส่งมอบกันคนละวันได้ แต่เดิมทั้งคู่ยืมวันของหัวใบงานไปใช้
+ * ใบงานขายที่พิมพ์ออกมาจึงบอกวันเดียว ทั้งที่ของสองชิ้นนั้นคนละวันกัน
+ *
+ * พับเก็บไว้ตอนยังไม่ได้ใช้ เพราะงานส่วนใหญ่ทำรอบเดียวจบ สองช่องวันที่บนทุก
+ * บล็อกสินค้าคือสองช่องที่คนต้องอ่านผ่านทุกครั้งเพื่อไปให้ถึงราคา บรรทัดที่
+ * พับอยู่ยังบอกวันที่กำลังใช้จริง จะได้ไม่ต้องเปิดดูเพื่อรู้ว่ามันใช้วันอะไร
+ */
+function ItemJobDates({
+  item,
+  idx,
+  job,
+  onChange,
+}: {
+  item: TicketItem;
+  idx: number;
+  job: { dropOff: Date | string | null | undefined; pickup: Date | string | null | undefined };
+  onChange: (fields: Partial<TicketItem>) => void;
+}) {
+  const d = itemDates(item, job);
+  const [open, setOpen] = useState(false);
+  const showFields = d.own || open;
+
+  const dayText = (v: string) => (v ? fmtThaiDayString(v) : '—');
+
+  if (!showFields) {
+    return (
+      <div
+        className="mt-2.5 pt-2.5 flex items-center justify-between gap-2 flex-wrap"
+        style={{ borderTop: '1px dashed var(--line)' }}
+      >
+        <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+          <i className="fa-regular fa-calendar mr-1"></i>
+          ใช้วันของใบงาน · รับ {dayText(d.received)} · ส่ง {dayText(d.delivered)}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-xs underline"
+          style={{ color: 'var(--ink-soft)' }}
+        >
+          กำหนดวันของรายการนี้เอง
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2.5 pt-2.5" style={{ borderTop: '1px dashed var(--line)' }}>
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <span className="text-xs font-medium" style={{ color: 'var(--ink-soft)' }}>
+          <i className="fa-regular fa-calendar mr-1"></i>วันของรายการนี้
+        </span>
+        {/*
+          ล้างทั้งคู่ ไม่ใช่ซ่อนช่อง — ปุ่มที่แค่พับหน้าจอกลับ จะทิ้งวันที่
+          กรอกไว้อยู่ในฐานข้อมูลโดยที่ไม่มีใครเห็นมันอีก
+        */}
+        <button
+          type="button"
+          onClick={() => {
+            onChange({ receivedAt: '', deliveredAt: '' });
+            setOpen(false);
+          }}
+          className="text-xs underline"
+          style={{ color: 'var(--ink-soft)' }}
+        >
+          กลับไปใช้วันของใบงาน
+        </button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>
+            วันที่รับงาน
+          </label>
+          <ThaiDateInput
+            value={item.receivedAt || ''}
+            onChange={(v) => onChange({ receivedAt: v })}
+            ariaLabel={`วันที่รับงานรายการที่ ${idx + 1}`}
+            className="field text-xs px-2.5 py-1.5 w-full"
+          />
+        </div>
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>
+            วันที่ส่งงาน
+          </label>
+          <ThaiDateInput
+            value={item.deliveredAt || ''}
+            onChange={(v) => onChange({ deliveredAt: v })}
+            ariaLabel={`วันที่ส่งงานรายการที่ ${idx + 1}`}
+            className="field text-xs px-2.5 py-1.5 w-full"
+          />
+        </div>
+      </div>
+      {/*
+        เว้นข้างเดียวได้ และบอกว่าข้างที่เว้นใช้วันอะไร.
+
+        ของที่สั่งพร้อมงานแรกแต่มาส่งทีหลัง มีวันรับเป็นวันเดียวกับใบงาน การ
+        บังคับให้กรอกคู่จะทำให้คนต้องพิมพ์วันที่รู้อยู่แล้วซ้ำ
+      */}
+      {(!item.receivedAt || !item.deliveredAt) && (
+        <p className="text-xs mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+          ช่องที่เว้นไว้ใช้วันของใบงาน — รับ {dayText(d.received)} · ส่ง {dayText(d.delivered)}
+        </p>
+      )}
+      {/* ส่งของก่อนรับงานไม่มีอยู่จริง — ฐานข้อมูลก็ปฏิเสธ บอกตรงนี้ก่อนจะไปเจอตอนกดบันทึก */}
+      {item.receivedAt && item.deliveredAt && item.deliveredAt < item.receivedAt && (
+        <p className="text-xs mt-1.5" style={{ color: '#B23A48' }} role="alert">
+          วันที่ส่งงานอยู่ก่อนวันที่รับงาน — บันทึกไม่ได้
+        </p>
+      )}
     </div>
   );
 }
