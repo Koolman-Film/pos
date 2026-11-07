@@ -1644,10 +1644,12 @@ export type Database = {
           booked: string
           booked_price: number
           category: string
+          delivered_at: string | null
           discount_type: string | null
           discount_value: number | null
           finnix_amount: number
           id: number
+          received_at: string | null
           interested: string
           interested_price: number
           finnix_doc_no: string
@@ -1661,10 +1663,12 @@ export type Database = {
           booked?: string
           booked_price?: number
           category: string
+          delivered_at?: string | null
           discount_type?: string | null
           discount_value?: number | null
           finnix_amount?: number
           id?: never
+          received_at?: string | null
           interested?: string
           interested_price?: number
           finnix_doc_no?: string
@@ -1678,10 +1682,12 @@ export type Database = {
           booked?: string
           booked_price?: number
           category?: string
+          delivered_at?: string | null
           discount_type?: string | null
           discount_value?: number | null
           finnix_amount?: number
           id?: never
+          received_at?: string | null
           interested?: string
           interested_price?: number
           finnix_doc_no?: string

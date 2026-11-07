@@ -9,6 +9,7 @@ import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
 import { groupDocLines } from './docLines';
+import { groupItemsByDeliveryDay } from './itemDates';
 import { SERVICE_EXTERIOR_PARTS, SERVICE_INTERIOR_PARTS, SERVICE_POINT_ROWS } from './serviceForm';
 import { WRAP_CATEGORY, WRAP_OPTIONS } from './wrapOptions';
 
@@ -479,6 +480,22 @@ export function PrintJobSheet({
   for (const i of t.items.filter((i) => i.sold)) {
     categoryTotals[i.category] = (categoryTotals[i.category] || 0) + itemNetPrice(mapItem(i));
   }
+  /*
+    ใบงานขาย แยกตามวันส่งของ (ร้านขอ 7 พ.ย. 2569).
+
+    ลูกค้ากลับมาซื้อเพิ่มทีหลัง แล้วรายการนั้นถูกเพิ่มลงในใบงานใบเดิม ของสอง
+    ชิ้นในใบเดียวกันจึงส่งมอบกันคนละวัน — เอกสารที่บอกวันเดียวจึงพูดไม่ตรงกับ
+    ของที่ลูกค้าได้รับไปจริง
+
+    แยกด้วย "วันส่งงาน" เพราะใบขายพูดถึงการส่งมอบ ไม่ใช่วันที่ตกลงกัน
+
+    งานที่ทำรอบเดียว ได้กลุ่มเดียว แล้วหัวกลุ่มก็ไม่ขึ้น — เอกสารออกมาหน้าตา
+    เหมือนเดิมทุกประการ ซึ่งเป็นใบงานส่วนใหญ่
+  */
+  const saleGroups = groupItemsByDeliveryDay(
+    t.items.filter((i) => i.sold),
+    { dropOff: t.dropOffDateObj, pickup: t.pickupDateObj },
+  );
 
   /**
    * `skipRework` is set by the ใบงานติดตั้ง, where แก้งาน is printed under the
@@ -1269,100 +1286,132 @@ export function PrintJobSheet({
               ))}
             </div>
           )}
-          {t.items
-            .filter((i) => i.sold)
-            .map((i, idx) => {
-              let rows: { label: string | null; product: string }[];
-              if (i.positions && i.positions.length) {
-                const grouped: Record<string, string[]> = {};
-                i.positions.forEach((p) => {
-                  if (!grouped[p.product]) grouped[p.product] = [];
-                  grouped[p.product].push(p.position);
-                });
-                rows = Object.entries(grouped).map(([product, labels]) => ({
-                  label: labels.join(', '),
-                  product,
-                }));
-              } else {
-                rows = [{ label: null, product: i.sold }];
-              }
-              const multi = categories.length > 1;
-              return (
+          {saleGroups.map((g) => (
+            <div key={g.day || 'ยังไม่ได้นัด'}>
+              {/*
+                หัวกลุ่มขึ้นเฉพาะตอนมีหลายวัน — ใบที่ส่งรอบเดียวไม่ต้องมีหัวข้อ
+                มาบอกสิ่งที่หัวเอกสารบอกไปแล้ว
+              */}
+              {saleGroups.length > 1 && (
                 <div
-                  key={idx}
-                  style={
-                    multi
-                      ? { marginBottom: 16, borderLeft: '3px solid #333', paddingLeft: 10 }
-                      : { marginBottom: 16 }
-                  }
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'baseline',
+                    gap: 10,
+                    border: '1.5px solid #333',
+                    borderRadius: 6,
+                    padding: '5px 10px',
+                    margin: '0 0 10px',
+                    background: '#F2F2F2',
+                    fontSize: 13,
+                    fontWeight: 'bold',
+                  }}
                 >
+                  <span>
+                    ส่งงาน {g.day ? fmtThaiDate(new Date(`${g.day}T00:00:00`)) : 'ยังไม่ได้นัด'}
+                    <span style={{ fontWeight: 'normal', fontSize: 11, marginLeft: 8 }}>
+                      รับงาน {g.received ? fmtThaiDate(new Date(`${g.received}T00:00:00`)) : '-'}
+                    </span>
+                  </span>
+                  {/* ยอดของวันนั้น — แยกวันแล้วไม่บอกว่าวันนั้นเท่าไหร่ ก็ต้องบวกเองอยู่ดี */}
+                  <span>{fmt(g.items.reduce((sum, i) => sum + itemNetPrice(mapItem(i)), 0))}</span>
+                </div>
+              )}
+              {g.items.map((i, idx) => {
+                let rows: { label: string | null; product: string }[];
+                if (i.positions && i.positions.length) {
+                  const grouped: Record<string, string[]> = {};
+                  i.positions.forEach((p) => {
+                    if (!grouped[p.product]) grouped[p.product] = [];
+                    grouped[p.product].push(p.position);
+                  });
+                  rows = Object.entries(grouped).map(([product, labels]) => ({
+                    label: labels.join(', '),
+                    product,
+                  }));
+                } else {
+                  rows = [{ label: null, product: i.sold }];
+                }
+                const multi = categories.length > 1;
+                return (
                   <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                      marginBottom: 10,
-                    }}
+                    key={idx}
+                    style={
+                      multi
+                        ? { marginBottom: 16, borderLeft: '3px solid #333', paddingLeft: 10 }
+                        : { marginBottom: 16 }
+                    }
                   >
-                    <p
+                    <div
                       style={{
-                        margin: 0,
-                        fontSize: 17,
-                        fontWeight: 900,
-                        letterSpacing: 0.3,
                         display: 'flex',
-                        alignItems: 'center',
-                        gap: 7,
+                        justifyContent: 'space-between',
+                        alignItems: 'baseline',
+                        marginBottom: 10,
                       }}
                     >
-                      {multi && (
-                        <span style={{ ...stepBadge, width: 20, height: 20, lineHeight: '18px' }}>
-                          {categories.indexOf(i.category) + 1}
-                        </span>
-                      )}
-                      <span style={{ borderBottom: '2px solid #333', paddingBottom: 2 }}>
-                        {i.category}
-                      </span>
-                    </p>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 11, color: '#666' }}>
-                        ช่าง:{' '}
-                        <b>
-                          {t.techByCategory &&
-                          t.techByCategory[i.category] &&
-                          t.techByCategory[i.category].length
-                            ? t.techByCategory[i.category].join(', ')
-                            : '-'}
-                        </b>
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 'bold', marginTop: 2 }}>
-                        ยอดรวม: {fmt(itemNetPrice(mapItem(i)))}
-                      </div>
-                    </div>
-                  </div>
-                  {rows.map((r, ri) => {
-                    const stockMatch = stock.find((s) => s.name === r.product);
-                    const short = stockMatch?.shortName || r.product;
-                    return (
-                      <div
-                        key={ri}
+                      <p
                         style={{
+                          margin: 0,
+                          fontSize: 17,
+                          fontWeight: 900,
+                          letterSpacing: 0.3,
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 10,
-                          marginBottom: 8,
-                          paddingLeft: 12,
+                          gap: 7,
                         }}
                       >
-                        {r.label && <span style={emboss}>{r.label}</span>}
-                        <span style={{ fontSize: 18, fontWeight: 'bold' }}>{short}</span>
-                        <span style={{ fontSize: 11, color: '#777' }}>({r.product})</span>
+                        {multi && (
+                          <span style={{ ...stepBadge, width: 20, height: 20, lineHeight: '18px' }}>
+                            {categories.indexOf(i.category) + 1}
+                          </span>
+                        )}
+                        <span style={{ borderBottom: '2px solid #333', paddingBottom: 2 }}>
+                          {i.category}
+                        </span>
+                      </p>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 11, color: '#666' }}>
+                          ช่าง:{' '}
+                          <b>
+                            {t.techByCategory &&
+                            t.techByCategory[i.category] &&
+                            t.techByCategory[i.category].length
+                              ? t.techByCategory[i.category].join(', ')
+                              : '-'}
+                          </b>
+                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 'bold', marginTop: 2 }}>
+                          ยอดรวม: {fmt(itemNetPrice(mapItem(i)))}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
+                    </div>
+                    {rows.map((r, ri) => {
+                      const stockMatch = stock.find((s) => s.name === r.product);
+                      const short = stockMatch?.shortName || r.product;
+                      return (
+                        <div
+                          key={ri}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            marginBottom: 8,
+                            paddingLeft: 12,
+                          }}
+                        >
+                          {r.label && <span style={emboss}>{r.label}</span>}
+                          <span style={{ fontSize: 18, fontWeight: 'bold' }}>{short}</span>
+                          <span style={{ fontSize: 11, color: '#777' }}>({r.product})</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
           <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
           <div style={{ fontSize: 12, marginBottom: 16 }}>
             <p style={{ fontWeight: 'bold', marginBottom: 6 }}>ข้อมูลการชำระเงิน</p>

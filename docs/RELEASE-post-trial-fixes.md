@@ -1,9 +1,9 @@
-# Release runbook — post-trial fixes (migrations 0012–0088)
+# Release runbook — post-trial fixes (migrations 0012–0089)
 
 Branch: `claude/service-schedule-compact` (pushed to origin)
 
 ชุดแรกของไฟล์นี้คือ 0012–0037 ที่ออกมาจากการทดลองใช้ ตั้งแต่นั้นมีงานตามมาอีก
-หลายชุดจนถึง 0088 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
+หลายชุดจนถึง 0089 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
 ไว้ให้หมดแล้ว
 
 This is the batch that came out of the shop's trial run. [DEPLOYMENT.md](./DEPLOYMENT.md)
@@ -27,7 +27,7 @@ work FIRST (step 2) — the new code reads columns that do not exist yet, so a
 deploy that lands before the migrations will 500 on the ticket list, the
 dashboard and the accounting page.
 
-## 2. Database — migrations 0012–0088
+## 2. Database — migrations 0012–0089
 
 ```bash
 npx supabase login                       # personal access token, once
@@ -37,8 +37,8 @@ npx supabase db push                     # applies 0012 … 0037 only
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
-`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 70 ในตารางข้างล่าง
-(`release-0019` … `release-0088` และ `repair-categories-and-services.sql`)
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 71 ในตารางข้างล่าง
+(`release-0019` … `release-0089` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -128,7 +128,8 @@ it twice changes nothing, and each records its versions in
 | 67    | `supabase/release-0086.sql`                   | a normal connection                                 |
 | 68    | `supabase/release-0087.sql`                   | a normal connection                                 |
 | 69    | `supabase/release-0088.sql`                   | a normal connection                                 |
-| 70    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 70    | `supabase/release-0089.sql`                   | a normal connection                                 |
+| 71    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -331,9 +332,17 @@ In this order, as an admin:
     สินค้าหมวดอื่นที่ชื่อบังเอิญลงท้ายด้วยเลขในวงเล็บ จะไม่ถูกอ่านเป็นตารางฟุต
 
 14. **พิมพ์รายงานสรุปการขาย** — ขายส่ง → รายงานสรุป → ปุ่ม PDF กระดาษต้องออกมา
-    **แนวนอน** และ **มีสี** (แถบสามหัวข้อ กับสีสถานะการชำระ) ถ้าออกมาขาวดำ ให้
-    ติ๊ก “Background graphics” ในกล่องพิมพ์ของเบราว์เซอร์ ซึ่งเป็นสวิตช์ของ
-    เครื่องผู้ใช้ ไม่ใช่ของระบบ
+    **แนวนอน** และ **มีสี** — สามหัวข้อเป็นกรอบสี น้ำเงิน/เขียว/แดง และมีพื้นสี
+    เฉพาะแถวหัวข้อ ถ้าพื้นแถวหัวข้อหายไปแต่กรอบยังอยู่ ให้ติ๊ก
+    “Background graphics” ในกล่องพิมพ์ของเบราว์เซอร์ ซึ่งเป็นสวิตช์ของเครื่อง
+    ผู้ใช้ ไม่ใช่ของระบบ
+15. **วันของรายการที่ซื้อเพิ่มทีหลัง** (0089) — เปิดใบงานที่มีสินค้าหลายรายการ
+    ที่ สินค้า/การติดตั้ง แต่ละบล็อกต้องมีบรรทัด “ใช้วันของใบงาน …” อยู่ท้าย
+    กด **กำหนดวันของรายการนี้เอง** ใส่วันที่ต่างจากใบงาน แล้วกดบันทึกใบงาน
+    **ปิดหน้าแล้วเปิดใหม่** วันที่ต้องยังอยู่ จากนั้นสั่งพิมพ์ **ใบงานขาย**
+    เอกสารต้องแยกเป็นกลุ่มตามวันส่ง พร้อมยอดของแต่ละวัน — การเปิดหน้าใหม่คือ
+    หัวใจของข้อนี้ ช่องที่ยังไม่ได้เก็บลงฐานข้อมูลจะดู “สำเร็จ” ทุกครั้งจนกว่า
+    จะรีเฟรช
 
 ## 4. หลังขึ้นระบบ — งานที่ต้องทำด้วยมือ
 
