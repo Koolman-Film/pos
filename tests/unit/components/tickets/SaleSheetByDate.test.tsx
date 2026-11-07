@@ -1,17 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 import { PrintJobSheet } from '@/components/tickets/PrintJobSheet';
 import type { Ticket } from '@/components/tickets/types';
 
 /**
- * ใบงานขาย แยกตามวันส่งของ (migration 0089, ร้านแจ้ง 7 พ.ย. 2569).
+ * ใบงานขาย แยกเป็นคนละใบตามวันส่งของ (migration 0089, ร้านแจ้ง 7 พ.ย. 2569).
  *
- * ลูกค้ากลับมาซื้อเพิ่มทีหลัง แล้วรายการนั้นถูกเพิ่มลงในใบงานใบเดิม เอกสารที่
- * ออกมาจึงบอกวันเดียว ทั้งที่ของสองชิ้นนั้นส่งมอบกันคนละวัน
+ * ลูกค้ากลับมาซื้อเพิ่มทีหลัง แล้วรายการนั้นถูกเพิ่มลงในใบงานใบเดิม — ของสอง
+ * ชิ้นในใบเดียวกันจึงส่งมอบกันคนละวัน
  *
- * ข้อที่สำคัญที่สุดในไฟล์นี้คือข้อสุดท้าย: ใบที่ทำรอบเดียวต้องหน้าตาเหมือนเดิม
- * ทุกประการ ไม่งั้นงานส่วนใหญ่ของร้านจะได้เอกสารที่เปลี่ยนไปโดยไม่มีใครขอ
+ * รอบแรกผมแยกเป็น "หัวข้อ" ในใบเดียว ซึ่งตอบผิดคำถาม ร้านตีกลับมาว่ายังไม่ได้
+ * แยก และถูกแล้ว: ใบงานขายคือกระดาษที่ยื่นให้ลูกค้าตอนรับของ ลูกค้าที่มารับ
+ * วันที่ 7 ต้องได้ใบของวันที่ 7 ไม่ใช่ใบที่พาดหัวว่าวันที่ 2 แล้วมีของที่เขา
+ * รับไปแล้วติดมาด้วย
+ *
+ * ข้อที่สำคัญที่สุดในไฟล์นี้ยังเป็นข้อสุดท้าย: ใบที่ส่งรอบเดียวต้องหน้าตา
+ * เหมือนเดิมทุกประการ ไม่งั้นงานส่วนใหญ่ของร้านจะได้เอกสารที่เปลี่ยนไปโดย
+ * ไม่มีใครขอ
  */
 const ticket = (items: Ticket['items']): Ticket =>
   ({
@@ -68,6 +74,9 @@ const renderSale = (t: Ticket) =>
     />,
   );
 
+/** แต่ละใบคือ `.print-page` ของตัวเอง — ใบพิมพ์ถูก portal ไปไว้ที่ body. */
+const sheets = () => Array.from(document.body.querySelectorAll<HTMLElement>('.print-page'));
+
 describe('ใบงานขาย — แยกตามวันส่งของ', () => {
   const later = item({
     category: 'บริการ',
@@ -77,35 +86,91 @@ describe('ใบงานขาย — แยกตามวันส่งข�
     deliveredAt: '2026-01-06',
   });
 
-  it('ของที่ส่งคนละวัน ขึ้นหัวกลุ่มบอกวันของมันเอง', () => {
+  it('ของที่ส่งคนละวัน ได้คนละใบ ไม่ใช่สองหัวข้อในใบเดียว', () => {
     renderSale(ticket([item(), later]));
-    expect(screen.getByText(/ส่งงาน 27 ธ.ค. 2568/)).toBeInTheDocument();
-    expect(screen.getByText(/ส่งงาน 6 ม.ค. 2569/)).toBeInTheDocument();
+    expect(sheets()).toHaveLength(2);
+    expect(screen.getAllByText('ใบงานขาย')).toHaveLength(2);
+    // ใบที่สองต้องขึ้นหน้าใหม่ ไม่ใช่ต่อท้ายใบแรกกลางหน้า
+    expect(sheets()[1]).toHaveStyle({ pageBreakBefore: 'always' });
   });
 
-  it('หัวกลุ่มบอกวันรับงานของรอบนั้น ไม่ใช่วันของใบงานเสมอไป', () => {
+  it('หัวของแต่ละใบบอกวันของใบนั้น ไม่ใช่วันของทั้งใบงาน', () => {
+    renderSale(ticket([item(), later]));
+    const [first, second] = sheets();
+    expect(
+      within(first).getByText(/วันที่ส่งงาน \(ของในใบนี้\): 27 ธ.ค. 2568/),
+    ).toBeInTheDocument();
+    expect(
+      within(second).getByText(/วันที่ส่งงาน \(ของในใบนี้\): 6 ม.ค. 2569/),
+    ).toBeInTheDocument();
     // รอบที่สองรถเข้ามาใหม่วันที่ 5 ม.ค. — ไม่ใช่ 24 ธ.ค. ที่เป็นของงานแรก
-    renderSale(ticket([item(), later]));
-    expect(screen.getByText(/ส่งงาน 6 ม.ค. 2569/)).toHaveTextContent('รับงาน 5 ม.ค. 2569');
+    expect(
+      within(second).getByText(/วันที่รับงาน \(ของในใบนี้\): 5 ม.ค. 2569/),
+    ).toBeInTheDocument();
   });
 
-  it('หัวกลุ่มบอกยอดของวันนั้น — แยกวันแล้วไม่บอกยอด ก็ต้องบวกเองอยู่ดี', () => {
+  it('วันของทั้งใบงานยังอยู่ตัวเล็ก — การรับประกันนับจากวันที่รถเข้ามาครั้งแรก', () => {
     renderSale(ticket([item(), later]));
-    expect(screen.getByText(/ส่งงาน 6 ม.ค. 2569/).parentElement).toHaveTextContent('350.00');
+    expect(within(sheets()[1]).getByText(/ทั้งใบงาน: รับ 24 ธ.ค. 2568/)).toHaveTextContent(
+      'ส่ง 27 ธ.ค. 2568',
+    );
   });
 
-  it('รายการยังขึ้นครบทุกชิ้น ไม่ได้หายไปกับการแบ่งกลุ่ม', () => {
+  it('แต่ละใบบอกว่าเป็นใบที่เท่าไหร่ของกี่ใบ', () => {
+    // ใบเดียวที่หลุดมือไป คือใบที่ไม่มีใครรู้ว่าหาย
     renderSale(ticket([item(), later]));
-    expect(screen.getByText('TPU กันรอยเกรดพรีเมียม')).toBeInTheDocument();
-    expect(screen.getByText('ล้างรถ')).toBeInTheDocument();
+    expect(within(sheets()[0]).getByText(/ใบที่ 1\/2/)).toBeInTheDocument();
+    expect(within(sheets()[1]).getByText(/ใบที่ 2\/2/)).toBeInTheDocument();
   });
 
-  it('งานที่ทำรอบเดียว ไม่มีหัวกลุ่มมาเพิ่ม — เอกสารหน้าตาเหมือนเดิม', () => {
+  it('ใบหนึ่งมีเฉพาะของที่ส่งวันนั้น ไม่มีของรอบอื่นติดมา', () => {
+    renderSale(ticket([item(), later]));
+    const [first, second] = sheets();
+    expect(within(first).getByText('TPU กันรอยเกรดพรีเมียม')).toBeInTheDocument();
+    expect(within(first).queryByText('ล้างรถ')).toBeNull();
+    expect(within(second).getByText('ล้างรถ')).toBeInTheDocument();
+    expect(within(second).queryByText('TPU กันรอยเกรดพรีเมียม')).toBeNull();
+  });
+
+  it('เงินในใบบอกสองชั้น — ยอดของใบนี้ กับฐานะของทั้งใบงาน', () => {
     /*
-      งานส่วนใหญ่ของร้านเป็นแบบนี้ หัวข้อที่บอกสิ่งที่หัวเอกสารบอกไปแล้ว คือ
+      เงินผูกกับใบงานทั้งใบ ไม่ได้ผูกกับรายการ การบอกว่า "ชำระแล้วเท่าไหร่ของ
+      วันนี้" จึงเป็นการเดา ใบจึงบอกยอดงานของมันเอง แล้วติดป้ายให้ยอดที่เหลือ
+      ว่าเป็นของทั้งใบงาน
+    */
+    renderSale(ticket([item(), later]));
+    const second = sheets()[1];
+    expect(within(second).getByText(/ยอดงานในใบนี้/)).toHaveTextContent('6 ม.ค. 2569');
+    expect(within(second).getByText(/ยอดงานในใบนี้/).parentElement).toHaveTextContent('350.00');
+    expect(within(second).getByText('ยอดสุทธิทั้งใบงาน JT-CM-00617')).toBeInTheDocument();
+    expect(within(second).getByText('ค้างชำระ (ทั้งใบงาน)')).toBeInTheDocument();
+  });
+
+  it('แถบชนิดสินค้า นับเฉพาะของในใบนั้น', () => {
+    // "งานนี้มี 2 ชนิดสินค้า" บนใบที่มีชิ้นเดียว คือคำบอกให้ไปตามหาของที่ไม่หาย
+    renderSale(ticket([item(), item({ category: 'เครื่องเสียง', sold: 'ลำโพง' }), later]));
+    const [first, second] = sheets();
+    expect(within(first).getByText(/ใบนี้มี 2 ชนิดสินค้า/)).toBeInTheDocument();
+    expect(within(second).queryByText(/ชนิดสินค้า/)).toBeNull();
+  });
+
+  it('ของที่ส่งคนละวันแต่ชนิดเดียวกัน ก็ไม่มีแถบชนิดสินค้าสักใบ', () => {
+    renderSale(ticket([item(), later]));
+    expect(screen.queryByText(/ชนิดสินค้า/)).toBeNull();
+  });
+
+  it('งานที่ส่งรอบเดียว ได้ใบเดียว หน้าตาเหมือนเดิมทุกประการ', () => {
+    /*
+      งานส่วนใหญ่ของร้านเป็นแบบนี้ ป้ายกำกับที่บอกสิ่งที่หัวเอกสารบอกไปแล้ว คือ
       บรรทัดที่คนต้องอ่านผ่านทุกใบเพื่อไม่ได้อะไรเลย
     */
     renderSale(ticket([item(), item({ category: 'เครื่องเสียง', sold: 'ลำโพง' })]));
-    expect(screen.queryByText(/^ส่งงาน /)).not.toBeInTheDocument();
+    expect(sheets()).toHaveLength(1);
+    expect(screen.queryByText(/ใบที่ 1\//)).toBeNull();
+    expect(screen.queryByText(/ของในใบนี้/)).toBeNull();
+    expect(screen.queryByText(/ยอดงานในใบนี้/)).toBeNull();
+    expect(screen.getByText('ยอดสุทธิ')).toBeInTheDocument();
+    expect(screen.getByText('งานนี้มี 2 ชนิดสินค้า')).toBeInTheDocument();
+    expect(screen.getByText(/วันที่ส่งงาน:/)).toBeInTheDocument();
   });
 });
