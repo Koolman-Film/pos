@@ -906,10 +906,27 @@ export function WholesaleDetail({
 
     Their phone heads the document and their name signs it, so the document
     identifies a person the customer can ring — which is the whole point of
-    recording it. Looked up within the PO’s own branch: two branches may both
-    have a "โหน่ง" and they are not the same person.
+    recording it.
+
+    `branchSales` คือเซลล์ที่ "ขึ้นทะเบียนไว้ที่สาขานี้" ซึ่งเป็นสิ่งเดียวกับที่
+    ด่านในฐานข้อมูลใช้ตัดสินว่า PO ใบนี้ต้องระบุเซลล์ไหม (0057) — ไม่ใช่สิ่ง
+    เดียวกับ "เลือกใครได้บ้าง"
   */
   const branchSales = salesPeople.filter((p) => p.shop === o.shop);
+  /*
+    เซลล์คนเดียวกัน ขายได้ทุกสาขา (ร้านยืนยัน 7 พ.ย. 2569).
+
+    โหน่ง กับ เคน ขึ้นทะเบียนไว้ใต้ Finnix North สาขาอื่นจึงไม่มีใครให้เลือกเลย
+    ทั้งที่เป็นคนเดียวกันที่วิ่งขายทุกสาขา แอดมินที่เปิด PO ให้พะเยาจึงต้องเลือก
+    "ยังไม่ระบุ" หรือสร้างชื่อซ้ำขึ้นมาใหม่ ซึ่งจะแตกยอดของคนคนเดียวออกเป็นสองชื่อ
+
+    รวมตามชื่อ เพราะ `orders.sales_by` เก็บชื่อ ไม่ใช่ id — ชื่อเดียวกันคือคน
+    เดียวกันตามที่ร้านใช้งานจริง แถวของสาขานี้มาก่อน เบอร์โทรจึงเป็นของแถวที่
+    ใกล้ตัวที่สุดเมื่อมีหลายแถวชื่อเดียวกัน
+  */
+  const sellerOptions = [...branchSales, ...salesPeople.filter((p) => p.shop !== o.shop)].filter(
+    (p, i, all) => all.findIndex((x) => x.name === p.name) === i,
+  );
   // บัญชีรับชำระ: this branch's accounts only — the database refuses another
   // branch's (0062), and a PO that switches branch drops a choice that no
   // longer belongs to it rather than printing the wrong bank.
@@ -925,9 +942,9 @@ export function WholesaleDetail({
     what the shop hit: the reps existed on the POs but not in the table.
   */
   const sellerName = (o.salesBy ?? '').trim();
-  // The staff row is only the phone book. Matched within the PO’s own branch:
-  // two branches may both have a "โหน่ง" and they are not the same person.
-  const seller = branchSales.find((p) => p.name === sellerName) ?? null;
+  // The staff row is only the phone book — หาในรายชื่อชุดเดียวกับที่เลือกได้
+  // ไม่งั้นเซลล์ที่มาจากสาขาอื่นจะถูกเลือกได้แต่เอกสารไม่ขึ้นเบอร์
+  const seller = sellerOptions.find((p) => p.name === sellerName) ?? null;
   /*
     ใครเปิด PO — shown beside, never instead of, whose sale it is. The id is
     resolved through the staff list; a PO older than the column says so rather
@@ -1344,7 +1361,7 @@ export function WholesaleDetail({
                   <SalesPersonPicker
                     value={o.salesBy ?? ''}
                     shop={o.shop}
-                    people={branchSales}
+                    people={sellerOptions}
                     canManage={can('options.manage')}
                     onSelect={(name) => field('salesBy', name)}
                     onSavePerson={onSaveSalesPerson}
@@ -1454,7 +1471,7 @@ export function WholesaleDetail({
                       </div>
                       <div>
                         <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                          ราคามาตรฐาน
+                          ราคาขายมาตรฐาน
                         </label>
                         <input
                           type="number"
@@ -1465,7 +1482,7 @@ export function WholesaleDetail({
                       </div>
                       <div>
                         <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                          ราคาที่เสนอ
+                          ราคาขายที่เสนอ
                         </label>
                         <input
                           type="number"
@@ -1574,6 +1591,26 @@ export function WholesaleDetail({
                         </div>
                       </div>
                     ))}
+                    {/*
+                      ปุ่มบันทึกรอบถัดไป อยู่ตรงนี้ ไม่ใช่แค่ในกล่องออกเอกสาร
+                      (ร้านแจ้ง 7 พ.ย. 2569).
+
+                      ทางเดิมมีอยู่แล้ว — กด "ใบส่งของ" แล้วกล่องกรอกรอบถัดไปจะ
+                      เปิดขึ้น — แต่ไม่มีใครหาเจอ เพราะคนที่เห็น "ส่งแล้ว 8/10 ·
+                      ค้างอีก 2" กำลังมองหาที่กรอกรอบถัดไป ไม่ได้กำลังมองหาปุ่ม
+                      พิมพ์เอกสาร ปุ่มนี้จึงเปิดกล่องเดียวกัน ไม่ได้เพิ่มทางที่สอง
+                      ให้บันทึกต่างกันได้
+                    */}
+                    {stillOwed && !deliveryPanel && (onSaveDelivery || onRecordDelivery) && (
+                      <button
+                        onClick={() => void issueDocument('delivery')}
+                        className="btn-outline w-full text-sm rounded-2xl py-2.5 flex items-center justify-center gap-2 font-medium"
+                      >
+                        <i className="fa-solid fa-truck-fast"></i>
+                        บันทึกการจัดส่งรอบถัดไป · ยังค้างส่ง{' '}
+                        {progress.reduce((n, p) => n + p.remaining, 0)} ชิ้น
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
