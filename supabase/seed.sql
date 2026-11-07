@@ -402,6 +402,19 @@ insert into stock (sku, name, short_name, category, shop_id, qty, min_qty, cost,
   ('SKU-FLM-3M60-RL-NT', 'ฟิล์ม 3M CRM (ม้วน)', '3M-RL', 'ฟิล์มกรองแสง', 'north', 60, 20, 9000, 12000),
   ('SKU-FLM-FNCT-RL-NT', 'ฟิล์ม FINNIX CT (ม้วน)', 'FNCT-RL', 'ฟิล์มกรองแสง', 'north', 45, 20, 11000, 15000);
 
+-- ม้วนละกี่ตารางฟุต (migration 0088).
+--
+-- เฉพาะสินค้าที่ขายเป็นม้วน เพราะมันคือสินค้าที่คืนกลับมาไม่เต็มหน่วยได้จริง —
+-- ลำโพงคู่หนึ่งไม่มีใครคืนมา 0.6 คู่ ตัวเลขนี้ทำให้ใบคืนสินค้าถามเป็นตารางฟุต
+-- แล้วหารให้เอง แทนที่จะให้คนรับของหารในหัว
+--
+-- 3M ม้วนละ 500 FINNIX ม้วนละ 250 ตั้งใจให้ไม่เท่ากัน: ของคืน 300 ตร.ฟ. เท่ากัน
+-- แต่ได้ 0.6 ม้วน กับ 1.2 ม้วน ซึ่งเป็นเหตุผลทั้งหมดที่ขนาดม้วนต้องอยู่ในระบบ
+update stock set unit_size = 500, unit_label = 'ตร.ฟ.'
+ where sku in ('SKU-FLM-3M60-RL', 'SKU-FLM-3M60-RL-NT');
+update stock set unit_size = 250, unit_label = 'ตร.ฟ.'
+ where sku in ('SKU-FLM-FNCT-RL', 'SKU-FLM-FNCT-RL-NT');
+
 insert into withdrawals (item, shop_id, qty, type, withdrawn_by, withdrawn_at, status) values
   ('ฟิล์ม FINNIX CT 40%', 'cm', 1, 'สินค้าตัวอย่าง', 'พนักงาน กมล', date '2026-07-14', 'รออนุมัติ');
 

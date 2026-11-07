@@ -9,6 +9,7 @@ import { ShopButtons } from '@/components/ui/ShopButtons';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import {
   fmt,
+  fmtQty,
   fmtThaiDateLong,
   fmtThaiDayString,
   shopDayKey,
@@ -43,6 +44,7 @@ import {
 } from '@/lib/domain/payAccount';
 import { uploadAttachments, discardAttachments } from '@/lib/storage/attachments';
 import { bankOptions } from '@/lib/domain/banks';
+import { toSellingUnits, toSubUnits, unitLabelOf, unitSizeOf } from '@/lib/domain/unitSize';
 import { AttachmentField } from '@/components/ui/AttachmentField';
 import { AttachmentLinks } from '@/components/ui/AttachmentLinks';
 
@@ -531,6 +533,30 @@ export function WholesaleDetail({
     const short = shortNameOf(name);
     return short ? `${short} · ${name}` : name;
   };
+  /*
+    ม้วนละกี่ตารางฟุต ของสินค้าที่กำลังคืน (migration 0088).
+
+    ร้านตั้งค่านี้ที่ตัวสินค้าในสต็อกครั้งเดียว แล้วแถวที่คืนก็ถามเป็นตารางฟุต
+    ตรง ๆ ได้ — ซึ่งคือหน่วยที่ของจริงถูกวัดมาตอนรับคืน ส่วนที่ระบบเก็บยังเป็น
+    หน่วยที่ขาย (ม้วน) เหมือนเดิม เงินกับสต็อกจึงไม่ต้องรู้จักตารางฟุตเลย
+
+    หาจากสาขาของ PO ก่อน แล้วค่อยข้ามสาขา ตามแบบเดียวกับ `shortNameOf`: สินค้า
+    ชื่อเดียวกันคือสินค้าตัวเดียวกัน และขนาดม้วนของมันไม่เปลี่ยนตามสาขา
+  */
+  const returnUnitOf = (name: string) => {
+    const match =
+      stock.find((st) => st.shop === o.shop && st.name === name) ??
+      stock.find((st) => st.name === name);
+    return { size: unitSizeOf(match), label: unitLabelOf(match) };
+  };
+  /*
+    ยังมีแถวที่ต้องหารเองไหม.
+
+    คำอธิบายวิธีหารควรโผล่เฉพาะตอนที่มันจำเป็น ถ้าสินค้าทุกแถวตั้งขนาดต่อหน่วย
+    ไว้แล้ว ช่องกรอกถามเป็นตารางฟุตให้เองอยู่ และประโยคสอนหารก็กลายเป็นตัวหนังสือ
+    ที่ขัดกับสิ่งที่อยู่ตรงหน้า
+  */
+  const someReturnsLackUnit = o.returns.some((r) => returnUnitOf(r.item).size === 0);
 
   const purchasedProducts = [
     ...new Set([
@@ -1894,88 +1920,134 @@ export function WholesaleDetail({
                   บอกวิธีคืนไม่เต็มหน่วย ตรงที่คนกำลังจะกรอก (ร้านถาม 7 พ.ย. 2569).
 
                   ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต และม้วนละ
-                  ไม่เท่ากัน — ความรู้นี้ไม่มีอยู่ในระบบ มีแต่ในหัวคนที่รับของคืน
-                  ประโยคนี้จึงบอกวิธีแปลง แทนที่จะให้เดาว่าช่องจำนวนใส่ทศนิยมได้ไหม
+                  ไม่เท่ากัน สินค้าที่ตั้ง "ปริมาณต่อหน่วย" ไว้แล้ว ช่องกรอกจะ
+                  ถามเป็นตารางฟุตและหารให้เอง (0088) ประโยคนี้จึงเหลือไว้สำหรับ
+                  สินค้าที่ยังไม่ได้ตั้ง — และบอกด้วยว่าตั้งได้ที่ไหน ไม่ใช่
+                  ปล่อยให้หารมือไปตลอด
                 */}
-                <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
-                  คืนไม่เต็มหน่วย ใส่เป็นทศนิยมได้ — เช่น ฟิล์มม้วนละ 500 ตร.ฟ. คืนมา 300 ตร.ฟ.
-                  ให้ใส่ 0.6 (300 ÷ 500) ระบบจะคิดเงินคืนและคืนสต็อกตามสัดส่วนนั้น
-                </p>
-                {o.returns.map((r, idx) => (
-                  // flex-wrap เพราะแถวนี้มีห้าช่องแล้ว. On a narrow card the date and
-                  // the bin drop to a second line instead of the bin being pushed off
-                  // the right edge of the panel, where it was unreachable.
-                  <div key={idx} className="flex flex-wrap gap-2 mb-2 items-start">
-                    <select
-                      value={returnValue(r)}
-                      aria-label="สินค้าที่รับคืน"
-                      onChange={(e) => {
-                        const picked = returnOptions.find((op) => op.value === e.target.value);
-                        updateReturnFields(idx, {
-                          item: picked?.name ?? '',
-                          itemUid: picked?.uid ?? '',
-                        });
-                      }}
-                      className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
-                    >
-                      <option value="" disabled>
-                        เลือกสินค้าที่เคยซื้อ...
-                      </option>
-                      {returnOptions.map((op) => (
-                        <option key={op.value} value={op.value}>
-                          {op.label}
+                {someReturnsLackUnit && (
+                  <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
+                    สินค้าที่ยังไม่ได้ตั้ง “ปริมาณต่อหน่วย” ต้องใส่เป็นสัดส่วนเอง — เช่น ฟิล์มม้วนละ
+                    500 ตร.ฟ. คืนมา 300 ตร.ฟ. ให้ใส่ 0.6 (300 ÷ 500) · ตั้งขนาดต่อหน่วยได้ที่
+                    สต็อกสินค้า แล้วช่องนี้จะให้กรอกเป็น ตร.ฟ. และหารให้เอง
+                  </p>
+                )}
+                {o.returns.map((r, idx) => {
+                  const unit = returnUnitOf(r.item);
+                  /*
+                    ตัวเลขที่โชว์ในช่องกรอก เมื่อสินค้ามีขนาดต่อหน่วย.
+
+                    แปลงกลับจาก `qty` ทุกครั้ง ไม่ได้เก็บเลขตารางฟุตไว้เป็น
+                    ข้อมูลอีกชุด — ถ้าเก็บสองที่ วันหนึ่งมันจะขัดกันเอง และตอนนั้น
+                    จะไม่มีใครรู้ว่าของที่คืนจริงคือเท่าไหร่
+                  */
+                  const subUnitValue =
+                    `${r.qty}` === '' ? '' : toSubUnits(Number(r.qty) || 0, unit.size);
+                  return (
+                    // flex-wrap เพราะแถวนี้มีห้าช่องแล้ว. On a narrow card the date and
+                    // the bin drop to a second line instead of the bin being pushed off
+                    // the right edge of the panel, where it was unreachable.
+                    <div key={idx} className="flex flex-wrap gap-2 mb-2 items-start">
+                      <select
+                        value={returnValue(r)}
+                        aria-label="สินค้าที่รับคืน"
+                        onChange={(e) => {
+                          const picked = returnOptions.find((op) => op.value === e.target.value);
+                          updateReturnFields(idx, {
+                            item: picked?.name ?? '',
+                            itemUid: picked?.uid ?? '',
+                          });
+                        }}
+                        className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
+                      >
+                        <option value="" disabled>
+                          เลือกสินค้าที่เคยซื้อ...
                         </option>
-                      ))}
-                    </select>
-                    {/*
-                      `step="any"` ไม่ใช่รายละเอียด — มันคือเรื่องที่ร้านถาม
-                      7 พ.ย. 2569.
+                        {returnOptions.map((op) => (
+                          <option key={op.value} value={op.value}>
+                            {op.label}
+                          </option>
+                        ))}
+                      </select>
+                      {/*
+                      ถามด้วยหน่วยที่ของถูกวัดมาจริง (migration 0088).
 
                       ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต ม้วนละ
-                      500 บ้าง 250 บ้าง คืนมา 300 ตร.ฟ. จึงเป็น 0.6 ม้วน
-                      ฐานข้อมูลเก็บเป็น numeric มาตั้งแต่ต้นและการคิดเงินก็คูณ
-                      ตรง ๆ อยู่แล้ว — ที่ปิดทางไว้คือช่องกรอกที่บอกว่า step 1
-                      ลูกศรเลยเดินทีละม้วน และเบราว์เซอร์ตีว่าทศนิยมคือค่าที่ผิด
+                      500 บ้าง 250 บ้าง คืนมา 300 ตร.ฟ. จึงเป็น 0.6 ม้วน หรือ
+                      1.2 ม้วน — ตัวเลขเดียวกัน ต่างกันสองเท่า การหารนั้นเคยเป็น
+                      งานในหัวของคนรับของคืน ซึ่งผิดได้ และผิดทีเดียวคือคืนเงิน
+                      ผิดกับสต็อกผิดพร้อมกัน
+
+                      ร้านตั้งขนาดต่อหน่วยไว้ที่สินค้าครั้งเดียว ช่องนี้จึงถาม
+                      เป็นตารางฟุตแล้วหารให้ ส่วนสินค้าที่ยังไม่ได้ตั้ง ยังถาม
+                      เป็นสัดส่วนของหน่วยที่ขายเหมือนเดิม — `step="any"` ทั้งคู่
+                      เพราะช่องที่ไม่บอก step เบราว์เซอร์ถือว่าเดินทีละ 1 และตี
+                      ว่าทศนิยมคือค่าที่ผิด
                     */}
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      aria-label={`จำนวนที่คืนรายการที่ ${idx + 1}`}
-                      value={r.qty}
-                      onChange={(e) => updateReturn(idx, 'qty', e.target.value)}
-                      className="field text-xs px-2.5 py-1.5 w-20"
-                    />
-                    <input
-                      placeholder="เหตุผล"
-                      value={r.reason}
-                      onChange={(e) => updateReturn(idx, 'reason', e.target.value)}
-                      className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
-                    />
-                    {/* The date the return reduces revenue on — see migration 0045. */}
-                    <ThaiDateInput
-                      value={r.date || ''}
-                      onChange={(v) => updateReturn(idx, 'date', v)}
-                      ariaLabel={`วันที่รับคืนรายการที่ ${idx + 1}`}
-                      className="field text-xs px-2.5 py-1.5"
-                    />
-                    <button
-                      onClick={() => removeReturn(idx)}
-                      aria-label={`ลบรายการคืนสินค้าที่ ${idx + 1}`}
-                      title="ลบรายการนี้"
-                      className="text-xs px-2 rounded-lg flex-shrink-0"
-                      style={{ color: '#B23A48' }}
-                    >
-                      <i className="fa-solid fa-trash"></i>
-                    </button>
-                    {/*
+                      {unit.size > 0 ? (
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            aria-label={`จำนวนที่คืนรายการที่ ${idx + 1} (${unit.label})`}
+                            value={subUnitValue}
+                            onChange={(e) =>
+                              updateReturn(
+                                idx,
+                                'qty',
+                                e.target.value === ''
+                                  ? ''
+                                  : toSellingUnits(Number(e.target.value), unit.size),
+                              )
+                            }
+                            className="field text-xs px-2.5 py-1.5 w-20"
+                          />
+                          <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                            {unit.label}
+                          </span>
+                        </div>
+                      ) : (
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          aria-label={`จำนวนที่คืนรายการที่ ${idx + 1}`}
+                          value={r.qty}
+                          onChange={(e) => updateReturn(idx, 'qty', e.target.value)}
+                          className="field text-xs px-2.5 py-1.5 w-20"
+                        />
+                      )}
+                      <input
+                        placeholder="เหตุผล"
+                        value={r.reason}
+                        onChange={(e) => updateReturn(idx, 'reason', e.target.value)}
+                        className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
+                      />
+                      {/* The date the return reduces revenue on — see migration 0045. */}
+                      <ThaiDateInput
+                        value={r.date || ''}
+                        onChange={(v) => updateReturn(idx, 'date', v)}
+                        ariaLabel={`วันที่รับคืนรายการที่ ${idx + 1}`}
+                        className="field text-xs px-2.5 py-1.5"
+                      />
+                      <button
+                        onClick={() => removeReturn(idx)}
+                        aria-label={`ลบรายการคืนสินค้าที่ ${idx + 1}`}
+                        title="ลบรายการนี้"
+                        className="text-xs px-2 rounded-lg flex-shrink-0"
+                        style={{ color: '#B23A48' }}
+                      >
+                        <i className="fa-solid fa-trash"></i>
+                      </button>
+                      {/*
                   ของกลับเข้าชั้นเมื่อยืนยันแล้วเท่านั้น (migration 0054).
 
                   Writing down that a customer will return something and having
                   it back on the rack are days apart. Until somebody ticks this,
                   the goods are on a lorry and the count must not say otherwise.
                 */}
-                    {/*
+                      {/*
                       คิดเงินคืนเท่าไหร่ — ให้เห็นตรงแถว ไม่ใช่เห็นแต่ยอดรวม.
 
                       การคืนไม่เต็มม้วนคือการหารที่คนกรอกทำในหัว (คืน 300 จาก
@@ -1983,40 +2055,55 @@ export function WholesaleDetail({
                       ได้ทันที ก่อนที่ตัวเลขจะไปโผล่เป็นยอดรวมก้อนเดียวข้างล่าง
                       ที่แยกไม่ออกว่ามาจากแถวไหน
                     */}
-                    {Number(r.qty) > 0 && returnUnitPrice(o, r) > 0 && (
-                      <p className="text-xs w-full" style={{ color: 'var(--ink-soft)' }}>
-                        คืนเงิน {fmt(Number(r.qty))} × {fmt(returnUnitPrice(o, r))} ={' '}
-                        <b>{fmt(Number(r.qty) * returnUnitPrice(o, r))}</b>
-                      </p>
-                    )}
-                    <div className="w-full">
-                      {r.receivedAt ? (
-                        <span className="text-xs" style={{ color: '#3F6B33' }}>
-                          <i className="fa-solid fa-circle-check mr-1"></i>
-                          รับของคืนแล้ว {fmtThaiDayString(r.receivedAt)} · คืนสต็อกแล้ว
-                        </span>
-                      ) : !savedReturnUids.has(r.uid ?? '') ? (
-                        <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                          บันทึก PO ก่อน จึงจะยืนยันรับของคืนได้
-                        </span>
-                      ) : can('wholesale.updateStatus') ? (
-                        <button
-                          onClick={() => confirmReturn(idx)}
-                          aria-label={`ยืนยันรับคืนรายการที่ ${idx + 1}`}
-                          className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
-                          style={{ color: '#3F6B33' }}
-                        >
-                          <i className="fa-solid fa-box-open mr-1.5"></i>ยืนยันว่าได้รับของคืนแล้ว
-                        </button>
-                      ) : (
-                        <span className="text-xs" style={{ color: '#8A5A12' }}>
-                          <i className="fa-regular fa-clock mr-1"></i>รอยืนยันว่าได้รับของคืน —
-                          ยังไม่คืนสต็อก
-                        </span>
+                      {Number(r.qty) > 0 && returnUnitPrice(o, r) > 0 && (
+                        <p className="text-xs w-full" style={{ color: 'var(--ink-soft)' }}>
+                          {/*
+                          การหารที่ระบบทำแทน ต้องเห็นว่าได้เท่าไหร่.
+
+                          ช่องกรอกรับเป็นตารางฟุต แต่เงินกับสต็อกเดินด้วยจำนวน
+                          หน่วยที่ขาย บรรทัดนี้คือที่เดียวที่ทั้งสองตัวเลขอยู่
+                          ด้วยกัน — คนกรอกจึงจับได้ทันทีว่าตั้งขนาดม้วนผิด
+                          (300 ตร.ฟ. ไม่ควรกลายเป็น 1.2 ม้วน ถ้าม้วนละ 500)
+                        */}
+                          {unit.size > 0 && (
+                            <>
+                              คืนมา {fmtQty(toSubUnits(Number(r.qty), unit.size))} {unit.label} ={' '}
+                              {fmtQty(Number(r.qty))} หน่วย ·{' '}
+                            </>
+                          )}
+                          คืนเงิน {fmt(Number(r.qty))} × {fmt(returnUnitPrice(o, r))} ={' '}
+                          <b>{fmt(Number(r.qty) * returnUnitPrice(o, r))}</b>
+                        </p>
                       )}
+                      <div className="w-full">
+                        {r.receivedAt ? (
+                          <span className="text-xs" style={{ color: '#3F6B33' }}>
+                            <i className="fa-solid fa-circle-check mr-1"></i>
+                            รับของคืนแล้ว {fmtThaiDayString(r.receivedAt)} · คืนสต็อกแล้ว
+                          </span>
+                        ) : !savedReturnUids.has(r.uid ?? '') ? (
+                          <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                            บันทึก PO ก่อน จึงจะยืนยันรับของคืนได้
+                          </span>
+                        ) : can('wholesale.updateStatus') ? (
+                          <button
+                            onClick={() => confirmReturn(idx)}
+                            aria-label={`ยืนยันรับคืนรายการที่ ${idx + 1}`}
+                            className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                            style={{ color: '#3F6B33' }}
+                          >
+                            <i className="fa-solid fa-box-open mr-1.5"></i>ยืนยันว่าได้รับของคืนแล้ว
+                          </button>
+                        ) : (
+                          <span className="text-xs" style={{ color: '#8A5A12' }}>
+                            <i className="fa-regular fa-clock mr-1"></i>รอยืนยันว่าได้รับของคืน —
+                            ยังไม่คืนสต็อก
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {returnError && (
                   <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
                     {returnError}

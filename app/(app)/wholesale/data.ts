@@ -424,14 +424,19 @@ export async function loadOrderDetailData(
         id: number;
         name: string;
         short_name: string | null;
+        category: string;
         shop_id: string;
         qty: number;
         sell_price: number;
+        unit_size: number;
+        unit_label: string;
       }>(
         (from, to) =>
           supabase
             .from('stock')
-            .select('id, name, short_name, shop_id, qty, sell_price')
+            .select(
+              'id, name, short_name, category, shop_id, qty, sell_price, unit_size, unit_label',
+            )
             .in('shop_id', session.accessibleShopIds)
             .order('shop_id')
             .order('name')
@@ -461,9 +466,15 @@ export async function loadOrderDetailData(
     id: s.id,
     name: s.name,
     shortName: s.short_name ?? '',
+    // ด่านที่ทำให้เลขท้ายชื่อถูกอ่านเป็นตารางฟุตเฉพาะหมวดฟิล์ม (0088)
+    category: s.category ?? '',
     shop: s.shop_id,
     qty: s.qty,
     sellPrice: s.sell_price,
+    // ม้วนละกี่ตารางฟุต — ใบคืนสินค้าหารด้วยตัวนี้ แทนที่จะให้คนรับของหารในหัว
+    // ว่างอยู่ก็ยังอ่านจากชื่อสินค้าได้ เพราะร้านเขียน `... 40% (250)` ไว้แล้ว
+    unitSize: s.unit_size ?? 0,
+    unitLabel: s.unit_label ?? '',
   }));
 
   const shopInfo: Record<string, WsShopInfo> = {};
