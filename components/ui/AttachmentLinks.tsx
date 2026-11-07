@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 
+import { AttachmentPeek } from '@/components/ui/AttachmentPeek';
 import { FilePreview } from '@/components/ui/FilePreview';
 import { fileNameFromPath } from '@/lib/storage/attachments';
+import { signedUrl } from '@/lib/storage/signedUrls';
 
 /**
  * ไฟล์ที่แนบไว้แล้ว — ชื่อที่กดแล้วเปิดดูได้จริง.
@@ -13,8 +15,12 @@ import { fileNameFromPath } from '@/lib/storage/attachments';
  * ซึ่งแปลว่าหลักฐานที่บังคับให้แนบ ไม่เคยถูกใช้ตรวจสอบเลยสักครั้ง (ร้านเจอใน
  * ขายส่ง 26 ต.ค. 2569)
  *
- * ลิงก์ถูกขอทีละครั้งตอนกด ไม่ใช่ขอล่วงหน้าทั้งหน้า — มันมีอายุหนึ่งนาที และ
- * หน้าที่โชว์ PO สิบใบไม่ควรยิงขอลิงก์ที่ไม่มีใครกดดูสามสิบเส้น
+ * ลิงก์ถูกขอทีละครั้งตอนชี้หรือกด ไม่ใช่ขอล่วงหน้าทั้งหน้า — มันมีอายุหนึ่งนาที
+ * และหน้าที่โชว์ PO สิบใบไม่ควรยิงขอลิงก์ที่ไม่มีใครเปิดดูสามสิบเส้น เส้นที่ขอ
+ * ไปแล้วถูกเก็บไว้ใน `signedUrl` ชี้ดูแล้วกดเปิดเต็มจอจึงไม่ต้องรอรอบสอง
+ *
+ * ชี้เมาส์ค้างไว้จะเห็นไฟล์เลยโดยไม่ต้องกด (`AttachmentPeek`) ส่วนการกดยังเปิด
+ * หน้าต่างเต็มจอเหมือนเดิม ซึ่งเป็นทางเดียวที่ซูมหรือเปิดแท็บใหม่ได้
  *
  * `variant` แยกสองที่ใช้: `chip` คือในฟอร์มที่ไฟล์เป็นของชิ้นหนึ่งที่จับต้องได้
  * ส่วน `inline` คือบรรทัดสรุปในการ์ดที่แน่นอยู่แล้ว ซึ่งชิปเขียวจะกินที่เกินตัว
@@ -42,11 +48,9 @@ export function AttachmentLinks({
     setError(null);
     setOpeningPath(path);
     try {
-      const res = await urlAction(path);
+      const res = await signedUrl(path, urlAction);
       if (res.url) setPreview({ url: res.url, fileName: fileNameFromPath(path) });
       else setError(res.error || 'เปิดไฟล์ไม่สำเร็จ');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'เปิดไฟล์ไม่สำเร็จ');
     } finally {
       setOpeningPath(null);
     }
@@ -86,15 +90,17 @@ export function AttachmentLinks({
               className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
               style={{ background: 'var(--paper)', color: '#4C7A3E' }}
             >
-              <button
-                type="button"
-                onClick={() => open(path)}
-                className="flex items-center gap-1.5"
-                disabled={!urlAction}
-                title={urlAction ? `ดู ${fileNameFromPath(path)}` : fileNameFromPath(path)}
-              >
-                {name(path)}
-              </button>
+              <AttachmentPeek path={path} fileName={fileNameFromPath(path)} urlAction={urlAction}>
+                <button
+                  type="button"
+                  onClick={() => open(path)}
+                  className="flex items-center gap-1.5"
+                  disabled={!urlAction}
+                  title={urlAction ? `ดู ${fileNameFromPath(path)}` : fileNameFromPath(path)}
+                >
+                  {name(path)}
+                </button>
+              </AttachmentPeek>
               {onRemove && (
                 <button
                   type="button"
@@ -107,20 +113,26 @@ export function AttachmentLinks({
               )}
             </span>
           ) : (
-            <button
+            <AttachmentPeek
               key={path}
-              type="button"
-              onClick={() => open(path)}
-              disabled={!urlAction}
-              title={urlAction ? `ดู ${fileNameFromPath(path)}` : fileNameFromPath(path)}
-              className={`text-xs flex items-center ${urlAction ? 'underline' : ''}`}
-              style={{
-                color: urlAction ? 'var(--primary)' : 'var(--ink-faint)',
-                textUnderlineOffset: 2,
-              }}
+              path={path}
+              fileName={fileNameFromPath(path)}
+              urlAction={urlAction}
             >
-              {name(path)}
-            </button>
+              <button
+                type="button"
+                onClick={() => open(path)}
+                disabled={!urlAction}
+                title={urlAction ? `ดู ${fileNameFromPath(path)}` : fileNameFromPath(path)}
+                className={`text-xs flex items-center ${urlAction ? 'underline' : ''}`}
+                style={{
+                  color: urlAction ? 'var(--primary)' : 'var(--ink-faint)',
+                  textUnderlineOffset: 2,
+                }}
+              >
+                {name(path)}
+              </button>
+            </AttachmentPeek>
           ),
         )}
       </div>
