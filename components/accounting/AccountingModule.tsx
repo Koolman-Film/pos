@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import { uploadAttachments } from '@/lib/storage/attachments';
+import { signedUrl } from '@/lib/storage/signedUrls';
 import { createPortal, flushSync } from 'react-dom';
 import { downloadBase64 } from '@/lib/browser/download';
 
@@ -12,6 +13,7 @@ import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { AttachmentPeek } from '@/components/ui/AttachmentPeek';
 import { FilePreview } from '@/components/ui/FilePreview';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -692,7 +694,7 @@ export function AccountingModule({
     setOpeningPath(a.path);
     startTransition(async () => {
       try {
-        const res = await attachmentUrlAction(a.path);
+        const res = await signedUrl(a.path, attachmentUrlAction);
         if (res.url) setPreview({ url: res.url, fileName: a.fileName, mimeType: a.mimeType ?? '' });
       } finally {
         setOpeningPath(null);
@@ -1805,20 +1807,27 @@ export function AccountingModule({
                           className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
                           style={{ background: 'var(--surface)', color: 'var(--primary)' }}
                         >
-                          <button
-                            onClick={() => openAttachment(a)}
-                            className="flex items-center gap-1.5"
-                            title={`ดู ${a.fileName}`}
+                          <AttachmentPeek
+                            path={a.path}
+                            fileName={a.fileName}
+                            mimeType={a.mimeType ?? ''}
+                            urlAction={attachmentUrlAction}
                           >
-                            <i
-                              className={`fa-solid ${
-                                openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
-                              }`}
-                            ></i>
-                            <span className="truncate" style={{ maxWidth: 160 }}>
-                              {a.fileName}
-                            </span>
-                          </button>
+                            <button
+                              onClick={() => openAttachment(a)}
+                              className="flex items-center gap-1.5"
+                              title={`ดู ${a.fileName}`}
+                            >
+                              <i
+                                className={`fa-solid ${
+                                  openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
+                                }`}
+                              ></i>
+                              <span className="truncate" style={{ maxWidth: 160 }}>
+                                {a.fileName}
+                              </span>
+                            </button>
+                          </AttachmentPeek>
                           {detachAction && (
                             <button
                               onClick={() => removeAttachment(a)}
@@ -1902,23 +1911,30 @@ export function AccountingModule({
                     {e.attachments && e.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {e.attachments.map((a) => (
-                          <button
+                          <AttachmentPeek
                             key={a.id}
-                            onClick={() => openAttachment(a)}
-                            disabled={openingPath === a.path}
-                            className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                            style={{ background: 'var(--paper)', color: 'var(--primary)' }}
-                            title={`เปิด ${a.fileName}`}
+                            path={a.path}
+                            fileName={a.fileName}
+                            mimeType={a.mimeType ?? ''}
+                            urlAction={attachmentUrlAction}
                           >
-                            <i
-                              className={`fa-solid ${
-                                openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
-                              }`}
-                            ></i>
-                            <span className="truncate" style={{ maxWidth: 160 }}>
-                              {a.fileName}
-                            </span>
-                          </button>
+                            <button
+                              onClick={() => openAttachment(a)}
+                              disabled={openingPath === a.path}
+                              className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                              style={{ background: 'var(--paper)', color: 'var(--primary)' }}
+                              title={`เปิด ${a.fileName}`}
+                            >
+                              <i
+                                className={`fa-solid ${
+                                  openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
+                                }`}
+                              ></i>
+                              <span className="truncate" style={{ maxWidth: 160 }}>
+                                {a.fileName}
+                              </span>
+                            </button>
+                          </AttachmentPeek>
                         ))}
                       </div>
                     )}
