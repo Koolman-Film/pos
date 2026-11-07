@@ -170,3 +170,58 @@ describe('WholesaleDetail — ป้ายช่องราคา', () => {
     expect(screen.getByText('ราคาขายที่เสนอ')).toBeInTheDocument();
   });
 });
+
+/**
+ * คืนสินค้าไม่เต็มหน่วย (ร้านถาม 7 พ.ย. 2569).
+ *
+ * ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต และม้วนละไม่เท่ากัน —
+ * 500 บ้าง 250 บ้าง คืนมา 300 ตร.ฟ. จากม้วนละ 500 จึงเป็น 0.6 ม้วน
+ *
+ * ฐานข้อมูลเก็บจำนวนเป็น numeric มาตั้งแต่ต้น และการคิดเงินก็คูณตรง ๆ อยู่แล้ว
+ * สิ่งที่ปิดทางไว้คือช่องกรอกที่บอกว่าเดินทีละ 1
+ */
+describe('WholesaleDetail — คืนสินค้าไม่เต็มหน่วย', () => {
+  const withReturn = po({
+    id: 'WS-CM-0088',
+    shop: 'cm',
+    items: [
+      { name: 'ฟิล์ม 3M CRM (ม้วน)', qty: 2, listPrice: 1200, requestedPrice: 1200, uid: 'u1' },
+    ],
+    returns: [
+      {
+        item: 'ฟิล์ม 3M CRM (ม้วน)',
+        itemUid: 'u1',
+        qty: 0.6,
+        reason: 'ของชำรุด',
+        date: '2026-11-07',
+      },
+    ],
+  } as unknown as Partial<WsOrder>);
+
+  it('ช่องจำนวนรับทศนิยมได้ ไม่ใช่เดินทีละหน่วย', () => {
+    renderPO(withReturn);
+    const qty = screen.getByLabelText('จำนวนที่คืนรายการที่ 1');
+    expect(qty).toHaveAttribute('step', 'any');
+    expect(qty).toHaveValue(0.6);
+  });
+
+  it('คิดเงินคืนตามสัดส่วน และบอกวิธีคิดไว้ที่แถวนั้น', () => {
+    // คนกรอกหาร 300 ÷ 500 ในหัว บรรทัดนี้คือที่ที่เขาตรวจคำตอบตัวเองได้ทันที
+    renderPO(withReturn);
+    expect(screen.getByText(/คืนเงิน/)).toHaveTextContent('0.60 × 1,200.00 = 720.00');
+  });
+
+  it('ยอดสุทธิหักตามสัดส่วนที่คืน ไม่ใช่หักทั้งม้วน', () => {
+    renderPO(withReturn);
+    // 2 × 1,200 = 2,400 ลบของคืน 720 = 1,680 (ยอดเดียวกันขึ้นทั้งบนจอและบนกระดาษ)
+    // ยอดเดียวกันขึ้นทั้งบนจอและบนกระดาษ จึงนับว่ามีอย่างน้อยหนึ่งที่
+    expect(screen.getAllByText('1,680.00').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('-720.00').length).toBeGreaterThan(0);
+  });
+
+  it('บอกวิธีคืนไม่เต็มหน่วย ตรงที่คนกำลังจะกรอก', () => {
+    // ความรู้ว่าม้วนละกี่ตารางฟุตไม่มีอยู่ในระบบ มีแต่ในหัวคนที่รับของคืน
+    renderPO(withReturn);
+    expect(screen.getByText(/คืนไม่เต็มหน่วย/)).toHaveTextContent('300 ÷ 500');
+  });
+});
