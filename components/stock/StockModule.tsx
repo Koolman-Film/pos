@@ -13,7 +13,7 @@ import { findFilmPrice } from '@/lib/domain/filmPrice';
 import type { InsurancePlan } from '@/components/tickets/types';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { matchesSearch } from '@/lib/domain/search';
-import { unitSizeFromName } from '@/lib/domain/unitSize';
+import { readsSizeFromName, unitSizeFromName } from '@/lib/domain/unitSize';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useSearchFromUrl } from '@/lib/hooks/useSearchFromUrl';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
@@ -1603,7 +1603,7 @@ export function StockModule({
                         value={addStk.unitSize}
                         onChange={(e) => setAddStk({ ...addStk, unitSize: e.target.value })}
                         placeholder={
-                          unitSizeFromName(addStk.newName)
+                          readsSizeFromName({ name: addStk.newName, category: addStk.category })
                             ? `จากชื่อสินค้า ${unitSizeFromName(addStk.newName)}`
                             : 'เช่น 500'
                         }
@@ -2093,7 +2093,7 @@ export function StockModule({
                                   setEditForm({ ...editForm, unitSize: Number(e.target.value) })
                                 }
                                 placeholder={
-                                  unitSizeFromName(editForm.name)
+                                  readsSizeFromName(editForm)
                                     ? `จากชื่อสินค้า ${unitSizeFromName(editForm.name)}`
                                     : 'เช่น 500'
                                 }
@@ -2105,10 +2105,10 @@ export function StockModule({
                                 มีไว้บอกว่า "ไม่ต้องไล่กรอก 78 รายการ" ไม่ใช่
                                 ปล่อยให้เดาว่าช่องว่างแปลว่าใช้ไม่ได้
                               */}
-                              {!editForm.unitSize && unitSizeFromName(editForm.name) > 0 && (
+                              {!editForm.unitSize && readsSizeFromName(editForm) && (
                                 <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-                                  อ่านจากชื่อสินค้าได้ {unitSizeFromName(editForm.name)} — เว้นว่าง
-                                  ไว้ได้ กรอกเมื่อชื่อไม่ตรงเท่านั้น
+                                  อ่านจากชื่อสินค้าได้ {unitSizeFromName(editForm.name)} —
+                                  เว้นว่างไว้ได้ กรอกเมื่อชื่อไม่ตรงเท่านั้น
                                 </p>
                               )}
                             </div>

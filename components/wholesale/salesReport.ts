@@ -127,6 +127,18 @@ export function paymentStatusText(p: { status: string }): string {
   return 'ชำระแล้ว';
 }
 
+/**
+ * คลาสสีของสถานะการชำระ — ชุดเดียวกันทั้งบนจอและบนกระดาษ.
+ *
+ * ร้านขอให้กระดาษมีสีเหมือนหน้าเว็บ (7 พ.ย. 2569) ซึ่งจะเป็นจริงได้ก็ต่อเมื่อ
+ * ทั้งสองที่ตัดสินสีจากฟังก์ชันเดียวกัน ไม่ใช่ต่างคนต่างเขียน if แล้วค่อย ๆ
+ * เพี้ยนออกจากกัน
+ */
+export function payInk(p: { status: string; settled: boolean }): string {
+  if (p.status === PAYMENT_BOUNCED) return 'ink-due';
+  return p.settled ? 'ink-paid' : 'ink-wait';
+}
+
 const round = (n: number) => Math.round(n * 100) / 100;
 
 const sum = (rows: SalesReportRow[]): SalesReportTotals => ({
