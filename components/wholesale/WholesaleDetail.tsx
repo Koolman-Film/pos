@@ -1887,8 +1887,19 @@ export function WholesaleDetail({
                 </p>
               </div>
               <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.returns)}>
-                <p className="text-xs font-semibold mb-3" style={{ color: PANEL.returns.spine }}>
+                <p className="text-xs font-semibold mb-1" style={{ color: PANEL.returns.spine }}>
                   <i className="fa-solid fa-rotate-left mr-1.5"></i>การคืนสินค้า
+                </p>
+                {/*
+                  บอกวิธีคืนไม่เต็มหน่วย ตรงที่คนกำลังจะกรอก (ร้านถาม 7 พ.ย. 2569).
+
+                  ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต และม้วนละ
+                  ไม่เท่ากัน — ความรู้นี้ไม่มีอยู่ในระบบ มีแต่ในหัวคนที่รับของคืน
+                  ประโยคนี้จึงบอกวิธีแปลง แทนที่จะให้เดาว่าช่องจำนวนใส่ทศนิยมได้ไหม
+                */}
+                <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
+                  คืนไม่เต็มหน่วย ใส่เป็นทศนิยมได้ — เช่น ฟิล์มม้วนละ 500 ตร.ฟ. คืนมา 300 ตร.ฟ.
+                  ให้ใส่ 0.6 (300 ÷ 500) ระบบจะคิดเงินคืนและคืนสต็อกตามสัดส่วนนั้น
                 </p>
                 {o.returns.map((r, idx) => (
                   // flex-wrap เพราะแถวนี้มีห้าช่องแล้ว. On a narrow card the date and
@@ -1916,11 +1927,24 @@ export function WholesaleDetail({
                         </option>
                       ))}
                     </select>
+                    {/*
+                      `step="any"` ไม่ใช่รายละเอียด — มันคือเรื่องที่ร้านถาม
+                      7 พ.ย. 2569.
+
+                      ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต ม้วนละ
+                      500 บ้าง 250 บ้าง คืนมา 300 ตร.ฟ. จึงเป็น 0.6 ม้วน
+                      ฐานข้อมูลเก็บเป็น numeric มาตั้งแต่ต้นและการคิดเงินก็คูณ
+                      ตรง ๆ อยู่แล้ว — ที่ปิดทางไว้คือช่องกรอกที่บอกว่า step 1
+                      ลูกศรเลยเดินทีละม้วน และเบราว์เซอร์ตีว่าทศนิยมคือค่าที่ผิด
+                    */}
                     <input
                       type="number"
+                      step="any"
+                      min="0"
+                      aria-label={`จำนวนที่คืนรายการที่ ${idx + 1}`}
                       value={r.qty}
                       onChange={(e) => updateReturn(idx, 'qty', e.target.value)}
-                      className="field text-xs px-2.5 py-1.5 w-16"
+                      className="field text-xs px-2.5 py-1.5 w-20"
                     />
                     <input
                       placeholder="เหตุผล"
@@ -1951,6 +1975,20 @@ export function WholesaleDetail({
                   it back on the rack are days apart. Until somebody ticks this,
                   the goods are on a lorry and the count must not say otherwise.
                 */}
+                    {/*
+                      คิดเงินคืนเท่าไหร่ — ให้เห็นตรงแถว ไม่ใช่เห็นแต่ยอดรวม.
+
+                      การคืนไม่เต็มม้วนคือการหารที่คนกรอกทำในหัว (คืน 300 จาก
+                      500 ตร.ฟ. = 0.6) บรรทัดนี้คือที่ที่เขาตรวจคำตอบของตัวเอง
+                      ได้ทันที ก่อนที่ตัวเลขจะไปโผล่เป็นยอดรวมก้อนเดียวข้างล่าง
+                      ที่แยกไม่ออกว่ามาจากแถวไหน
+                    */}
+                    {Number(r.qty) > 0 && returnUnitPrice(o, r) > 0 && (
+                      <p className="text-xs w-full" style={{ color: 'var(--ink-soft)' }}>
+                        คืนเงิน {fmt(Number(r.qty))} × {fmt(returnUnitPrice(o, r))} ={' '}
+                        <b>{fmt(Number(r.qty) * returnUnitPrice(o, r))}</b>
+                      </p>
+                    )}
                     <div className="w-full">
                       {r.receivedAt ? (
                         <span className="text-xs" style={{ color: '#3F6B33' }}>
