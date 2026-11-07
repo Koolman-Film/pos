@@ -64,6 +64,13 @@ export type AddProductInput =
       sellPrice: number;
       /** จุดสั่งซื้อ. Was hard-coded to 5 for every product ever created. */
       min?: number;
+      /**
+       * ปริมาณต่อหน่วยที่ขาย เช่น ฟิล์มม้วนละ 500 ตร.ฟ. (migration 0088).
+       * ใบคืนสินค้าใช้ตัวนี้หารให้เอง — 0 หรือไม่ส่งมา = ไม่ได้ระบุ.
+       */
+      unitSize?: number;
+      /** ชื่อหน่วยย่อยของ `unitSize` เช่น ตร.ฟ. */
+      unitLabel?: string;
       supplier?: string;
       docNo?: string;
     };
@@ -121,6 +128,10 @@ export async function addProductAction(input: AddProductInput): Promise<void> {
         min_qty: Number(input.min) || 5,
         cost: 0,
         sell_price: canSeePrices ? Number(input.sellPrice) || 0 : 0,
+        // ไม่ใช่ราคา จึงไม่อยู่หลังด่าน seeStockPrices — ขนาดม้วนเป็นข้อเท็จจริง
+        // ของตัวสินค้า และคนที่รับของคืนต้องใช้มันโดยไม่ต้องเห็นราคา (0088)
+        unit_size: Math.max(0, Number(input.unitSize) || 0),
+        unit_label: (input.unitLabel ?? '').trim(),
       })
       .select('id')
       .single();
@@ -270,6 +281,9 @@ export async function saveProductAction(input: {
   min: number;
   cost?: number;
   sellPrice?: number;
+  /** ปริมาณต่อหน่วยที่ขาย — 0 = ไม่ได้ระบุ (migration 0088). */
+  unitSize?: number;
+  unitLabel?: string;
 }): Promise<void> {
   const session = await requireCapability('stock.editDelete');
   const canSeePrices = session.hasDashboardWidget('seeStockPrices');
@@ -292,6 +306,9 @@ export async function saveProductAction(input: {
     category: input.category,
     qty: Number(input.qty),
     min_qty: Number(input.min),
+    // ฟอร์มนี้คือทางเดียวที่สินค้าเก่าจะได้ขนาดต่อหน่วย — มันเกิดมาพร้อม 0 ทุกตัว
+    unit_size: Math.max(0, Number(input.unitSize) || 0),
+    unit_label: (input.unitLabel ?? '').trim(),
     ...(canSeePrices
       ? { cost: Number(input.cost) || 0, sell_price: Number(input.sellPrice) || 0 }
       : {}),

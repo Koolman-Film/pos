@@ -1515,6 +1515,8 @@ export type Database = {
           shop_id: string
           short_name: string
           sku: string
+          unit_label: string
+          unit_size: number
         }
         Insert: {
           category: string
@@ -1527,6 +1529,8 @@ export type Database = {
           shop_id: string
           short_name?: string
           sku: string
+          unit_label?: string
+          unit_size?: number
         }
         Update: {
           category?: string
@@ -1539,6 +1543,8 @@ export type Database = {
           shop_id?: string
           short_name?: string
           sku?: string
+          unit_label?: string
+          unit_size?: number
         }
         Relationships: [
           {

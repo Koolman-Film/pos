@@ -13,6 +13,7 @@ import { findFilmPrice } from '@/lib/domain/filmPrice';
 import type { InsurancePlan } from '@/components/tickets/types';
 import { currentMonthValue, daysAgoValue, exportStamp, todayValue } from '@/lib/domain/now';
 import { matchesSearch } from '@/lib/domain/search';
+import { unitSizeFromName } from '@/lib/domain/unitSize';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useSearchFromUrl } from '@/lib/hooks/useSearchFromUrl';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
@@ -50,6 +51,15 @@ export type StockItem = {
   cost?: number;
   sellPrice?: number;
   serviceCount?: number;
+  /**
+   * ปริมาณต่อหน่วยที่ขาย เช่น ฟิล์มม้วนละ 500 ตร.ฟ. — 0 = ไม่ได้ระบุ (0088).
+   *
+   * ใบคืนสินค้าใช้ตัวนี้หารให้เอง ความรู้ว่าม้วนละเท่าไหร่เคยอยู่ในชื่อสินค้า
+   * เฉย ๆ ซึ่งคนอ่านออกแต่ระบบอ่านไม่ออก
+   */
+  unitSize?: number;
+  /** ชื่อหน่วยย่อยของ unitSize เช่น ตร.ฟ. */
+  unitLabel?: string;
 };
 
 export type Withdrawal = {
@@ -419,6 +429,8 @@ export function StockModule({
     cost: 0,
     sellPrice: 0,
     min: 5,
+    unitSize: '' as string | number,
+    unitLabel: '',
     supplier: '',
     docNo: '',
     serviceCount: '' as string | number,
@@ -633,6 +645,8 @@ export function StockModule({
         cost: Number(addStk.cost),
         sellPrice: Number(addStk.sellPrice),
         min: Number(addStk.min),
+        unitSize: Number(addStk.unitSize) || 0,
+        unitLabel: addStk.unitLabel,
         supplier: addStk.supplier,
         docNo: addStk.docNo,
       });
@@ -666,6 +680,8 @@ export function StockModule({
       min: Number(editForm.min),
       cost: Number(editForm.cost),
       sellPrice: Number(editForm.sellPrice),
+      unitSize: Number(editForm.unitSize) || 0,
+      unitLabel: editForm.unitLabel ?? '',
     });
     setEditingId(null);
     setEditForm(null);
@@ -1565,6 +1581,52 @@ export function StockModule({
                       className="field w-full text-sm px-3 py-2"
                     />
                   </div>
+                  {/*
+                    ปริมาณต่อหน่วย — กรอกครั้งเดียวต่อสินค้า (ร้านเลือกวิธีนี้
+                    7 พ.ย. 2569).
+
+                    ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต ม้วนละ
+                    500 บ้าง 250 บ้าง ตัวเลขนี้คือสิ่งเดียวที่ทำให้ใบคืนสินค้า
+                    หารแทนคนรับของได้ ก่อนหน้านี้มันอยู่ในชื่อสินค้าเฉย ๆ
+                    (`...Plus (500)`) ซึ่งคนอ่านออกแต่ระบบอ่านไม่ออก
+                  */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        ปริมาณต่อหน่วย
+                      </label>
+                      <input
+                        aria-label="ปริมาณต่อหน่วย"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={addStk.unitSize}
+                        onChange={(e) => setAddStk({ ...addStk, unitSize: e.target.value })}
+                        placeholder={
+                          unitSizeFromName(addStk.newName)
+                            ? `จากชื่อสินค้า ${unitSizeFromName(addStk.newName)}`
+                            : 'เช่น 500'
+                        }
+                        className="field w-full text-sm px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                        หน่วยย่อย
+                      </label>
+                      <input
+                        aria-label="ชื่อหน่วยย่อย"
+                        value={addStk.unitLabel}
+                        onChange={(e) => setAddStk({ ...addStk, unitLabel: e.target.value })}
+                        placeholder="เช่น ตร.ฟ."
+                        className="field w-full text-sm px-3 py-2"
+                      />
+                    </div>
+                    <p className="text-xs col-span-2" style={{ color: 'var(--ink-faint)' }}>
+                      ฟิล์มที่เขียนขนาดไว้ท้ายชื่อ เช่น “… 40% (250)” ระบบอ่านเอาเอง ไม่ต้องกรอก —
+                      กรอกเมื่อชื่อไม่ได้บอกขนาด หรือบอกไม่ตรง
+                    </p>
+                  </div>
                   {addStk.category === 'ฟิล์มกันรอย' && (
                     <div>
                       <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
@@ -2006,6 +2068,61 @@ export function StockModule({
                                 onChange={(e) =>
                                   setEditForm({ ...editForm, min: Number(e.target.value) })
                                 }
+                                className="field text-sm px-2.5 py-1.5 w-full"
+                              />
+                            </div>
+                            {/*
+                              ปริมาณต่อหน่วย — ที่เดียวกับที่แก้สินค้าที่มีอยู่
+                              แล้ว 135 ตัวได้ (0088). สินค้าทุกตัวเกิดมาพร้อม 0
+                              คือไม่ได้ระบุ ฟอร์มนี้จึงเป็นทางเดียวที่จะเติมให้
+                              ของเก่า
+                            */}
+                            <div>
+                              <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                                ปริมาณต่อหน่วย
+                              </label>
+                              <input
+                                aria-label="ปริมาณต่อหน่วย"
+                                type="number"
+                                step="any"
+                                min="0"
+                                // 0 แปลว่า "ไม่ได้ระบุ" ไม่ใช่ศูนย์ตารางฟุต —
+                                // ช่องว่างกับ placeholder จึงตรงความหมายกว่าเลข 0
+                                value={editForm.unitSize || ''}
+                                onChange={(e) =>
+                                  setEditForm({ ...editForm, unitSize: Number(e.target.value) })
+                                }
+                                placeholder={
+                                  unitSizeFromName(editForm.name)
+                                    ? `จากชื่อสินค้า ${unitSizeFromName(editForm.name)}`
+                                    : 'เช่น 500'
+                                }
+                                className="field text-sm px-2.5 py-1.5 w-full"
+                              />
+                              {/*
+                                ร้านเขียนขนาดม้วนไว้ท้ายชื่ออยู่แล้วทุกตัว
+                                (`... 40% (250)`) ระบบอ่านเอาเองได้ ประโยคนี้จึง
+                                มีไว้บอกว่า "ไม่ต้องไล่กรอก 78 รายการ" ไม่ใช่
+                                ปล่อยให้เดาว่าช่องว่างแปลว่าใช้ไม่ได้
+                              */}
+                              {!editForm.unitSize && unitSizeFromName(editForm.name) > 0 && (
+                                <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
+                                  อ่านจากชื่อสินค้าได้ {unitSizeFromName(editForm.name)} — เว้นว่าง
+                                  ไว้ได้ กรอกเมื่อชื่อไม่ตรงเท่านั้น
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                                หน่วยย่อย
+                              </label>
+                              <input
+                                aria-label="ชื่อหน่วยย่อย"
+                                value={editForm.unitLabel ?? ''}
+                                onChange={(e) =>
+                                  setEditForm({ ...editForm, unitLabel: e.target.value })
+                                }
+                                placeholder="เช่น ตร.ฟ."
                                 className="field text-sm px-2.5 py-1.5 w-full"
                               />
                             </div>

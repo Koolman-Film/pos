@@ -79,7 +79,9 @@ export default async function StockPage({
         (from, to) =>
           supabase
             .from('stock')
-            .select('id, sku, name, short_name, category, shop_id, qty, min_qty, cost, sell_price')
+            .select(
+              'id, sku, name, short_name, category, shop_id, qty, min_qty, unit_size, unit_label, cost, sell_price',
+            )
             .order('category', { ascending: true })
             .order('name', { ascending: true })
             .order('id', { ascending: true })
@@ -90,7 +92,9 @@ export default async function StockPage({
         (from, to) =>
           supabase
             .from('stock')
-            .select('id, sku, name, short_name, category, shop_id, qty, min_qty')
+            .select(
+              'id, sku, name, short_name, category, shop_id, qty, min_qty, unit_size, unit_label',
+            )
             .order('category', { ascending: true })
             .order('name', { ascending: true })
             .order('id', { ascending: true })
@@ -107,6 +111,8 @@ export default async function StockPage({
     shop_id: string;
     qty: number;
     min_qty: number;
+    unit_size: number;
+    unit_label: string;
     cost?: number;
     sell_price?: number;
   };
@@ -120,6 +126,10 @@ export default async function StockPage({
       shop: row.shop_id,
       qty: row.qty,
       min: row.min_qty,
+      // ไม่ใช่ราคา จึงส่งให้ทุกคน — คนที่รับของคืนต้องใช้ขนาดม้วนโดยไม่ต้อง
+      // เห็นราคาทุนหรือราคาขาย (0088)
+      unitSize: row.unit_size ?? 0,
+      unitLabel: row.unit_label ?? '',
     };
     if (canSeeStockPrices) {
       item.cost = row.cost ?? 0;

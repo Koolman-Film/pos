@@ -1,9 +1,9 @@
-# Release runbook — post-trial fixes (migrations 0012–0087)
+# Release runbook — post-trial fixes (migrations 0012–0088)
 
 Branch: `claude/service-schedule-compact` (pushed to origin)
 
 ชุดแรกของไฟล์นี้คือ 0012–0037 ที่ออกมาจากการทดลองใช้ ตั้งแต่นั้นมีงานตามมาอีก
-หลายชุดจนถึง 0087 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
+หลายชุดจนถึง 0088 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
 ไว้ให้หมดแล้ว
 
 This is the batch that came out of the shop's trial run. [DEPLOYMENT.md](./DEPLOYMENT.md)
@@ -27,7 +27,7 @@ work FIRST (step 2) — the new code reads columns that do not exist yet, so a
 deploy that lands before the migrations will 500 on the ticket list, the
 dashboard and the accounting page.
 
-## 2. Database — migrations 0012–0087
+## 2. Database — migrations 0012–0088
 
 ```bash
 npx supabase login                       # personal access token, once
@@ -37,8 +37,8 @@ npx supabase db push                     # applies 0012 … 0037 only
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
-`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 69 ในตารางข้างล่าง
-(`release-0019` … `release-0087` และ `repair-categories-and-services.sql`)
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 70 ในตารางข้างล่าง
+(`release-0019` … `release-0088` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -127,7 +127,8 @@ it twice changes nothing, and each records its versions in
 | 66    | `supabase/release-0085.sql`                   | a normal connection                                 |
 | 67    | `supabase/release-0086.sql`                   | a normal connection                                 |
 | 68    | `supabase/release-0087.sql`                   | a normal connection                                 |
-| 69    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 69    | `supabase/release-0088.sql`                   | a normal connection                                 |
+| 70    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -319,6 +320,12 @@ In this order, as an admin:
     และบรรทัดการโอนบอกค่าธรรมเนียมกำกับไว้
 12. **เช็คที่รอเรียกเก็บ** — หน้าเดียวกัน ต้องมีหัวข้อ "เช็คและเงินที่รอเรียกเก็บ"
     ถ้าสาขานั้นมีเช็คค้าง และยอดคงเหลือข้างบนต้อง**ไม่**รวมมันเข้าไป
+13. **คืนฟิล์มไม่เต็มม้วน** (0088) — เปิด PO ที่ขายฟิล์มม้วนที่ชื่อลงท้ายด้วย
+    ขนาด เช่น `… 40% (250)` แล้วดูที่ การคืนสินค้า ช่องจำนวนต้องมี **ตร.ฟ.**
+    กำกับอยู่ข้างหลัง ใส่ 300 ลงไป บรรทัดใต้แถวต้องอ่านว่า
+    `คืนมา 300 ตร.ฟ. = 1.2 หน่วย` — ถ้ามันยังถามเป็นสัดส่วนของม้วน แปลว่าชื่อ
+    สินค้าไม่ได้ลงท้ายด้วยขนาด ให้ไปกรอก **ปริมาณต่อหน่วย** ที่ สต็อกสินค้า →
+    แก้ไขสินค้า แทน (กรอกครั้งเดียวต่อสินค้า)
 
 ## 4. หลังขึ้นระบบ — งานที่ต้องทำด้วยมือ
 
@@ -389,9 +396,9 @@ In this order, as an admin:
    พวกนั้นอัปโหลดจริงมาตลอด แค่เปิดดูไม่ได้ ตอนนี้เปิดได้แล้ว)
 
 10. **สถานะ PO เก่าไม่ถูกไล่คำนวณใหม่** (0081) — สถานะจะขยับมาถูกต้องเมื่อมี
-   กิจกรรมถัดไปเกิดกับใบนั้น (บันทึกรายการ รับเงิน ส่งของ) ถ้าอยากให้ไล่ปรับ
-   ทั้งหมดในครั้งเดียว ขอสคริปต์เพิ่มได้ — ตั้งใจไม่ใส่มาในไฟล์ เพราะมันจะทำให้
-   สถานะของ PO เก่าหลายใบขยับพร้อมกันโดยไม่มีใครดู
+    กิจกรรมถัดไปเกิดกับใบนั้น (บันทึกรายการ รับเงิน ส่งของ) ถ้าอยากให้ไล่ปรับ
+    ทั้งหมดในครั้งเดียว ขอสคริปต์เพิ่มได้ — ตั้งใจไม่ใส่มาในไฟล์ เพราะมันจะทำให้
+    สถานะของ PO เก่าหลายใบขยับพร้อมกันโดยไม่มีใครดู
 
 11. **ใบงานเก่าที่ปิดแล้วยังไม่ถูกล็อก** — ดูหัวข้อถัดไป
 
