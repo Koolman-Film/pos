@@ -113,12 +113,17 @@ function Figure({
   );
 }
 
-/** หัวข้อสามเรื่องที่ตารางแบ่งไว้ — ใช้ร่วมกับสำเนาที่พิมพ์ลงกระดาษ. */
-const SECTION_TINT = {
-  order: 'rgba(100, 116, 139, 0.10)',
-  payment: 'rgba(63, 107, 51, 0.10)',
-  balance: 'rgba(178, 58, 72, 0.10)',
-};
+/*
+  สามหัวข้อแยกด้วยเส้นกรอบ ไม่ใช่พื้นสี (ร้านขอ 7 พ.ย. 2569).
+
+  พื้นสีอ่อน ๆ ใต้ทุกเซลล์ แข่งกับตัวหนังสือที่อยู่บนมัน และยิ่งคอลัมน์เยอะ
+  หน้าก็ยิ่งกลายเป็นแถบสีสามแถบที่ตัวเลขจมอยู่ข้างใน เส้นกรอบทำงานเดียวกัน —
+  บอกว่าช่องไหนเป็นเรื่องไหน — โดยไม่แตะพื้นที่ที่ตัวเลขอยู่ และเข้มได้โดยไม่
+  ทำให้อ่านยากขึ้น พื้นสีจึงเหลือไว้ที่แถวหัวข้ออย่างเดียว
+
+  นิยามอยู่ใน app/globals.css คลาสเดียวกับที่กระดาษใช้ ทั้งสองที่จึงเปลี่ยน
+  พร้อมกันเสมอ แทนที่จะเป็นสีสองชุดที่ต้องจำว่าต้องแก้ทั้งคู่
+*/
 
 const cell = { padding: '6px 8px', verticalAlign: 'top' as const };
 const num = { ...cell, textAlign: 'right' as const, whiteSpace: 'nowrap' as const };
@@ -168,20 +173,23 @@ function GroupCard({
           ปล่อยให้ยืดหยุ่นเต็มที่ จอแคบจะบีบช่องสินค้าจนชื่อแตกเป็นห้าบรรทัด
           อ่านไม่ออก — เลื่อนตารางซ้ายขวาอ่านง่ายกว่าอ่านคำที่ถูกหั่น
         */}
-        <table className="w-full text-xs" style={{ borderCollapse: 'collapse', minWidth: 900 }}>
+        <table
+          className="report-sections w-full text-xs"
+          style={{ borderCollapse: 'collapse', minWidth: 900 }}
+        >
           <thead>
             {/*
               แถวหัวข้อใหญ่ สามเรื่อง — colSpan ไม่ใช่การตกแต่ง มันคือสิ่งที่
               บอกว่าสี่ช่องนี้เป็นเรื่องเดียวกัน
             */}
-            <tr style={{ textAlign: 'center' }}>
-              <th colSpan={4} style={{ ...cell, background: SECTION_TINT.order }}>
+            <tr className="section-head" style={{ textAlign: 'center' }}>
+              <th className="sec-order" colSpan={4} style={cell}>
                 1. การสั่งซื้อ
               </th>
-              <th colSpan={4} style={{ ...cell, background: SECTION_TINT.payment }}>
+              <th className="sec-pay" colSpan={4} style={cell}>
                 2. การชำระเงิน
               </th>
-              <th colSpan={2} style={{ ...cell, background: SECTION_TINT.balance }}>
+              <th className="sec-bal" colSpan={2} style={cell}>
                 3. จำนวนเงินคงค้างชำระ
               </th>
             </tr>
@@ -211,17 +219,25 @@ function GroupCard({
               ตาราง ซึ่งอาจอยู่คนละหน้ากระดาษแล้ว
             */}
             <tr style={{ borderTop: '1.5px solid var(--line-strong)', fontWeight: 700 }}>
-              <td colSpan={3} style={cell}>
+              <td className="sec-order" colSpan={3} style={cell}>
                 รวม {group.orders} ใบ
               </td>
-              <td style={num}>{fmt(group.total)}</td>
-              <td colSpan={2} style={{ ...cell, textAlign: 'right' }}>
+              <td className="sec-order" style={num}>
+                {fmt(group.total)}
+              </td>
+              <td className="sec-pay" colSpan={2} style={{ ...cell, textAlign: 'right' }}>
                 ชำระแล้ว
               </td>
-              <td style={num}>{fmt(group.paid)}</td>
-              <td style={cell}></td>
-              <td style={num}>{fmt(group.reported)}</td>
-              <td style={num}>{fmt(group.netOutstanding)}</td>
+              <td className="sec-pay" style={num}>
+                {fmt(group.paid)}
+              </td>
+              <td className="sec-pay" style={cell}></td>
+              <td className="sec-bal" style={num}>
+                {fmt(group.reported)}
+              </td>
+              <td className="sec-bal" style={num}>
+                {fmt(group.netOutstanding)}
+              </td>
             </tr>
           </tfoot>
         </table>
@@ -254,7 +270,7 @@ function OrderRows({
   const orderCells = (
     <>
       {/* เลขเอกสารขึ้นบรรทัดใหม่กลางคำ อ่านแล้วเหมือนคนละใบ */}
-      <td style={{ ...cell, background: SECTION_TINT.order, whiteSpace: 'nowrap' }} rowSpan={span}>
+      <td className="sec-order" style={{ ...cell, whiteSpace: 'nowrap' }} rowSpan={span}>
         <Link href={`/wholesale/${row.orderId}`} style={{ color: 'var(--primary)' }}>
           {row.orderId}
         </Link>
@@ -273,10 +289,10 @@ function OrderRows({
           {counterpart}: {row.counterpart}
         </span>
       </td>
-      <td style={{ ...cell, background: SECTION_TINT.order, whiteSpace: 'nowrap' }} rowSpan={span}>
+      <td className="sec-order" style={{ ...cell, whiteSpace: 'nowrap' }} rowSpan={span}>
         {row.deliveredAt ? fmtThaiDayString(row.deliveredAt) : 'ยังไม่ส่ง'}
       </td>
-      <td style={{ ...cell, background: SECTION_TINT.order }} rowSpan={span}>
+      <td className="sec-order" style={cell} rowSpan={span}>
         {row.items.length === 0 ? (
           '—'
         ) : (
@@ -289,7 +305,7 @@ function OrderRows({
           </ul>
         )}
       </td>
-      <td style={{ ...num, background: SECTION_TINT.order }} rowSpan={span}>
+      <td className="sec-order" style={num} rowSpan={span}>
         {fmt(row.total)}
       </td>
     </>
@@ -297,7 +313,7 @@ function OrderRows({
 
   const balanceCells = (
     <>
-      <td style={{ ...num, background: SECTION_TINT.balance }} rowSpan={span}>
+      <td className="sec-bal" style={num} rowSpan={span}>
         {row.reported > 0.005 ? (
           <b style={{ color: '#8A5A12' }}>{fmt(row.reported)}</b>
         ) : (
@@ -305,9 +321,9 @@ function OrderRows({
         )}
       </td>
       <td
+        className="sec-bal"
         style={{
           ...num,
-          background: SECTION_TINT.balance,
           fontWeight: 600,
           color: row.netOutstanding > 0.005 ? '#B23A48' : undefined,
         }}
@@ -333,7 +349,7 @@ function OrderRows({
     return (
       <tr style={{ borderTop: '1px solid var(--line)' }}>
         {orderCells}
-        <td colSpan={4} style={{ ...cell, color: 'var(--ink-faint)' }}>
+        <td className="sec-pay" colSpan={4} style={{ ...cell, color: 'var(--ink-faint)' }}>
           ยังไม่มีการชำระเงิน
         </td>
         {balanceCells}
@@ -365,12 +381,18 @@ function PaymentCells({ pay }: { pay: SalesReportRow['payments'][number] }) {
   const tone = INK[payInk(pay) as keyof typeof INK];
   return (
     <>
-      <td style={{ ...cell, whiteSpace: 'nowrap' }}>
+      <td className="sec-pay" style={{ ...cell, whiteSpace: 'nowrap' }}>
         {pay.paidAt ? fmtThaiDayString(pay.paidAt) : '—'}
       </td>
-      <td style={cell}>{pay.method}</td>
-      <td style={num}>{fmt(pay.amount)}</td>
-      <td style={{ ...cell, color: tone, whiteSpace: 'nowrap' }}>{text}</td>
+      <td className="sec-pay" style={cell}>
+        {pay.method}
+      </td>
+      <td className="sec-pay" style={num}>
+        {fmt(pay.amount)}
+      </td>
+      <td className="sec-pay" style={{ ...cell, color: tone, whiteSpace: 'nowrap' }}>
+        {text}
+      </td>
     </>
   );
 }

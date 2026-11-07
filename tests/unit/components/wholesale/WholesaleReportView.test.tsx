@@ -217,6 +217,37 @@ describe('รายงานสรุปการขาย — สามหั�
     expect(within(table()).getByText('ยังไม่มีการชำระเงิน')).toBeInTheDocument();
   });
 
+  it('กรองตามสถานะได้ตอนดูรายงาน ไม่ใช่เฉพาะตอนดูรายการ', async () => {
+    /*
+      ตัวกรองสถานะมีอยู่แล้วและรายงานก็ฟังมันอยู่แล้ว แต่มันเป็นแถวชิปที่ขึ้น
+      เฉพาะมุมมองรายการ พอสลับมาดูรายงานจึงไม่มีทางเลือกว่าจะดูเฉพาะใบที่ค้าง
+      ชำระ ทั้งที่นั่นคือคำถามหลักที่คนเปิดรายงานนี้ถาม (ร้านขอ 7 พ.ย. 2569)
+    */
+    const user = renderList([
+      ...WITH_PAYMENTS,
+      po('WS-CM-0012', 'cm', { customerId: 2, status: 'ปิดงานแล้ว' }),
+    ]);
+    await openReport(user);
+    expect(figure('ยอดขายรวม')).toContain('20,000.00');
+
+    await user.selectOptions(screen.getByLabelText('กรองตามสถานะ'), 'ค้างชำระ');
+    // เหลือแต่ใบที่ค้างชำระ — 10,000 ของอีกใบหายไปจากทุกยอด
+    expect(figure('ยอดขายรวม')).toContain('10,000.00');
+    expect(within(onScreen()).queryByText('ร้านดีคาร์แคร์')).not.toBeInTheDocument();
+  });
+
+  it('สถานะที่เลือกไว้ ติดไปกับมุมมองรายการด้วย — ตัวกรองชุดเดียวกัน', async () => {
+    // ถ้าเป็นสถานะคนละชุด สลับมุมมองแล้วตัวเลขจะเปลี่ยนโดยไม่มีใครสั่ง
+    const user = renderList([
+      ...WITH_PAYMENTS,
+      po('WS-CM-0012', 'cm', { customerId: 2, status: 'ปิดงานแล้ว' }),
+    ]);
+    await openReport(user);
+    await user.selectOptions(screen.getByLabelText('กรองตามสถานะ'), 'ปิดงานแล้ว');
+    await user.click(screen.getByRole('button', { name: 'รายการ' }));
+    expect(screen.getByRole('button', { name: /^ปิดงานแล้ว/ })).toHaveClass('pill-active');
+  });
+
   it('แถวรวมของกลุ่ม มีคำกำกับว่าตัวเลขคือยอดอะไร', async () => {
     // ตัวเลขเปล่า ๆ ใต้ตารางยาว บังคับให้นับคอลัมน์ขึ้นไปหาหัวตาราง
     const user = renderList(WITH_PAYMENTS);
