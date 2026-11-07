@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
 
 import { PeriodShopFilter } from '@/components/ui/PeriodShopFilter';
-import { fmt, fmtThaiDate, fmtThaiDayString } from '@/lib/domain/format';
+import { fmt, fmtQty, fmtThaiDate, fmtThaiDayString } from '@/lib/domain/format';
 import {
   currentMonthValue,
   daysAgoValue,
@@ -29,7 +29,7 @@ import { deliveryProgress, hasUndelivered } from '@/lib/domain/deliveries';
 import { isWsFlag, matchesWsFlag, WS_FLAG_LABELS, type WsFlag } from '@/lib/alerts/wholesale';
 
 import { pendingCheques } from './cheques';
-import { buildSalesReport, type SalesReportGroupBy } from './salesReport';
+import { buildSalesReport, paymentStatusText, type SalesReportGroupBy } from './salesReport';
 import { WholesaleReport } from './WholesaleReport';
 
 import {
@@ -354,17 +354,40 @@ export function WholesaleList({
         วันที่เปิด: r.openedOn,
         วันที่ส่งของ: r.deliveredAt,
         [otherHead]: r.counterpart,
+        // ชื่อคอลัมน์ตรงกับบนจอ ไม่งั้นไฟล์กับหน้าจอกลายเป็นสองภาษา
+        สินค้า: r.items.map((it) => `${it.name} × ${fmtQty(it.qty)}`).join(', '),
         สถานะ: r.status,
         กำหนดชำระ: r.dueAt,
         เลยกำหนด: r.overdue ? 'ใช่' : '',
         ยอดสุทธิ: r.total,
         ชำระแล้ว: r.paid,
-        'แจ้งแล้ว รอยืนยัน': r.reported,
+        รอยืนยันเงินเข้า: r.reported,
         ค้างชำระ: r.outstanding,
+        คงค้างสุทธิ: r.netOutstanding,
       })),
+    );
+    /*
+      การชำระเงินอยู่คนละชีต ไม่ใช่แถวเพิ่มในชีตแรก.
+
+      PO ที่จ่ายมาสามงวดจะกลายเป็นสามแถว แล้วยอดสุทธิของมันจะถูกนับสามรอบใน
+      pivot แรกที่ใครก็ตามลากขึ้นมา — ชีตแรกจึงต้องเป็นหนึ่งแถวต่อหนึ่งใบเสมอ
+    */
+    const payments = report.groups.flatMap((g) =>
+      g.rows.flatMap((r) =>
+        r.payments.map((p) => ({
+          [groupHead]: g.label,
+          'เลขที่ PO': r.orderId,
+          สาขา: shopName(r.shop, accessibleShops),
+          วันที่ชำระ: p.paidAt,
+          วิธีการชำระ: p.method,
+          จำนวนที่ชำระ: p.amount,
+          สถานะ: paymentStatusText(p),
+        })),
+      ),
     );
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'สรุปการขาย');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payments), 'การชำระเงิน');
     XLSX.writeFile(wb, `wholesale-sales-report-${exportStamp()}.xlsx`);
   }
 
@@ -883,59 +906,185 @@ export function WholesaleList({
             {view === 'report' && (
               <>
                 <p>{periodText}</p>
+                {/*
+                  สามหัวข้อบนกระดาษ ตรงกับบนจอ (ร้านขอ 7 พ.ย. 2569).
+
+                  การสั่งซื้อ · การชำระเงิน · จำนวนเงินคงค้างชำระ — สามเรื่องนี้
+                  ถูกอ่านคนละเวลาและคนละคน การเรียงเป็นคอลัมน์ยาวแถวเดียวบังคับ
+                  ให้ทุกคนอ่านทุกช่องเพื่อหาช่องของตัวเอง
+                */}
                 {report.groups.map((g) => (
                   <div key={g.key} style={{ marginBottom: 16 }}>
-                    <h3>
-                      {g.label} — {g.orders} ใบ
+                    <h3 className="report-group">
+                      {g.label} — {g.orders} ใบ · ค้างชำระ {fmt(g.outstanding)} จากยอดขาย{' '}
+                      {fmt(g.total)}
                     </h3>
-                    <table>
+                    <table className="report-table">
                       <thead>
+                        <tr className="section-head">
+                          <th colSpan={4}>1. การสั่งซื้อ</th>
+                          <th colSpan={4}>2. การชำระเงิน</th>
+                          <th colSpan={2}>3. จำนวนเงินคงค้างชำระ</th>
+                        </tr>
                         <tr>
-                          <th>เลขที่ PO</th>
-                          <th>เปิดเมื่อ</th>
-                          <th>{groupBy === 'customer' ? 'พนักงานขาย' : 'ลูกค้า'}</th>
-                          <th>สถานะ</th>
-                          <th>กำหนดชำระ</th>
-                          <th style={{ textAlign: 'right' }}>ยอดสุทธิ</th>
-                          <th style={{ textAlign: 'right' }}>ชำระแล้ว</th>
-                          <th style={{ textAlign: 'right' }}>ค้างชำระ</th>
+                          <th className="nw">เลขที่ PO</th>
+                          <th className="nw">วันที่ส่งของ</th>
+                          <th>สินค้า</th>
+                          <th className="nw" style={{ textAlign: 'right' }}>
+                            จำนวนเงิน
+                          </th>
+                          <th className="nw">วันที่ชำระ</th>
+                          <th>วิธีการชำระ</th>
+                          <th className="nw" style={{ textAlign: 'right' }}>
+                            จำนวนที่ชำระ
+                          </th>
+                          <th className="nw">สถานะ</th>
+                          <th className="nw" style={{ textAlign: 'right' }}>
+                            รอยืนยันเงินเข้า
+                          </th>
+                          <th className="nw" style={{ textAlign: 'right' }}>
+                            คงค้างสุทธิ
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {g.rows.map((r) => (
-                          <tr key={r.orderId}>
-                            <td>{r.orderId}</td>
-                            <td>{r.openedOn ? fmtThaiDayString(r.openedOn) : '—'}</td>
-                            <td>{r.counterpart}</td>
-                            <td>{r.status}</td>
-                            <td>
-                              {r.dueAt ? fmtThaiDayString(r.dueAt) : '—'}
-                              {r.overdue ? ' (เลยกำหนด)' : ''}
-                            </td>
-                            <td style={{ textAlign: 'right' }}>{fmt(r.total)}</td>
-                            <td style={{ textAlign: 'right' }}>{fmt(r.paid)}</td>
-                            <td style={{ textAlign: 'right' }}>{fmt(r.outstanding)}</td>
-                          </tr>
-                        ))}
+                        {g.rows.flatMap((r) => {
+                          const span = Math.max(1, r.payments.length);
+                          const payCells = (p: (typeof r.payments)[number]) => (
+                            <>
+                              <td className="nw">{p.paidAt ? fmtThaiDayString(p.paidAt) : '—'}</td>
+                              <td>{p.method}</td>
+                              <td className="nw" style={{ textAlign: 'right' }}>
+                                {fmt(p.amount)}
+                              </td>
+                              <td className="nw">{paymentStatusText(p)}</td>
+                            </>
+                          );
+                          return [
+                            <tr key={r.orderId}>
+                              <td className="nw" rowSpan={span}>
+                                {r.orderId}
+                                {accessibleShops.length > 1 && (
+                                  <span style={{ display: 'block' }}>
+                                    {shopName(r.shop, accessibleShops)}
+                                  </span>
+                                )}
+                                {/* อีกมิติหนึ่งเกาะมากับเลขที่ PO — ร้านไม่ได้ขอ
+                                    เป็นคอลัมน์ แต่ทิ้งไปแปลว่ารายงานที่จัดกลุ่ม
+                                    ตามลูกค้า ตอบไม่ได้ว่าใบไหนเซลล์คนไหนขาย */}
+                                <span style={{ display: 'block' }}>
+                                  {groupBy === 'customer' ? 'พนักงานขาย' : 'ลูกค้า'}:{' '}
+                                  {r.counterpart}
+                                </span>
+                              </td>
+                              <td className="nw" rowSpan={span}>
+                                {r.deliveredAt ? fmtThaiDayString(r.deliveredAt) : 'ยังไม่ส่ง'}
+                              </td>
+                              <td rowSpan={span}>
+                                {r.items.length === 0
+                                  ? '—'
+                                  : r.items.map((it, i) => (
+                                      <span key={i} style={{ display: 'block' }}>
+                                        {it.name} × {fmtQty(it.qty)}
+                                      </span>
+                                    ))}
+                              </td>
+                              <td className="nw" rowSpan={span} style={{ textAlign: 'right' }}>
+                                {fmt(r.total)}
+                              </td>
+                              {r.payments.length === 0 ? (
+                                <td colSpan={4}>ยังไม่มีการชำระเงิน</td>
+                              ) : (
+                                payCells(r.payments[0])
+                              )}
+                              <td className="nw" rowSpan={span} style={{ textAlign: 'right' }}>
+                                {r.reported > 0.005 ? fmt(r.reported) : '—'}
+                              </td>
+                              <td className="nw" rowSpan={span} style={{ textAlign: 'right' }}>
+                                {fmt(r.netOutstanding)}
+                                {r.outstanding > 0.005 && r.dueAt && (
+                                  <span style={{ display: 'block' }}>
+                                    กำหนด {fmtThaiDayString(r.dueAt)}
+                                    {r.overdue ? ' (เลยกำหนด)' : ''}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>,
+                            ...r.payments
+                              .slice(1)
+                              .map((p, i) => <tr key={`${r.orderId}-p${i}`}>{payCells(p)}</tr>),
+                          ];
+                        })}
+                        {/* แถวรวมของกลุ่ม — ตัวเลขทุกตัวมีคำกำกับว่าคือยอดอะไร */}
                         <tr>
-                          <th colSpan={5} style={{ textAlign: 'left' }}>
-                            รวม
+                          <th colSpan={3} style={{ textAlign: 'left' }}>
+                            รวม {g.orders} ใบ
                           </th>
-                          <th style={{ textAlign: 'right' }}>{fmt(g.total)}</th>
-                          <th style={{ textAlign: 'right' }}>{fmt(g.paid)}</th>
-                          <th style={{ textAlign: 'right' }}>{fmt(g.outstanding)}</th>
+                          <th className="nw" style={{ textAlign: 'right' }}>
+                            {fmt(g.total)}
+                          </th>
+                          <th colSpan={2} style={{ textAlign: 'right' }}>
+                            ชำระแล้ว
+                          </th>
+                          <th className="nw" style={{ textAlign: 'right' }}>
+                            {fmt(g.paid)}
+                          </th>
+                          <th></th>
+                          <th className="nw" style={{ textAlign: 'right' }}>
+                            {fmt(g.reported)}
+                          </th>
+                          <th className="nw" style={{ textAlign: 'right' }}>
+                            {fmt(g.netOutstanding)}
+                          </th>
                         </tr>
                       </tbody>
                     </table>
                   </div>
                 ))}
-                <table>
+                {/*
+                  ยอดรวมทั้งรายงาน — ตัวเลขเปล่า ๆ ใต้ตารางยาว บังคับให้คนนับ
+                  คอลัมน์ขึ้นไปหาหัวตาราง ซึ่งอยู่คนละหน้ากระดาษไปแล้ว
+                  (ร้านแจ้ง 7 พ.ย. 2569) ตารางนี้จึงพกชื่อยอดมาเอง
+                */}
+                <table className="report-table">
                   <tbody>
                     <tr>
                       <th style={{ textAlign: 'left' }}>รวมทั้งรายงาน ({report.orders} ใบ)</th>
-                      <th style={{ textAlign: 'right' }}>{fmt(report.total)}</th>
-                      <th style={{ textAlign: 'right' }}>{fmt(report.paid)}</th>
-                      <th style={{ textAlign: 'right' }}>{fmt(report.outstanding)}</th>
+                      {/* ชิดขวาเท่ากับตัวเลขที่อยู่ใต้มัน — ป้ายที่ลอยอยู่คนละ
+                          ฝั่งของช่อง ไม่ได้บอกว่ากำกับตัวเลขตัวไหน */}
+                      <th className="nw" style={{ textAlign: 'right' }}>
+                        ยอดขายรวม
+                      </th>
+                      <th className="nw" style={{ textAlign: 'right' }}>
+                        ชำระแล้ว
+                      </th>
+                      <th className="nw" style={{ textAlign: 'right' }}>
+                        รอยืนยันเงินเข้า
+                      </th>
+                      <th className="nw" style={{ textAlign: 'right' }}>
+                        ค้างชำระ
+                      </th>
+                      <th className="nw" style={{ textAlign: 'right' }}>
+                        ค้างสุทธิ
+                      </th>
+                    </tr>
+                    <tr>
+                      <td></td>
+                      <td className="nw" style={{ textAlign: 'right' }}>
+                        {fmt(report.total)}
+                      </td>
+                      <td className="nw" style={{ textAlign: 'right' }}>
+                        {fmt(report.paid)}
+                      </td>
+                      <td className="nw" style={{ textAlign: 'right' }}>
+                        {fmt(report.reported)}
+                      </td>
+                      <td className="nw" style={{ textAlign: 'right' }}>
+                        {fmt(report.outstanding)}
+                      </td>
+                      <td className="nw" style={{ textAlign: 'right' }}>
+                        {fmt(report.netOutstanding)}
+                      </td>
                     </tr>
                   </tbody>
                 </table>
