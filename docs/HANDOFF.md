@@ -63,7 +63,9 @@ and deleted_at is null and not locked`). 8 more are locked.
 commits are on `main` under new hashes. fai should reset that branch to `main` (not
 merge `main` into it) before continuing.
 
-**Migration numbers:** prod is at 0085. **The next free number is 0086.**
+**Migration numbers:** prod is at 0085. `main` has 0086–0089 (fai's second batch,
+merged 2026-11-10, **not yet released**). **The next free number is 0090.** PR #11
+(`fix/ticket-dates-only-when-changed`) still uses 0086 and must be renumbered.
 
 ## Owner actions pending (not code)
 
