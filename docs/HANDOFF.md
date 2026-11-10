@@ -4,10 +4,18 @@ _Last updated 2026-11-10. Update this file at the end of every working session._
 
 ## Where things stand
 
-- **Production** (`finnixpos.kool-man.com`) runs `main` at `1d65740` (deployment
-  `pos-8whn7v5pn`, promoted 2026-11-10), and its database has every migration
-  through **0089**. After the release the production schema matched the rehearsal
-  database on all six schema categories (`supabase/snippets/fingerprint.sql`).
+- **Production** (`finnixpos.kool-man.com`) runs `main` at `eb97ce8` (deployment
+  `pos-reyyvmaa3`, promoted 2026-11-10 ~12:55), and its database has every migration
+  through **0090**. After the 0086–0089 release the production schema matched the
+  rehearsal database on all six schema categories (`supabase/snippets/fingerprint.sql`).
+- **10 Nov, second release (PR #11):** 0090 — `enforce_ticket_dates()` skips an UPDATE
+  that leaves both dates unchanged, so tickets that were inverted before 0085 can be
+  saved again; new tickets and date edits still follow 0085. Function only, no data.
+  Applied with `npx supabase db query --linked -f supabase/release-0090.sql`; checked on
+  a real inverted ticket in a rolled-back block (unchanged-dates save passes, an
+  inverted date edit is still rejected). No runtime errors in the first 10 minutes.
+  Rollback: `vercel promote pos-8whn7v5pn-vivatchais-projects.vercel.app --yes`, then
+  `supabase/snippets/revert-0090.sql` (production's exact 0085 body; rehearsed locally).
 - **10 Nov release (PR #12, fai's second `service-schedule-compact` batch):** 0086–0089 —
   wholesale payment attachments that are really uploaded, transfer fee recorded with the
   transfer, quantity per unit (partial film-roll returns), per-item pickup/delivery
@@ -69,10 +77,10 @@ _Last updated 2026-11-10. Update this file at the end of every working session._
 
 **Data the shop should look at:**
 
-- 19 open tickets have pickup ≤ drop-off. Since 0085 they can't be saved until the date
-  is corrected in the form; **0090** (PR #11, not released) lets them save as long as
-  the dates are not touched. The 7 active ones were sent to the shop on 16 Oct (`select id from pos.tickets where pickup_date <= drop_off_date
-and deleted_at is null and not locked`). 8 more are locked.
+- 18 open tickets have pickup ≤ drop-off (count on 2026-11-10). Since **0090** (released
+  10 Nov) they can be saved as long as the dates are not touched; the warning next to the
+  date fields stays until someone corrects them. The 7 active ones were sent to the shop on 16 Oct (`select id from pos.tickets where pickup_date <= drop_off_date
+and deleted_at is null and not locked`). 5 more are locked.
 - 4 POs whose status disagrees with their data and will be re-derived on next edit:
   WS-FN-0004 (เสร็จสิ้น, nothing paid → ค้างชำระ), WS-FN-0042 (delivered, still
   รออนุมัติราคา → ค้างชำระ), WS-FN-0041 (delivered, total 0, รอจัดส่ง → เสร็จสิ้น),
@@ -82,8 +90,8 @@ and deleted_at is null and not locked`). 8 more are locked.
 commits are on `main` under new hashes. fai should reset that branch to `main` (not
 merge `main` into it) before continuing.
 
-**Migration numbers:** prod is at 0089 (released 2026-11-10). **The next free number
-is 0091** (0090 is PR #11, `fix/ticket-dates-only-when-changed`, not yet released).
+**Migration numbers:** prod is at 0090 (released 2026-11-10). **The next free number
+is 0091.**
 
 ## Owner actions pending (not code)
 

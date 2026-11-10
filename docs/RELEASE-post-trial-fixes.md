@@ -12,7 +12,8 @@
 > **0077–0085** (rows 58–66) were released to production on 2026-10-16 (PR #9).
 > **0086–0089** (rows 67–70) were released to production on 2026-11-10 (PR #12);
 > backup `pos_backup_20261110`, revert `supabase/snippets/revert-0086-0089.sql`.
-> **0090** (row 71) is not yet applied.
+> **0090** (row 71) was released to production on 2026-11-10 (PR #11);
+> revert `supabase/snippets/revert-0090.sql`.
 
 It began as the runbook for the batch that came out of the shop's trial run
 (branch `claude/post-trial-fixes-a16ecc`, now merged) and has grown one row per
