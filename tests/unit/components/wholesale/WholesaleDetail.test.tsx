@@ -889,6 +889,50 @@ describe('WholesaleDetail — การรับเงินแบบเช็�
     expect(screen.getByLabelText('วันที่หน้าเช็ค')).toHaveValue('2026-10-15');
   });
 
+  /*
+    ธนาคารเลือกจากรายการ ไม่ใช่พิมพ์เอง (ร้านขอ 6 พ.ย. 2569).
+
+    ช่องพิมพ์เปล่าทำให้ธนาคารเดียวกันถูกบันทึกได้หลายแบบ แล้วเช็คของธนาคาร
+    เดียวกันก็ไม่รวมกันในรายการเช็คค้างรับ
+  */
+  it('ธนาคารเป็น dropdown ของธนาคารไทย', async () => {
+    const user = userEvent.setup();
+    render(<WholesaleDetail order={chequeOrder} canDo={() => true} />);
+
+    const bank = screen.getByLabelText('ธนาคารของเช็ค');
+    expect(bank.tagName).toBe('SELECT');
+    const names = within(bank)
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(names).toContain('กสิกรไทย');
+    expect(names).toContain('ไทยพาณิชย์');
+    expect(names).toContain('ออมสิน');
+
+    await user.selectOptions(bank, 'ไทยพาณิชย์');
+    expect(bank).toHaveValue('ไทยพาณิชย์');
+  });
+
+  it('ชื่อธนาคารที่พิมพ์ไว้ก่อนมี dropdown ยังอยู่ในรายการ', () => {
+    // ถ้ามันหลุดไป การเปิดใบเก่ามาแก้ยอดเงินจะล้างธนาคารของเช็คทิ้งโดยไม่มีใคร
+    // ตั้งใจ — หลักฐานว่าเป็นเช็คของธนาคารไหน หายไปพร้อมกับการกดบันทึก
+    render(<WholesaleDetail order={chequeOrder} canDo={() => true} />);
+    const bank = screen.getByLabelText('ธนาคารของเช็ค');
+    expect(within(bank).getByRole('option', { name: 'KBANK' })).toBeInTheDocument();
+    expect(bank).toHaveValue('KBANK');
+  });
+
+  it('เลือกธนาคารแล้ว ค่าไปถึงตอนบันทึก PO', async () => {
+    const user = userEvent.setup();
+    const onSaveOrder = vi.fn();
+    render(<WholesaleDetail order={chequeOrder} canDo={() => true} onSaveOrder={onSaveOrder} />);
+
+    await user.selectOptions(screen.getByLabelText('ธนาคารของเช็ค'), 'กรุงเทพ');
+    await user.click(screen.getByRole('button', { name: 'บันทึก PO' }));
+
+    const sent = onSaveOrder.mock.calls[0][0] as WsOrder;
+    expect(sent.payments[0].chequeBank).toBe('กรุงเทพ');
+  });
+
   it('ซ่อนปุ่มยืนยันเงินเข้าเมื่อไม่มีสิทธิ์', () => {
     render(
       <WholesaleDetail
@@ -952,6 +996,44 @@ describe('WholesaleDetail — การรับเงินแบบเช็�
     // each side as meaning something different.
     expect(sheet.textContent).toContain('ยังไม่ได้ขึ้นเงิน');
     expect(sheet.textContent).toContain('หนี้จะถูกตัดเมื่อเช็คขึ้นเงิน');
+  });
+
+  /*
+    ใบเสร็จบอกแค่ จ่ายวันไหน และจ่ายเท่าไหร่ (ร้านขอ 27 ต.ค. 2569).
+
+    แหล่งรับเงินคือบัญชีฝั่งร้านที่เงินก้อนนั้นไปลง ลูกค้าไม่ได้ถือใบนี้ไว้
+    เพื่อรู้เรื่องนั้น — ส่วนรายละเอียดเช็คอยู่ต่อ เพราะนั่นคือตัวเช็คที่
+    ลูกค้ายื่นมาเอง ไม่ใช่บัญชีของร้าน
+  */
+  it('ใบเสร็จไม่บอกว่าเงินเข้าบัญชีไหนของร้าน', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'print').mockImplementation(() => {});
+    render(
+      <WholesaleDetail
+        order={
+          {
+            ...chequeOrder,
+            payments: [
+              {
+                ...chequePayment,
+                method: 'กสิกร ออมทรัพย์',
+                chequeNo: '',
+                chequeBank: '',
+                chequeDate: '',
+              },
+            ],
+          } as unknown as WsOrder
+        }
+        canDo={() => true}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /ใบเสร็จรับเงิน/ }));
+    const sheet = document.querySelector('.print-area') as HTMLElement;
+    expect(sheet.textContent).not.toContain('กสิกร ออมทรัพย์');
+    // วันที่กับยอดยังต้องอยู่ครบ — นั่นคือทั้งหมดที่ใบเสร็จรับรอง
+    expect(sheet.textContent).toContain('1 ก.ย. 2569');
+    expect(sheet.textContent).toContain('20,000.00');
   });
 });
 

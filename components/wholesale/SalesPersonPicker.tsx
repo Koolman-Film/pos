@@ -30,8 +30,14 @@ export function SalesPersonPicker({
 }: {
   /** The NAME stored on the PO (`orders.sales_by`), not an id. */
   value: string;
+  /** สาขาที่ "เพิ่ม" จะสร้างเซลล์คนใหม่ไว้ใต้ — คือสาขาของ PO ใบนี้. */
   shop: string;
-  /** Already filtered to this branch by the caller. */
+  /**
+   * เซลล์ทุกคนที่ผู้ใช้เข้าถึงได้ รวมชื่อซ้ำแล้ว (ร้านยืนยัน 7 พ.ย. 2569).
+   *
+   * เคยส่งมาเฉพาะของสาขานี้ ซึ่งทำให้สาขาที่ยังไม่มีใครขึ้นทะเบียน เลือกไม่ได้
+   * เลยสักคน ทั้งที่เป็นเซลล์คนเดียวกันที่วิ่งขายทุกสาขา
+   */
   people: SalesPerson[];
   /** `options.manage` — selecting is for everyone, editing the list is not. */
   canManage: boolean;

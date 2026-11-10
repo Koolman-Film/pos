@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import { uploadAttachments } from '@/lib/storage/attachments';
+import { signedUrl } from '@/lib/storage/signedUrls';
 import { createPortal, flushSync } from 'react-dom';
 import { downloadBase64 } from '@/lib/browser/download';
 
@@ -12,10 +13,12 @@ import { DEFAULT_PERIOD, isInPeriod } from '@/lib/domain/period';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard';
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { AttachmentPeek } from '@/components/ui/AttachmentPeek';
 import { FilePreview } from '@/components/ui/FilePreview';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { LEGACY_METHOD_SUFFIX } from '@/lib/domain/payAccount';
+import { movesMoney, paidWithoutDate } from '@/lib/domain/expenseMoney';
 
 import { groupExpenseReport, NO_SOURCE } from './expenseReport';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -395,9 +398,21 @@ export function AccountingModule({
   }
   const isPettySource = (e: { shop: string; source: string }) =>
     e.source === 'เงินสดย่อย' || !!pettyNames.get(e.shop)?.has(e.source);
-  const cashSpent = shopExpensesAllCat
-    .filter((e) => isPettySource(e) && e.status === 'จ่ายแล้ว')
+  /*
+    กฎเดียวกับฝั่งการจัดการเงิน ไม่ใช่กฎที่เขียนขึ้นเองตรงนี้ (ร้านเจอ 31 ต.ค.
+    2569). ของเดิมถามแค่สถานะ ส่วน `loadMoneyData` ถามวันที่จ่ายด้วย — แถวที่
+    ติดจ่ายแล้วแต่ไม่มีวันที่จึงถูกนับข้างเดียว แล้วสองหน้าจออ่านยอดเงินสดย่อย
+    ของบัญชีเดียวกันได้คนละตัวเลข
+  */
+  // `dateObj` คือวันที่จ่ายของแถวนี้ (หน้านี้แปลง `paid_at` เป็น Date ไว้ให้ช่อง
+  // แก้วันที่) — แปลงชื่อตรงนี้ทีเดียว กฎจะได้ไม่ต้องรู้จักรูปข้อมูลของหน้าจอ
+  const asMoney = (e: ExpenseView) => ({ status: e.status, paidAt: e.dateObj });
+  const cashSpentRows = shopExpensesAllCat.filter(isPettySource);
+  const cashSpent = cashSpentRows
+    .filter((e) => movesMoney(asMoney(e)))
     .reduce((s, e) => s + Number(e.amount), 0);
+  // เงินที่ไม่มียอดไหนนับได้ — ต้องบอก ไม่ใช่ปล่อยให้หายเงียบ ๆ
+  const cashUndated = cashSpentRows.filter((e) => paidWithoutDate(asMoney(e)));
   const cashBalance = cashTopups - cashSpent;
   /*
     เงินสดย่อย เข้าและออก ในรายการเดียว.
@@ -679,7 +694,7 @@ export function AccountingModule({
     setOpeningPath(a.path);
     startTransition(async () => {
       try {
-        const res = await attachmentUrlAction(a.path);
+        const res = await signedUrl(a.path, attachmentUrlAction);
         if (res.url) setPreview({ url: res.url, fileName: a.fileName, mimeType: a.mimeType ?? '' });
       } finally {
         setOpeningPath(null);
@@ -1008,6 +1023,14 @@ export function AccountingModule({
             <p className="text-[11px] mt-1" style={{ color: 'var(--primary)', opacity: 0.7 }}>
               เติมแล้ว {fmt(cashTopups)} &minus; จ่ายไป {fmt(cashSpent)}
             </p>
+            {cashUndated.length > 0 && (
+              <p className="text-[11px] mt-1 font-medium" style={{ color: '#B23A48' }}>
+                <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+                อีก {cashUndated.length} รายการติดจ่ายแล้วแต่ไม่ได้ลงวันที่ รวม{' '}
+                {fmt(cashUndated.reduce((s, e) => s + Number(e.amount), 0))} — ยังไม่ถูกนับ
+                ใส่วันที่จ่ายให้ครบแล้วยอดจะตรง
+              </p>
+            )}
           </div>
         </div>
         {/* สรุปเงินรอรับคืน Finnix — only when the period holds any. */}
@@ -1784,20 +1807,27 @@ export function AccountingModule({
                           className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
                           style={{ background: 'var(--surface)', color: 'var(--primary)' }}
                         >
-                          <button
-                            onClick={() => openAttachment(a)}
-                            className="flex items-center gap-1.5"
-                            title={`ดู ${a.fileName}`}
+                          <AttachmentPeek
+                            path={a.path}
+                            fileName={a.fileName}
+                            mimeType={a.mimeType ?? ''}
+                            urlAction={attachmentUrlAction}
                           >
-                            <i
-                              className={`fa-solid ${
-                                openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
-                              }`}
-                            ></i>
-                            <span className="truncate" style={{ maxWidth: 160 }}>
-                              {a.fileName}
-                            </span>
-                          </button>
+                            <button
+                              onClick={() => openAttachment(a)}
+                              className="flex items-center gap-1.5"
+                              title={`ดู ${a.fileName}`}
+                            >
+                              <i
+                                className={`fa-solid ${
+                                  openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
+                                }`}
+                              ></i>
+                              <span className="truncate" style={{ maxWidth: 160 }}>
+                                {a.fileName}
+                              </span>
+                            </button>
+                          </AttachmentPeek>
                           {detachAction && (
                             <button
                               onClick={() => removeAttachment(a)}
@@ -1881,23 +1911,30 @@ export function AccountingModule({
                     {e.attachments && e.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {e.attachments.map((a) => (
-                          <button
+                          <AttachmentPeek
                             key={a.id}
-                            onClick={() => openAttachment(a)}
-                            disabled={openingPath === a.path}
-                            className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                            style={{ background: 'var(--paper)', color: 'var(--primary)' }}
-                            title={`เปิด ${a.fileName}`}
+                            path={a.path}
+                            fileName={a.fileName}
+                            mimeType={a.mimeType ?? ''}
+                            urlAction={attachmentUrlAction}
                           >
-                            <i
-                              className={`fa-solid ${
-                                openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
-                              }`}
-                            ></i>
-                            <span className="truncate" style={{ maxWidth: 160 }}>
-                              {a.fileName}
-                            </span>
-                          </button>
+                            <button
+                              onClick={() => openAttachment(a)}
+                              disabled={openingPath === a.path}
+                              className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                              style={{ background: 'var(--paper)', color: 'var(--primary)' }}
+                              title={`เปิด ${a.fileName}`}
+                            >
+                              <i
+                                className={`fa-solid ${
+                                  openingPath === a.path ? 'fa-spinner fa-spin' : 'fa-paperclip'
+                                }`}
+                              ></i>
+                              <span className="truncate" style={{ maxWidth: 160 }}>
+                                {a.fileName}
+                              </span>
+                            </button>
+                          </AttachmentPeek>
                         ))}
                       </div>
                     )}

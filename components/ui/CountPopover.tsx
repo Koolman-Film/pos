@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { fmt } from '@/lib/domain/format';
-import { useClampIntoReadableArea } from '@/components/ui/useClampIntoReadableArea';
+import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import type { CountItem } from '@/components/dailyReport/buildDailyReport';
 
 /**
@@ -65,7 +66,11 @@ export function CountPopover({
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) close();
+      // กล่องอยู่คนละที่ใน DOM แล้ว การถามแค่ `wrapRef` จะปิดตัวเองทันทีที่
+      // คลิกลิงก์ข้างในกล่อง
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      close();
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') close();
@@ -89,7 +94,64 @@ export function CountPopover({
     timer.current = null;
   };
 
-  useClampIntoReadableArea(panelRef, open, items.length);
+  const mounted = useIsMounted();
+  const [place, setPlace] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+
+  /*
+    วางกล่องด้วยพิกัดของหน้าต่าง แล้วแขวนไว้ที่ body (ร้านเจอซ้ำ 16 ต.ค. 2569).
+
+    สองรอบก่อนหน้านี้แก้ด้วยการเลื่อนกล่องให้อยู่ในคอลัมน์เนื้อหา ซึ่งแก้ได้
+    เฉพาะตอนที่สิ่งที่บังคือขอบจอ — แต่ของจริงที่ตัดกล่องคือ **บรรพบุรุษที่มี
+    overflow** ตารางในรายงานห่อด้วย `overflow-x-auto` เพื่อให้เลื่อนดูคอลัมน์
+    ได้บนมือถือ และกล่อง absolute ที่อยู่ข้างในนั้นถูกกล่องนั้นตัดเสมอ ไม่ว่า
+    จะเลื่อนไปไหน กล่องที่ว่างเปล่าในภาพคือกล่องที่ถูกตัดจนหมดทั้งใบ
+
+    ย้ายไปไว้ที่ body จึงไม่เหลือบรรพบุรุษให้ตัด และเปลี่ยนเป็น `fixed` เพราะ
+    พิกัดที่วัดจาก `getBoundingClientRect` เป็นพิกัดของหน้าต่างอยู่แล้ว
+
+    ความสูงถูกหนีบด้วยที่ว่างจริงใต้ตัวเลข ถ้าข้างล่างไม่พอก็พลิกขึ้นไปข้างบน
+    เลือกด้านที่มีที่มากกว่า แทนที่จะยืนยันกางลงล่างแล้วโดนขอบจอตัด
+  */
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place1 = () => {
+      const anchor = wrapRef.current?.getBoundingClientRect();
+      const el = panelRef.current;
+      if (!anchor || !el) return;
+
+      const margin = 8;
+      const column = document.querySelector('main')?.getBoundingClientRect();
+      const minLeft = Math.max(column ? column.left : 0, 0) + margin;
+      const maxRight =
+        Math.min(column ? column.right : window.innerWidth, window.innerWidth) - margin;
+
+      const width = el.offsetWidth;
+      // ชิดขวาของตัวเลขก่อน แล้วค่อยหนีบเข้าพื้นที่อ่านได้ — ตัวเลขส่วนใหญ่
+      // ชิดขวาของตาราง กล่องจึงควรกางไปทางซ้าย
+      let left = anchor.right - width;
+      if (left + width > maxRight) left = maxRight - width;
+      if (left < minLeft) left = minLeft;
+
+      const below = window.innerHeight - anchor.bottom - margin;
+      const above = anchor.top - margin;
+      // ต่ำกว่านี้คือกล่องที่เปิดแล้วอ่านอะไรไม่ได้ ดีกว่าพลิกขึ้นไปข้างบน
+      const MIN_USEFUL = 120;
+      const downward = below >= MIN_USEFUL || below >= above;
+      setPlace({
+        left,
+        top: downward ? anchor.bottom + 4 : Math.max(margin, anchor.top - 4 - el.offsetHeight),
+        maxHeight: Math.max(96, downward ? below : above),
+      });
+    };
+    place1();
+    // เลื่อนหน้าหรือย่อขยายแล้วตัวเลขย้ายที่ กล่องต้องตามไป ไม่ใช่ค้างอยู่ที่เดิม
+    window.addEventListener('scroll', place1, true);
+    window.addEventListener('resize', place1);
+    return () => {
+      window.removeEventListener('scroll', place1, true);
+      window.removeEventListener('resize', place1);
+    };
+  }, [open, items.length]);
 
   const total = items.reduce((n, i) => n + i.amount, 0);
 
@@ -111,87 +173,86 @@ export function CountPopover({
       >
         {count}
       </button>
-      {open && (
-        <span
-          id={panelId}
-          role="dialog"
-          aria-label={title}
-          /* กล่องที่ลอยอยู่ตอนกดแคป ไม่ใช่ส่วนหนึ่งของรายงาน */
-          data-capture-hide=""
-          ref={panelRef}
-          className="absolute z-30 rounded-xl p-2 text-left"
-          style={{
-            top: 'calc(100% + 4px)',
-            /*
-              ตั้งต้นชิดขวาของตัวเลข แล้วค่อยเลื่อนให้อยู่ในจอ.
-
-              ตัวเลขจำนวนส่วนใหญ่อยู่ชิดขวาของตาราง กล่องจึงควรกางไปทางซ้าย —
-              แต่ตัวเลขบนการ์ดสรุปอยู่ชิดซ้ายของหน้า กล่องเลยทะลุออกไปทับแถบ
-              เมนูจนอ่านไม่ได้ (ร้านเจอ 2 ต.ค. 2569) การเดาทิศทางจากตำแหน่งที่
-              เขียนโค้ดไว้ตอบไม่ได้ทุกกรณี โดยเฉพาะบนจอแคบที่ทุกอย่างขยับ —
-              จึงวัดเอาหลังกางแล้วเลื่อนเท่าที่ล้นจริง
-            */
-            right: 0,
-            background: 'var(--surface)',
-            border: '1px solid var(--line)',
-            boxShadow: '0 10px 28px rgba(0,0,0,.16)',
-            minWidth: '15rem',
-            // บนมือถือ กล่องกว้างกว่าจอคือกล่องที่อ่านไม่ได้ ไม่ว่าจะวางตรงไหน
-            maxWidth: 'min(22rem, calc(100vw - 24px))',
-            maxHeight: '16rem',
-            overflowY: 'auto',
-            whiteSpace: 'normal',
-            cursor: 'default',
-          }}
-        >
+      {open &&
+        mounted &&
+        createPortal(
           <span
-            className="block text-xs font-semibold px-1.5 pb-1.5 mb-1"
-            style={{ borderBottom: '1px solid var(--line)' }}
+            id={panelId}
+            role="dialog"
+            aria-label={title}
+            /* กล่องที่ลอยอยู่ตอนกดแคป ไม่ใช่ส่วนหนึ่งของรายงาน */
+            data-capture-hide=""
+            ref={panelRef}
+            /* เมาส์เข้ามาในกล่องแล้วต้องไม่ปิด — มันออกจากตัวเลขไปแล้วตามนิยาม */
+            onPointerEnter={(e) => e.pointerType === 'mouse' && setHovering(true)}
+            onPointerLeave={(e) => e.pointerType === 'mouse' && setHovering(false)}
+            className="fixed z-50 rounded-xl p-2 text-left"
+            style={{
+              left: place?.left ?? -9999,
+              top: place?.top ?? -9999,
+              // ยังไม่ได้วัด = ยังไม่ต้องให้เห็น กันกล่องกระพริบที่มุมซ้ายบน
+              visibility: place ? 'visible' : 'hidden',
+              background: 'var(--surface)',
+              border: '1px solid var(--line)',
+              boxShadow: '0 10px 28px rgba(0,0,0,.16)',
+              minWidth: '15rem',
+              // บนมือถือ กล่องกว้างกว่าจอคือกล่องที่อ่านไม่ได้ ไม่ว่าจะวางตรงไหน
+              maxWidth: 'min(22rem, calc(100vw - 24px))',
+              maxHeight: Math.min(place?.maxHeight ?? 256, 256),
+              overflowY: 'auto',
+              whiteSpace: 'normal',
+              cursor: 'default',
+            }}
           >
-            {title}
-          </span>
-          {items.length === 0 && (
-            <span className="block text-xs px-1.5 py-1" style={{ color: 'var(--ink-faint)' }}>
-              {emptyNote}
-            </span>
-          )}
-          {items.map((item, i) => (
             <span
-              key={`${item.label}-${i}`}
-              className="flex items-start justify-between gap-3 text-xs px-1.5 py-1"
+              className="block text-xs font-semibold px-1.5 pb-1.5 mb-1"
+              style={{ borderBottom: '1px solid var(--line)' }}
             >
-              <span className="min-w-0">
-                {item.href ? (
-                  <Link
-                    href={item.href}
-                    className="font-medium"
-                    style={{ color: 'var(--primary)' }}
-                  >
-                    {item.label}
-                  </Link>
-                ) : (
-                  <span className="font-medium">{item.label}</span>
-                )}
-                {item.note && (
-                  <span className="block" style={{ color: 'var(--ink-faint)' }}>
-                    {item.note}
-                  </span>
-                )}
+              {title}
+            </span>
+            {items.length === 0 && (
+              <span className="block text-xs px-1.5 py-1" style={{ color: 'var(--ink-faint)' }}>
+                {emptyNote}
               </span>
-              <span className="font-semibold whitespace-nowrap">{fmt(item.amount)}</span>
-            </span>
-          ))}
-          {items.length > 1 && (
-            <span
-              className="flex items-center justify-between gap-3 text-xs px-1.5 pt-1.5 mt-1 font-semibold"
-              style={{ borderTop: '1px solid var(--line)' }}
-            >
-              <span>รวม</span>
-              <span className="whitespace-nowrap">{fmt(total)}</span>
-            </span>
-          )}
-        </span>
-      )}
+            )}
+            {items.map((item, i) => (
+              <span
+                key={`${item.label}-${i}`}
+                className="flex items-start justify-between gap-3 text-xs px-1.5 py-1"
+              >
+                <span className="min-w-0">
+                  {item.href ? (
+                    <Link
+                      href={item.href}
+                      className="font-medium"
+                      style={{ color: 'var(--primary)' }}
+                    >
+                      {item.label}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{item.label}</span>
+                  )}
+                  {item.note && (
+                    <span className="block" style={{ color: 'var(--ink-faint)' }}>
+                      {item.note}
+                    </span>
+                  )}
+                </span>
+                <span className="font-semibold whitespace-nowrap">{fmt(item.amount)}</span>
+              </span>
+            ))}
+            {items.length > 1 && (
+              <span
+                className="flex items-center justify-between gap-3 text-xs px-1.5 pt-1.5 mt-1 font-semibold"
+                style={{ borderTop: '1px solid var(--line)' }}
+              >
+                <span>รวม</span>
+                <span className="whitespace-nowrap">{fmt(total)}</span>
+              </span>
+            )}
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }

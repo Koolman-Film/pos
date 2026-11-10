@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { adminClient, assertNoError } from './_helpers';
 
 /**
- * วันที่ส่งงานต้องอยู่หลังวันที่รับงาน (0085) — ตรวจเฉพาะใบใหม่และตอนแก้วันที่ (0086).
+ * วันที่ส่งงานต้องอยู่หลังวันที่รับงาน (0085) — ตรวจเฉพาะใบใหม่และตอนแก้วันที่ (0090).
  *
  * The trigger sits below RLS, so the service-role client is enough: nobody can
  * write a new inverted range through the API.
@@ -12,11 +12,11 @@ import { adminClient, assertNoError } from './_helpers';
  * What this file cannot set up is a row that is ALREADY inverted — by design no
  * API path creates one. That case (an old inverted ticket saved with its dates
  * unchanged must pass) was proven against a local database with the trigger
- * bypassed; see the PR for 0086.
+ * bypassed; see the PR for 0090.
  */
 
 const admin = adminClient();
-const TICKET = 'JT-CM-T0086';
+const TICKET = 'JT-CM-T0090';
 const at = (iso: string) => new Date(`${iso}+07:00`).toISOString();
 
 const base = { shop_id: 'cm', customer_name: 'ทดสอบวันที่', status: 'จองแล้ว' };

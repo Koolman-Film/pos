@@ -33,7 +33,7 @@ export const ORDER_SELECT = `
   order_deliveries(id, uid, delivered_at, note, attachments, stock_deducted_at, order_delivery_items(item_uid, item_name, qty)),
   order_returns(item_name, item_uid, qty, reason, returned_at, uid, received_at),
   order_adjustments(amount, reason, adjusted_at, uid, status, approved_at, reject_note),
-  order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, is_cheque, installment_uid, cleared_at, bounced_at, bounce_note),
+  order_payments(amount, method, paid_at, uid, status, cheque_no, cheque_bank, cheque_date, is_cheque, installment_uid, cleared_at, bounced_at, bounce_note, attachments),
   order_installments(uid, seq, due_at, amount, note)
 `;
 
@@ -123,6 +123,7 @@ export type OrderRow = {
         cleared_at: string | null;
         bounced_at: string | null;
         bounce_note: string;
+        attachments: string[] | null;
       }[]
     | null;
 };
@@ -215,7 +216,7 @@ export function mapOrder(row: OrderRow): WsOrder {
       clearedAt: p.cleared_at ?? '',
       bouncedAt: p.bounced_at ?? '',
       bounceNote: p.bounce_note ?? '',
-      attachments: [],
+      attachments: p.attachments ?? [],
     })),
   };
 }
@@ -423,14 +424,19 @@ export async function loadOrderDetailData(
         id: number;
         name: string;
         short_name: string | null;
+        category: string;
         shop_id: string;
         qty: number;
         sell_price: number;
+        unit_size: number;
+        unit_label: string;
       }>(
         (from, to) =>
           supabase
             .from('stock')
-            .select('id, name, short_name, shop_id, qty, sell_price')
+            .select(
+              'id, name, short_name, category, shop_id, qty, sell_price, unit_size, unit_label',
+            )
             .in('shop_id', session.accessibleShopIds)
             .order('shop_id')
             .order('name')
@@ -460,9 +466,15 @@ export async function loadOrderDetailData(
     id: s.id,
     name: s.name,
     shortName: s.short_name ?? '',
+    // ด่านที่ทำให้เลขท้ายชื่อถูกอ่านเป็นตารางฟุตเฉพาะหมวดฟิล์ม (0088)
+    category: s.category ?? '',
     shop: s.shop_id,
     qty: s.qty,
     sellPrice: s.sell_price,
+    // ม้วนละกี่ตารางฟุต — ใบคืนสินค้าหารด้วยตัวนี้ แทนที่จะให้คนรับของหารในหัว
+    // ว่างอยู่ก็ยังอ่านจากชื่อสินค้าได้ เพราะร้านเขียน `... 40% (250)` ไว้แล้ว
+    unitSize: s.unit_size ?? 0,
+    unitLabel: s.unit_label ?? '',
   }));
 
   const shopInfo: Record<string, WsShopInfo> = {};

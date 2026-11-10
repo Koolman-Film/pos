@@ -291,26 +291,29 @@ describe('เอกสารทางการเงิน', () => {
     expect(screen.getByText(/^วันที่เอกสาร:/)).toBeInTheDocument();
   });
 
-  it('lists only the channels the money actually arrived by', () => {
+  /*
+    ช่องการชำระเงินบอกแค่ จ่ายวันไหน และจ่ายเท่าไหร่ (ร้านขอ 27 ต.ค. 2569).
+
+    เดิมใบเสร็จติ๊ก ✓ ช่องทางที่เงินเข้า แล้วพิมพ์ชื่อแหล่งรับเงินต่อท้ายยอด
+    อีกที — "ชำระมัดจำ 3,000.00 บาท (โอนเงิน)" แหล่งรับเงินคือบัญชีฝั่งร้านที่
+    เงินก้อนนั้นไปลง ไม่ใช่สิ่งที่ใบเสร็จรับรองให้ลูกค้า
+  */
+  it('บอกแค่วันที่กับจำนวนเงิน ไม่บอกว่าเงินเข้าบัญชีไหน', () => {
     renderDoc();
-    const box = screen.getByText('ช่องทางการชำระเงิน').parentElement!;
-    // A receipt records what happened; the shop's other two channels have no
-    // business on it, and empty boxes beside them said nothing.
-    expect(within(box).getByText('โอนเงิน')).toBeInTheDocument();
-    expect(within(box).queryByText('เงินสด')).not.toBeInTheDocument();
-    expect(within(box).queryByText('บัตรเครดิต')).not.toBeInTheDocument();
-    expect(within(box).getAllByText('✓')).toHaveLength(1);
-    expect(within(box).getByText(/ชำระมัดจำ 3,000.00 บาท \(โอนเงิน\)/)).toBeInTheDocument();
+    const box = screen.getByText('การชำระเงิน').parentElement!;
+    expect(within(box).getByText(/3,000.00 บาท/)).toBeInTheDocument();
+    expect(within(box).getByText(/12 ส.ค. 2569/)).toBeInTheDocument();
+    expect(within(box).queryByText(/โอนเงิน/)).not.toBeInTheDocument();
+    // ช่องติ๊กของช่องทางที่ใช้ หายไปทั้งแถว
+    expect(within(box).queryByText('✓')).not.toBeInTheDocument();
   });
 
-  it('keeps a channel that has since been dropped from the shop settings', () => {
-    // The receipt is a record of that day. Reading the channels off the payments
-    // rather than จัดการสิทธิ์ means an old document still reads correctly.
+  it('ไม่หลุดชื่อแหล่งรับเงินไปที่อื่นบนใบเสร็จด้วย', () => {
+    // บัญชีของร้านไม่ควรอยู่บนกระดาษที่ลูกค้าถือกลับบ้าน ไม่ว่าจะมุมไหน
     renderDoc({
-      shopInfo: { cm: { ...shopInfo.cm, paymentChannels: ['เงินสด'] } },
+      payments: [{ type: 'มัดจำ', method: 'กสิกร ออมทรัพย์', amount: 3000, date: '2026-08-12' }],
     });
-    const box = screen.getByText('ช่องทางการชำระเงิน').parentElement!;
-    expect(within(box).getByText('โอนเงิน')).toBeInTheDocument();
+    expect(screen.queryByText(/กสิกร ออมทรัพย์/)).not.toBeInTheDocument();
   });
 });
 
@@ -565,7 +568,7 @@ describe('เอกสารการเงิน — ภาษาอังก�
       'Description',
       'Amount',
       'Grand Total',
-      'Payment Method',
+      'Payment',
       'Signature',
     ]) {
       expect(screen.getAllByText(new RegExp(en)).length).toBeGreaterThan(0);

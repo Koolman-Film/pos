@@ -2,7 +2,7 @@
 --
 -- ไฟล์เดียวจบ สำหรับขึ้นระบบจริง
 --
--- รวม release-0019 ถึง release-0086 และ repair-categories-and-services.sql
+-- รวม release-0019 ถึง release-0090 และ repair-categories-and-services.sql
 -- ไว้ในไฟล์เดียว ตามลำดับที่ระบุไว้ใน docs/RELEASE-post-trial-fixes.md เพื่อไม่ต้อง
 -- เปิดทีละไฟล์แล้ววางทีละครั้งใน SQL Editor สามสิบกว่ารอบ ซึ่งพลาดลำดับได้ง่าย
 --
@@ -12045,16 +12045,763 @@ create trigger tickets_dates_order
 insert into supabase_migrations.schema_migrations(version, name) values ('0085', 'pickup_after_dropoff') on conflict (version) do nothing;
 
 
-
 -- ==========================================================================
 -- supabase/release-0086.sql
 -- ==========================================================================
 
 -- supabase/release-0086.sql
+--
+-- หลักฐานการชำระเงินของ PO ขายส่ง — เก็บจริง และเปิดดูได้
+--
+-- รันต่อจาก release-0085.sql
+--
+-- ปลอดภัยเมื่อรันซ้ำ: add column if not exists และ create or replace function
+--
+-- ช่อง "แนบหลักฐานการชำระเงิน" ในใบ PO มีมาตั้งแต่ต้น แต่มันเก็บแค่ "ชื่อไฟล์"
+-- ไว้ในหน่วยความจำของหน้าจอ ไม่ได้อัปโหลดไฟล์ และ `order_payments` ก็ไม่มี
+-- คอลัมน์ให้เก็บ พอรีเฟรชหน้า ชื่อไฟล์ก็หายไปพร้อมกัน — หลักฐานที่พนักงานคิดว่า
+-- แนบแล้ว ไม่เคยมีอยู่จริงสักไฟล์ (ร้านเจอ 26 ต.ค. 2569)
+--
+-- หลังรันไฟล์นี้ ไฟล์ขึ้น bucket wholesale-attachments ที่เดียวกับหลักฐานการ
+-- จัดส่ง (0055) และคอลัมน์นี้เก็บ storage path ไม่ใช่ชื่อไฟล์
+--
+-- ของเดิมไม่ขยับ: การรับเงินทุกแถวที่บันทึกไปแล้วได้ลิสต์ไฟล์ว่าง ซึ่งตรงกับ
+-- ความจริง — ไฟล์พวกนั้นไม่เคยถูกอัปโหลด
+
+set search_path = pos, public, extensions;
+
+alter table order_payments
+  add column if not exists attachments text[] not null default '{}';
+
+comment on column order_payments.attachments is
+  'หลักฐานการชำระเงิน — storage path ใน wholesale-attachments (0086)';
+
+/*
+  `save_order_children` เก็บหลักฐานการชำระเงินของแต่ละงวดด้วย.
+
+  ตัวเดิมทั้งดุ้น (0080) เพิ่มคอลัมน์เดียว: `attachments` มาจาก payload เหมือน
+  `cheque_no` — `create or replace` เขียนทับทั้งตัว ไม่ใช่แก้บางบรรทัด อะไรที่
+  ไม่เขียนกลับมาคือของที่หายไป
+
+  `prior` หอบไฟล์เดิมมาด้วย เพราะทุกการบันทึกคือการลบลูกทั้งชุดแล้วเขียนใหม่
+  ถ้า payload ไม่มีคีย์นี้ (client รุ่นก่อนหน้า) ไฟล์ที่แนบไว้ต้องไม่หายไปเงียบ ๆ
+*/
+create or replace function save_order_children(
+  p_order_id text,
+  p_items jsonb,
+  p_returns jsonb,
+  p_adjustments jsonb,
+  p_payments jsonb,
+  p_saved_on date
+)
+returns void
+language plpgsql
+security invoker
+set search_path = pos
+as $$
+declare
+  v_prior jsonb;
+  v_prior_adj jsonb;
+  v_prior_ret jsonb;
+  v_dupe_count int;
+  v_bad record;
+begin
+  -- uid ซ้ำใน payload เดียวกันไม่ใช่การพิมพ์ผิดของผู้ใช้ — ฝั่งหน้าจอสร้าง uid
+  -- ใหม่ทุกครั้งที่กดเพิ่มรายการ ถ้าซ้ำแปลว่า payload ถูกแก้มา จึงปฏิเสธทั้งชุด
+  select count(*) into v_dupe_count
+    from (
+      select pay->>'uid' as uid
+        from jsonb_array_elements(coalesce(p_payments, '[]'::jsonb)) as pay
+       where coalesce(pay->>'uid', '') <> ''
+       group by 1
+      having count(*) > 1
+    ) d;
+  if v_dupe_count > 0 then
+    raise exception 'รายการรับเงินมี uid ซ้ำกัน บันทึกไม่ได้';
+  end if;
+
+  select count(*) into v_dupe_count
+    from (
+      select it->>'uid' as uid
+        from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) as it
+       where coalesce(it->>'uid', '') <> ''
+       group by 1
+      having count(*) > 1
+    ) d;
+  if v_dupe_count > 0 then
+    raise exception 'รายการสินค้ามี uid ซ้ำกัน บันทึกไม่ได้';
+  end if;
+
+  -- ของที่ส่งออกไปแล้ว จะลดจำนวนให้ต่ำกว่านั้นหรือลบทิ้งไม่ได้ (0077)
+  select sent.item_name as name, sent.qty as sent, coalesce(keep.qty, 0) as keeping
+    into v_bad
+    from (
+      select li.item_uid, max(li.item_name) as item_name, sum(li.qty) as qty
+        from order_delivery_items li
+        join order_deliveries d on d.id = li.delivery_id
+       where d.order_id = p_order_id
+       group by li.item_uid
+    ) sent
+    left join (
+      select coalesce(it->>'uid', '') as uid, coalesce((it->>'qty')::numeric, 0) as qty
+        from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) as it
+    ) keep on keep.uid = sent.item_uid
+   where coalesce(keep.qty, 0) < sent.qty
+   limit 1;
+
+  if found then
+    raise exception 'สินค้า "%" ส่งออกไปแล้ว % — จะแก้จำนวนให้เหลือ % หรือลบรายการทิ้งไม่ได้ ต้องลบรอบส่งของก่อน',
+      v_bad.name, v_bad.sent, v_bad.keeping using errcode = '55000';
+  end if;
+
+  select coalesce(
+    jsonb_object_agg(
+      uid,
+      jsonb_build_object(
+        'status', status,
+        'cleared_at', cleared_at,
+        'cleared_by', cleared_by,
+        'bounced_at', bounced_at,
+        'bounce_note', bounce_note,
+        'reported_by', reported_by,
+        'reported_at', reported_at,
+        'attachments', to_jsonb(attachments)
+      )
+    ),
+    '{}'::jsonb
+  )
+  into v_prior
+  from order_payments
+  where order_id = p_order_id and uid <> '';
+
+  select coalesce(
+    jsonb_object_agg(
+      uid,
+      jsonb_build_object(
+        'status', status,
+        'approved_at', approved_at,
+        'approved_by', approved_by,
+        'reject_note', reject_note
+      )
+    ),
+    '{}'::jsonb
+  )
+  into v_prior_adj
+  from order_adjustments
+  where order_id = p_order_id and uid <> '';
+
+  -- การยืนยันรับของคืน และการคืนสต๊อก ต้องอยู่รอดข้ามการบันทึก.
+  select coalesce(
+    jsonb_object_agg(
+      uid,
+      jsonb_build_object(
+        'received_at', received_at,
+        'received_by', received_by,
+        'stock_returned_at', stock_returned_at
+      )
+    ),
+    '{}'::jsonb
+  )
+  into v_prior_ret
+  from order_returns
+  where order_id = p_order_id and uid <> '';
+
+  delete from order_items where order_id = p_order_id;
+  delete from order_returns where order_id = p_order_id;
+  delete from order_adjustments where order_id = p_order_id;
+  delete from order_payments where order_id = p_order_id;
+
+  insert into order_items (order_id, name, qty, list_price, requested_price, reason, uid)
+  select
+    p_order_id,
+    coalesce(it->>'name', ''),
+    coalesce((it->>'qty')::numeric, 0),
+    coalesce((it->>'listPrice')::numeric, 0),
+    coalesce((it->>'requestedPrice')::numeric, 0),
+    coalesce(it->>'reason', ''),
+    -- ไม่มี uid มา = สร้างให้ ไม่ใช่ปล่อยว่าง: ทั้งระบบนับ "ส่งไปแล้วเท่าไหร่"
+    -- จากคีย์นี้ และรายการที่ไม่มีคีย์จะไปกองรวมกันเป็นถังเดียว (0079)
+    coalesce(nullif(btrim(it->>'uid'), ''), 'i' || replace(gen_random_uuid()::text, '-', ''))
+  from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) as it;
+
+  insert into order_returns (
+    order_id, item_name, item_uid, qty, reason, returned_at, uid,
+    received_at, received_by, stock_returned_at
+  )
+  select
+    p_order_id,
+    coalesce(r->>'item', ''),
+    -- บรรทัดที่ของถูกคืนกลับมา (0080). ว่างได้ — ของที่คืนอาจเป็นสินค้าที่ลูกค้า
+    -- ซื้อจาก PO ใบอื่น ซึ่งไม่มีบรรทัดในใบนี้ให้ชี้ถึงตั้งแต่แรก
+    coalesce(btrim(r->>'itemUid'), ''),
+    coalesce((r->>'qty')::numeric, 0),
+    coalesce(r->>'reason', ''),
+    coalesce(nullif(r->>'date', '')::date, p_saved_on),
+    coalesce(r->>'uid', ''),
+    -- From the database, never from the caller.
+    (prior_ret.v->>'received_at')::date,
+    (prior_ret.v->>'received_by')::uuid,
+    (prior_ret.v->>'stock_returned_at')::timestamptz
+  from jsonb_array_elements(coalesce(p_returns, '[]'::jsonb)) as r
+  left join lateral (
+    select v_prior_ret -> coalesce(r->>'uid', '') as v
+  ) as prior_ret on true;
+
+  insert into order_adjustments (
+    order_id, amount, reason, adjusted_at, uid,
+    status, approved_at, approved_by, reject_note
+  )
+  select
+    p_order_id,
+    coalesce((a->>'amount')::numeric, 0),
+    coalesce(a->>'reason', ''),
+    coalesce(nullif(a->>'date', '')::date, p_saved_on),
+    coalesce(a->>'uid', ''),
+    coalesce(prior_adj.v->>'status', 'รออนุมัติ'),
+    (prior_adj.v->>'approved_at')::date,
+    (prior_adj.v->>'approved_by')::uuid,
+    coalesce(prior_adj.v->>'reject_note', '')
+  from jsonb_array_elements(coalesce(p_adjustments, '[]'::jsonb)) as a
+  left join lateral (
+    select v_prior_adj -> coalesce(a->>'uid', '') as v
+  ) as prior_adj on true;
+
+  insert into order_payments (
+    order_id, amount, method, paid_at, uid,
+    cheque_no, cheque_bank, cheque_date, is_cheque, installment_uid,
+    attachments,
+    status, cleared_at, cleared_by, bounced_at, bounce_note,
+    reported_by, reported_at
+  )
+  select
+    p_order_id,
+    coalesce((pay->>'amount')::numeric, 0),
+    coalesce(pay->>'method', ''),
+    coalesce(nullif(pay->>'date', '')::date, p_saved_on),
+    coalesce(pay->>'uid', ''),
+    coalesce(pay->>'chequeNo', ''),
+    coalesce(pay->>'chequeBank', ''),
+    nullif(pay->>'chequeDate', '')::date,
+    coalesce((pay->>'isCheque')::boolean, false),
+    coalesce(pay->>'installmentUid', ''),
+    -- ไม่ส่งคีย์นี้มาเลย = client รุ่นก่อนหน้า ซึ่งต้องไม่ลบไฟล์ที่แนบไว้ทิ้ง
+    case
+      when pay ? 'attachments' then coalesce(
+        (select array_agg(value) from jsonb_array_elements_text(pay->'attachments')),
+        '{}'::text[]
+      )
+      else coalesce(prior.files, '{}'::text[])
+    end,
+    coalesce(prior.v->>'status', 'แจ้งแล้ว'),
+    (prior.v->>'cleared_at')::date,
+    (prior.v->>'cleared_by')::uuid,
+    (prior.v->>'bounced_at')::date,
+    coalesce(prior.v->>'bounce_note', ''),
+    coalesce((prior.v->>'reported_by')::uuid, auth.uid()),
+    coalesce((prior.v->>'reported_at')::timestamptz, now())
+  from jsonb_array_elements(coalesce(p_payments, '[]'::jsonb)) as pay
+  left join lateral (
+    select
+      v_prior -> coalesce(pay->>'uid', '') as v,
+      (
+        select array_agg(value)
+          from jsonb_array_elements_text(
+            coalesce(v_prior -> coalesce(pay->>'uid', '') -> 'attachments', '[]'::jsonb)
+          )
+      ) as files
+  ) as prior on true;
+end;
+$$;
+
+revoke all on function save_order_children(text, jsonb, jsonb, jsonb, jsonb, date) from public, anon;
+grant execute on function save_order_children(text, jsonb, jsonb, jsonb, jsonb, date) to authenticated;
+
+insert into supabase_migrations.schema_migrations(version, name) values ('0086', 'order_payment_attachments') on conflict (version) do nothing;
+
+
+-- ==========================================================================
+-- supabase/release-0087.sql
+-- ==========================================================================
+
+-- supabase/release-0087.sql
+--
+-- ค่าธรรมเนียมการโอน — บันทึกพร้อมการโอน ไม่ต้องไปเปิดหน้าค่าใช้จ่ายอีกรอบ
+--
+-- รันต่อจาก release-0086.sql
+--
+-- ปลอดภัยเมื่อรันซ้ำ: add column if not exists, เช็ก pg_constraint ก่อนเพิ่ม
+-- และ create or replace function
+--
+-- เงินที่ย้ายจากเครื่องรูดบัตรเข้าบัญชีธนาคาร โดนหักค่าธรรมเนียมระหว่างทางเสมอ
+-- ซึ่งเป็นค่าใช้จ่ายของร้าน วิธีที่ร้านทำอยู่คือบันทึกการโอนเต็มจำนวนก่อน แล้ว
+-- ไปเปิดหน้าค่าใช้จ่ายบันทึกค่าธรรมเนียมอีกรายการ (ร้านแจ้ง 6 พ.ย. 2569)
+--
+-- สองขั้นตอนที่ต้องจำว่าคู่กัน แปลว่าวันไหนลืมขั้นที่สอง ยอดบัญชีจะเกินจริงอยู่
+-- เท่าค่าธรรมเนียม และไม่มีอะไรบนหน้าจอบอกว่าขาดอะไรไป
+--
+-- หลังรันไฟล์นี้ ช่องค่าธรรมเนียมอยู่ในฟอร์มโอนเงิน และระบบสร้างรายการค่าใช้จ่าย
+-- ให้เองในทรานแซกชันเดียวกัน ลบการโอนทิ้งเมื่อไหร่ ค่าใช้จ่ายของมันหายตามไปด้วย
+--
+-- วิธีคิดเลข: การโอนยังเป็นยอดเต็มทั้งสองด้าน ส่วนค่าธรรมเนียมเป็นค่าใช้จ่ายที่
+-- หักจากบัญชีปลายทาง (เลือกเป็นต้นทางได้) เครื่องรูด 10,000 เข้าธนาคาร ค่า
+-- ธรรมเนียม 30 จึงเป็น เครื่องรูด −10,000 · ธนาคาร +10,000 −30 = +9,970
+--
+-- ทำไมไม่โอนยอดสุทธิไปเลย: ยอดคงเหลือทุกใบคำนวณจาก `buildMoneySources` ตัวเดียว
+-- ซึ่งรู้จักแค่ "การโอน" กับ "ค่าใช้จ่าย" การโอนสุทธิจะทำให้ 30 บาทนั้นหายไป
+-- จากระบบโดยไม่เป็นค่าใช้จ่ายของใคร แล้วต้องสอนตัวคำนวณให้รู้จักค่าธรรมเนียม
+-- เป็นเรื่องที่สาม — วิธีนี้ไม่ต้องแตะตัวคำนวณเลยสักบรรทัด
+--
+-- ของเดิมไม่ขยับ: การโอนทุกใบที่บันทึกไปแล้วมีค่าธรรมเนียมเป็น 0
+
+set search_path = pos, public, extensions;
+
+alter table money_transfers
+  add column if not exists fee numeric(12, 2) not null default 0,
+  add column if not exists fee_category text not null default '',
+  -- บัญชีที่ค่าธรรมเนียมถูกหัก — ปกติคือปลายทาง แต่บาง acquirer หักจากต้นทาง
+  add column if not exists fee_account_id bigint references money_accounts(id) on delete set null,
+  -- รายการค่าใช้จ่ายที่ระบบสร้างให้ เก็บไว้เพื่อให้ลบตามกันได้
+  add column if not exists fee_expense_id bigint references expenses(id) on delete set null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'money_transfers_fee_not_negative'
+  ) then
+    alter table money_transfers
+      add constraint money_transfers_fee_not_negative check (fee >= 0);
+  end if;
+end$$;
+
+/*
+  ค่าธรรมเนียมกินการโอนทั้งก้อนไม่ได้.
+
+  ถ้ายอมให้ fee >= amount แปลว่ามีคนกรอกสลับช่อง — การโอนที่ค่าธรรมเนียมเท่ากับ
+  หรือมากกว่าเงินที่โอน ไม่ใช่เหตุการณ์ที่เกิดขึ้นจริง และมันจะทำให้บัญชี
+  ปลายทางติดลบเงียบ ๆ
+*/
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'money_transfers_fee_below_amount'
+  ) then
+    alter table money_transfers
+      add constraint money_transfers_fee_below_amount check (fee = 0 or fee < amount);
+  end if;
+end$$;
+
+comment on column money_transfers.fee is
+  'ค่าธรรมเนียมการโอน — บันทึกเป็นค่าใช้จ่ายให้เองผ่าน fee_expense_id (0087)';
+comment on column money_transfers.fee_account_id is
+  'บัญชีที่ค่าธรรมเนียมถูกหัก ว่าง = บัญชีปลายทาง (0087)';
+comment on column money_transfers.fee_expense_id is
+  'รายการใน expenses ที่ระบบสร้างให้คู่กับการโอนใบนี้ ลบการโอนแล้วลบตาม (0087)';
+
+/*
+  บันทึกการโอน พร้อมค่าธรรมเนียมของมัน ในทรานแซกชันเดียว.
+
+  สองแถวนี้ต้องเกิดพร้อมกันหรือไม่เกิดเลย การเขียนแยกจากฝั่ง action แปลว่ามี
+  ช่วงที่การโอนมีอยู่แต่ค่าใช้จ่ายยังไม่มี และถ้าคำสั่งที่สองพลาด จะไม่มีอะไร
+  ย้อนคำสั่งแรกให้ — ซึ่งคือปัญหาเดียวกับที่ร้านทำด้วยมืออยู่ตอนนี้ แค่เร็วขึ้น
+
+  `security invoker` ตามทั้งระบบ: RLS ของทั้ง money_transfers และ expenses
+  ยังเป็นด่านจริง ไม่ได้ถูกข้ามเพราะเรียกผ่านฟังก์ชัน
+*/
+create or replace function save_money_transfer(
+  p_shop text,
+  p_from_account_id bigint,
+  p_to_account_id bigint,
+  p_amount numeric,
+  p_moved_at date,
+  p_note text,
+  p_fee numeric default 0,
+  p_fee_category text default '',
+  p_fee_account_id bigint default null
+)
+returns bigint
+language plpgsql
+security invoker
+set search_path = pos
+as $$
+declare
+  v_fee numeric := greatest(coalesce(p_fee, 0), 0);
+  v_fee_account bigint := coalesce(p_fee_account_id, p_to_account_id, p_from_account_id);
+  v_fee_source text := '';
+  v_expense_id bigint;
+  v_transfer_id bigint;
+  v_from_name text;
+  v_to_name text;
+begin
+  if v_fee > 0 then
+    if v_fee_account is null then
+      raise exception 'ค่าธรรมเนียมต้องระบุว่าหักจากบัญชีไหน' using errcode = '23514';
+    end if;
+
+    -- ชื่อบัญชี ไม่ใช่ id: `expenses.source` เก็บป้ายชื่อแหล่งเงิน และยอดคงเหลือ
+    -- จับคู่กลับด้วยชื่อ (0064) — เก็บ id ลงไปจะกลายเป็นค่าใช้จ่ายที่ไม่เข้าบัญชีไหน
+    select name into v_fee_source from money_accounts where id = v_fee_account;
+    if v_fee_source is null then
+      raise exception 'ไม่พบบัญชีที่จะหักค่าธรรมเนียม' using errcode = 'P0002';
+    end if;
+
+    select name into v_from_name from money_accounts where id = p_from_account_id;
+    select name into v_to_name from money_accounts where id = p_to_account_id;
+
+    insert into expenses (shop_id, description, category, source, amount, status, paid_at)
+    values (
+      p_shop,
+      -- อธิบายตัวเองได้ในหน้าค่าใช้จ่าย โดยไม่ต้องย้อนกลับมาดูว่ามาจากการโอนใบไหน
+      'ค่าธรรมเนียมโอนเงิน ' || coalesce(v_from_name, 'นอกระบบ') || ' → ' ||
+        coalesce(v_to_name, 'นอกระบบ'),
+      coalesce(nullif(btrim(p_fee_category), ''), 'ค่าธรรมเนียม/ภาษี'),
+      v_fee_source,
+      v_fee,
+      'จ่ายแล้ว',
+      p_moved_at
+    )
+    returning id into v_expense_id;
+  end if;
+
+  insert into money_transfers (
+    shop_id, from_account_id, to_account_id, amount, moved_at, note, created_by,
+    fee, fee_category, fee_account_id, fee_expense_id
+  ) values (
+    p_shop, p_from_account_id, p_to_account_id, p_amount, p_moved_at,
+    coalesce(btrim(p_note), ''), auth.uid(),
+    v_fee,
+    case when v_fee > 0 then coalesce(nullif(btrim(p_fee_category), ''), 'ค่าธรรมเนียม/ภาษี') else '' end,
+    case when v_fee > 0 then v_fee_account else null end,
+    v_expense_id
+  )
+  returning id into v_transfer_id;
+
+  return v_transfer_id;
+end;
+$$;
+
+revoke all on function save_money_transfer(text, bigint, bigint, numeric, date, text, numeric, text, bigint) from public, anon;
+grant execute on function save_money_transfer(text, bigint, bigint, numeric, date, text, numeric, text, bigint) to authenticated;
+
+/*
+  ลบการโอน แล้วค่าใช้จ่ายของมันหายตามไปด้วย.
+
+  ค่าธรรมเนียมที่ค้างอยู่หลังการโอนถูกลบ คือค่าใช้จ่ายที่ไม่มีเหตุการณ์รองรับ
+  และไม่มีใครรู้ว่ามันมาจากไหน — แย่กว่าการลืมบันทึกตั้งแต่แรก เพราะมันดูถูกต้อง
+*/
+create or replace function delete_money_transfer(p_id bigint)
+returns void
+language plpgsql
+security invoker
+set search_path = pos
+as $$
+declare
+  v_expense_id bigint;
+begin
+  select fee_expense_id into v_expense_id from money_transfers where id = p_id;
+  delete from money_transfers where id = p_id;
+  if v_expense_id is not null then
+    delete from expenses where id = v_expense_id;
+  end if;
+end;
+$$;
+
+revoke all on function delete_money_transfer(bigint) from public, anon;
+grant execute on function delete_money_transfer(bigint) to authenticated;
+
+insert into supabase_migrations.schema_migrations(version, name) values ('0087', 'transfer_fee') on conflict (version) do nothing;
+
+
+-- ==========================================================================
+-- supabase/release-0088.sql
+-- ==========================================================================
+
+-- supabase/release-0088.sql
+--
+-- ปริมาณต่อหน่วย — เก็บไว้ที่สินค้า ให้ใบคืนสินค้าหารเอง
+--
+-- รันต่อจาก release-0087.sql
+--
+-- ปลอดภัยเมื่อรันซ้ำ: add column if not exists และเช็ก pg_constraint ก่อนเพิ่ม
+--
+-- ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต และม้วนละไม่เท่ากัน 500
+-- บ้าง 250 บ้าง คืนมา 300 ตร.ฟ. จากม้วนละ 500 คือ 0.6 ม้วน (ร้านถาม 7 พ.ย. 2569)
+--
+-- 0088 ไม่ได้แก้การคิดเลข — `order_returns.qty` เป็น numeric มาตั้งแต่ 0005 และ
+-- `apply_stock_deltas` ก็รับทศนิยมอยู่แล้ว สิ่งที่ขาดคือ "ม้วนละกี่ตารางฟุต"
+-- ซึ่งทุกวันนี้อยู่ในชื่อสินค้าเฉย ๆ (`...Plus (500)`) เป็นข้อความที่คนอ่านออก
+-- แต่ระบบอ่านไม่ออก คนรับของคืนจึงต้องหารในหัวทุกครั้ง และ 300 ÷ 250 กับ
+-- 300 ÷ 500 ก็ต่างกันสองเท่า — หารพลาดครั้งเดียวคือคืนเงินผิดและสต็อกผิด
+--
+-- หลังรันไฟล์นี้ กรอกครั้งเดียวต่อสินค้า แล้วช่องจำนวนในใบคืนสินค้าจะให้กรอก
+-- เป็นตารางฟุตตรง ๆ และหารให้เอง
+--
+-- ทำไมเก็บที่สินค้า ไม่ใช่ที่แถวที่คืน: ขนาดม้วนเป็นคุณสมบัติของสินค้า ไม่ใช่
+-- ของเหตุการณ์การคืน ถ้าให้กรอกที่แถว คนกรอกต้องรู้ขนาดม้วนทุกครั้งที่รับของคืน
+-- ซึ่งเป็นความรู้ชุดเดิมที่หายไปอยู่แล้ว แค่ย้ายที่ถาม
+--
+-- ยังเก็บ `qty` เป็นหน่วยที่ขาย (ม้วน) เหมือนเดิม ตารางฟุตเป็นแค่วิธีกรอก ไม่ใช่
+-- หน่วยใหม่ที่ระบบต้องเรียนรู้ — เงิน สต็อก และเอกสารทุกใบจึงไม่ต้องแตะเลย
+--
+-- ของเดิมไม่ขยับ: สินค้าทุกแถวที่มีอยู่ได้ unit_size = 0 ซึ่งหมายถึง "ไม่ได้ระบุ"
+-- ใบคืนสินค้าของสินค้าเหล่านั้นทำงานเหมือนเดิมทุกอย่าง คือกรอกเป็นสัดส่วนของ
+-- หน่วยที่ขาย
+
+set search_path = pos, public, extensions;
+
+alter table stock
+  -- จำนวนหน่วยย่อยใน 1 หน่วยที่ขาย — 0 = ไม่ได้ระบุ ไม่ใช่ "ศูนย์ตารางฟุต"
+  add column if not exists unit_size numeric not null default 0,
+  -- ชื่อหน่วยย่อย เช่น ตร.ฟ. / เมตร — ขนาดเปล่า ๆ ไม่มีหน่วยกำกับ อ่านไม่ได้ว่า
+  -- 500 คืออะไร และแต่ละหมวดก็ใช้หน่วยไม่เหมือนกัน
+  add column if not exists unit_label text not null default '';
+
+/*
+  ขนาดต่อหน่วยติดลบไม่มีอยู่จริง.
+
+  ถ้าหลุดเข้าไปได้ มันจะกลับทิศการหาร — คืน 300 ตร.ฟ. จะกลายเป็นจำนวนติดลบ
+  ซึ่งแปลว่าคืนเงินติดลบและสต็อกลดลงตอนรับของคืน
+*/
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'stock_unit_size_not_negative'
+  ) then
+    alter table stock
+      add constraint stock_unit_size_not_negative check (unit_size >= 0);
+  end if;
+end$$;
+
+comment on column stock.unit_size is
+  'ปริมาณต่อหน่วยที่ขาย เช่น ฟิล์มม้วนละ 500 ตร.ฟ. — 0 = ไม่ได้ระบุ (0088)';
+comment on column stock.unit_label is
+  'ชื่อหน่วยย่อยของ unit_size เช่น ตร.ฟ. (0088)';
+
+insert into supabase_migrations.schema_migrations(version, name) values ('0088', 'stock_unit_size') on conflict (version) do nothing;
+
+
+-- ==========================================================================
+-- supabase/release-0089.sql
+-- ==========================================================================
+
+-- supabase/release-0089.sql
+--
+-- วันที่รับงาน/ส่งงาน รายบรรทัด — สำหรับสินค้าที่ซื้อเพิ่มทีหลัง
+--
+-- รันต่อจาก release-0088.sql
+--
+-- ปลอดภัยเมื่อรันซ้ำ: add column if not exists, เช็ก pg_constraint ก่อนเพิ่ม
+-- และ create or replace function
+--
+-- ใบงานหนึ่งใบมีวันรับกับวันส่งคู่เดียว ซึ่งถูกตอนที่รถเข้ามาทำทุกอย่างในรอบ
+-- เดียว แต่ของจริงมีกรณีที่ลูกค้ากลับมาซื้อเพิ่มทีหลัง แล้วรายการนั้นถูกเพิ่ม
+-- ลงในใบงานใบเดิม (ร้านแจ้ง 7 พ.ย. 2569)
+--
+-- ตอนนี้บรรทัดที่ซื้อวันที่ 20 กับบรรทัดที่ซื้อวันที่ 5 อ่านว่าเป็นงานวันเดียว
+-- กันทั้งคู่ เพราะทั้งสองยืมวันของหัวใบงานไปใช้ ใบงานขายที่พิมพ์ออกมาจึงบอก
+-- วันเดียว ทั้งที่ของสองชิ้นนั้นส่งมอบกันคนละวัน
+--
+-- ทางเลือกที่ไม่เลือก: ให้เปิดใบงานใหม่สำหรับของที่ซื้อเพิ่ม — ซึ่งจะแตก
+-- ประวัติของรถคันเดียวออกเป็นหลายใบ ทั้งที่ร้านคิดว่ามันคืองานเดียวกัน และจะ
+-- ทำให้ยอดรวมของงานนั้นต้องบวกเอาเองจากหลายใบ
+--
+-- NULL = ใช้วันของใบงาน ซึ่งเป็นพฤติกรรมเดิมทุกอย่าง ของเก่าทุกแถวจึงไม่ขยับ
+-- และงานปกติที่ทำรอบเดียวก็ไม่ต้องกรอกอะไรเพิ่ม
+--
+-- เก็บเป็น date ไม่ใช่ timestamptz เหมือนหัวใบงาน: คำถามของบรรทัดคือ "ของชิ้น
+-- นี้ส่งมอบวันไหน" ไม่ใช่กี่โมง ส่วนเวลานัดยังเป็นของทั้งใบงานเหมือนเดิม
+
+set search_path = pos, public, extensions;
+
+alter table ticket_items
+  add column if not exists received_at date,
+  add column if not exists delivered_at date;
+
+/*
+  ส่งของก่อนรับงานไม่มีอยู่จริง.
+
+  กฎเดียวกับที่ 0085 ใส่ให้หัวใบงาน — ถ้ายอมให้สลับกันได้ ใบงานขายที่แยกตาม
+  วันจะเรียงของออกมาผิดลำดับ และไม่มีใครรู้ว่าวันไหนคือวันที่ลูกค้ารับของไป
+*/
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'ticket_items_dates_in_order'
+  ) then
+    alter table ticket_items
+      add constraint ticket_items_dates_in_order
+      check (received_at is null or delivered_at is null or delivered_at >= received_at);
+  end if;
+end$$;
+
+comment on column ticket_items.received_at is
+  'วันที่รับงานของบรรทัดนี้ — NULL = ใช้วันของใบงาน (0089)';
+comment on column ticket_items.delivered_at is
+  'วันที่ส่งงานของบรรทัดนี้ — NULL = ใช้วันของใบงาน (0089)';
+
+/*
+  `save_ticket_children` เก็บสองวันนี้ด้วย.
+
+  ตัวเดิมของ 0084 ทั้งดุ้น เพิ่มเฉพาะสองคอลัมน์ — `create or replace` เขียนทับ
+  ทั้งตัว อะไรที่ไม่เขียนกลับมาคือของที่หายไป
+
+  `nullif(..., '')` เพราะช่องวันที่ที่ว่างอยู่ส่งมาเป็นสตริงว่าง ซึ่งแปลว่า
+  "ใช้วันของใบงาน" ไม่ใช่วันที่ที่อ่านไม่ออก
+*/
+create or replace function save_ticket_children(
+  p_ticket_id text,
+  p_items jsonb,
+  p_payments jsonb
+)
+returns void
+language plpgsql
+security invoker
+set search_path = pos
+as $$
+declare
+  v_item jsonb;
+  v_item_id bigint;
+  v_prior_paid jsonb;
+  v_dupe_count int;
+  v_net numeric;
+  v_finnix numeric;
+begin
+  if exists (select 1 from tickets where id = p_ticket_id and locked)
+     and not current_user_can('list.unlock') then
+    raise exception 'ใบงานนี้ปิดงานแล้วและถูกล็อก แก้ไขไม่ได้ (ต้องให้แอดมินปลดล็อกก่อน)'
+      using errcode = '42501';
+  end if;
+
+  -- uid ซ้ำใน payload เดียวกันไม่ใช่การพิมพ์ผิดของผู้ใช้ — หน้าจอสร้าง uid ใหม่
+  -- ทุกครั้งที่กดเพิ่มรายการ ถ้าซ้ำแปลว่า payload ถูกแก้มา จึงปฏิเสธทั้งชุด
+  select count(*) into v_dupe_count
+    from (
+      select pay->>'uid' as uid
+        from jsonb_array_elements(coalesce(p_payments, '[]'::jsonb)) as pay
+       where coalesce(pay->>'uid', '') <> ''
+       group by 1
+      having count(*) > 1
+    ) d;
+
+  if v_dupe_count > 0 then
+    raise exception 'รายการรับเงินมี uid ซ้ำกัน บันทึกไม่ได้';
+  end if;
+
+  -- วันที่ของสิ่งที่เก็บอยู่แล้ว คีย์ด้วย uid เก็บไว้ก่อนที่ delete ข้างล่างจะทิ้ง
+  select coalesce(jsonb_object_agg(uid, paid_at), '{}'::jsonb)
+    into v_prior_paid
+    from ticket_payments
+   where ticket_id = p_ticket_id and uid <> '';
+
+  -- Positions cascade from ticket_items, so deleting the items clears them too.
+  delete from ticket_items where ticket_id = p_ticket_id;
+  delete from ticket_payments where ticket_id = p_ticket_id;
+
+  for v_item in select value from jsonb_array_elements(coalesce(p_items, '[]'::jsonb))
+  loop
+    v_net := ticket_item_net(
+      coalesce((v_item->>'soldPrice')::numeric, 0),
+      v_item->>'discountType',
+      (v_item->>'discountValue')::numeric
+    );
+    /*
+      ไม่ส่ง finnixAmount มาเลย = หน้าจอรุ่นเก่า อ่านจากธงเดิมแทน
+      ส่งมา = ตัวเลขคือคำตอบ และธงถูกคำนวณจากมัน
+    */
+    v_finnix := case
+      when v_item ? 'finnixAmount'
+        then least(greatest(coalesce((v_item->>'finnixAmount')::numeric, 0), 0), v_net)
+      when v_item->>'revenueKind' = 'รับแทน' then v_net
+      else 0
+    end;
+
+    insert into ticket_items (
+      ticket_id, category, booked, booked_price, sold, sold_price,
+      interested, interested_price, discount_type, discount_value, actual_qty,
+      revenue_kind, finnix_doc_no, finnix_amount, received_at, delivered_at
+    ) values (
+      p_ticket_id,
+      coalesce(v_item->>'category', ''),
+      coalesce(v_item->>'booked', ''),
+      coalesce((v_item->>'bookedPrice')::numeric, 0),
+      coalesce(v_item->>'sold', ''),
+      coalesce((v_item->>'soldPrice')::numeric, 0),
+      coalesce(v_item->>'interested', ''),
+      coalesce((v_item->>'interestedPrice')::numeric, 0),
+      -- Both nullable: absent or JSON null must stay NULL, not become 0/''.
+      v_item->>'discountType',
+      (v_item->>'discountValue')::numeric,
+      coalesce(v_item->'actualQty', '{}'::jsonb),
+      /*
+        ธงคำนวณจากตัวเลข ไม่รับจากหน้าจอ — บรรทัดที่แบ่งกันเป็น 'รายได้'
+        เพราะคำถามที่คอลัมน์นี้ถูกถามจริง ๆ คือ "ใบนี้มีอะไรเป็นของสาขาไหม"
+      */
+      case
+        -- บรรทัดที่ยังไม่มีราคาไม่มีเงินให้แบ่ง ธงที่ส่งมาจึงเป็นคำตอบเดียวที่มี
+        when v_net <= 0 then (case when v_item->>'revenueKind' = 'รับแทน' then 'รับแทน' else 'รายได้' end)
+        when v_finnix >= v_net - 0.005 then 'รับแทน'
+        else 'รายได้'
+      end,
+      coalesce(btrim(v_item->>'finnixDocNo'), ''),
+      v_finnix,
+      -- ว่าง = ใช้วันของใบงาน (0089)
+      nullif(v_item->>'receivedAt', '')::date,
+      nullif(v_item->>'deliveredAt', '')::date
+    )
+    returning id into v_item_id;
+
+    insert into ticket_item_positions (ticket_item_id, "position", product, price)
+    select
+      v_item_id,
+      coalesce(pos->>'position', ''),
+      coalesce(pos->>'product', ''),
+      coalesce((pos->>'price')::numeric, 0)
+    from jsonb_array_elements(coalesce(v_item->'positions', '[]'::jsonb)) as pos;
+  end loop;
+
+  insert into ticket_payments (ticket_id, type, method, amount, paid_at, uid, attachments)
+  select
+    p_ticket_id,
+    coalesce(pay->>'type', ''),
+    coalesce(pay->>'method', ''),
+    coalesce((pay->>'amount')::numeric, 0),
+    -- วันที่ที่ส่งมา → วันที่เดิมของ uid นี้ → วันนี้. ลำดับกลางคือสิ่งที่ 0060
+    -- เพิ่ม: การบันทึกที่ไม่ได้ส่งวันที่มา จะไม่ย้ายเงินมาไว้วันนี้อีกต่อไป
+    coalesce(
+      nullif(pay->>'paidAt', '')::date,
+      (v_prior_paid ->> coalesce(pay->>'uid', ''))::date,
+      current_date
+    ),
+    coalesce(pay->>'uid', ''),
+    -- `jsonb_array_elements_text` over an absent key yields no rows, which
+    -- aggregates to NULL — coalesce keeps the NOT NULL default shape.
+    coalesce(
+      (select array_agg(value) from jsonb_array_elements_text(coalesce(pay->'attachments', '[]'::jsonb))),
+      '{}'
+    )
+  from jsonb_array_elements(coalesce(p_payments, '[]'::jsonb)) as pay;
+end;
+$$;
+
+revoke all on function save_ticket_children(text, jsonb, jsonb) from public, anon;
+grant execute on function save_ticket_children(text, jsonb, jsonb) to authenticated;
+
+insert into supabase_migrations.schema_migrations(version, name) values ('0089', 'item_job_dates') on conflict (version) do nothing;
+
+
+
+
+
+
+
+-- ==========================================================================
+-- supabase/release-0090.sql
+-- ==========================================================================
+
+-- supabase/release-0090.sql
 --
 -- กติกาวันที่ของใบงาน ตรวจเฉพาะใบใหม่ และตอนที่มีคนแก้วันที่
 --
--- รันต่อจาก release-0085.sql
+-- รันต่อจาก release-0089.sql
 --
 -- ปลอดภัยเมื่อรันซ้ำ: create or replace function อย่างเดียว ไม่แตะข้อมูล
 --
@@ -12067,7 +12814,7 @@ create or replace function enforce_ticket_dates() returns trigger
 language plpgsql
 as $$
 begin
-  -- วันที่ไม่ได้ถูกแก้: ไม่ใช่จังหวะที่จะถามหาวันที่ถูก (0086)
+  -- วันที่ไม่ได้ถูกแก้: ไม่ใช่จังหวะที่จะถามหาวันที่ถูก (0090)
   if tg_op = 'UPDATE'
      and new.drop_off_date is not distinct from old.drop_off_date
      and new.pickup_date is not distinct from old.pickup_date then
@@ -12084,9 +12831,9 @@ begin
 end;
 $$;
 
-select 'release-0086 done' as status;
+select 'release-0090 done' as status;
 
-insert into supabase_migrations.schema_migrations(version, name) values ('0086', 'ticket_dates_only_when_changed') on conflict (version) do nothing;
+insert into supabase_migrations.schema_migrations(version, name) values ('0090', 'ticket_dates_only_when_changed') on conflict (version) do nothing;
 
 
 -- ==========================================================================

@@ -15,7 +15,7 @@ create or replace function enforce_ticket_dates() returns trigger
 language plpgsql
 as $$
 begin
-  -- วันที่ไม่ได้ถูกแก้: ไม่ใช่จังหวะที่จะถามหาวันที่ถูก (0086)
+  -- วันที่ไม่ได้ถูกแก้: ไม่ใช่จังหวะที่จะถามหาวันที่ถูก (0090)
   if tg_op = 'UPDATE'
      and new.drop_off_date is not distinct from old.drop_off_date
      and new.pickup_date is not distinct from old.pickup_date then

@@ -920,6 +920,7 @@ export type Database = {
       }
       order_payments: {
         Row: {
+          attachments: string[]
           installment_uid: string
           is_cheque: boolean
           bounce_note: string
@@ -940,6 +941,7 @@ export type Database = {
           paid_at: string
         }
         Insert: {
+          attachments?: string[]
           installment_uid?: string
           is_cheque?: boolean
           bounce_note?: string
@@ -960,6 +962,7 @@ export type Database = {
           paid_at: string
         }
         Update: {
+          attachments?: string[]
           installment_uid?: string
           is_cheque?: boolean
           bounce_note?: string
@@ -1512,6 +1515,8 @@ export type Database = {
           shop_id: string
           short_name: string
           sku: string
+          unit_label: string
+          unit_size: number
         }
         Insert: {
           category: string
@@ -1524,6 +1529,8 @@ export type Database = {
           shop_id: string
           short_name?: string
           sku: string
+          unit_label?: string
+          unit_size?: number
         }
         Update: {
           category?: string
@@ -1536,6 +1543,8 @@ export type Database = {
           shop_id?: string
           short_name?: string
           sku?: string
+          unit_label?: string
+          unit_size?: number
         }
         Relationships: [
           {
@@ -1635,10 +1644,12 @@ export type Database = {
           booked: string
           booked_price: number
           category: string
+          delivered_at: string | null
           discount_type: string | null
           discount_value: number | null
           finnix_amount: number
           id: number
+          received_at: string | null
           interested: string
           interested_price: number
           finnix_doc_no: string
@@ -1652,10 +1663,12 @@ export type Database = {
           booked?: string
           booked_price?: number
           category: string
+          delivered_at?: string | null
           discount_type?: string | null
           discount_value?: number | null
           finnix_amount?: number
           id?: never
+          received_at?: string | null
           interested?: string
           interested_price?: number
           finnix_doc_no?: string
@@ -1669,10 +1682,12 @@ export type Database = {
           booked?: string
           booked_price?: number
           category?: string
+          delivered_at?: string | null
           discount_type?: string | null
           discount_value?: number | null
           finnix_amount?: number
           id?: never
+          received_at?: string | null
           interested?: string
           interested_price?: number
           finnix_doc_no?: string
@@ -2328,6 +2343,24 @@ export type Database = {
           p_doc_type: string
           p_ticket_id: string
         }
+        Returns: undefined
+      }
+      save_money_transfer: {
+        Args: {
+          p_amount: number
+          p_fee?: number
+          p_fee_account_id?: number | null
+          p_fee_category?: string
+          p_from_account_id: number | null
+          p_moved_at: string
+          p_note: string
+          p_shop: string
+          p_to_account_id: number | null
+        }
+        Returns: number
+      }
+      delete_money_transfer: {
+        Args: { p_id: number }
         Returns: undefined
       }
       save_insurance_policy: {

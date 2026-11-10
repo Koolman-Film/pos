@@ -9,6 +9,7 @@ import { ShopButtons } from '@/components/ui/ShopButtons';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import {
   fmt,
+  fmtQty,
   fmtThaiDateLong,
   fmtThaiDayString,
   shopDayKey,
@@ -41,7 +42,11 @@ import {
   payAccountLine,
   type PayAccount,
 } from '@/lib/domain/payAccount';
-import { uploadAttachments, discardAttachments, fileNameFromPath } from '@/lib/storage/attachments';
+import { uploadAttachments, discardAttachments } from '@/lib/storage/attachments';
+import { bankOptions } from '@/lib/domain/banks';
+import { toSellingUnits, toSubUnits, unitLabelOf, unitSizeOf } from '@/lib/domain/unitSize';
+import { AttachmentField } from '@/components/ui/AttachmentField';
+import { AttachmentLinks } from '@/components/ui/AttachmentLinks';
 
 import { CustomerPicker } from './CustomerPicker';
 import { SalesPersonPicker } from './SalesPersonPicker';
@@ -173,6 +178,7 @@ export function WholesaleDetail({
   onSaveCustomer,
   onSaveSalesPerson,
   onBack,
+  attachmentUrlAction,
 }: {
   order: WsOrder;
   /**
@@ -196,6 +202,13 @@ export function WholesaleDetail({
   staffNames?: Record<string, string>;
   /** พนักงานขายของทุกสาขาที่ผู้ใช้เข้าถึงได้ — filtered to `o.shop` in the picker. */
   salesPeople?: SalesPerson[];
+  /**
+   * ขอลิงก์เปิดไฟล์ที่แนบไว้ — bucket เป็นแบบส่วนตัว จึงเปิดตรง ๆ ไม่ได้ (0086).
+   *
+   * ไม่ส่งมา (เช่นในเทสต์) ชื่อไฟล์จะยังแสดงอยู่ แต่กดไม่ได้ ดีกว่าปุ่มที่กดแล้ว
+   * ไม่เกิดอะไรขึ้น
+   */
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
   isNew?: boolean;
   onBack?: () => void;
   onSaveOrder?: (order: WsOrder, isNew: boolean) => Promise<void> | void;
@@ -520,6 +533,30 @@ export function WholesaleDetail({
     const short = shortNameOf(name);
     return short ? `${short} · ${name}` : name;
   };
+  /*
+    ม้วนละกี่ตารางฟุต ของสินค้าที่กำลังคืน (migration 0088).
+
+    ร้านตั้งค่านี้ที่ตัวสินค้าในสต็อกครั้งเดียว แล้วแถวที่คืนก็ถามเป็นตารางฟุต
+    ตรง ๆ ได้ — ซึ่งคือหน่วยที่ของจริงถูกวัดมาตอนรับคืน ส่วนที่ระบบเก็บยังเป็น
+    หน่วยที่ขาย (ม้วน) เหมือนเดิม เงินกับสต็อกจึงไม่ต้องรู้จักตารางฟุตเลย
+
+    หาจากสาขาของ PO ก่อน แล้วค่อยข้ามสาขา ตามแบบเดียวกับ `shortNameOf`: สินค้า
+    ชื่อเดียวกันคือสินค้าตัวเดียวกัน และขนาดม้วนของมันไม่เปลี่ยนตามสาขา
+  */
+  const returnUnitOf = (name: string) => {
+    const match =
+      stock.find((st) => st.shop === o.shop && st.name === name) ??
+      stock.find((st) => st.name === name);
+    return { size: unitSizeOf(match), label: unitLabelOf(match) };
+  };
+  /*
+    ยังมีแถวที่ต้องหารเองไหม.
+
+    คำอธิบายวิธีหารควรโผล่เฉพาะตอนที่มันจำเป็น ถ้าสินค้าทุกแถวตั้งขนาดต่อหน่วย
+    ไว้แล้ว ช่องกรอกถามเป็นตารางฟุตให้เองอยู่ และประโยคสอนหารก็กลายเป็นตัวหนังสือ
+    ที่ขัดกับสิ่งที่อยู่ตรงหน้า
+  */
+  const someReturnsLackUnit = o.returns.some((r) => returnUnitOf(r.item).size === 0);
 
   const purchasedProducts = [
     ...new Set([
@@ -895,10 +932,27 @@ export function WholesaleDetail({
 
     Their phone heads the document and their name signs it, so the document
     identifies a person the customer can ring — which is the whole point of
-    recording it. Looked up within the PO’s own branch: two branches may both
-    have a "โหน่ง" and they are not the same person.
+    recording it.
+
+    `branchSales` คือเซลล์ที่ "ขึ้นทะเบียนไว้ที่สาขานี้" ซึ่งเป็นสิ่งเดียวกับที่
+    ด่านในฐานข้อมูลใช้ตัดสินว่า PO ใบนี้ต้องระบุเซลล์ไหม (0057) — ไม่ใช่สิ่ง
+    เดียวกับ "เลือกใครได้บ้าง"
   */
   const branchSales = salesPeople.filter((p) => p.shop === o.shop);
+  /*
+    เซลล์คนเดียวกัน ขายได้ทุกสาขา (ร้านยืนยัน 7 พ.ย. 2569).
+
+    โหน่ง กับ เคน ขึ้นทะเบียนไว้ใต้ Finnix North สาขาอื่นจึงไม่มีใครให้เลือกเลย
+    ทั้งที่เป็นคนเดียวกันที่วิ่งขายทุกสาขา แอดมินที่เปิด PO ให้พะเยาจึงต้องเลือก
+    "ยังไม่ระบุ" หรือสร้างชื่อซ้ำขึ้นมาใหม่ ซึ่งจะแตกยอดของคนคนเดียวออกเป็นสองชื่อ
+
+    รวมตามชื่อ เพราะ `orders.sales_by` เก็บชื่อ ไม่ใช่ id — ชื่อเดียวกันคือคน
+    เดียวกันตามที่ร้านใช้งานจริง แถวของสาขานี้มาก่อน เบอร์โทรจึงเป็นของแถวที่
+    ใกล้ตัวที่สุดเมื่อมีหลายแถวชื่อเดียวกัน
+  */
+  const sellerOptions = [...branchSales, ...salesPeople.filter((p) => p.shop !== o.shop)].filter(
+    (p, i, all) => all.findIndex((x) => x.name === p.name) === i,
+  );
   // บัญชีรับชำระ: this branch's accounts only — the database refuses another
   // branch's (0062), and a PO that switches branch drops a choice that no
   // longer belongs to it rather than printing the wrong bank.
@@ -914,9 +968,9 @@ export function WholesaleDetail({
     what the shop hit: the reps existed on the POs but not in the table.
   */
   const sellerName = (o.salesBy ?? '').trim();
-  // The staff row is only the phone book. Matched within the PO’s own branch:
-  // two branches may both have a "โหน่ง" and they are not the same person.
-  const seller = branchSales.find((p) => p.name === sellerName) ?? null;
+  // The staff row is only the phone book — หาในรายชื่อชุดเดียวกับที่เลือกได้
+  // ไม่งั้นเซลล์ที่มาจากสาขาอื่นจะถูกเลือกได้แต่เอกสารไม่ขึ้นเบอร์
+  const seller = sellerOptions.find((p) => p.name === sellerName) ?? null;
   /*
     ใครเปิด PO — shown beside, never instead of, whose sale it is. The id is
     resolved through the staff list; a PO older than the column says so rather
@@ -1333,7 +1387,7 @@ export function WholesaleDetail({
                   <SalesPersonPicker
                     value={o.salesBy ?? ''}
                     shop={o.shop}
-                    people={branchSales}
+                    people={sellerOptions}
                     canManage={can('options.manage')}
                     onSelect={(name) => field('salesBy', name)}
                     onSavePerson={onSaveSalesPerson}
@@ -1443,7 +1497,7 @@ export function WholesaleDetail({
                       </div>
                       <div>
                         <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                          ราคามาตรฐาน
+                          ราคาขายมาตรฐาน
                         </label>
                         <input
                           type="number"
@@ -1454,7 +1508,7 @@ export function WholesaleDetail({
                       </div>
                       <div>
                         <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                          ราคาที่เสนอ
+                          ราคาขายที่เสนอ
                         </label>
                         <input
                           type="number"
@@ -1534,12 +1588,20 @@ export function WholesaleDetail({
                                 </li>
                               ))}
                             </ul>
-                            {round.attachments.length > 0 && (
-                              <p className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-                                <i className="fa-solid fa-paperclip mr-1"></i>
-                                {round.attachments.map((p) => fileNameFromPath(p)).join(', ')}
-                              </p>
-                            )}
+                            {/*
+                              หลักฐานของรอบนี้ — กดแล้วเปิดดูได้ ไม่ใช่ชื่อไฟล์เฉย ๆ.
+
+                              ระบบบังคับให้แนบก่อนจึงจะบันทึกรอบส่งของได้ (0055)
+                              แล้วพิมพ์ชื่อไฟล์ออกมาทิ้งไว้ — bucket เป็นแบบ
+                              ส่วนตัว คนที่กลับมาตรวจย้อนหลังจึงเปิดดูไม่ได้เลย
+                              สักทาง (ร้านเจอ 26 ต.ค. 2569)
+                            */}
+                            <div className="mt-1">
+                              <AttachmentLinks
+                                paths={round.attachments}
+                                urlAction={attachmentUrlAction}
+                              />
+                            </div>
                           </div>
                           {onDeleteDelivery && round.id && can('wholesale.updateStatus') && (
                             <button
@@ -1555,6 +1617,26 @@ export function WholesaleDetail({
                         </div>
                       </div>
                     ))}
+                    {/*
+                      ปุ่มบันทึกรอบถัดไป อยู่ตรงนี้ ไม่ใช่แค่ในกล่องออกเอกสาร
+                      (ร้านแจ้ง 7 พ.ย. 2569).
+
+                      ทางเดิมมีอยู่แล้ว — กด "ใบส่งของ" แล้วกล่องกรอกรอบถัดไปจะ
+                      เปิดขึ้น — แต่ไม่มีใครหาเจอ เพราะคนที่เห็น "ส่งแล้ว 8/10 ·
+                      ค้างอีก 2" กำลังมองหาที่กรอกรอบถัดไป ไม่ได้กำลังมองหาปุ่ม
+                      พิมพ์เอกสาร ปุ่มนี้จึงเปิดกล่องเดียวกัน ไม่ได้เพิ่มทางที่สอง
+                      ให้บันทึกต่างกันได้
+                    */}
+                    {stillOwed && !deliveryPanel && (onSaveDelivery || onRecordDelivery) && (
+                      <button
+                        onClick={() => void issueDocument('delivery')}
+                        className="btn-outline w-full text-sm rounded-2xl py-2.5 flex items-center justify-center gap-2 font-medium"
+                      >
+                        <i className="fa-solid fa-truck-fast"></i>
+                        บันทึกการจัดส่งรอบถัดไป · ยังค้างส่ง{' '}
+                        {progress.reduce((n, p) => n + p.remaining, 0)} ชิ้น
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1831,98 +1913,197 @@ export function WholesaleDetail({
                 </p>
               </div>
               <div className="mb-5 rounded-2xl p-3.5" style={panelStyle(PANEL.returns)}>
-                <p className="text-xs font-semibold mb-3" style={{ color: PANEL.returns.spine }}>
+                <p className="text-xs font-semibold mb-1" style={{ color: PANEL.returns.spine }}>
                   <i className="fa-solid fa-rotate-left mr-1.5"></i>การคืนสินค้า
                 </p>
-                {o.returns.map((r, idx) => (
-                  // flex-wrap เพราะแถวนี้มีห้าช่องแล้ว. On a narrow card the date and
-                  // the bin drop to a second line instead of the bin being pushed off
-                  // the right edge of the panel, where it was unreachable.
-                  <div key={idx} className="flex flex-wrap gap-2 mb-2 items-start">
-                    <select
-                      value={returnValue(r)}
-                      aria-label="สินค้าที่รับคืน"
-                      onChange={(e) => {
-                        const picked = returnOptions.find((op) => op.value === e.target.value);
-                        updateReturnFields(idx, {
-                          item: picked?.name ?? '',
-                          itemUid: picked?.uid ?? '',
-                        });
-                      }}
-                      className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
-                    >
-                      <option value="" disabled>
-                        เลือกสินค้าที่เคยซื้อ...
-                      </option>
-                      {returnOptions.map((op) => (
-                        <option key={op.value} value={op.value}>
-                          {op.label}
+                {/*
+                  บอกวิธีคืนไม่เต็มหน่วย ตรงที่คนกำลังจะกรอก (ร้านถาม 7 พ.ย. 2569).
+
+                  ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต และม้วนละ
+                  ไม่เท่ากัน สินค้าที่ตั้ง "ปริมาณต่อหน่วย" ไว้แล้ว ช่องกรอกจะ
+                  ถามเป็นตารางฟุตและหารให้เอง (0088) ประโยคนี้จึงเหลือไว้สำหรับ
+                  สินค้าที่ยังไม่ได้ตั้ง — และบอกด้วยว่าตั้งได้ที่ไหน ไม่ใช่
+                  ปล่อยให้หารมือไปตลอด
+                */}
+                {someReturnsLackUnit && (
+                  <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
+                    สินค้าที่ยังไม่ได้ตั้ง “ปริมาณต่อหน่วย” ต้องใส่เป็นสัดส่วนเอง — เช่น ฟิล์มม้วนละ
+                    500 ตร.ฟ. คืนมา 300 ตร.ฟ. ให้ใส่ 0.6 (300 ÷ 500) · ตั้งขนาดต่อหน่วยได้ที่
+                    สต็อกสินค้า แล้วช่องนี้จะให้กรอกเป็น ตร.ฟ. และหารให้เอง
+                  </p>
+                )}
+                {o.returns.map((r, idx) => {
+                  const unit = returnUnitOf(r.item);
+                  /*
+                    ตัวเลขที่โชว์ในช่องกรอก เมื่อสินค้ามีขนาดต่อหน่วย.
+
+                    แปลงกลับจาก `qty` ทุกครั้ง ไม่ได้เก็บเลขตารางฟุตไว้เป็น
+                    ข้อมูลอีกชุด — ถ้าเก็บสองที่ วันหนึ่งมันจะขัดกันเอง และตอนนั้น
+                    จะไม่มีใครรู้ว่าของที่คืนจริงคือเท่าไหร่
+                  */
+                  const subUnitValue =
+                    `${r.qty}` === '' ? '' : toSubUnits(Number(r.qty) || 0, unit.size);
+                  return (
+                    // flex-wrap เพราะแถวนี้มีห้าช่องแล้ว. On a narrow card the date and
+                    // the bin drop to a second line instead of the bin being pushed off
+                    // the right edge of the panel, where it was unreachable.
+                    <div key={idx} className="flex flex-wrap gap-2 mb-2 items-start">
+                      <select
+                        value={returnValue(r)}
+                        aria-label="สินค้าที่รับคืน"
+                        onChange={(e) => {
+                          const picked = returnOptions.find((op) => op.value === e.target.value);
+                          updateReturnFields(idx, {
+                            item: picked?.name ?? '',
+                            itemUid: picked?.uid ?? '',
+                          });
+                        }}
+                        className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
+                      >
+                        <option value="" disabled>
+                          เลือกสินค้าที่เคยซื้อ...
                         </option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      value={r.qty}
-                      onChange={(e) => updateReturn(idx, 'qty', e.target.value)}
-                      className="field text-xs px-2.5 py-1.5 w-16"
-                    />
-                    <input
-                      placeholder="เหตุผล"
-                      value={r.reason}
-                      onChange={(e) => updateReturn(idx, 'reason', e.target.value)}
-                      className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
-                    />
-                    {/* The date the return reduces revenue on — see migration 0045. */}
-                    <ThaiDateInput
-                      value={r.date || ''}
-                      onChange={(v) => updateReturn(idx, 'date', v)}
-                      ariaLabel={`วันที่รับคืนรายการที่ ${idx + 1}`}
-                      className="field text-xs px-2.5 py-1.5"
-                    />
-                    <button
-                      onClick={() => removeReturn(idx)}
-                      aria-label={`ลบรายการคืนสินค้าที่ ${idx + 1}`}
-                      title="ลบรายการนี้"
-                      className="text-xs px-2 rounded-lg flex-shrink-0"
-                      style={{ color: '#B23A48' }}
-                    >
-                      <i className="fa-solid fa-trash"></i>
-                    </button>
-                    {/*
+                        {returnOptions.map((op) => (
+                          <option key={op.value} value={op.value}>
+                            {op.label}
+                          </option>
+                        ))}
+                      </select>
+                      {/*
+                      ถามด้วยหน่วยที่ของถูกวัดมาจริง (migration 0088).
+
+                      ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต ม้วนละ
+                      500 บ้าง 250 บ้าง คืนมา 300 ตร.ฟ. จึงเป็น 0.6 ม้วน หรือ
+                      1.2 ม้วน — ตัวเลขเดียวกัน ต่างกันสองเท่า การหารนั้นเคยเป็น
+                      งานในหัวของคนรับของคืน ซึ่งผิดได้ และผิดทีเดียวคือคืนเงิน
+                      ผิดกับสต็อกผิดพร้อมกัน
+
+                      ร้านตั้งขนาดต่อหน่วยไว้ที่สินค้าครั้งเดียว ช่องนี้จึงถาม
+                      เป็นตารางฟุตแล้วหารให้ ส่วนสินค้าที่ยังไม่ได้ตั้ง ยังถาม
+                      เป็นสัดส่วนของหน่วยที่ขายเหมือนเดิม — `step="any"` ทั้งคู่
+                      เพราะช่องที่ไม่บอก step เบราว์เซอร์ถือว่าเดินทีละ 1 และตี
+                      ว่าทศนิยมคือค่าที่ผิด
+                    */}
+                      {unit.size > 0 ? (
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            aria-label={`จำนวนที่คืนรายการที่ ${idx + 1} (${unit.label})`}
+                            value={subUnitValue}
+                            onChange={(e) =>
+                              updateReturn(
+                                idx,
+                                'qty',
+                                e.target.value === ''
+                                  ? ''
+                                  : toSellingUnits(Number(e.target.value), unit.size),
+                              )
+                            }
+                            className="field text-xs px-2.5 py-1.5 w-20"
+                          />
+                          <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                            {unit.label}
+                          </span>
+                        </div>
+                      ) : (
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          aria-label={`จำนวนที่คืนรายการที่ ${idx + 1}`}
+                          value={r.qty}
+                          onChange={(e) => updateReturn(idx, 'qty', e.target.value)}
+                          className="field text-xs px-2.5 py-1.5 w-20"
+                        />
+                      )}
+                      <input
+                        placeholder="เหตุผล"
+                        value={r.reason}
+                        onChange={(e) => updateReturn(idx, 'reason', e.target.value)}
+                        className="field text-xs px-2.5 py-1.5 flex-1 min-w-0"
+                      />
+                      {/* The date the return reduces revenue on — see migration 0045. */}
+                      <ThaiDateInput
+                        value={r.date || ''}
+                        onChange={(v) => updateReturn(idx, 'date', v)}
+                        ariaLabel={`วันที่รับคืนรายการที่ ${idx + 1}`}
+                        className="field text-xs px-2.5 py-1.5"
+                      />
+                      <button
+                        onClick={() => removeReturn(idx)}
+                        aria-label={`ลบรายการคืนสินค้าที่ ${idx + 1}`}
+                        title="ลบรายการนี้"
+                        className="text-xs px-2 rounded-lg flex-shrink-0"
+                        style={{ color: '#B23A48' }}
+                      >
+                        <i className="fa-solid fa-trash"></i>
+                      </button>
+                      {/*
                   ของกลับเข้าชั้นเมื่อยืนยันแล้วเท่านั้น (migration 0054).
 
                   Writing down that a customer will return something and having
                   it back on the rack are days apart. Until somebody ticks this,
                   the goods are on a lorry and the count must not say otherwise.
                 */}
-                    <div className="w-full">
-                      {r.receivedAt ? (
-                        <span className="text-xs" style={{ color: '#3F6B33' }}>
-                          <i className="fa-solid fa-circle-check mr-1"></i>
-                          รับของคืนแล้ว {fmtThaiDayString(r.receivedAt)} · คืนสต็อกแล้ว
-                        </span>
-                      ) : !savedReturnUids.has(r.uid ?? '') ? (
-                        <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                          บันทึก PO ก่อน จึงจะยืนยันรับของคืนได้
-                        </span>
-                      ) : can('wholesale.updateStatus') ? (
-                        <button
-                          onClick={() => confirmReturn(idx)}
-                          aria-label={`ยืนยันรับคืนรายการที่ ${idx + 1}`}
-                          className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
-                          style={{ color: '#3F6B33' }}
-                        >
-                          <i className="fa-solid fa-box-open mr-1.5"></i>ยืนยันว่าได้รับของคืนแล้ว
-                        </button>
-                      ) : (
-                        <span className="text-xs" style={{ color: '#8A5A12' }}>
-                          <i className="fa-regular fa-clock mr-1"></i>รอยืนยันว่าได้รับของคืน —
-                          ยังไม่คืนสต็อก
-                        </span>
+                      {/*
+                      คิดเงินคืนเท่าไหร่ — ให้เห็นตรงแถว ไม่ใช่เห็นแต่ยอดรวม.
+
+                      การคืนไม่เต็มม้วนคือการหารที่คนกรอกทำในหัว (คืน 300 จาก
+                      500 ตร.ฟ. = 0.6) บรรทัดนี้คือที่ที่เขาตรวจคำตอบของตัวเอง
+                      ได้ทันที ก่อนที่ตัวเลขจะไปโผล่เป็นยอดรวมก้อนเดียวข้างล่าง
+                      ที่แยกไม่ออกว่ามาจากแถวไหน
+                    */}
+                      {Number(r.qty) > 0 && returnUnitPrice(o, r) > 0 && (
+                        <p className="text-xs w-full" style={{ color: 'var(--ink-soft)' }}>
+                          {/*
+                          การหารที่ระบบทำแทน ต้องเห็นว่าได้เท่าไหร่.
+
+                          ช่องกรอกรับเป็นตารางฟุต แต่เงินกับสต็อกเดินด้วยจำนวน
+                          หน่วยที่ขาย บรรทัดนี้คือที่เดียวที่ทั้งสองตัวเลขอยู่
+                          ด้วยกัน — คนกรอกจึงจับได้ทันทีว่าตั้งขนาดม้วนผิด
+                          (300 ตร.ฟ. ไม่ควรกลายเป็น 1.2 ม้วน ถ้าม้วนละ 500)
+                        */}
+                          {unit.size > 0 && (
+                            <>
+                              คืนมา {fmtQty(toSubUnits(Number(r.qty), unit.size))} {unit.label} ={' '}
+                              {fmtQty(Number(r.qty))} หน่วย ·{' '}
+                            </>
+                          )}
+                          คืนเงิน {fmt(Number(r.qty))} × {fmt(returnUnitPrice(o, r))} ={' '}
+                          <b>{fmt(Number(r.qty) * returnUnitPrice(o, r))}</b>
+                        </p>
                       )}
+                      <div className="w-full">
+                        {r.receivedAt ? (
+                          <span className="text-xs" style={{ color: '#3F6B33' }}>
+                            <i className="fa-solid fa-circle-check mr-1"></i>
+                            รับของคืนแล้ว {fmtThaiDayString(r.receivedAt)} · คืนสต็อกแล้ว
+                          </span>
+                        ) : !savedReturnUids.has(r.uid ?? '') ? (
+                          <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                            บันทึก PO ก่อน จึงจะยืนยันรับของคืนได้
+                          </span>
+                        ) : can('wholesale.updateStatus') ? (
+                          <button
+                            onClick={() => confirmReturn(idx)}
+                            aria-label={`ยืนยันรับคืนรายการที่ ${idx + 1}`}
+                            className="btn-outline text-xs rounded-xl px-3 py-1.5 font-medium"
+                            style={{ color: '#3F6B33' }}
+                          >
+                            <i className="fa-solid fa-box-open mr-1.5"></i>ยืนยันว่าได้รับของคืนแล้ว
+                          </button>
+                        ) : (
+                          <span className="text-xs" style={{ color: '#8A5A12' }}>
+                            <i className="fa-regular fa-clock mr-1"></i>รอยืนยันว่าได้รับของคืน —
+                            ยังไม่คืนสต็อก
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {returnError && (
                   <p className="text-xs mb-2" style={{ color: '#B23A48' }} role="alert">
                     {returnError}
@@ -2165,6 +2346,8 @@ export function WholesaleDetail({
                     onSubmitPanel={submitPayPanel}
                     onCancelPanel={() => setPayPanel(null)}
                     error={payPanel?.idx === idx ? payError : ''}
+                    folder={`${o.shop}/${o.id}`}
+                    attachmentUrlAction={attachmentUrlAction}
                   />
                 ))}
                 <button
@@ -2361,12 +2544,12 @@ export function WholesaleDetail({
                     {o.deliveryNote}
                   </p>
                 )}
-                {(o.deliveryAttachments ?? []).length > 0 && (
-                  <p className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
-                    <i className="fa-solid fa-paperclip mr-1.5"></i>
-                    {(o.deliveryAttachments ?? []).map(fileNameFromPath).join(', ')}
-                  </p>
-                )}
+                <div className="mt-1">
+                  <AttachmentLinks
+                    paths={o.deliveryAttachments ?? []}
+                    urlAction={attachmentUrlAction}
+                  />
+                </div>
               </div>
             </div>
 
@@ -2726,9 +2909,16 @@ export function WholesaleDetail({
                       {receiptPayments.map((p, idx) => (
                         <tr key={idx}>
                           <td style={{ padding: '3px 6px' }}>
-                            {p.date ? fmtThaiDayString(p.date) : '-'} &middot; {p.method}
-                            {/* เลขที่เช็ค ธนาคาร และวันที่หน้าเช็ค.
+                            {/*
+                              วันที่อย่างเดียว ไม่มีแหล่งรับเงิน (ร้านขอ 27 ต.ค.
+                              2569) — บัญชีที่เงินไปลงเป็นเรื่องของฝั่งร้าน ไม่ใช่
+                              สิ่งที่ใบเสร็จรับรองให้ลูกค้า
+                            */}
+                            {p.date ? fmtThaiDayString(p.date) : '-'}
+                            {/* เลขที่เช็ค ธนาคาร และวันที่หน้าเช็ค — อยู่ต่อ.
 
+                                นี่ไม่ใช่แหล่งรับเงิน แต่เป็นตัวเช็คที่ลูกค้า
+                                ยื่นมาเอง และใบเสร็จคือที่เดียวที่บันทึกไว้
                                 A receipt that says only "รับเงินแล้ว 50,000"
                                 against a cheque dated next month is read by
                                 each side as meaning something different. These
@@ -2874,6 +3064,8 @@ function PaymentRow({
   onSubmitPanel,
   onCancelPanel,
   error,
+  folder,
+  attachmentUrlAction,
 }: {
   p: WsPayment;
   idx: number;
@@ -2890,6 +3082,9 @@ function PaymentRow({
   onSubmitPanel: () => void;
   onCancelPanel: () => void;
   error: string;
+  /** โฟลเดอร์ใน bucket — สาขา/เลข PO ให้ไฟล์เรียงตามใบที่มันเป็นหลักฐานให้ */
+  folder: string;
+  attachmentUrlAction?: (path: string) => Promise<{ url?: string; error?: string }>;
 }) {
   const st = p.status || PAYMENT_RECEIVED;
   const received = st === PAYMENT_RECEIVED;
@@ -3037,13 +3232,27 @@ function PaymentRow({
               onChange={(e) => onChange(idx, 'chequeNo', e.target.value)}
               className="field text-xs px-2.5 py-1.5 flex-1"
             />
-            <input
-              placeholder="ธนาคาร"
+            {/*
+              ธนาคารเลือกจากรายการ ไม่ใช่พิมพ์เอง (ร้านขอ 6 พ.ย. 2569).
+
+              ช่องพิมพ์เปล่าทำให้ธนาคารเดียวกันถูกบันทึกได้หลายแบบ — "กสิกรไทย",
+              "KBANK", "ธ.กสิกร" — แล้วเช็คของธนาคารเดียวกันก็ไม่รวมกันในรายการ
+              เช็คค้างรับ ส่วนชื่อที่พิมพ์ไว้ก่อนหน้านี้ยังอยู่ในรายการให้เลือก
+              การเปิดใบเก่ามาแก้เรื่องอื่นจึงไม่ล้างธนาคารทิ้ง
+            */}
+            <select
               aria-label="ธนาคารของเช็ค"
               value={p.chequeBank ?? ''}
               onChange={(e) => onChange(idx, 'chequeBank', e.target.value)}
               className="field text-xs px-2.5 py-1.5 flex-1"
-            />
+            >
+              <option value="">เลือกธนาคาร...</option>
+              {bankOptions(p.chequeBank).map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
@@ -3058,55 +3267,22 @@ function PaymentRow({
           </div>
         </div>
       )}
-      <div className="flex flex-col gap-1.5">
-        <label
-          className="text-xs flex items-center gap-1.5 flex-1 field px-2.5 py-1.5 cursor-pointer"
-          style={{ color: 'var(--ink-soft)' }}
-        >
-          <i className="fa-solid fa-paperclip"></i>
-          แนบหลักฐานการชำระเงิน (เลือกได้หลายไฟล์)...
-          <input
-            type="file"
-            accept="image/*,.pdf"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              if (files.length)
-                onChange(idx, 'attachments', [
-                  ...(p.attachments || []),
-                  ...files.map((fl) => fl.name),
-                ]);
-              e.target.value = '';
-            }}
-          />
-        </label>
-        {(p.attachments || []).length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {p.attachments.map((fn, fi) => (
-              <span
-                key={fi}
-                className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                style={{ background: 'var(--paper)', color: '#4C7A3E' }}
-              >
-                <i className="fa-solid fa-circle-check"></i>
-                {fn}
-                <i
-                  className="fa-solid fa-xmark cursor-pointer"
-                  style={{ color: '#B23A48' }}
-                  onClick={() =>
-                    onChange(
-                      idx,
-                      'attachments',
-                      p.attachments.filter((_, fi2) => fi2 !== fi),
-                    )
-                  }
-                ></i>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      {/*
+        หลักฐานการชำระเงิน — ไฟล์จริง ไม่ใช่ชื่อไฟล์ (0086).
+
+        ของเดิมเป็นช่องแนบปลอม: มันเก็บ `file.name` ลง state แล้วทิ้งตัวไฟล์
+        ไป และ `order_payments` ก็ไม่มีคอลัมน์ให้เก็บด้วยซ้ำ ชิปเขียวจึงขึ้น
+        ครบทุกครั้ง แล้วหายไปตอนรีเฟรช — คนกรอกเชื่อว่าแนบแล้ว ทั้งที่ไม่เคยมี
+        ไฟล์ไหนขึ้นไปเลย ตัวเดียวกับที่ใบงานใช้แนบสลิป ต่างแค่ bucket
+      */}
+      <AttachmentField
+        label="แนบหลักฐานการชำระเงิน (เลือกได้หลายไฟล์)..."
+        paths={p.attachments || []}
+        onChange={(next) => onChange(idx, 'attachments', next)}
+        folder={folder}
+        bucket="wholesale-attachments"
+        urlAction={attachmentUrlAction}
+      />
       {canConfirm && !panel && (
         <div className="flex gap-2 mt-2.5">
           {!saved ? (

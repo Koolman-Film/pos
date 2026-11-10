@@ -4,6 +4,7 @@ import {
   type MoneyMovement,
   type MoneyTransfer,
 } from '@/components/dashboard/moneyFlow';
+import { PAYMENT_REPORTED } from '@/lib/domain/orders';
 import { fetchAllRows } from '@/lib/supabase/fetchAll';
 import type { createClient } from '@/lib/supabase/server';
 
@@ -69,6 +70,9 @@ type OrderPaymentRow = {
   } | null;
 };
 
+/** แถวเดียวกัน แต่ยังไม่ยืนยันเงินเข้า จึงต้องรู้วันที่หน้าเช็คด้วย. */
+type ReportedPaymentRow = OrderPaymentRow & { cheque_date: string | null };
+
 type ExpenseRow = {
   id: number;
   shop_id: string;
@@ -98,6 +102,7 @@ type TransferRow = {
   from_account_id: number | null;
   to_account_id: number | null;
   amount: number | string | null;
+  fee: number | string | null;
   moved_at: string;
   note: string | null;
 };
@@ -111,7 +116,8 @@ type ReconciliationRow = {
   note: string | null;
 };
 
-export type MoneyTransferRecord = MoneyTransfer & { id: number; note: string };
+/** `fee` มีค่าใช้จ่ายของตัวเองอยู่แล้ว (0087) — ไม่ได้หักซ้ำในยอดการโอน. */
+export type MoneyTransferRecord = MoneyTransfer & { id: number; note: string; fee: number };
 
 export type MoneyReconciliationRecord = {
   id: number;
@@ -141,12 +147,38 @@ export type PendingTopup = {
   lookalikes: { transferId: number; on: string; fromAccountId: number | null }[];
 };
 
+/**
+ * เช็คที่รับมาแล้ว แต่ยังไม่ได้ขึ้นเงิน (ร้านแจ้ง 6 พ.ย. 2569).
+ *
+ * ไม่ได้อยู่ใน `movements` และต้องไม่อยู่ — มันยังไม่ใช่เงินในบัญชีไหน แต่มันคือ
+ * ของจริงที่ร้านถืออยู่ และก่อนหน้านี้มันไม่ปรากฏบนหน้าการจัดการเงิน/บัญชีเลย
+ * ร้านจึงอ่านหน้านั้นแล้วรู้สึกว่าไม่ตรงกับความจริง
+ *
+ * จะกลายเป็น movement ก็ต่อเมื่อมีคนกด "ยืนยันเงินเข้า" ซึ่งเป็นจังหวะที่เงินเข้า
+ * บัญชีจริง และลงวันที่ของวันนั้น ไม่ใช่วันที่หน้าเช็ค
+ */
+export type PendingChequeRecord = {
+  shop: string;
+  /** PO ที่เช็คใบนี้จ่ายให้ — กดจากหน้าจอไปดูใบนั้นได้. */
+  orderId: string;
+  customerName: string;
+  amount: number;
+  /** แหล่งเงินที่เงินจะเข้า เมื่อขึ้นเงินได้ — เลือกไว้ตั้งแต่ตอนบันทึกรับเช็ค. */
+  method: string;
+  chequeNo: string;
+  chequeBank: string;
+  /** วันที่หน้าเช็ค — วันแรกที่ขึ้นเงินได้ ว่างได้เมื่อไม่ใช่เช็ค. */
+  due: string;
+};
+
 export type MoneyData = {
   accounts: MoneyAccount[];
   movements: MoneyMovement[];
   transfers: MoneyTransferRecord[];
   reconciliations: MoneyReconciliationRecord[];
   pendingTopups: PendingTopup[];
+  /** เงินที่แจ้งแล้วแต่ยังไม่ยืนยัน — ยังไม่นับเป็นยอดคงเหลือของบัญชีใด. */
+  pendingCheques: PendingChequeRecord[];
 };
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -167,6 +199,7 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
     ticketPays,
     policyPays,
     orderPays,
+    reportedPays,
     expenseRows,
     pettyRows,
   ] = await Promise.all([
@@ -187,7 +220,7 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
       (from, to) =>
         supabase
           .from('money_transfers')
-          .select('id, shop_id, from_account_id, to_account_id, amount, moved_at, note')
+          .select('id, shop_id, from_account_id, to_account_id, amount, moved_at, note, fee')
           .order('moved_at', { ascending: false })
           .order('id', { ascending: false })
           .range(from, to) as unknown as Page<TransferRow>,
@@ -244,6 +277,27 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
           .eq('status', 'รับเงินแล้ว')
           .order('id')
           .range(from, to) as unknown as Page<OrderPaymentRow>,
+      'order_payments',
+    ),
+    /*
+      เช็คที่ยังไม่ได้ขึ้นเงิน — อ่านแยกจากแถวข้างบน ไม่ใช่กรองทีหลัง.
+
+      สองชุดนี้ตอบคนละคำถาม และต้องไม่ปนกัน: ชุดบนคือเงินที่เข้าบัญชีแล้ว ชุดนี้
+      คือสิทธิ์ในเงินที่ยังขึ้นไม่ได้ ถ้าเผลอรวมเข้าไปในยอดคงเหลือเมื่อไหร่ ร้าน
+      จะเห็นเงินที่ยังเอาไปใช้ไม่ได้ ซึ่งแย่กว่าไม่เห็นมันเลย
+    */
+    fetchAllRows(
+      (from, to) =>
+        supabase
+          .from('order_payments')
+          .select(
+            'id, order_id, method, amount, paid_at, cleared_at, cheque_no, cheque_bank, cheque_date, orders!inner(shop_id, wholesale_customers(name))',
+          )
+          .is('orders.deleted_at', null)
+          .eq('status', PAYMENT_REPORTED)
+          .gt('amount', 0)
+          .order('id')
+          .range(from, to) as unknown as Page<ReportedPaymentRow>,
       'order_payments',
     ),
     fetchAllRows(
@@ -423,6 +477,7 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
       fromAccountId: t.from_account_id,
       toAccountId: t.to_account_id,
       amount: num(t.amount),
+      fee: num(t.fee),
       on: t.moved_at,
       note: t.note ?? '',
     })),
@@ -434,5 +489,19 @@ export async function loadMoneyData(supabase: Client): Promise<MoneyData> {
       systemBalance: num(r.system_balance),
       note: r.note ?? '',
     })),
+    pendingCheques: reportedPays
+      .filter((p) => p.orders)
+      .map((p) => ({
+        shop: p.orders!.shop_id,
+        orderId: p.order_id,
+        customerName: p.orders!.wholesale_customers?.name ?? '',
+        amount: num(p.amount),
+        method: p.method ?? '',
+        chequeNo: p.cheque_no ?? '',
+        chequeBank: p.cheque_bank ?? '',
+        // ไม่มีวันที่หน้าเช็ค (เงินสดที่แจ้งไว้แต่ยังไม่มีใครนับ) ก็ใช้วันที่รับ
+        // ไว้แทน — เป็นวันเดียวที่แถวนั้นอ้างถึง
+        due: day(p.cheque_date) || day(p.paid_at),
+      })),
   };
 }
