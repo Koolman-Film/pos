@@ -1,13 +1,31 @@
 # Handoff
 
-_Last updated 2026-10-16. Update this file at the end of every working session._
+_Last updated 2026-11-10. Update this file at the end of every working session._
 
 ## Where things stand
 
-- **Production** (`finnixpos.kool-man.com`) runs `main` at `593fbe9` (deployment
-  `pos-qb5y9mqvj`), and its database has every migration through **0085**. On 2026-10-16
-  the production schema matched a migrations-built database on all six schema categories
-  (`supabase/snippets/fingerprint.sql`).
+- **Production** (`finnixpos.kool-man.com`) runs `main` at `1d65740` (deployment
+  `pos-8whn7v5pn`, promoted 2026-11-10), and its database has every migration
+  through **0089**. After the release the production schema matched the rehearsal
+  database on all six schema categories (`supabase/snippets/fingerprint.sql`).
+- **10 Nov release (PR #12, fai's second `service-schedule-compact` batch):** 0086–0089 —
+  wholesale payment attachments that are really uploaded, transfer fee recorded with the
+  transfer, quantity per unit (partial film-roll returns), per-item pickup/delivery
+  dates; plus the sales summary report, uncleared cheques, and the per-item-date
+  hydration fix. No backfill. Applied one file per transaction with
+  `npx supabase db query --linked -f`; checked as a real admin in a rolled-back block
+  (transfer fee → expense → deleted together; an old-app PO save keeps attachments).
+- **Backup and revert for that release:** schema `pos_backup_20261110` holds every pos
+  function/trigger definition at 0085 (`object_defs`) and copies of the 10 tables the
+  release touches (checksum-identical to live when taken; `manifest` has the counts).
+  Rollback, in this order:
+  1. `vercel promote pos-qb5y9mqvj-vivatchais-projects.vercel.app --yes` (the 0085 app);
+  2. run `supabase/snippets/revert-0086-0089.sql` once — restores 0085 function bodies,
+     drops the two new functions and the four new CHECKs, un-stamps 0086–0089, keeps the
+     new columns so nothing typed since is lost.
+     Rehearsed locally at 0085: release → revert → functions and triggers byte-identical to
+     0085 → release again cleanly. Drop the backup around **2026-11-17**
+     (`drop schema pos_backup_20261110 cascade;`).
 - **16 Oct release (PR #9, fai's `service-schedule-compact`):** 0077–0085 — delivery
   rounds, installments, delivery integrity, returns tied to lines, automatic PO status,
   ticket MEMO, insurance payment evidence, Finnix amounts, delivery-after-intake rule.
@@ -63,8 +81,8 @@ and deleted_at is null and not locked`). 8 more are locked.
 commits are on `main` under new hashes. fai should reset that branch to `main` (not
 merge `main` into it) before continuing.
 
-**Migration numbers:** prod is at 0085. `main` has 0086–0089 (fai's second batch,
-merged 2026-11-10, **not yet released**). **The next free number is 0090.** PR #11
+**Migration numbers:** prod is at 0089 (released 2026-11-10). **The next free number
+is 0090.** PR #11
 (`fix/ticket-dates-only-when-changed`) still uses 0086 and must be renumbered.
 
 ## Owner actions pending (not code)
@@ -74,6 +92,7 @@ merged 2026-11-10, **not yet released**). **The next free number is 0090.** PR #
 | now (was due ~30 Sep) | Drop the snapshot `pos_backup_20260923` on production (`drop schema pos_backup_20260923 cascade;`). It is irreversible, so the owner confirms it.      |
 | now (was due ~4 Oct)  | Drop `pos_backup_20260927` the same way.                                                                                                               |
 | ~23 Oct               | Drop `pos_backup_20261016` once the 16 Oct release has run a week without trouble. Until then it is the revert path.                                   |
+| ~17 Nov               | Drop `pos_backup_20261110` once the 10 Nov release has run a week without trouble. Until then it is the revert path.                                   |
 | now                   | Decide what to do with the empty POs WS-FN-0043 … 0047 (see 1.5).                                                                                      |
 | once                  | Re-run any revenue report or export taken between ~17:00 and ~22:45 on 27 Sep (1.4).                                                                   |
 | once                  | The bookkeeper records payments for the 11 insurance policies sold before 0071 (฿48,000).                                                              |
