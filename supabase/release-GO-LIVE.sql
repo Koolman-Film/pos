@@ -2,7 +2,7 @@
 --
 -- ไฟล์เดียวจบ สำหรับขึ้นระบบจริง
 --
--- รวม release-0019 ถึง release-0089 และ repair-categories-and-services.sql
+-- รวม release-0019 ถึง release-0090 และ repair-categories-and-services.sql
 -- ไว้ในไฟล์เดียว ตามลำดับที่ระบุไว้ใน docs/RELEASE-post-trial-fixes.md เพื่อไม่ต้อง
 -- เปิดทีละไฟล์แล้ววางทีละครั้งใน SQL Editor สามสิบกว่ารอบ ซึ่งพลาดลำดับได้ง่าย
 --
@@ -12791,6 +12791,49 @@ insert into supabase_migrations.schema_migrations(version, name) values ('0089',
 
 
 
+
+
+-- ==========================================================================
+-- supabase/release-0090.sql
+-- ==========================================================================
+
+-- supabase/release-0090.sql
+--
+-- กติกาวันที่ของใบงาน ตรวจเฉพาะใบใหม่ และตอนที่มีคนแก้วันที่
+--
+-- รันต่อจาก release-0089.sql
+--
+-- ปลอดภัยเมื่อรันซ้ำ: create or replace function อย่างเดียว ไม่แตะข้อมูล
+--
+-- หลังรันไฟล์นี้ ใบเก่าที่วันที่ผิดมาแต่เดิมบันทึกเรื่องอื่นได้ตามปกติ ส่วนใบใหม่
+-- และการแก้วันที่ ยังถูกกติกาของ 0085 เหมือนเดิม
+
+set search_path = pos, public, extensions;
+
+create or replace function enforce_ticket_dates() returns trigger
+language plpgsql
+as $$
+begin
+  -- วันที่ไม่ได้ถูกแก้: ไม่ใช่จังหวะที่จะถามหาวันที่ถูก (0090)
+  if tg_op = 'UPDATE'
+     and new.drop_off_date is not distinct from old.drop_off_date
+     and new.pickup_date is not distinct from old.pickup_date then
+    return new;
+  end if;
+
+  if new.drop_off_date is not null
+     and new.pickup_date is not null
+     and new.pickup_date <= new.drop_off_date then
+    raise exception 'วันที่ส่งงานต้องอยู่หลังวันที่รับงาน — ถ้าเป็นวันเดียวกัน เวลาส่งงานต้องหลังเวลารับงาน'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+select 'release-0090 done' as status;
+
+insert into supabase_migrations.schema_migrations(version, name) values ('0090', 'ticket_dates_only_when_changed') on conflict (version) do nothing;
 
 
 -- ==========================================================================

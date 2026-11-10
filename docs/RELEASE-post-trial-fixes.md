@@ -12,6 +12,7 @@
 > **0077–0085** (rows 58–66) were released to production on 2026-10-16 (PR #9).
 > **0086–0089** (rows 67–70) were released to production on 2026-11-10 (PR #12);
 > backup `pos_backup_20261110`, revert `supabase/snippets/revert-0086-0089.sql`.
+> **0090** (row 71) is not yet applied.
 
 It began as the runbook for the batch that came out of the shop's trial run
 (branch `claude/post-trial-fixes-a16ecc`, now merged) and has grown one row per
@@ -35,8 +36,8 @@ into the Dashboard SQL Editor. Each file stamps its own version into
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
-`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 71 ในตารางข้างล่าง
-(`release-0019` … `release-0089` และ `repair-categories-and-services.sql`)
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 72 ในตารางข้างล่าง
+(`release-0019` … `release-0090` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -127,7 +128,8 @@ it twice changes nothing, and each records its versions in
 | 68    | `supabase/release-0087.sql`                   | a normal connection                                 |
 | 69    | `supabase/release-0088.sql`                   | a normal connection                                 |
 | 70    | `supabase/release-0089.sql`                   | a normal connection                                 |
-| 71    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 71    | `supabase/release-0090.sql`                   | a normal connection                                 |
+| 72    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -405,8 +407,10 @@ In this order, as an admin:
 6. **เติมการรับเงินค่าประกันของกรมธรรม์เดิม** (0071) — กรมธรรม์ที่ขายก่อนรันไฟล์
    มียอดรับเงินเป็น 0 ทั้งหมด เพราะตอนนั้นยังไม่มีช่องให้กรอก
 
-7. **ใบงานที่วันส่งงานอยู่ก่อนวันรับงาน** (0085) — ใบพวกนี้ยังเปิดอ่านได้ แต่จะ
-   บันทึกไม่ได้จนกว่าจะแก้วันที่ หาไว้ล่วงหน้าได้ด้วย:
+7. **ใบงานที่วันส่งงานอยู่ก่อนวันรับงาน** (0085, ผ่อนใน 0090) — ใบพวกนี้ยังเปิด
+   อ่านได้ และตั้งแต่ 0090 บันทึกเรื่องอื่นได้ตามปกติตราบที่ไม่แตะวันที่ (ก่อน 0090
+   บันทึกอะไรไม่ได้เลยจนกว่าจะแก้วันที่) หน้าใบงานขึ้นคำเตือนข้างช่องวันที่ให้คน
+   ที่รู้วันจริงแก้ได้ หาไว้ล่วงหน้าได้ด้วย:
 
    ```sql
    select id, drop_off_date, pickup_date
