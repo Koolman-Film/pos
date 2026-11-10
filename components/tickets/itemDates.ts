@@ -1,4 +1,4 @@
-import { dateInputValue } from '@/lib/domain/now';
+import { shopDayKey } from '@/lib/domain/format';
 
 /**
  * วันรับงาน/ส่งงานของแต่ละบรรทัด — กฎกลางที่ฟอร์มกับใบพิมพ์ใช้ร่วมกัน
@@ -35,7 +35,10 @@ export type ItemDates = {
 const asDay = (v: Date | string | null | undefined): string => {
   if (!v) return '';
   const d = v instanceof Date ? v : new Date(v);
-  return Number.isNaN(d.getTime()) ? '' : dateInputValue(d);
+  // The shop's day, not the process's: the server renders in UTC and the
+  // browser in Bangkok, so local getters disagree for 17:00–24:00 UTC and the
+  // page fails to hydrate.
+  return Number.isNaN(d.getTime()) ? '' : shopDayKey(d);
 };
 
 /**

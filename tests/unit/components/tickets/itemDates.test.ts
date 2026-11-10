@@ -85,3 +85,29 @@ describe('groupItemsByDeliveryDay — ใบงานขายแยกตาม
     expect(groups.map((g) => g.day)).toEqual(['2026-01-06', '']);
   });
 });
+
+/**
+ * The server renders in UTC and the browser in Bangkok. A ticket dropped off
+ * between 00:00 and 07:00 Bangkok is the previous day in UTC, so reading the
+ * process's clock printed a different day on each side and the ticket page
+ * failed to hydrate (React #418, PR #12 CI).
+ */
+describe('itemDates on a UTC server', () => {
+  it('borrows the shop day, not the process day', () => {
+    const tz = process.env.TZ;
+    process.env.TZ = 'UTC';
+    try {
+      const d = itemDates(
+        {},
+        {
+          dropOff: new Date('2025-12-25T02:00:00+07:00'),
+          pickup: '2025-12-27T01:30:00+07:00',
+        },
+      );
+      expect(d.received).toBe('2025-12-25');
+      expect(d.delivered).toBe('2025-12-27');
+    } finally {
+      process.env.TZ = tz;
+    }
+  });
+});

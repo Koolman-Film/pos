@@ -3,7 +3,7 @@
 import { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
-import { fmt, fmtThaiDate, hhmm, thaiBahtText } from '@/lib/domain/format';
+import { fmt, fmtThaiDate, fmtThaiDayString, hhmm, thaiBahtText } from '@/lib/domain/format';
 import { payAccountLine, type PayAccount } from '@/lib/domain/payAccount';
 import { useIsMounted } from '@/lib/hooks/useIsMounted';
 import { itemNetPrice } from '@/lib/domain/tickets';
@@ -689,7 +689,7 @@ export function PrintJobSheet({
     // Date + the clock the shop wrote, so the sheet says when the customer is
     // actually due rather than only which day.
     const day = (v: string, time = '') =>
-      v ? `${fmtThaiDate(new Date(`${v}T00:00:00`))}${time ? ' ' + time : ''}` : '-';
+      v ? `${fmtThaiDayString(v)}${time ? ' ' + time : ''}` : '-';
     const jobDay = (d: Date | null | undefined) => {
       if (!d) return '-';
       const clock = hhmm(d);
@@ -748,7 +748,7 @@ export function PrintJobSheet({
    * มาครั้งแรก ซึ่งเป็นสิ่งที่การรับประกันนับจากมัน
    */
   function saleGroupDates(g: { day: string; received: string }) {
-    const day = (v: string) => (v ? fmtThaiDate(new Date(`${v}T00:00:00`)) : '-');
+    const day = (v: string) => (v ? fmtThaiDayString(v) : '-');
     const jobDay = (d: Date | null | undefined) => {
       if (!d) return '-';
       const clock = hhmm(d);
@@ -1494,7 +1494,7 @@ export function PrintJobSheet({
                   >
                     <span>
                       ยอดงานในใบนี้
-                      {g.day ? ` (ส่งงาน ${fmtThaiDate(new Date(`${g.day}T00:00:00`))})` : ''}
+                      {g.day ? ` (ส่งงาน ${fmtThaiDayString(g.day)})` : ''}
                     </span>
                     <span>{fmt(groupTotal)}</span>
                   </div>
