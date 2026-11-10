@@ -10,8 +10,8 @@
 > `supabase db push` does **not** work (the stored database password is stale).
 >
 > **0077–0085** (rows 58–66) were released to production on 2026-10-16 (PR #9).
-> **0086–0089** arrived later with `claude/service-schedule-compact` and are
-> **not yet applied** to production — release them in table order (rows 67–70).
+> **0086–0089** (rows 67–70) were released to production on 2026-11-10 (PR #12);
+> backup `pos_backup_20261110`, revert `supabase/snippets/revert-0086-0089.sql`.
 
 It began as the runbook for the batch that came out of the shop's trial run
 (branch `claude/post-trial-fixes-a16ecc`, now merged) and has grown one row per
