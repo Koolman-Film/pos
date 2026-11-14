@@ -1,7 +1,8 @@
 import { shopDayKey } from '@/lib/domain/format';
 import { buildServiceSchedule } from '@/lib/domain/serviceSchedule';
 
-import { appointmentDate, type UpcomingTicket } from './Dashboard';
+import { appointmentDate, isCancelled, type UpcomingTicket } from './Dashboard';
+import type { CalendarTicket } from './JobCalendar';
 
 /**
  * การนัดหมายของใบงานหนึ่งใบ — one ticket, several appointments.
@@ -266,4 +267,70 @@ export function buildAppointments<T extends AppointmentTicket>(
   }
 
   return appointments;
+}
+
+/**
+ * คิวงานเจ็ดวันข้างหน้า — เรียงตามเวลานัด.
+ *
+ * ช่วงเวลาถูกวัดบนนาฬิกาของร้าน ไม่ใช่ของเซิร์ฟเวอร์ ตัวที่ส่งเข้ามาจึงเป็น
+ * ขอบเขตที่คำนวณไว้แล้ว ไม่ใช่ "วันนี้"
+ *
+ * งานที่ยกเลิกไม่อยู่ในคิว (ร้านแจ้ง 14 พ.ย. 2569) — การ์ดนี้ตอบว่าวันไหนต้อง
+ * มีคนเตรียมพร้อม งานที่ยกเลิกไปแล้วไม่ใช่คำตอบของคำถามนั้น มันนั่งอยู่บน
+ * การ์ดเหมือนงานที่ยังมาอยู่ แล้วคนก็กันคิวให้รถที่ไม่มาจริง
+ */
+export function upcomingRows<T extends AppointmentTicket>(
+  appointments: Appointment<T>[],
+  windowStart: Date,
+  windowEnd: Date,
+): UpcomingTicket[] {
+  return appointments
+    .filter(({ t, appt }) => !isCancelled(t) && appt && appt >= windowStart && appt <= windowEnd)
+    .sort((x, y) => (x.appt as Date).getTime() - (y.appt as Date).getTime())
+    .map(({ row }) => row);
+}
+
+/**
+ * สิ่งที่ปฏิทินต้องวาด — ใบงานทุกใบที่มีวันรับ บวกการมาแต่ละครั้งของรถ.
+ *
+ * งานแก้/เซอร์วิส/เคลม/รถสไลด์ ไม่ใช่สถานะ ใบงานยังถืออะไรอยู่ก็ถืออันนั้น
+ * ต่อไป แต่ปฏิทินตอบว่า "วันนั้นมีอะไรเกิดขึ้น" และรถที่กลับมาก็คือหนึ่งใน
+ * สิ่งที่เกิดขึ้น สร้างจากรายการเดียวกับการ์ดเจ็ดวัน สองที่นี้จึงขัดกันไม่ได้
+ *
+ * `isVisitKind` ถูกส่งเข้ามา แทนที่จะรู้จักรายชื่อเอง เพราะสีกับชื่อของการมา
+ * แต่ละแบบเป็นเรื่องของหน้าที่วาด ไม่ใช่ของกฎข้อนี้
+ */
+export function calendarEntries<T extends AppointmentTicket & { shop: string }>(
+  tickets: (T & { dropOff: Date | null; statusHistory: { status: string; changedAt: Date }[] })[],
+  appointments: Appointment<T>[],
+  isVisitKind: (serviceType: string) => boolean,
+): CalendarTicket[] {
+  // ปฏิทินตอบคำถามเดียวกับคิวงาน จึงกรองด้วยกฎเดียวกัน
+  const entries: CalendarTicket[] = tickets
+    .filter((t) => t.dropOff && !isCancelled(t))
+    .map((t) => ({
+      id: t.id,
+      shop: t.shop,
+      status: t.status,
+      dropOff: t.dropOff as Date,
+      statusHistory: t.statusHistory,
+    }));
+
+  for (const ap of appointments) {
+    if (!isVisitKind(ap.row.serviceType)) continue;
+    if (!ap.appt) continue;
+    // ใบงานถูกยกเลิก เซอร์วิสกับงานแก้ที่นัดไว้บนใบนั้นก็ไม่เกิดเหมือนกัน
+    if (isCancelled(ap.t)) continue;
+    entries.push({
+      id: ap.t.id,
+      shop: ap.t.shop,
+      status: ap.row.serviceType,
+      // ว่างโดยตั้งใจ: ปฏิทินอ่านการเปลี่ยนสถานะครั้งล่าสุดเมื่อมีประวัติ
+      // ส่วนแถวนี้พูดถึงวันของตัวมันเอง ไม่ใช่ของใบงาน
+      statusHistory: [],
+      dropOff: ap.appt,
+    });
+  }
+
+  return entries;
 }

@@ -34,7 +34,12 @@ import {
   type TrendExpense,
 } from '@/components/dashboard/receivables';
 import type { CalendarTicket } from '@/components/dashboard/JobCalendar';
-import { buildAppointments, type VisitDates } from '@/components/dashboard/appointments';
+import {
+  buildAppointments,
+  calendarEntries,
+  upcomingRows,
+  type VisitDates,
+} from '@/components/dashboard/appointments';
 import { branchShare, finnixShare } from '@/lib/domain/finnixShare';
 import { buildBranchComparison } from '@/components/dashboard/branchTotals';
 import {
@@ -830,10 +835,13 @@ export default async function DashboardPage({
 
   const appointments = buildAppointments(shopTickets, visitsByTicket, claimsByTicket);
 
-  const upcoming: UpcomingTicket[] = appointments
-    .filter(({ appt }) => appt && appt >= windowStart && appt <= windowEnd)
-    .sort((a, b) => (a.appt as Date).getTime() - (b.appt as Date).getTime())
-    .map(({ row }) => row);
+  /*
+    งานที่ยกเลิกถูกตัดออกใน `upcomingRows`/`calendarEntries` ไม่ใช่ใน
+    `buildAppointments` — `visitTotals` ข้างล่างนับงานแก้/เซอร์วิสจากรายการ
+    เดียวกันนี้ และตัวนับนั้นอยู่แถวเดียวกับแถบงานทั้งหมด ซึ่งเป็นสำมะโนของ
+    งานทุกใบ ไม่ใช่คิว การกรองที่ต้นทางจะลากตัวนับนั้นไปด้วยโดยไม่มีใครขอ
+  */
+  const upcoming: UpcomingTicket[] = upcomingRows(appointments, windowStart, windowEnd);
 
   // Pending approvals count across ALL orders the caller can see, not the
   // shop-filtered subset — matching the prototype, which reads `orders` directly
@@ -879,29 +887,9 @@ export default async function DashboardPage({
     a car returning is one of the things happening. Built from the same list
     that feeds the 7-day card, so the two can never disagree.
   */
-  const calendarTickets: CalendarTicket[] = tickets
-    .filter((t) => t.dropOff)
-    .map((t) => ({
-      id: t.id,
-      shop: t.shop,
-      status: t.status,
-      dropOff: t.dropOff as Date,
-      statusHistory: t.statusHistory,
-    }));
-
-  for (const a of appointments) {
-    if (!VISIT_KINDS.some((v) => v[0] === a.row.serviceType)) continue;
-    if (!a.appt) continue;
-    calendarTickets.push({
-      id: a.t.id,
-      shop: a.t.shop,
-      status: a.row.serviceType,
-      dropOff: a.appt,
-      // Empty on purpose: the calendar reads the last status change when there
-      // is a history, and this entry is about its own date, not the ticket’s.
-      statusHistory: [],
-    });
-  }
+  const calendarTickets: CalendarTicket[] = calendarEntries(tickets, appointments, (kind) =>
+    VISIT_KINDS.some((v) => v[0] === kind),
+  );
 
   /*
     …and the same events, counted for the period the dashboard is showing.
