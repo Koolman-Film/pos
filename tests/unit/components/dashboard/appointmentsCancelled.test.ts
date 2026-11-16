@@ -19,7 +19,12 @@ import {
  * มันเปิดจะไม่ตรงกัน
  */
 
-const ticket = (over: Partial<AppointmentTicket> & { shop?: string } = {}) => ({
+type Row = AppointmentTicket & {
+  shop: string;
+  statusHistory: { status: string; changedAt: Date }[];
+};
+
+const ticket = (over: Partial<Row> = {}): Row => ({
   id: 'JT-CM-00164',
   shop: 'cm',
   customer: 'คุณ รุ่งทิพย์',
@@ -33,7 +38,7 @@ const ticket = (over: Partial<AppointmentTicket> & { shop?: string } = {}) => ({
   dropOff: new Date('2026-11-14T13:00:00+07:00'),
   pickup: new Date('2026-11-14T17:00:00+07:00'),
   extras: {},
-  statusHistory: [] as { status: string; changedAt: Date }[],
+  statusHistory: [],
   ...over,
 });
 

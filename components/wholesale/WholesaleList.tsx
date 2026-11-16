@@ -31,6 +31,8 @@ import { isWsFlag, matchesWsFlag, WS_FLAG_LABELS, type WsFlag } from '@/lib/aler
 import { pendingCheques } from './cheques';
 import {
   buildSalesReport,
+  chequeRef,
+  hasCheque,
   payInk,
   paymentStatusText,
   type SalesReportGroupBy,
@@ -385,6 +387,11 @@ export function WholesaleList({
           สาขา: shopName(r.shop, accessibleShops),
           วันที่ชำระ: p.paidAt,
           วิธีการชำระ: p.method,
+          // คอลัมน์ของตัวเอง ไม่ใช่ข้อความก้อนเดียว — ใน Excel คนจะกรองและ
+          // ค้นหาด้วยเลขเช็ค ซึ่งทำไม่ได้ถ้ามันติดอยู่กลางประโยค
+          เลขที่เช็ค: p.chequeNo,
+          ธนาคาร: p.chequeBank,
+          วันที่หน้าเช็ค: p.chequeDate,
           จำนวนที่ชำระ: p.amount,
           สถานะ: paymentStatusText(p),
         })),
@@ -673,8 +680,8 @@ export function WholesaleList({
                     {customerName(c.customerId, customers)}
                     <span className="text-xs ml-1.5" style={{ color: 'var(--ink-faint)' }}>
                       {c.orderId}
-                      {c.chequeNo ? ` · เช็ค ${c.chequeNo}` : ''}
-                      {c.chequeBank ? ` ${c.chequeBank}` : ''}
+                      {/* ข้อความเดียวกับที่ตารางข้างล่างใช้ สองที่นี้จึงเทียบกันได้ */}
+                      {hasCheque(c) ? ` · ${chequeRef(c)}` : ''}
                     </span>
                   </span>
                   <span className="flex items-baseline gap-3 flex-shrink-0">
@@ -994,8 +1001,15 @@ export function WholesaleList({
                           const span = Math.max(1, r.payments.length);
                           const payCells = (p: (typeof r.payments)[number]) => (
                             <>
-                              <td className="nw">{p.paidAt ? fmtThaiDayString(p.paidAt) : '—'}</td>
-                              <td>{p.method}</td>
+                              <td className="nw">
+                                {p.paidAt ? fmtThaiDayString(p.paidAt) : '—'}
+                                {p.chequeDate && (
+                                  <span style={{ display: 'block' }}>
+                                    ลงวันที่ {fmtThaiDayString(p.chequeDate)}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="nw">{p.method}</td>
                               <td className="nw" style={{ textAlign: 'right' }}>
                                 {fmt(p.amount)}
                               </td>

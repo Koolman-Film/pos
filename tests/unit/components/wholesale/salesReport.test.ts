@@ -249,7 +249,79 @@ describe('buildSalesReport — รายละเอียดสามหัว�
         ],
       } as unknown as Partial<WsOrder>),
     ]).groups[0].rows;
-    expect(row.payments[0].method).toBe('เช็ค BBL เลขที่ 0038119');
+    expect(row.payments[0].method).toBe('เช็ค 0038119 BBL');
+  });
+
+  it('เลขที่เช็คกับวันที่หน้าเช็ค เดินทางมาเป็นคอลัมน์ของตัวเอง', () => {
+    /*
+      ร้านแจ้ง 16 พ.ย. 2569: รายงานบอกวันที่รับเช็คไว้ แต่ไม่บอกวันที่หน้าเช็ค
+      และไม่บอกเลขที่เช็ค — สองอย่างที่หัวข้อ "เช็ค/เงินที่แจ้งแล้ว" ข้างบน
+      บอกอยู่แล้ว คนอ่านจึงเทียบสองที่นี้ไม่ได้ว่าพูดถึงใบเดียวกันหรือเปล่า
+
+      เป็นฟิลด์แยก ไม่ใช่ข้อความก้อนเดียว เพราะกระดาษเอาวันที่ไปไว้คอลัมน์วันที่
+      และ Excel ต้องกรองด้วยเลขเช็คได้
+    */
+    const [row] = build([
+      withPayments({
+        payments: [
+          {
+            amount: 130000,
+            method: 'กรุงเทพ',
+            status: 'แจ้งแล้ว',
+            date: '2026-11-16',
+            isCheque: true,
+            chequeBank: 'กรุงศรีอยุธยา',
+            chequeNo: '57845629',
+            chequeDate: '2027-01-31',
+          },
+        ],
+      } as unknown as Partial<WsOrder>),
+    ]).groups[0].rows;
+
+    expect(row.payments[0]).toMatchObject({
+      paidAt: '2026-11-16',
+      method: 'เช็ค 57845629 กรุงศรีอยุธยา',
+      chequeNo: '57845629',
+      chequeBank: 'กรุงศรีอยุธยา',
+      chequeDate: '2027-01-31',
+    });
+  });
+
+  it('เลขเช็คที่กรอกไว้ ไม่หายไปเพราะธง isCheque ไม่ได้ติ๊ก', () => {
+    /*
+      `isCheque` เพิ่งมีตอน 0064 แถวที่กรอกก่อนหน้านั้นมีเลขเช็คครบแต่ธงเป็น
+      เท็จ และคนกรอกก็เผลอปลดธงทิ้งได้ตลอด ถ้าถามแต่ธง เลขเช็คที่พิมพ์ไว้แล้ว
+      จะหายจากรายงานเงียบ ๆ ทั้งที่กระดาษอยู่ในลิ้นชักจริง ๆ
+    */
+    const [row] = build([
+      withPayments({
+        payments: [
+          {
+            amount: 5000,
+            method: 'บัญชีธนาคารสาขา',
+            status: 'แจ้งแล้ว',
+            date: '2026-10-20',
+            chequeNo: '0038119',
+            chequeDate: '2026-12-01',
+          },
+        ],
+      } as unknown as Partial<WsOrder>),
+    ]).groups[0].rows;
+
+    expect(row.payments[0].method).toBe('เช็ค 0038119');
+    expect(row.payments[0].chequeDate).toBe('2026-12-01');
+  });
+
+  it('ไม่ใช่เช็ค ก็ยังเป็นแหล่งเงินตามเดิม และไม่มีวันที่หน้าเช็คติดมา', () => {
+    const [row] = build([
+      withPayments({
+        payments: [{ amount: 5000, method: 'เงินสด', status: 'รับเงินแล้ว', date: '2026-10-20' }],
+      } as unknown as Partial<WsOrder>),
+    ]).groups[0].rows;
+
+    expect(row.payments[0].method).toBe('เงินสด');
+    expect(row.payments[0].chequeDate).toBe('');
+    expect(row.payments[0].chequeNo).toBe('');
   });
 
   it('ค้างสุทธิ = ค้างชำระ ลบส่วนที่รอยืนยันเงินเข้า', () => {

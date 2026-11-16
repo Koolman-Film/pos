@@ -162,6 +162,7 @@ describe('รายงานสรุปการขาย — สามหั�
           isCheque: true,
           chequeBank: 'BBL',
           chequeNo: '0038119',
+          chequeDate: '2026-12-25',
         },
       ],
     }),
@@ -194,7 +195,7 @@ describe('รายงานสรุปการขาย — สามหั�
     expect(within(body).getByText('ชำระแล้ว')).toBeInTheDocument();
     expect(within(body).getByText('รอยืนยันเงินเข้า')).toBeInTheDocument();
     // เช็คต้องอ่านว่าเป็นเช็ค ไม่ใช่ชื่อบัญชีที่จะเอาไปขึ้น ซึ่งอ่านแล้วเหมือนเงินเข้าแล้ว
-    expect(within(table()).getByText(/เช็ค BBL เลขที่ 0038119/)).toBeInTheDocument();
+    expect(within(table()).getByText(/เช็ค 0038119 BBL/)).toBeInTheDocument();
   });
 
   it('เงินที่จ่ายมาแล้วแต่รอยืนยัน ไม่หายไปในยอดค้าง', async () => {
@@ -246,6 +247,37 @@ describe('รายงานสรุปการขาย — สามหั�
     await user.selectOptions(screen.getByLabelText('กรองตามสถานะ'), 'ปิดงานแล้ว');
     await user.click(screen.getByRole('button', { name: 'รายการ' }));
     expect(screen.getByRole('button', { name: /^ปิดงานแล้ว/ })).toHaveClass('pill-active');
+  });
+
+  it('วันที่หน้าเช็คอยู่ใต้วันที่รับชำระ ไม่ได้แทนที่มัน', async () => {
+    /*
+      ร้านแจ้ง 16 พ.ย. 2569: รายงานบอกแต่วันที่รับเช็คไว้ ซึ่งสำหรับเช็คลงวันที่
+      ล่วงหน้าคือวันที่ไม่ได้บอกอะไรเลยว่าเงินจะเข้าเมื่อไหร่ — ห่างกันเป็นเดือน
+      ได้ตามปกติ สองวันตอบคนละคำถาม จึงอยู่ด้วยกันทั้งคู่
+    */
+    const user = renderList(WITH_PAYMENTS);
+    await openReport(user);
+    const cell = within(table()).getByText(/ลงวันที่ 25 ธ.ค. 2569/).parentElement as HTMLElement;
+    expect(cell).toHaveTextContent('25 ก.ย. 2569');
+  });
+
+  it('การจ่ายที่ไม่ใช่เช็ค ไม่มีบรรทัดลงวันที่มาเกะกะ', async () => {
+    const user = renderList(WITH_PAYMENTS);
+    await openReport(user);
+    // มีเช็คใบเดียวในชุดนี้ บรรทัด "ลงวันที่" จึงต้องมีที่เดียว
+    expect(within(table()).getAllByText(/ลงวันที่/)).toHaveLength(1);
+  });
+
+  it('กระดาษบอกเลขเช็คและวันที่หน้าเช็คเท่ากับบนจอ', async () => {
+    /*
+      ร้านเทียบหน้าจอกับ PDF แล้วเห็นคนละชุด — เอกสารที่ส่งออกไปข้างนอกคือฉบับ
+      ที่คนอื่นอ่าน มันจึงต้องครบเท่ากัน ไม่ใช่ครบน้อยกว่า
+    */
+    const user = renderList(WITH_PAYMENTS);
+    await openReport(user);
+    const paper = document.querySelector('.print-area') as HTMLElement;
+    expect(within(paper).getByText(/เช็ค 0038119 BBL/)).toBeInTheDocument();
+    expect(within(paper).getByText(/ลงวันที่ 25 ธ.ค. 2569/)).toBeInTheDocument();
   });
 
   it('แถวรวมของกลุ่ม มีคำกำกับว่าตัวเลขคือยอดอะไร', async () => {

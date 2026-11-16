@@ -383,8 +383,19 @@ function PaymentCells({ pay }: { pay: SalesReportRow['payments'][number] }) {
     <>
       <td className="sec-pay" style={{ ...cell, whiteSpace: 'nowrap' }}>
         {pay.paidAt ? fmtThaiDayString(pay.paidAt) : '—'}
+        {/*
+          วันที่หน้าเช็คอยู่ใต้วันที่รับ ไม่ได้แทนที่มัน — สองวันนี้ตอบคนละ
+          คำถาม วันบนคือวันที่กระดาษมาถึงร้าน วันล่างคือวันที่เงินจะเข้า
+        */}
+        {pay.chequeDate && (
+          <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
+            ลงวันที่ {fmtThaiDayString(pay.chequeDate)}
+          </span>
+        )}
       </td>
-      <td className="sec-pay" style={cell}>
+      {/* ไม่ตัดคำ: "เช็ค 0071284 KBANK" ที่ถูกหั่นเป็นสามบรรทัดในคอลัมน์กว้าง
+          ห้าสิบพิกเซล คือเลขที่เช็คที่อ่านไม่ออกบนกระดาษ ตารางจะเจียดที่ให้เอง */}
+      <td className="sec-pay" style={{ ...cell, whiteSpace: 'nowrap' }}>
         {pay.method}
       </td>
       <td className="sec-pay" style={num}>

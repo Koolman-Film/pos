@@ -49,8 +49,19 @@ export type SalesReportItem = {
 export type SalesReportPayment = {
   /** วันที่รับชำระ. */
   paidAt: string;
-  /** แหล่งเงินที่เงินเข้า — หรือ "เช็ค ..." เมื่อจ่ายด้วยเช็ค. */
+  /** แหล่งเงินที่เงินเข้า — หรือ `chequeRef` เมื่อเป็นเช็ค. */
   method: string;
+  /** เลขที่เช็ค ว่าง = ไม่ใช่เช็ค หรือยังไม่ได้กรอก. */
+  chequeNo: string;
+  chequeBank: string;
+  /**
+   * วันที่หน้าเช็ค — วันที่คาดว่าเงินจะเข้า.
+   *
+   * คนละวันกับ `paidAt` ซึ่งเป็นวันที่รับกระดาษไว้ ขายส่งรับเช็คลงวันที่
+   * ล่วงหน้าเป็นปกติ สองวันนี้จึงห่างกันเป็นเดือน รายงานที่บอกแต่วันรับ จึง
+   * บอกไม่ได้ว่าเงินก้อนนี้จะเข้าเมื่อไหร่ (ร้านแจ้ง 16 พ.ย. 2569)
+   */
+  chequeDate: string;
   amount: number;
   /** รับเงินแล้ว / แจ้งแล้ว / เด้ง. */
   status: string;
@@ -121,6 +132,43 @@ export type SalesReport = SalesReportTotals & { groups: SalesReportGroup[] };
  * "แจ้งแล้ว" ตอบคำถามนั้นไม่ตรง เพราะมันบอกว่าใครทำอะไรไป ไม่ได้บอกว่าเงินถึง
  * ร้านหรือยัง
  */
+/** หนึ่งการชำระ เท่าที่กฎเรื่องเช็คต้องรู้. */
+type ChequeFields = {
+  isCheque?: boolean;
+  chequeNo?: string;
+  chequeBank?: string;
+  chequeDate?: string;
+};
+
+/**
+ * มีเช็คอยู่เบื้องหลังไหม — ดูที่ข้อมูล ไม่ใช่ที่ธง.
+ *
+ * `isCheque` เพิ่งมีตอน 0064 แถวที่กรอกก่อนหน้านั้นมีเลขเช็คครบแต่ธงเป็นเท็จ
+ * และคนกรอกก็เผลอปลดธงทิ้งได้ตลอด ถ้าถามแต่ธง เลขเช็คที่พิมพ์ไว้แล้วจะหาย
+ * จากรายงานเงียบ ๆ ทั้งที่กระดาษอยู่ในลิ้นชักจริง ๆ — ใบเสร็จในหน้า PO ถาม
+ * แบบนี้อยู่แล้ว ตรงนี้จึงถามแบบเดียวกัน
+ */
+export function hasCheque(p: ChequeFields): boolean {
+  return !!(p.isCheque || p.chequeNo || p.chequeBank || p.chequeDate);
+}
+
+/**
+ * ชื่อเรียกเช็คใบหนึ่ง — ข้อความเดียว ใช้ทุกที่ที่พูดถึงเช็คใบนี้.
+ *
+ * หัวข้อ "เช็ค/เงินที่แจ้งแล้ว" กับตารางในรายงานเคยเขียนกันคนละแบบ อันบนบอก
+ * เลขเช็ค อันล่างบอกแค่คำว่าเช็คกับชื่อบัญชี คนอ่านเลยเทียบสองที่นี้ไม่ได้
+ * ว่าพูดถึงใบเดียวกันหรือเปล่า (ร้านแจ้ง 16 พ.ย. 2569) ฟังก์ชันเดียวจึงเป็น
+ * วิธีเดียวที่รับประกันว่ามันจะไม่ค่อย ๆ เพี้ยนออกจากกันอีก
+ *
+ * ไม่มีวันที่อยู่ในนี้ เพราะวันที่หน้าเช็คไปอยู่ในคอลัมน์วันที่ ซึ่งเป็นที่ของ
+ * มัน — ยัดสามอย่างลงช่อง "วิธีการชำระ" แล้วมันจะตกบรรทัดบนกระดาษ
+ */
+export function chequeRef(p: ChequeFields): string {
+  const no = (p.chequeNo ?? '').trim();
+  const bank = (p.chequeBank ?? '').trim();
+  return `เช็ค${no ? ' ' + no : ''}${bank ? ' ' + bank : ''}`;
+}
+
 export function paymentStatusText(p: { status: string }): string {
   if (p.status === PAYMENT_BOUNCED) return 'เช็คเด้ง';
   if (p.status === PAYMENT_REPORTED) return 'รอยืนยันเงินเข้า';
@@ -190,9 +238,10 @@ export function buildSalesReport(
             `method` คือแหล่งเงินที่เงินจะไปเข้า ซึ่งสำหรับเช็คแปลว่าบัญชีที่
             จะเอาไปขึ้น — อ่านแล้วเหมือนเงินเข้าแล้ว ทั้งที่กระดาษยังอยู่ในลิ้นชัก
           */
-          method: p.isCheque
-            ? `เช็ค${p.chequeBank ? ' ' + p.chequeBank : ''}${p.chequeNo ? ' เลขที่ ' + p.chequeNo : ''}`
-            : p.method || '—',
+          method: hasCheque(p) ? chequeRef(p) : p.method || '—',
+          chequeNo: (p.chequeNo ?? '').trim(),
+          chequeBank: (p.chequeBank ?? '').trim(),
+          chequeDate: p.chequeDate ?? '',
           amount: Number(p.amount) || 0,
           status: p.status || PAYMENT_RECEIVED,
           settled: isReceived(p),
