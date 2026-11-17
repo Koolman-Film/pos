@@ -6,6 +6,9 @@ import userEvent from '@testing-library/user-event';
 // context under jsdom. Test-environment concern only.
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+  // ตัวกรองของประวัติสต็อกอ่าน/เขียน URL — สองตัวนี้จึงต้องมี ไม่งั้นทั้งโมดูลพัง
+  usePathname: () => '/stock',
+  useSearchParams: () => new URLSearchParams(''),
 }));
 
 import { StockModule, type StockItem } from '@/components/stock/StockModule';
@@ -471,7 +474,17 @@ describe('StockModule — ประวัติสต็อก', () => {
     expect(screen.getByText('JT-LP-00003')).toBeInTheDocument();
   });
 
-  it('narrows to one kind of movement', async () => {
+  it('ตัวกรองถามเซิร์ฟเวอร์ ไม่ได้กรองแถวที่ถืออยู่ในมือ', async () => {
+    /*
+      เดิมข้อนี้ติ๊กประเภทการเคลื่อนไหวแล้วดูว่าตารางสั้นลง ซึ่งพิสูจน์ว่า
+      "กรองในหน้าจอ" ทำงาน — แต่นั่นคือพฤติกรรมที่ถูกเปลี่ยนทิ้งไปแล้ว
+      (ร้านขอ 17 พ.ย. 2569) การกรองในหน้าจอค้นได้แค่กองที่หน้าจอบังเอิญถืออยู่
+      และสมุดบัญชีสต็อกยาวกว่านั้นเสมอ
+
+      ตอนนี้ตัวกรองเขียนค่าลง URL แล้วหน้าเซิร์ฟเวอร์ถามฐานข้อมูลใหม่ สิ่งที่
+      ยังพิสูจน์ได้จากที่นี่คือ หน้าจอแสดงแถวที่ได้รับมา ไม่หักอะไรออกเอง
+      ส่วนการเขียน URL อยู่ใน StockLedgerFilters.test.tsx
+    */
     const user = userEvent.setup();
     render(
       <StockModule
@@ -484,9 +497,11 @@ describe('StockModule — ประวัติสต็อก', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /ประวัติสต็อก/ }));
-    await user.selectOptions(screen.getByLabelText('กรองตามประเภทการเคลื่อนไหว'), 'รับเข้า');
+    await user.click(screen.getByLabelText('กรองประวัติสต็อกตามประเภทการเคลื่อนไหว'));
+    await user.click(screen.getByLabelText('รับเข้า'));
+
     expect(screen.getByText('+10')).toBeInTheDocument();
-    expect(screen.queryByText('JT-LP-00003')).not.toBeInTheDocument();
+    expect(screen.getByText('JT-LP-00003')).toBeInTheDocument();
   });
 });
 

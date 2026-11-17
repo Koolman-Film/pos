@@ -1,13 +1,23 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
+import { MultiSelectFilter } from '@/components/ui/MultiSelectFilter';
+import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
 import { StatusPill } from '@/components/ui/StatusPill';
+import {
+  EMPTY_LEDGER_FILTER,
+  LEDGER_KINDS,
+  LEDGER_PARAM,
+  isLedgerFiltered,
+  ledgerParamValue,
+  type LedgerFilter,
+} from '@/components/stock/ledgerFilter';
 import { fmt, fmtThaiDate } from '@/lib/domain/format';
 import { findFilmPrice } from '@/lib/domain/filmPrice';
 import type { InsurancePlan } from '@/components/tickets/types';
@@ -175,6 +185,8 @@ export function StockModule({
   filmPriceMatrix = [],
   insurancePlans = [],
   movements = [],
+  ledgerFilter = EMPTY_LEDGER_FILTER,
+  ledgerCapped = false,
   batches = [],
   actions = {},
   initialSearch,
@@ -201,8 +213,12 @@ export function StockModule({
   filmPriceMatrix?: FilmPriceEntry[];
   /** แผนประกันฟิล์มกันรอย — the list a ticket picks from (migration 0023). */
   insurancePlans?: InsurancePlan[];
-  /** สมุดบัญชีสต็อก, newest first (migration 0026). */
+  /** สมุดบัญชีสต็อก, newest first (migration 0026) — กรองมาจากเซิร์ฟเวอร์แล้ว. */
   movements?: StockMovement[];
+  /** ตัวกรองของสมุดบัญชี ตามที่อ่านได้จาก URL. */
+  ledgerFilter?: LedgerFilter;
+  /** ยังไม่ได้กรอง และกองล่าสุดเต็มโควต้า — ยังมีของเก่ากว่านี้อีก. */
+  ledgerCapped?: boolean;
   /** ล็อตสินค้า, newest first (migration 0027). */
   batches?: StockBatch[];
   actions?: StockActions;
@@ -220,6 +236,8 @@ export function StockModule({
   // `.print-area`, so a nested print-area would be hidden with it. Portaling
   // needs `document`, which is absent during SSR, hence the mount gate.
   const router = useRouter();
+  const ledgerPath = usePathname();
+  const ledgerSearch = useSearchParams();
   const mounted = useIsMounted();
 
   const [categoriesState, setCategoriesState] = useState<string[]>(productCategories);
@@ -267,7 +285,6 @@ export function StockModule({
     active: true,
   });
   const [planDraft, setPlanDraft] = useState<InsurancePlan | null>(null);
-  const [ledgerKind, setLedgerKind] = useState('all');
 
   async function savePlan() {
     if (!planDraft || !planDraft.name.trim()) return;
@@ -404,7 +421,15 @@ export function StockModule({
   const [periodValue, setPeriodValue] = useState(() => currentMonthValue());
   const [rangeStart, setRangeStart] = useState(() => daysAgoValue(6));
   const [rangeEnd, setRangeEnd] = useState(() => todayValue());
-  const [panel, setPanel] = useState<string | null>(null); // null | 'withdraw' | 'add' | 'adjust' | 'price' | 'bulk'
+  /*
+    ลิงก์ที่มีตัวกรองประวัติสต็อกติดมา เปิดมาที่ประวัติสต็อกเลย.
+
+    ตัวกรองอยู่ใน URL เพื่อให้ส่งลิงก์ให้คนอื่นดูได้ ลิงก์ที่เปิดมาแล้วเจอ
+    รายการสต็อกเฉย ๆ คือลิงก์ที่ไม่ได้ทำสิ่งที่มันสัญญาไว้
+  */
+  const [panel, setPanel] = useState<string | null>(
+    isLedgerFiltered(ledgerFilter) ? 'ledger' : null,
+  ); // null | 'withdraw' | 'add' | 'adjust' | 'price' | 'bulk' | 'ledger'
 
   const stockScopedToAccess = stock.filter((s) => accessibleShops.some((a) => a.id === s.shop));
 
@@ -574,15 +599,56 @@ export function StockModule({
   const [branchFilter, setBranchFilter] = useState('all');
 
   /**
-   * The ledger, scoped to the branch filter already on screen and to one kind
-   * of movement when asked. Read-only: it is a record, and a record that can be
-   * edited is not one.
+   * สมุดบัญชีสต็อก — กรองมาจากฐานข้อมูลแล้ว อ่านอย่างเดียว.
+   *
+   * เคยกรองที่นี่ด้วย `branchFilter` ของการ์ด "รายการสต็อก" ซึ่งอยู่คนละแท็บ
+   * — ตารางถูกกรองด้วยปุ่มที่มองไม่เห็นบนหน้าจอขณะนั้น ตอนนี้แท็บนี้มีตัวกรอง
+   * สาขาของตัวเองที่เห็นอยู่ตรงนั้น
+   *
+   * บันทึกที่แก้ได้ ไม่ใช่บันทึก จึงไม่มีอะไรให้กดนอกจากอ่าน
    */
-  const ledgerRows = movements.filter(
-    (m) =>
-      (branchFilter === 'all' || m.shop === branchFilter) &&
-      (ledgerKind === 'all' || m.kind === ledgerKind),
+  const ledgerRows = movements;
+
+  /*
+    ตัวกรองของสมุดบัญชีอยู่ใน URL ไม่ใช่ใน useState.
+
+    เพราะคนที่กรองแล้วได้คำตอบ มักต้องส่งคำตอบนั้นให้คนอื่นดู — ลิงก์ที่กดแล้ว
+    เห็นตารางเดียวกันคือสิ่งที่ใช้ส่งได้ และเป็นที่เดียวกับที่หน้าเซิร์ฟเวอร์
+    อ่านเพื่อถามฐานข้อมูล สองฝั่งจึงไม่มีทางเห็นคนละชุด (แบบเดียวกับตัวกรอง
+    ของแดชบอร์ด — components/dashboard/DashboardFilter.tsx)
+  */
+  const setLedgerParams = (updates: Record<string, string>) => {
+    const next = new URLSearchParams(ledgerSearch.toString());
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    router.push(`${ledgerPath}?${next.toString()}`, { scroll: false });
+  };
+  const setLedgerList = (key: string, values: string[]) =>
+    setLedgerParams({ [key]: ledgerParamValue(values) });
+  const clearLedger = () =>
+    setLedgerParams(Object.fromEntries(Object.values(LEDGER_PARAM).map((k) => [k, ''])));
+
+  /*
+    สาขาเลือกด้วยชื่อ แต่เก็บด้วยรหัส.
+
+    ตัวกรองหลายค่าทำงานกับข้อความ ส่วนฐานข้อมูลรู้จักแต่รหัสสาขา การเก็บชื่อลง
+    URL จะพังทันทีที่ร้านเปลี่ยนชื่อสาขา — ลิงก์เก่าจะกรองไม่เจออะไรเลย
+  */
+  const shopIdOf = (name: string) => accessibleShops.find((sh) => sh.name === name)?.id ?? name;
+
+  /** ชื่อสินค้าที่เลือกได้ — รวมของที่เคยมีในสมุดแต่ถูกลบออกจากคลังไปแล้ว. */
+  const ledgerNameOptions = [
+    ...new Set([...stock.map((x) => x.name), ...movements.map((m) => m.itemName)]),
+  ]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'th'));
+  const ledgerKindOptions = [...new Set([...LEDGER_KINDS, ...movements.map((m) => m.kind)])].filter(
+    Boolean,
   );
+  /** ตารางมาจากหลายสาขาได้ไหม — ถ้าใช่ แถวต้องบอกว่าของตัวเองมาจากสาขาไหน. */
+  const showLedgerShop = new Set(movements.map((m) => m.shop)).size > 1;
 
   /** ล็อตของสาขาที่กำลังดูอยู่ — เรียงตามที่โหลดมา คือใหม่สุดก่อน. */
   const lotRows = batches.filter((b) => {
@@ -1036,25 +1102,96 @@ export function StockModule({
               ทุกครั้งที่จำนวนเปลี่ยน พร้อมจำนวนก่อน/หลัง — รับเข้า, ตัดจากใบงาน, เบิกใช้, ปรับสต็อก
             </p>
 
-            <select
-              aria-label="กรองตามประเภทการเคลื่อนไหว"
-              value={ledgerKind}
-              onChange={(e) => setLedgerKind(e.target.value)}
-              className="field text-xs px-2.5 py-1.5 mb-3"
-            >
-              <option value="all">ทุกประเภท</option>
-              {[...new Set(movements.map((m) => m.kind))].map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              {/* สาขาก่อน เพราะเป็นคำถามแรกของคนที่มาตรวจ: ของหายที่ไหน */}
+              {accessibleShops.length > 1 && (
+                <MultiSelectFilter
+                  ariaLabel="กรองประวัติสต็อกตามสาขา"
+                  label="ทุกสาขา"
+                  unit="สาขา"
+                  options={accessibleShops.map((sh) => sh.name)}
+                  values={ledgerFilter.shops.map(shopName)}
+                  onChange={(next) => setLedgerList(LEDGER_PARAM.shops, next.map(shopIdOf))}
+                />
+              )}
+              <MultiSelectFilter
+                ariaLabel="กรองประวัติสต็อกตามชื่อสินค้า"
+                label="ทุกสินค้า"
+                unit="สินค้า"
+                options={ledgerNameOptions}
+                values={ledgerFilter.names}
+                onChange={(next) => setLedgerList(LEDGER_PARAM.names, next)}
+              />
+              <MultiSelectFilter
+                ariaLabel="กรองประวัติสต็อกตามชนิดสินค้า"
+                label="ทุกชนิดสินค้า"
+                unit="ชนิด"
+                options={categories}
+                values={ledgerFilter.cats}
+                onChange={(next) => setLedgerList(LEDGER_PARAM.cats, next)}
+              />
+              <MultiSelectFilter
+                ariaLabel="กรองประวัติสต็อกตามประเภทการเคลื่อนไหว"
+                label="ทุกประเภท"
+                unit="ประเภท"
+                options={ledgerKindOptions}
+                values={ledgerFilter.kinds}
+                onChange={(next) => setLedgerList(LEDGER_PARAM.kinds, next)}
+              />
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  ตั้งแต่
+                </span>
+                <ThaiDateInput
+                  ariaLabel="ประวัติสต็อก ตั้งแต่วันที่"
+                  className="field text-xs px-2 py-1.5"
+                  value={ledgerFilter.from}
+                  onChange={(v) => setLedgerParams({ [LEDGER_PARAM.from]: v })}
+                />
+                <span className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  ถึง
+                </span>
+                <ThaiDateInput
+                  ariaLabel="ประวัติสต็อก ถึงวันที่"
+                  className="field text-xs px-2 py-1.5"
+                  value={ledgerFilter.to}
+                  onChange={(v) => setLedgerParams({ [LEDGER_PARAM.to]: v })}
+                />
+              </div>
+              {isLedgerFiltered(ledgerFilter) && (
+                <button
+                  type="button"
+                  onClick={clearLedger}
+                  className="text-xs px-2.5 py-1.5 rounded-lg"
+                  style={{ border: '1.5px solid var(--line)', color: 'var(--ink-soft)' }}
+                >
+                  {/* "ทั้งหมด" เพราะแต่ละตัวกรองมีปุ่มล้างของตัวเองอยู่ในกล่องของมัน
+                      สองปุ่มที่เขียนเหมือนกันแต่ทำคนละอย่าง คือปุ่มที่กดผิด */}
+                  ล้างตัวกรองทั้งหมด
+                </button>
+              )}
+            </div>
+
+            {/*
+              บอกว่ากองนี้ถูกตัด ไม่ใช่ปล่อยให้เข้าใจว่าเท่านี้คือทั้งหมด —
+              สมุดบัญชีไม่มีวันเล็กลง หน้าที่เปิดมาเฉย ๆ จึงอ่านแค่ของล่าสุด
+            */}
+            <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
+              {isLedgerFiltered(ledgerFilter)
+                ? `พบ ${ledgerRows.length} รายการตามตัวกรองนี้ — ค้นจากทั้งสมุด ไม่ใช่เฉพาะที่เห็นล่าสุด`
+                : ledgerCapped
+                  ? `แสดง ${ledgerRows.length} รายการล่าสุด — เลือกช่วงเวลาหรือสินค้า เพื่อค้นย้อนหลังทั้งหมด`
+                  : `ทั้งหมด ${ledgerRows.length} รายการ`}
+            </p>
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ color: 'var(--ink-soft)' }}>
                     <th className="text-left font-medium py-2">วันที่</th>
+                    {/* สาขาอยู่ในตารางก็ต่อเมื่อแถวมาจากหลายสาขาได้จริง —
+                        คอลัมน์ที่ทุกแถวเขียนเหมือนกัน คือคอลัมน์ที่กินที่เปล่า */}
+                    {showLedgerShop && <th className="text-left font-medium py-2">สาขา</th>}
                     <th className="text-left font-medium py-2">สินค้า</th>
                     <th className="text-left font-medium py-2">ประเภท</th>
                     <th className="text-left font-medium py-2">เอกสาร</th>
@@ -1068,11 +1205,13 @@ export function StockModule({
                   {ledgerRows.length === 0 && (
                     <tr>
                       <td
-                        colSpan={canSeePrices ? 8 : 7}
+                        colSpan={(canSeePrices ? 8 : 7) + (showLedgerShop ? 1 : 0)}
                         className="py-3 text-xs"
                         style={{ color: 'var(--ink-faint)' }}
                       >
-                        ยังไม่มีประวัติในสาขานี้
+                        {isLedgerFiltered(ledgerFilter)
+                          ? 'ไม่มีรายการที่ตรงกับตัวกรองนี้'
+                          : 'ยังไม่มีประวัติสต็อก'}
                       </td>
                     </tr>
                   )}
@@ -1081,6 +1220,9 @@ export function StockModule({
                       <td className="py-2 whitespace-nowrap text-xs">
                         {fmtThaiDate(new Date(m.movedAt))}
                       </td>
+                      {showLedgerShop && (
+                        <td className="py-2 text-xs whitespace-nowrap">{shopName(m.shop)}</td>
+                      )}
                       <td className="py-2">{m.itemName}</td>
                       <td className="py-2 text-xs">{m.kind}</td>
                       <td className="py-2 text-xs">{m.documentId || String.fromCharCode(8212)}</td>

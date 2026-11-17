@@ -10,6 +10,12 @@ import {
   type StockMovement,
   type StockBatch,
 } from '@/components/stock/StockModule';
+import {
+  isLedgerFiltered,
+  ledgerRange,
+  ledgerStockIds,
+  parseLedgerFilter,
+} from '@/components/stock/ledgerFilter';
 
 import { updateOptionListAction } from '../optionListActions';
 import { loadInsurancePlans } from '../tickets/data';
@@ -188,29 +194,60 @@ export default async function StockPage({
     }));
   }
 
-  // สมุดบัญชีสต็อก (migration 0026). Capped: the ledger grows for ever and the
-  // panel is a "what happened lately" list, not an archive browser.
-  const { data: moveRows } = await supabase
-    .from('stock_movements')
-    .select(
-      'id, item_name, shop_id, kind, document_id, change, qty_before, qty_after, cost_total, note, moved_at, moved_by_name',
-    )
-    .order('moved_at', { ascending: false })
-    .limit(300);
-  const movements: StockMovement[] = (moveRows ?? []).map((m) => ({
-    id: m.id,
-    itemName: m.item_name,
-    shop: m.shop_id,
-    kind: m.kind,
-    documentId: m.document_id,
-    change: Number(m.change || 0),
-    qtyBefore: Number(m.qty_before || 0),
-    qtyAfter: Number(m.qty_after || 0),
-    costTotal: Number(m.cost_total || 0),
-    note: m.note,
-    movedAt: m.moved_at,
-    movedBy: m.moved_by_name,
-  }));
+  /*
+    สมุดบัญชีสต็อก (migration 0026) — กรองที่ฐานข้อมูล ไม่ใช่ที่หน้าจอ.
+
+    สมุดนี้โตขึ้นเรื่อย ๆ และไม่มีวันเล็กลง เดิมจึงอ่านมา 300 แถวล่าสุดแล้ว
+    ให้หน้าจอกรองเอาเอง ซึ่งพอมีตัวกรองช่วงเวลา (ร้านขอ 17 พ.ย. 2569) วิธีนั้น
+    จะตอบว่า "ไม่มีรายการ" สำหรับเดือนที่เลยกองล่าสุดไป ทั้งที่มีอยู่จริง
+
+    ยังไม่ได้กรองอะไร = กองล่าสุดเหมือนเดิม หน้านี้เปิดมาเพื่อดูว่า "เมื่อกี้
+    เกิดอะไรขึ้น" เป็นหลัก ไม่ใช่เพื่ออ่านทั้งเล่ม
+  */
+  const LEDGER_RECENT = 300;
+  const ledgerFilter = parseLedgerFilter(params);
+  const ledgerFiltered = isLedgerFiltered(ledgerFilter);
+  const ledgerIds = ledgerStockIds(ledgerFilter, stock);
+  const { fromISO, toISO } = ledgerRange(ledgerFilter);
+  const ledgerQuery = (from: number, to: number) => {
+    let q = supabase
+      .from('stock_movements')
+      .select(
+        'id, item_name, shop_id, kind, document_id, change, qty_before, qty_after, cost_total, note, moved_at, moved_by_name',
+      );
+    if (ledgerFilter.shops.length) q = q.in('shop_id', ledgerFilter.shops);
+    if (ledgerFilter.names.length) q = q.in('item_name', ledgerFilter.names);
+    // ชนิดสินค้าถูกแปลงเป็นรหัสสินค้าแล้ว — รายการว่างแปลว่าไม่มีสินค้าในชนิด
+    // ที่เลือก ซึ่งต้องได้ตารางว่าง ไม่ใช่ตารางที่ไม่ได้กรอง
+    if (ledgerIds) q = q.in('stock_id', ledgerIds);
+    if (ledgerFilter.kinds.length) q = q.in('kind', ledgerFilter.kinds);
+    if (fromISO) q = q.gte('moved_at', fromISO);
+    if (toISO) q = q.lte('moved_at', toISO);
+    // id รองจากวันที่ เพื่อให้ลำดับคงที่พอที่จะไล่ทีละหน้าได้ (fetchAll.ts)
+    return q
+      .order('moved_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to);
+  };
+  const moveRows = ledgerFiltered
+    ? await fetchAllRows((from, to) => ledgerQuery(from, to), 'stock_movements')
+    : (await ledgerQuery(0, LEDGER_RECENT - 1)).data;
+  const movements: StockMovement[] = ((moveRows ?? []) as NonNullable<typeof moveRows>).map(
+    (m) => ({
+      id: m.id,
+      itemName: m.item_name,
+      shop: m.shop_id,
+      kind: m.kind,
+      documentId: m.document_id,
+      change: Number(m.change || 0),
+      qtyBefore: Number(m.qty_before || 0),
+      qtyAfter: Number(m.qty_after || 0),
+      costTotal: Number(m.cost_total || 0),
+      note: m.note,
+      movedAt: m.moved_at,
+      movedBy: m.moved_by_name,
+    }),
+  );
 
   // ล็อตสินค้า (migration 0027) — what each round of buying cost, and how much
   // of it is left. Capped like the ledger; the panel shows recent deliveries.
@@ -269,6 +306,9 @@ export default async function StockPage({
       filmPriceMatrix={filmPriceMatrix}
       insurancePlans={insurancePlans}
       movements={movements}
+      ledgerFilter={ledgerFilter}
+      /* บอกตรง ๆ ว่ากองนี้ถูกตัด ไม่ใช่ปล่อยให้เข้าใจว่าเท่านี้คือทั้งหมด */
+      ledgerCapped={!ledgerFiltered && movements.length >= LEDGER_RECENT}
       batches={batches}
       actions={{
         addProduct: addProductAction,
