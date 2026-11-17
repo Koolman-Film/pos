@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { MultiSelectFilter } from '@/components/ui/MultiSelectFilter';
+import { SearchableSelect, type SearchableOption } from '@/components/ui/SearchableSelect';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { OptionManageProvider } from '@/components/ui/optionManage';
 import { PeriodShopFilter, type Shop } from '@/components/ui/PeriodShopFilter';
@@ -432,6 +433,24 @@ export function StockModule({
   ); // null | 'withdraw' | 'add' | 'adjust' | 'price' | 'bulk' | 'ledger'
 
   const stockScopedToAccess = stock.filter((s) => accessibleShops.some((a) => a.id === s.shop));
+
+  /*
+    ช่องเลือกสินค้าของสามแผง พิมพ์ค้นหาได้ (ร้านขอ 17 พ.ย. 2569).
+
+    ร้านมีสินค้าหลายร้อยตัว และชื่อขึ้นต้นเหมือนกันเป็นพรวน ("Alpha Finnix
+    กล้องบันทึกหน้า-หลัง F1 / F1 4K / F2 / F2 2K …") ดรอปดาวน์ธรรมดาตอบได้แค่
+    "เลื่อนหาเอา" ซึ่งกับรายการแบบนั้นคือเลือกผิดตัวได้ง่ายมาก — แล้วการปรับ
+    สต็อกผิดตัวก็กลายเป็นของขาดอีกตัวที่ไม่มีใครรู้ว่าหายไปตอนไหน
+
+    ชื่อสาขาอยู่ใน `note` ไม่ใช่ต่อท้ายชื่อ เพราะสินค้าชื่อเดียวกันมีอยู่ทุก
+    สาขา — คนต้องเห็นว่ากำลังจะแก้ของสาขาไหนโดยไม่ต้องอ่านจนจบบรรทัด และ
+    ค้นด้วยชื่อสาขาได้ด้วย (`note` ถูกค้นเหมือนกัน)
+  */
+  const productOptions: SearchableOption[] = stockScopedToAccess.map((s) => ({
+    value: String(s.id),
+    label: s.name,
+    note: shopName(s.shop),
+  }));
 
   // The pristine shapes of the three data-entry panels, kept as functions so the
   // `useState` seed and the dirty comparison below can never drift apart — the
@@ -1616,18 +1635,13 @@ export function StockModule({
                   <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                     เลือกสินค้า
                   </label>
-                  <select
-                    value={addStk.existingId}
-                    aria-label="เลือกสินค้าที่มีอยู่แล้ว"
-                    onChange={(e) => setAddStk({ ...addStk, existingId: Number(e.target.value) })}
-                    className="field w-full text-sm px-3 py-2"
-                  >
-                    {stockScopedToAccess.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} &middot; {shopName(s.shop)}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableSelect
+                    label="เลือกสินค้าที่มีอยู่แล้ว"
+                    placeholder="พิมพ์ชื่อสินค้าหรือสาขาเพื่อค้นหา"
+                    options={productOptions}
+                    value={String(addStk.existingId)}
+                    onChange={(v) => setAddStk({ ...addStk, existingId: Number(v) })}
+                  />
                 </div>
               ) : (
                 <>
@@ -1868,18 +1882,13 @@ export function StockModule({
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   สินค้า
                 </label>
-                <select
-                  value={adj.id}
-                  aria-label="สินค้าที่ต้องการปรับสต็อก"
-                  onChange={(e) => setAdj({ ...adj, id: Number(e.target.value) })}
-                  className="field w-full text-sm px-3 py-2"
-                >
-                  {stockScopedToAccess.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} &middot; {shopName(s.shop)}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  label="สินค้าที่ต้องการปรับสต็อก"
+                  placeholder="พิมพ์ชื่อสินค้าหรือสาขาเพื่อค้นหา"
+                  options={productOptions}
+                  value={String(adj.id)}
+                  onChange={(v) => setAdj({ ...adj, id: Number(v) })}
+                />
               </div>
               <div>
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
@@ -1929,18 +1938,13 @@ export function StockModule({
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
                   สินค้า
                 </label>
-                <select
-                  value={wd.id}
-                  aria-label="สินค้าที่ต้องการเบิก"
-                  onChange={(e) => setWd({ ...wd, id: Number(e.target.value) })}
-                  className="field w-full text-sm px-3 py-2"
-                >
-                  {stockScopedToAccess.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  label="สินค้าที่ต้องการเบิก"
+                  placeholder="พิมพ์ชื่อสินค้าหรือสาขาเพื่อค้นหา"
+                  options={productOptions}
+                  value={String(wd.id)}
+                  onChange={(v) => setWd({ ...wd, id: Number(v) })}
+                />
               </div>
               <div>
                 <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
