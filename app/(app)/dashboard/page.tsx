@@ -62,6 +62,7 @@ const VISIT_KINDS = [
   ['Service', 'Service', '#2563EB'],
   ['เคลมประกัน', 'เคลมประกัน', '#7C3AED'],
   ['รถสไลด์', 'รถสไลด์', '#0F766E'],
+  ['ติดตั้งเพิ่ม', 'ติดตั้งเพิ่ม', '#B45309'],
 ] as const;
 
 // Aggregated server-side per the plan's Task 13, Step 5 model: fetch the raw rows
@@ -106,7 +107,7 @@ export default async function DashboardPage({
         supabase
           .from('tickets')
           .select(
-            'id, shop_id, customer_name, plate, brand, model, service_type, booking_channel, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, interested, sold_price, discount_type, discount_value, revenue_kind, finnix_amount), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
+            'id, shop_id, customer_name, plate, brand, model, service_type, booking_channel, status, revenue_kind, extras, drop_off_date, pickup_date, ticket_items(category, booked, sold, interested, sold_price, discount_type, discount_value, revenue_kind, finnix_amount, received_at, delivered_at), ticket_payments(amount, method, paid_at), ticket_status_history(status, changed_at)',
           )
           // Soft-deleted tickets (migration 0013) are out of every figure on this
           // screen — revenue, job counts, the calendar and the bookings window.
@@ -293,6 +294,18 @@ export default async function DashboardPage({
     // (components/dashboard/productNames.ts).
     categories: [...new Set((t.ticket_items ?? []).map((i) => i.category).filter(Boolean))],
     products: productLabels(t.ticket_items ?? []),
+    /*
+      บรรทัดกับวันของมัน — ส่งดิบ ๆ ให้ `buildAppointments` ตัดสินใจ.
+
+      กฎว่าวันไหนคือ "การมาอีกครั้ง" อยู่ในนั้นที่เดียว เพราะมันทดสอบได้ ส่วน
+      หน้านี้เป็น Server Component ที่เรนเดอร์ในเทสต์ไม่ได้
+    */
+    lines: (t.ticket_items ?? []).map((i) => ({
+      category: i.category ?? '',
+      sold: i.sold ?? '',
+      receivedAt: i.received_at,
+      deliveredAt: i.delivered_at,
+    })),
     /*
       บรรทัดที่แบ่งรายได้กัน กลายเป็นน้ำหนักสองก้อน (migration 0084).
 

@@ -18,6 +18,29 @@ import type { CalendarTicket } from './JobCalendar';
  * cannot be rendered in a unit test.
  */
 
+/**
+ * ชื่อที่การมาติดตั้งรอบหลังใช้บนปฏิทินและคิวงาน.
+ *
+ * ไม่ใช่สถานะของใบงาน — ใบงานยังถืออะไรอยู่ก็ถืออันนั้นต่อไป มันคือ "วันนั้น
+ * มีอะไรเกิดขึ้น" แบบเดียวกับ แก้งาน/Service/เคลมประกัน/รถสไลด์ จึงถูกนับแยก
+ * จากแถบสถานะ ไม่งั้นรถคันเดียวจะถูกนับเป็นสองงาน (ร้านเลือกเอง 16 พ.ย. 2569)
+ */
+export const EXTRA_INSTALL_KIND = 'ติดตั้งเพิ่ม';
+
+/**
+ * บรรทัดสินค้า เท่าที่กฎ "ติดตั้งอีกวัน" ต้องรู้ (migration 0089).
+ *
+ * ว่างทั้งคู่ = บรรทัดนี้ใช้วันของใบงาน ซึ่งเป็นงานส่วนใหญ่ และไม่ได้แปลว่า
+ * ข้อมูลขาด
+ */
+export type AppointmentLine = {
+  category?: string;
+  /** ชื่อสินค้าที่ขายจริง — บรรทัดที่ยังไม่ได้ขาย ไม่มีวันติดตั้งให้นัด. */
+  sold?: string;
+  receivedAt?: string | null;
+  deliveredAt?: string | null;
+};
+
 /** The fields of a dashboard ticket that an appointment is derived from. */
 export type AppointmentTicket = {
   id: string;
@@ -34,6 +57,8 @@ export type AppointmentTicket = {
   dropOff: Date | null;
   pickup: Date | null;
   extras: Record<string, Record<string, unknown>>;
+  /** บรรทัดสินค้า — มีไว้หาวันติดตั้งที่ไม่ตรงกับหัวใบงาน. */
+  lines?: AppointmentLine[];
 };
 
 export type Appointment<T extends AppointmentTicket = AppointmentTicket> = {
@@ -261,6 +286,57 @@ export function buildAppointments<T extends AppointmentTicket>(
     }
 
     const baseAppt = appointmentDate(t);
+
+    /*
+      ของที่ติดตั้งคนละวันกับหัวใบงาน คือรถที่เข้ามาอีกครั้ง (ร้านแจ้ง 16 พ.ย. 2569).
+
+      ลูกค้ากลับมาซื้อเพิ่ม แล้วรายการนั้นถูกเพิ่มลงในใบงานใบเดิมพร้อมวันของ
+      ตัวเอง (migration 0089) ใบงานขายแยกใบตามวันนั้นแล้ว แต่ปฏิทินกับคิวงาน
+      ยังอ่านแต่วันของหัวใบงาน วันที่ช่างต้องว่างรอรถจึงไม่เคยโผล่ขึ้นมาเลย —
+      ร้านเห็นวันที่ 16 มีงาน ส่วนวันที่ 18 ที่ต้องติดฟิล์มนิรภัยเป็นช่องว่าง
+
+      ไม่ได้เข้าไปอยู่ใน `visits` ด้วยเหตุผลเดียวกับรถสไลด์: มันไม่ได้มาแทนการ
+      จองของวันแรก วันแรกก็ยังมีงานของมันอยู่ และวันที่ตรงกับหัวใบงานอยู่แล้ว
+      ถูกข้ามไป แถวการจองจึงไม่ถูกแทนที่ด้วยคำว่า "ติดตั้งเพิ่ม"
+
+      จัดกลุ่มตามคู่ (วันรับ, วันส่ง) ไม่ใช่ทีละบรรทัด — ของสามชิ้นที่นัดไว้วัน
+      เดียวกันคือรถเข้ามาครั้งเดียว ไม่ใช่สามครั้ง
+    */
+    const baseDay = shopDayKey(baseAppt);
+    const extraInstalls = new Map<
+      string,
+      { from: Date | null; to: Date | null; at: Date; cats: string[]; products: string[] }
+    >();
+    for (const line of t.lines ?? []) {
+      if (!line.sold) continue;
+      if (!line.receivedAt && !line.deliveredAt) continue;
+      // ข้างที่ไม่ได้กำหนดเอง ยืมวันของใบงานไปใช้ — กฎเดียวกับ `itemDates`
+      const from = asDate(String(line.receivedAt ?? '')) ?? t.dropOff;
+      const to = asDate(String(line.deliveredAt ?? '')) ?? t.pickup;
+      const at = appointmentDate({ status: t.status, dropOff: from, pickup: to });
+      const day = shopDayKey(at);
+      if (!at || !day || day === baseDay) continue;
+      const key = `${shopDayKey(from)}|${shopDayKey(to)}`;
+      const group = extraInstalls.get(key) ?? { from, to, at, cats: [], products: [] };
+      if (line.category && !group.cats.includes(line.category)) group.cats.push(line.category);
+      if (!group.products.includes(line.sold)) group.products.push(line.sold);
+      extraInstalls.set(key, group);
+    }
+    for (const g of extraInstalls.values()) {
+      appointments.push({
+        t,
+        appt: g.at,
+        row: {
+          ...base,
+          serviceType: EXTRA_INSTALL_KIND,
+          categories: g.cats.length ? g.cats : base.categories,
+          products: g.products,
+          dropOff: (g.from ?? g.to) as Date,
+          pickup: g.to,
+        },
+      });
+    }
+
     if (!baseAppt || !visitDays.has(shopDayKey(baseAppt))) {
       appointments.push({ t, appt: baseAppt, row: base });
     }

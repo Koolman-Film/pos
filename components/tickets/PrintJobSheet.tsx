@@ -497,6 +497,35 @@ export function PrintJobSheet({
     { dropOff: t.dropOffDateObj, pickup: t.pickupDateObj },
   );
 
+  /*
+    ใบงานติดตั้ง หนึ่งหน้า = หนึ่งชนิดสินค้า ของหนึ่งวันติดตั้ง (ร้านแจ้ง 16 พ.ย. 2569).
+
+    ของที่ลูกค้ากลับมาติดอีกวัน คือรถที่เข้ามาอีกครั้ง ช่างคนละคน วันคนละวัน
+    หน้ากระดาษที่พาดหัวด้วยวันของหัวใบงาน จึงส่งช่างไปรอรถผิดวัน — ใบงานขายกับ
+    ปฏิทินแยกวันนี้ให้เห็นอยู่แล้ว ใบที่ช่างถืออยู่เป็นที่เดียวที่ยังไม่แยก
+
+    วันมาก่อนชนิดสินค้า เพราะกองกระดาษถูกหยิบไปตามวันที่ทำงาน ไม่ใช่ตามชนิด
+    ของ งานที่ทำรอบเดียวได้กลุ่มเดียว ลำดับหน้าจึงเหมือนเดิมทุกประการ
+  */
+  const installPages = saleGroups.flatMap((g) =>
+    [...new Set(g.items.map((i) => i.category))].map((cat) => ({
+      cat,
+      day: g.day,
+      received: g.received,
+      items: g.items.filter((i) => i.category === cat),
+      /** ใบงานนี้ติดตั้งหลายวันไหม — ตัวที่บอกว่าหน้ากระดาษต้องบอกวันของตัวเอง. */
+      split: saleGroups.length > 1,
+      /**
+       * ของในหน้านี้ถูกนัดวันไว้เอง หรือแค่ยืมวันของใบงาน.
+       *
+       * หน้าที่แค่ยืมวันมา ยังเป็นงานของรอบแรก มันจึงต้องได้หัวเดิมทุกอย่าง
+       * รวมถึงป้ายงานแก้/เซอร์วิสกับเวลานัด ส่วนหน้าที่ถูกนัดไว้เอง คือรอบที่
+       * ขายทีหลังและมีวันของมันเอง
+       */
+      own: g.items.some((i) => i.receivedAt || i.deliveredAt),
+    })),
+  );
+
   /**
    * `skipRework` is set by the ใบงานติดตั้ง, where แก้งาน is printed under the
    * stamp at the bottom instead — saying it twice on one sheet, once in
@@ -747,7 +776,7 @@ export function PrintJobSheet({
    * ทันที วันของทั้งใบงานยังอยู่เป็นบรรทัดเล็กข้างล่าง เพราะมันคือวันที่รถเข้า
    * มาครั้งแรก ซึ่งเป็นสิ่งที่การรับประกันนับจากมัน
    */
-  function saleGroupDates(g: { day: string; received: string }) {
+  function saleGroupDates(g: { day: string; received: string }, scope = 'ของในใบนี้') {
     const day = (v: string) => (v ? fmtThaiDate(new Date(`${v}T00:00:00`)) : '-');
     const jobDay = (d: Date | null | undefined) => {
       if (!d) return '-';
@@ -773,7 +802,7 @@ export function PrintJobSheet({
             padding: '4px 10px',
           }}
         >
-          วันที่รับงาน (ของในใบนี้): {day(g.received)}
+          วันที่รับงาน ({scope}): {day(g.received)}
         </span>
         <span
           style={{
@@ -785,7 +814,7 @@ export function PrintJobSheet({
             background: '#FFF7DD',
           }}
         >
-          วันที่ส่งงาน (ของในใบนี้): {g.day ? day(g.day) : 'ยังไม่ได้นัด'}
+          วันที่ส่งงาน ({scope}): {g.day ? day(g.day) : 'ยังไม่ได้นัด'}
         </span>
         <span style={{ width: '100%', textAlign: 'right', fontSize: 10, color: '#777' }}>
           ทั้งใบงาน: รับ {jobDay(t.dropOffDateObj)} &middot; ส่ง {jobDay(t.pickupDateObj)}
@@ -799,75 +828,91 @@ export function PrintJobSheet({
   if (printMode === 'job') {
     content = (
       <div className="print-area">
-        {categories.map((cat, catIdx) => (
-          <div
-            key={cat}
-            className="print-page"
-            style={catIdx > 0 ? { pageBreakBefore: 'always' } : {}}
-          >
-            <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>ใบงานติดตั้ง</h1>
-            <div style={{ textAlign: 'right', marginBottom: 16 }}>
-              <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
-              {jobDates(cat)}
-              <p style={{ margin: '6px 0 0', fontSize: 12 }}>จองผ่าน: {t.bookingChannel || '-'}</p>
-              <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
-                บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
-              </p>
-            </div>
-            <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>
-              {shopName(t.shop)}
-            </p>
+        {installPages.map((pg, pgIdx) => {
+          const cat = pg.cat;
+          return (
             <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '4px 28px',
-                fontSize: 13,
-                marginBottom: 8,
-              }}
+              key={`${pg.day}|${cat}`}
+              className="print-page"
+              style={pgIdx > 0 ? { pageBreakBefore: 'always' } : {}}
             >
-              <span>
-                ชื่อลูกค้า: <b>{t.customer}</b>
-              </span>
-              <span>
-                เบอร์โทร: <b>{t.phone}</b>
-              </span>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '4px 22px',
-                fontSize: 13,
-                marginBottom: 10,
-              }}
-            >
-              <span>
-                ยี่ห้อรถ: <b>{t.brand}</b>
-              </span>
-              <span>
-                รุ่นรถ: <b>{t.model}</b>
-              </span>
-              <span>
-                สีรถ: <b>{t.color}</b>
-              </span>
-              <span>
-                ทะเบียนรถ/เลขถัง: <b>{t.plate}</b>
-              </span>
-              <span>
-                ประเภทรถ: <b>{t.carType}</b>
-              </span>
-            </div>
-            {categories.length > 1 && (
-              <p style={{ margin: '0 0 10px', fontSize: 11, color: '#B23A48', fontWeight: 'bold' }}>
-                งานนี้มี {categories.length} ชนิดสินค้า — หน้านี้แสดงเฉพาะ &quot;{cat}&quot; (หน้า{' '}
-                {catIdx + 1}/{categories.length})
+              <h1 style={{ margin: '0 0 14px', fontSize: 22, textAlign: 'center' }}>
+                ใบงานติดตั้ง
+              </h1>
+              <div style={{ textAlign: 'right', marginBottom: 16 }}>
+                <p style={{ margin: '0 0 6px', fontSize: 12 }}>เลขที่เอกสาร: {t.id}</p>
+                {/*
+                หน้าที่ยืมวันของใบงานมา ยังอ่านด้วยกฎเดิมทุกข้อ — รวมถึงป้าย
+                งานแก้/เซอร์วิส ที่พูดถึงรอบที่รถกลับเข้ามาทั้งใบ
+              */}
+                {pg.split && pg.own
+                  ? saleGroupDates({ day: pg.day, received: pg.received }, 'งานในใบนี้')
+                  : jobDates(cat)}
+                <p style={{ margin: '6px 0 0', fontSize: 12 }}>
+                  จองผ่าน: {t.bookingChannel || '-'}
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: 10, color: '#888' }}>
+                  บันทึกโดย: {t.createdBy || '-'} &middot; พิมพ์โดย: {currentUserName || '-'}
+                </p>
+              </div>
+              <p style={{ fontSize: 16, fontWeight: 'bold', margin: '0 0 10px' }}>
+                {shopName(t.shop)}
               </p>
-            )}
-            <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-            {t.items
-              .filter((i) => i.sold && i.category === cat)
-              .map((i, idx) => {
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '4px 28px',
+                  fontSize: 13,
+                  marginBottom: 8,
+                }}
+              >
+                <span>
+                  ชื่อลูกค้า: <b>{t.customer}</b>
+                </span>
+                <span>
+                  เบอร์โทร: <b>{t.phone}</b>
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '4px 22px',
+                  fontSize: 13,
+                  marginBottom: 10,
+                }}
+              >
+                <span>
+                  ยี่ห้อรถ: <b>{t.brand}</b>
+                </span>
+                <span>
+                  รุ่นรถ: <b>{t.model}</b>
+                </span>
+                <span>
+                  สีรถ: <b>{t.color}</b>
+                </span>
+                <span>
+                  ทะเบียนรถ/เลขถัง: <b>{t.plate}</b>
+                </span>
+                <span>
+                  ประเภทรถ: <b>{t.carType}</b>
+                </span>
+              </div>
+              {installPages.length > 1 && (
+                <p
+                  style={{ margin: '0 0 10px', fontSize: 11, color: '#B23A48', fontWeight: 'bold' }}
+                >
+                  {pg.split
+                    ? `งานนี้ติดตั้ง ${saleGroups.length} วัน — หน้านี้แสดงเฉพาะ "${cat}" ของวันที่ ${
+                        pg.day ? fmtThaiDate(new Date(`${pg.day}T00:00:00`)) : 'ที่ยังไม่ได้นัด'
+                      }`
+                    : `งานนี้มี ${categories.length} ชนิดสินค้า — หน้านี้แสดงเฉพาะ "${cat}"`}{' '}
+                  (หน้า {pgIdx + 1}/{installPages.length})
+                </p>
+              )}
+              <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
+              {pg.items.map((i, idx) => {
                 // ONE ROW PER POSITION, not one per product.
                 //
                 // The sheet used to group the positions by product — "บานหน้า,
@@ -969,118 +1014,119 @@ export function PrintJobSheet({
                   </div>
                 );
               })}
-            <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
-            {cat === WRAP_CATEGORY && wrapOptionsBlock()}
-            {notesBlock(cat)}
-            {extrasBlock(16, true)}
-            <p
-              style={{
-                margin: '0 0 16px',
-                display: 'flex',
-                justifyContent: 'flex-end',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 12,
-              }}
-            >
-              ชื่อช่างที่ทำ
-              {t.techByCategory && t.techByCategory[cat] && t.techByCategory[cat].length > 0 ? (
-                <span style={{ fontWeight: 'bold' }}>{t.techByCategory[cat].join(', ')}</span>
-              ) : (
-                <span
-                  style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 240 }}
-                >
-                  &nbsp;
-                </span>
-              )}
-              {/* Who checks the work belongs beside who did it. */}
-              <span>QC</span>
-              {t.qcBy ? (
-                <span style={{ fontWeight: 'bold' }}>{t.qcBy}</span>
-              ) : (
-                <span
-                  style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 120 }}
-                >
-                  &nbsp;
-                </span>
-              )}
-            </p>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div
+              <div style={{ borderTop: '1.5px solid #333', margin: '10px 0' }}></div>
+              {cat === WRAP_CATEGORY && wrapOptionsBlock()}
+              {notesBlock(cat)}
+              {extrasBlock(16, true)}
+              <p
                 style={{
-                  flex: 1,
-                  border: '1.5px solid #555',
-                  borderRadius: 6,
-                  padding: '10px 12px',
+                  margin: '0 0 16px',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
                 }}
               >
-                <p
+                ชื่อช่างที่ทำ
+                {t.techByCategory && t.techByCategory[cat] && t.techByCategory[cat].length > 0 ? (
+                  <span style={{ fontWeight: 'bold' }}>{t.techByCategory[cat].join(', ')}</span>
+                ) : (
+                  <span
+                    style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 240 }}
+                  >
+                    &nbsp;
+                  </span>
+                )}
+                {/* Who checks the work belongs beside who did it. */}
+                <span>QC</span>
+                {t.qcBy ? (
+                  <span style={{ fontWeight: 'bold' }}>{t.qcBy}</span>
+                ) : (
+                  <span
+                    style={{ display: 'inline-block', borderBottom: '1px solid #999', width: 120 }}
+                  >
+                    &nbsp;
+                  </span>
+                )}
+              </p>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div
                   style={{
-                    margin: '0 0 8px',
-                    fontWeight: 'bold',
-                    fontSize: 13,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
+                    flex: 1,
+                    border: '1.5px solid #555',
+                    borderRadius: 6,
+                    padding: '10px 12px',
                   }}
                 >
-                  <span
+                  <p
                     style={{
-                      display: 'inline-block',
-                      width: 16,
-                      height: 16,
-                      border: '2px solid #D8722A',
-                      borderRadius: 3,
-                      flexShrink: 0,
+                      margin: '0 0 8px',
+                      fontWeight: 'bold',
+                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
                     }}
-                  ></span>
-                  QC ก่อนติดตั้ง
-                </p>
-                <p style={{ margin: 0, fontSize: 11 }}>
-                  วันที่ ....................................
-                </p>
-              </div>
-              <div
-                style={{
-                  flex: 1,
-                  border: '1.5px solid #555',
-                  borderRadius: 6,
-                  padding: '10px 12px',
-                }}
-              >
-                <p
+                  >
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        width: 16,
+                        height: 16,
+                        border: '2px solid #D8722A',
+                        borderRadius: 3,
+                        flexShrink: 0,
+                      }}
+                    ></span>
+                    QC ก่อนติดตั้ง
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11 }}>
+                    วันที่ ....................................
+                  </p>
+                </div>
+                <div
                   style={{
-                    margin: '0 0 8px',
-                    fontWeight: 'bold',
-                    fontSize: 13,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
+                    flex: 1,
+                    border: '1.5px solid #555',
+                    borderRadius: 6,
+                    padding: '10px 12px',
                   }}
                 >
-                  <span
+                  <p
                     style={{
-                      display: 'inline-block',
-                      width: 16,
-                      height: 16,
-                      border: '2px solid #D8722A',
-                      borderRadius: 3,
-                      flexShrink: 0,
+                      margin: '0 0 8px',
+                      fontWeight: 'bold',
+                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
                     }}
-                  ></span>
-                  QC หลังติดตั้ง
-                </p>
-                <p style={{ margin: 0, fontSize: 11 }}>
-                  วันที่ ....................................
-                </p>
+                  >
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        width: 16,
+                        height: 16,
+                        border: '2px solid #D8722A',
+                        borderRadius: 3,
+                        flexShrink: 0,
+                      }}
+                    ></span>
+                    QC หลังติดตั้ง
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11 }}>
+                    วันที่ ....................................
+                  </p>
+                </div>
               </div>
-            </div>
-            {/* Last thing on the page, under the QC boxes: the technician has
+              {/* Last thing on the page, under the QC boxes: the technician has
                 read the job by the time they reach it, and it is the one thing
                 that changes what they are about to do. */}
-            {reworkOn(cat) && <ReworkStamp detail={reworkDetail} />}
-          </div>
-        ))}
+              {reworkOn(cat) && <ReworkStamp detail={reworkDetail} />}
+            </div>
+          );
+        })}
         {categories.includes('ฟิล์มกรองแสง') && (
           <div className="print-page" style={{ pageBreakBefore: 'always' }}>
             <h2 style={{ textAlign: 'center', marginBottom: 10, fontSize: 16 }}>

@@ -48,6 +48,7 @@ export const VISIT_STATUSES: CalendarStatus[] = [
   { key: 'Service', short: 'Service', dot: '#2563EB' },
   { key: 'เคลมประกัน', short: 'เคลมประกัน', dot: '#7C3AED' },
   { key: 'รถสไลด์', short: 'รถสไลด์', dot: '#0F766E' },
+  { key: 'ติดตั้งเพิ่ม', short: 'ติดตั้งเพิ่ม', dot: '#B45309' },
 ];
 
 function getStatus(statuses: CalendarStatus[], key: string): CalendarStatus {
