@@ -1918,6 +1918,35 @@ export type Database = {
           },
         ]
       }
+      user_notice_state: {
+        Row: {
+          dismissed_release: number
+          seen_release: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          dismissed_release?: number
+          seen_release?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          dismissed_release?: number
+          seen_release?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notice_state_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_shop_access: {
         Row: {
           shop_id: string

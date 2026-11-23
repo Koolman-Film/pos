@@ -1,9 +1,9 @@
-# Release runbook — post-trial fixes (migrations 0012–0089)
+# Release runbook — post-trial fixes (migrations 0012–0090)
 
 Branch: `claude/service-schedule-compact` (pushed to origin)
 
 ชุดแรกของไฟล์นี้คือ 0012–0037 ที่ออกมาจากการทดลองใช้ ตั้งแต่นั้นมีงานตามมาอีก
-หลายชุดจนถึง 0089 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
+หลายชุดจนถึง 0090 ทุกชุดใช้ runbook เดียวกันนี้ และ `release-GO-LIVE.sql` รวม
 ไว้ให้หมดแล้ว
 
 This is the batch that came out of the shop's trial run. [DEPLOYMENT.md](./DEPLOYMENT.md)
@@ -37,8 +37,8 @@ npx supabase db push                     # applies 0012 … 0037 only
 
 ### ขึ้นระบบจริง: ไฟล์เดียวจบ
 
-`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 71 ในตารางข้างล่าง
-(`release-0019` … `release-0089` และ `repair-categories-and-services.sql`)
+`supabase/release-GO-LIVE.sql` รวมลำดับที่ 3 ถึง 72 ในตารางข้างล่าง
+(`release-0019` … `release-0090` และ `repair-categories-and-services.sql`)
 ไว้ในไฟล์เดียว เปิด SQL Editor วางทั้งไฟล์แล้วกด Run ครั้งเดียว
 
 ปลอดภัยเมื่อรันซ้ำ ทดสอบด้วยการรันสองรอบติดกันบนฐานข้อมูลที่มีทุกอย่างครบแล้ว
@@ -129,7 +129,8 @@ it twice changes nothing, and each records its versions in
 | 68    | `supabase/release-0087.sql`                   | a normal connection                                 |
 | 69    | `supabase/release-0088.sql`                   | a normal connection                                 |
 | 70    | `supabase/release-0089.sql`                   | a normal connection                                 |
-| 71    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
+| 71    | `supabase/release-0090.sql`                   | a normal connection                                 |
+| 72    | `supabase/repair-categories-and-services.sql` | a normal connection                                 |
 
 `release-0019.sql` is separate because 0019 was written after the first file had
 already been handed over. If nothing has been run yet, running all thirty-seven in order
@@ -417,6 +418,28 @@ In this order, as an admin:
     พิมพ์ชื่อสินค้าได้ และพิมพ์ชื่อสาขาก็ได้ — สินค้าชื่อเดียวกันมีอยู่ทุกสาขา
     ชื่อสาขาจึงขึ้นอยู่ทางขวาของแต่ละบรรทัด ให้เห็นว่ากำลังจะแก้ของสาขาไหน
     พิมพ์แล้วไม่เจอ ต้องขึ้นว่า “ไม่พบรายการที่ค้นหา” ไม่ใช่กล่องเปล่า
+
+23. **"มีอะไรใหม่" (0090)** — ต้องรัน `release-0090.sql` ก่อน ไม่งั้นจุดสีกับ
+    แถบจะไม่ขึ้นเลย (หน้าจอจะเงียบ ไม่ error)
+
+    เข้าระบบด้วยบัญชีที่ยังไม่เคยอ่าน — ใต้หัวข้อต้องมีแถบ **"ระบบอัปเดตแล้ว ·
+    มี N เรื่องที่เกี่ยวกับงานของคุณ"** และเมนูชื่อผู้ใช้มุมขวาบนต้องมีจุดสี
+
+    - กด **ไว้ก่อน** → แถบหายจากทุกหน้า แต่ **จุดสียังอยู่** และเมนูยังขึ้น
+      "มีอะไรใหม่ N" — นี่คือจุดที่ต้องดูให้ชัด ถ้าจุดสีหายไปด้วย แปลว่าการกด
+      ตอนยุ่งกลายเป็นการทิ้งข่าวทั้งหมด ซึ่งผิด
+    - กด **ดูว่าอะไรเปลี่ยน** → ไปหน้า มีอะไรใหม่ พอเปิดแล้วทั้งแถบและจุดสีหาย
+      โดยไม่ต้องกดปุ่มยืนยันอะไร
+    - เข้าหน้านั้นซ้ำจากเมนูชื่อผู้ใช้ รายการต้องยังอยู่ครบ ไม่ใช่หายไปเพราะ
+      อ่านแล้ว
+
+    **ตรวจเรื่องสิทธิ์** ด้วยบัญชีที่เข้าได้ไม่ครบทุกเมนู — คนที่เข้าขายส่งไม่ได้
+    ต้องไม่เห็นเรื่องเลขที่เช็คในรายงานขายส่ง และตัวเลขบนแถบต้องนับเฉพาะเรื่อง
+    ของคนนั้น (ในฐานข้อมูลทดสอบทุกบทบาทเข้าได้ทุกเมนู ข้อนี้จึงตรวจได้เฉพาะบน
+    ระบบจริงที่มีการแบ่งสิทธิ์จริง)
+
+    เครื่องหน้าร้านที่ใช้ร่วมกัน: คนที่สองที่ล็อกอินเข้ามาต้องเห็นแถบของตัวเอง
+    แม้คนแรกจะกดปิดไปแล้ว — สถานะเก็บรายคนในฐานข้อมูล ไม่ใช่ในเบราว์เซอร์
 
 ## 4. หลังขึ้นระบบ — งานที่ต้องทำด้วยมือ
 

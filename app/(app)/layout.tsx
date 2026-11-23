@@ -1,9 +1,13 @@
 import { Header } from '@/components/layout/Header';
 import { MobileNavProvider } from '@/components/layout/MobileNavContext';
 import { Sidebar } from '@/components/layout/Sidebar';
+import { WhatsNewBar } from '@/components/notices/WhatsNewBar';
 import { getSessionContext } from '@/lib/auth/session';
+import { loadNoticeState } from '@/lib/notices/load';
+import { createClient } from '@/lib/supabase/server';
 
 import { acknowledgeAlertsToday, getAlertSnapshot } from './alerts/actions';
+import { dismissNoticeBar } from './whats-new/actions';
 
 /**
  * The authenticated shell — everything under the `(app)` route group renders
@@ -31,6 +35,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ['stock', '/stock'],
   ].find(([nav]) => session.hasNav(nav))?.[1];
 
+  /*
+    ข่าว "มีอะไรใหม่" อ่านตรงนี้เพราะทั้งจุดสีและแถบอยู่บนทุกหน้า.
+
+    อ่านแถวเดียวจากตารางเล็ก ๆ ที่คีย์ด้วยผู้ใช้ และ `getSessionContext()` ก็
+    ถูก cache ไว้แล้ว — ไม่ได้เพิ่มงานให้ทุกหน้าอย่างมีนัยสำคัญ
+  */
+  const notices = await loadNoticeState(await createClient(), session.userId, session.hasNav);
+
   return (
     // `app-shell` is the print-isolation hook: the `@media print` block in
     // app/globals.css hides this entire subtree so only the body-portaled
@@ -48,7 +60,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             alertsAction={getAlertSnapshot}
             ackAlertsAction={acknowledgeAlertsToday}
             searchHome={searchHome}
+            unreadNotices={notices.unread}
           />
+          {/*
+            เหนือเนื้อหา ใต้หัวข้อ — อ่านได้โดยไม่ต้องหยุดงาน และไม่ต้องกดปิด
+            ก่อนถึงจะทำงานต่อได้ ต่างจากหน้าต่างกลางจอที่จะถูกกดปิดโดยไม่อ่าน
+          */}
+          {notices.showBar && (
+            <WhatsNewBar count={notices.unread} dismissAction={dismissNoticeBar} />
+          )}
           {/*
             ความกว้างของเนื้อหา — 1152px มาจากต้นแบบที่วาดบนจอแล็ปท็อป.
 

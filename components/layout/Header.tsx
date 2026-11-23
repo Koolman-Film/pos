@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -51,6 +52,7 @@ export function Header({
   alertsAction,
   ackAlertsAction,
   searchHome,
+  unreadNotices = 0,
 }: {
   name: string;
   roleId: string;
@@ -60,6 +62,14 @@ export function Header({
   ackAlertsAction?: (urgentKeys: string[]) => Promise<{ ok: boolean; error?: string }>;
   /** Where a search typed away from a list goes. Without one there is no search box. */
   searchHome?: string;
+  /**
+   * จำนวนข่าว "มีอะไรใหม่" ที่คนนี้ยังไม่ได้อ่าน (docs/DESIGN-whats-new.md).
+   *
+   * อยู่ในเมนูชื่อผู้ใช้ ไม่ใช่ในกระดิ่ง — กระดิ่งคือ "มีงานค้างต้องทำ" ส่วน
+   * ข่าวคือ "มีของเปลี่ยนไป" ถ้าปนกัน ตัวเลขบนกระดิ่งจะไม่ได้แปลว่างานค้าง
+   * อีกต่อไป แล้วคนก็จะเลิกเชื่อมัน
+   */
+  unreadNotices?: number;
 }) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { setOpen } = useMobileNav();
@@ -147,6 +157,20 @@ export function Header({
                 style={{ color: 'var(--primary)' }}
               />
               <span className="hidden sm:inline">{name}</span>
+              {/* จุดสี ไม่ใช่ตัวเลข — เมนูนี้ไม่ใช่คิวงาน มันแค่บอกว่ามีอะไรให้อ่าน */}
+              {unreadNotices > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute rounded-full"
+                  style={{
+                    top: 6,
+                    right: 6,
+                    width: 7,
+                    height: 7,
+                    background: 'var(--primary)',
+                  }}
+                />
+              )}
               <i
                 className="fa-solid fa-chevron-down text-xs"
                 style={{ color: 'var(--ink-faint)' }}
@@ -174,6 +198,23 @@ export function Header({
                     {role.name}
                   </p>
                 </div>
+                <Link
+                  href="/whats-new"
+                  onClick={() => setShowUserMenu(false)}
+                  className="w-full text-left px-3.5 py-2.5 text-xs font-medium flex items-center gap-2"
+                  style={{ borderBottom: '1px solid var(--line)' }}
+                >
+                  <i className="fa-solid fa-wand-magic-sparkles" />
+                  มีอะไรใหม่
+                  {unreadNotices > 0 && (
+                    <span
+                      className="ml-auto text-xs px-1.5 rounded-full font-bold"
+                      style={{ background: 'var(--primary)', color: '#fff' }}
+                    >
+                      {unreadNotices}
+                    </span>
+                  )}
+                </Link>
                 <form action={logout}>
                   <button
                     type="submit"
