@@ -106,7 +106,7 @@ describe('เลือกสินค้าด้วยการพิมพ์'
 
   it('รับสินค้าเข้า — ช่องเลือกของที่มีอยู่แล้ว ก็พิมพ์ค้นหาได้', async () => {
     const user = await open('เพิ่มสินค้า');
-    await user.type(screen.getByLabelText('เลือกสินค้าที่มีอยู่แล้ว'), 'CRM');
+    await user.type(screen.getByLabelText('สินค้าของรายการที่ 1'), 'CRM');
 
     expect(shownOptions()).toHaveLength(1);
   });

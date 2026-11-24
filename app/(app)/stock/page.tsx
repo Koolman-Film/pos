@@ -21,9 +21,9 @@ import { updateOptionListAction } from '../optionListActions';
 import { loadInsurancePlans } from '../tickets/data';
 
 import {
-  addProductAction,
   bulkImportAction,
   adjustStockAction,
+  receiveDeliveryAction,
   withdrawAction,
   saveProductAction,
   deleteProductAction,
@@ -249,6 +249,26 @@ export default async function StockPage({
     }),
   );
 
+  /*
+    ชื่อผู้ขายที่เคยกรอกไว้ — ให้เลือกซ้ำได้ (ร้านขอ 24 พ.ย. 2569).
+
+    อ่านจากล็อตที่เคยรับเข้าจริง ไม่ใช่ตารางผู้ขายที่ต้องมาคอยดูแลอีกตาราง —
+    ชื่อที่เคยใช้จริงคือรายการที่ถูกต้องที่สุดอยู่แล้ว และไม่มีอะไรให้ลืมอัปเดต
+
+    เอาล็อตล่าสุดมาพันแถว แล้วค่อยตัดชื่อซ้ำ: ผู้ขายที่ร้านใช้อยู่จริงอยู่ในนั้น
+    ครบ ส่วนชื่อที่ไม่ได้ใช้มาหลายปีไม่ต้องมารกรายการ
+  */
+  const { data: supplierRows } = await supabase
+    .from('stock_batches')
+    .select('supplier')
+    .not('supplier', 'is', null)
+    .neq('supplier', '')
+    .order('received_at', { ascending: false })
+    .limit(1000);
+  const suppliers = [...new Set((supplierRows ?? []).map((r) => (r.supplier ?? '').trim()))]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'th'));
+
   // ล็อตสินค้า (migration 0027) — what each round of buying cost, and how much
   // of it is left. Capped like the ledger; the panel shows recent deliveries.
   const { data: batchRows } = await supabase
@@ -306,12 +326,13 @@ export default async function StockPage({
       filmPriceMatrix={filmPriceMatrix}
       insurancePlans={insurancePlans}
       movements={movements}
+      suppliers={suppliers}
       ledgerFilter={ledgerFilter}
       /* บอกตรง ๆ ว่ากองนี้ถูกตัด ไม่ใช่ปล่อยให้เข้าใจว่าเท่านี้คือทั้งหมด */
       ledgerCapped={!ledgerFiltered && movements.length >= LEDGER_RECENT}
       batches={batches}
       actions={{
-        addProduct: addProductAction,
+        receiveDelivery: receiveDeliveryAction,
         bulkImport: bulkImportAction,
         adjustStock: adjustStockAction,
         withdraw: withdrawAction,

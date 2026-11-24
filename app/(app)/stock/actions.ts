@@ -42,16 +42,15 @@ function assertShopAccess(session: SessionContext, shopId: string): void {
  * only moment anyone knows them, and a lot without them cannot be traced back
  * to the delivery it came from (migration 0027).
  */
-export type AddProductInput =
-  | {
-      mode: 'existing';
-      existingId: number;
-      qty: number;
-      cost: number;
-      supplier?: string;
-      docNo?: string;
-      reason?: string;
-    }
+/**
+ * หนึ่งบรรทัดของใบส่งของ — รับเข้าหลายตัวในใบเดียว (ร้านขอ 24 พ.ย. 2569).
+ *
+ * เหมือน `AddProductInput` ทุกอย่าง ยกเว้นไม่มี `supplier`/`docNo` เพราะสอง
+ * อย่างนั้นเป็นของใบ ไม่ใช่ของบรรทัด — ถ้าปล่อยให้แต่ละบรรทัดถือเอง มันจะเพี้ยน
+ * กันเองได้ แล้วใบส่งของใบเดียวจะกลายเป็นหลายใบในสายตาของประวัติสต็อก
+ */
+export type ReceiveLineInput =
+  | { mode: 'existing'; existingId: number; qty: number; cost: number }
   | {
       mode: 'new';
       newName: string;
@@ -62,95 +61,150 @@ export type AddProductInput =
       qty: number;
       cost: number;
       sellPrice: number;
-      /** จุดสั่งซื้อ. Was hard-coded to 5 for every product ever created. */
       min?: number;
-      /**
-       * ปริมาณต่อหน่วยที่ขาย เช่น ฟิล์มม้วนละ 500 ตร.ฟ. (migration 0088).
-       * ใบคืนสินค้าใช้ตัวนี้หารให้เอง — 0 หรือไม่ส่งมา = ไม่ได้ระบุ.
-       */
       unitSize?: number;
-      /** ชื่อหน่วยย่อยของ `unitSize` เช่น ตร.ฟ. */
       unitLabel?: string;
-      supplier?: string;
-      docNo?: string;
     };
 
-export async function addProductAction(input: AddProductInput): Promise<void> {
+export type ReceiveDeliveryResult =
+  | { ok: true; received: number }
+  /** `received` = กี่บรรทัดที่เข้าไปแล้วก่อนจะพัง — ของที่เข้าไปแล้วไม่ถูกถอนคืน. */
+  | { ok: false; received: number; error: string };
+
+/**
+ * รับของทั้งใบส่งของในครั้งเดียว.
+ *
+ * ใบส่งของใบหนึ่งมีสินค้าหลายตัวเป็นปกติ ของเดิมรับได้ทีละตัว คนจึงต้องพิมพ์
+ * ชื่อผู้ขายกับเลขที่ใบส่งของซ้ำทุกรอบ — พิมพ์ผิดรอบเดียว ล็อตนั้นก็หลุดจาก
+ * ใบของมันไปเงียบ ๆ แล้วตอนไล่ย้อนว่าของล็อตนี้มาจากใบไหนก็หาไม่เจอ
+ *
+ * ตรวจทุกบรรทัดให้ครบก่อนลงมือ — บรรทัดที่ 5 ที่สะกดสาขาผิด ไม่ควรถูกเจอหลัง
+ * จากบรรทัดที่ 1-4 เข้าสต็อกไปแล้ว
+ *
+ * ไม่ใช่ transaction เดียว: การรับของแต่ละบรรทัดเป็น RPC คนละครั้ง ถ้าพังกลาง
+ * ทางของที่เข้าไปแล้วจะอยู่ต่อ ฟังก์ชันนี้จึงบอกกลับไปว่าเข้าไปแล้วกี่บรรทัด
+ * แทนที่จะโยน error เปล่า ๆ ให้คนเดาเอง
+ */
+export async function receiveDeliveryAction(input: {
+  supplier?: string;
+  docNo?: string;
+  reason?: string;
+  lines: ReceiveLineInput[];
+}): Promise<ReceiveDeliveryResult> {
   const session = await requireCapability('stock.addProduct');
   const canSeePrices = session.hasDashboardWidget('seeStockPrices');
   const supabase = await createClient();
 
-  if (input.mode === 'existing') {
-    const { data: row, error } = await supabase
+  const lines = (input.lines ?? []).filter((l) =>
+    l.mode === 'new' ? !!l.newName?.trim() : !!l.existingId,
+  );
+  if (lines.length === 0) return { ok: false, received: 0, error: 'ยังไม่ได้เลือกสินค้าสักรายการ' };
+
+  // ด่านตรวจก่อนลงมือ — สิทธิ์สาขาของทุกบรรทัด และสินค้าเดิมต้องมีอยู่จริง
+  const existingIds = lines.flatMap((l) => (l.mode === 'existing' ? [l.existingId] : []));
+  const shopOf = new Map<number, string>();
+  if (existingIds.length) {
+    const { data: rows, error } = await supabase
       .from('stock')
-      .select('id, qty, cost, shop_id')
-      .eq('id', input.existingId)
-      .single();
-    if (error || !row) throw new Error('stock item not found');
-    assertShopAccess(session, row.shop_id);
+      .select('id, shop_id')
+      .in('id', existingIds);
+    if (error) return { ok: false, received: 0, error: error.message };
+    for (const r of rows ?? []) shopOf.set(r.id, r.shop_id);
+    const missing = existingIds.find((id) => !shopOf.has(id));
+    if (missing) return { ok: false, received: 0, error: 'ไม่พบสินค้าที่เลือกไว้บางรายการ' };
+  }
+  /*
+    สิทธิ์สาขาตอบกลับเป็นข้อความ ไม่ใช่โยนทิ้ง.
 
-    /*
-      One delivery, one LOT (migration 0027).
-
-      The cost of this round belongs to this round. It used to overwrite the
-      product's single `cost`, which told the shop that everything on the
-      shelf had been bought at the newest price. `stock.cost` is recomputed
-      from what the lots hold now, so it cannot say that any more.
-
-      A price-blind caller receives at cost 0 rather than being refused: the
-      goods arriving is the fact, and the price is filled in by someone who
-      can see prices.
-    */
-    const { error: recErr } = await supabase.rpc('receive_stock', {
-      p_stock_id: row.id,
-      p_qty: Number(input.qty),
-      p_unit_cost: canSeePrices ? Number(input.cost) || 0 : 0,
-      p_supplier: input.supplier ?? '',
-      p_doc_no: input.docNo ?? '',
-      p_by_name: session.name,
-      p_note: input.reason ?? '',
-    });
-    if (recErr) throw recErr;
-  } else {
-    assertShopAccess(session, input.shop);
-    // Created EMPTY, then received. A product that arrives with stock already
-    // on it would have a quantity no lot accounts for, and a cost that is the
-    // one number this migration exists to get rid of.
-    const { data: created, error } = await supabase
-      .from('stock')
-      .insert({
-        sku: input.sku?.trim() || `SKU-NEW-${Date.now()}`,
-        name: input.newName,
-        short_name: input.shortName ?? '',
-        category: input.category,
-        shop_id: input.shop,
-        qty: 0,
-        min_qty: Number(input.min) || 5,
-        cost: 0,
-        sell_price: canSeePrices ? Number(input.sellPrice) || 0 : 0,
-        // ไม่ใช่ราคา จึงไม่อยู่หลังด่าน seeStockPrices — ขนาดม้วนเป็นข้อเท็จจริง
-        // ของตัวสินค้า และคนที่รับของคืนต้องใช้มันโดยไม่ต้องเห็นราคา (0088)
-        unit_size: Math.max(0, Number(input.unitSize) || 0),
-        unit_label: (input.unitLabel ?? '').trim(),
-      })
-      .select('id')
-      .single();
-    if (error) throw error;
-
-    if (created && Number(input.qty) > 0) {
-      const { error: recErr } = await supabase.rpc('receive_stock', {
-        p_stock_id: created.id,
-        p_qty: Number(input.qty),
-        p_unit_cost: canSeePrices ? Number(input.cost) || 0 : 0,
-        p_supplier: input.supplier ?? '',
-        p_doc_no: input.docNo ?? '',
-        p_by_name: session.name,
-        p_note: 'ล็อตแรกของสินค้าใหม่',
-      });
-      if (recErr) throw recErr;
+    `assertShopAccess` โยน error ซึ่งถูกสำหรับ action ที่ทำทีละอย่าง แต่ที่นี่
+    คนกรอกมาทั้งใบแล้ว การโยนทิ้งทำให้เขาเห็นแค่หน้าจอค้าง ไม่รู้ว่าบรรทัดไหน
+    ผิด — บอกไปว่าบรรทัดที่เท่าไหร่ จะได้แก้ตรงนั้นโดยไม่ต้องกรอกใหม่ทั้งใบ
+  */
+  for (const [i, l] of lines.entries()) {
+    const shop = l.mode === 'new' ? l.shop : shopOf.get(l.existingId)!;
+    try {
+      assertShopAccess(session, shop);
+    } catch {
+      return {
+        ok: false,
+        received: 0,
+        error: `รายการที่ ${i + 1}: ไม่มีสิทธิ์รับของเข้าสาขานี้`,
+      };
     }
   }
+
+  const supplier = (input.supplier ?? '').trim();
+  const docNo = (input.docNo ?? '').trim();
+  let received = 0;
+
+  for (const l of lines) {
+    try {
+      if (l.mode === 'existing') {
+        const { error } = await supabase.rpc('receive_stock', {
+          p_stock_id: l.existingId,
+          p_qty: Number(l.qty),
+          p_unit_cost: canSeePrices ? Number(l.cost) || 0 : 0,
+          p_supplier: supplier,
+          p_doc_no: docNo,
+          p_by_name: session.name,
+          p_note: input.reason ?? '',
+        });
+        if (error) throw error;
+      } else {
+        /*
+          สร้างเปล่าก่อน แล้วค่อยรับเข้า (migration 0027).
+
+          สินค้าที่เกิดมาพร้อมจำนวน จะมีของอยู่บนชั้นที่ไม่มีล็อตไหนรองรับ และ
+          มีต้นทุนก้อนเดียวที่ 0027 ตั้งใจกำจัดทิ้ง
+        */
+        const { data: created, error } = await supabase
+          .from('stock')
+          .insert({
+            sku: l.sku?.trim() || `SKU-NEW-${Date.now()}-${received}`,
+            name: l.newName.trim(),
+            short_name: l.shortName ?? '',
+            category: l.category,
+            shop_id: l.shop,
+            qty: 0,
+            min_qty: Number(l.min) || 5,
+            cost: 0,
+            sell_price: canSeePrices ? Number(l.sellPrice) || 0 : 0,
+            unit_size: Math.max(0, Number(l.unitSize) || 0),
+            unit_label: (l.unitLabel ?? '').trim(),
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        if (created && Number(l.qty) > 0) {
+          const { error: recErr } = await supabase.rpc('receive_stock', {
+            p_stock_id: created.id,
+            p_qty: Number(l.qty),
+            p_unit_cost: canSeePrices ? Number(l.cost) || 0 : 0,
+            p_supplier: supplier,
+            p_doc_no: docNo,
+            p_by_name: session.name,
+            p_note: 'ล็อตแรกของสินค้าใหม่',
+          });
+          if (recErr) throw recErr;
+        }
+      }
+      received += 1;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ';
+      revalidatePath('/stock');
+      return {
+        ok: false,
+        received,
+        error:
+          received > 0
+            ? `รับเข้าแล้ว ${received} รายการ แล้วติดที่รายการที่ ${received + 1}: ${message}`
+            : message,
+      };
+    }
+  }
+
   revalidatePath('/stock');
+  return { ok: true, received };
 }
 
 export type BulkImportRow = {

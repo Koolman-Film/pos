@@ -578,8 +578,10 @@ describe('StockModule — โอนสาขา และ จุดสั่ง�
   });
 
   it('lets a new product set its own reorder point', async () => {
+    // แผงรับของเป็นหลายบรรทัดแล้ว (ร้านขอ 24 พ.ย. 2569) ชื่อช่องจึงมีเลขรายการ
+    // ต่อท้าย และผู้ขายย้ายไปอยู่หัวใบ เพราะเป็นของทั้งใบ ไม่ใช่ของบรรทัด
     const user = userEvent.setup();
-    const addProduct = vi.fn(async () => {});
+    const receiveDelivery = vi.fn(async () => ({ ok: true, received: 1 }));
     render(
       <StockModule
         stock={stock}
@@ -587,20 +589,23 @@ describe('StockModule — โอนสาขา และ จุดสั่ง�
         canDo={() => true}
         canSeeStockPrices={false}
         productCategories={['ฟิล์มกรองแสง']}
-        actions={{ addProduct }}
+        actions={{ receiveDelivery }}
       />,
     );
 
     await user.click(screen.getByRole('button', { name: /เพิ่มสินค้า/ }));
     await user.click(screen.getByRole('button', { name: 'ขึ้นทะเบียนสินค้าใหม่' }));
-    await user.type(screen.getByLabelText('ชื่อสินค้าใหม่'), 'ฟิล์มทดสอบ');
-    await user.clear(screen.getByLabelText('จุดสั่งซื้อ'));
-    await user.type(screen.getByLabelText('จุดสั่งซื้อ'), '12');
+    await user.type(screen.getByLabelText('ชื่อสินค้าใหม่ของรายการที่ 1'), 'ฟิล์มทดสอบ');
+    await user.clear(screen.getByLabelText('จุดสั่งซื้อของรายการที่ 1'));
+    await user.type(screen.getByLabelText('จุดสั่งซื้อของรายการที่ 1'), '12');
     await user.type(screen.getByLabelText('ผู้ขาย'), '3M');
-    await user.click(screen.getByRole('button', { name: /^บันทึก/ }));
+    await user.click(screen.getByRole('button', { name: /^บันทึกรับสินค้า/ }));
 
-    expect(addProduct).toHaveBeenCalledWith(
-      expect.objectContaining({ min: 12, supplier: '3M', newName: 'ฟิล์มทดสอบ' }),
+    expect(receiveDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supplier: '3M',
+        lines: [expect.objectContaining({ min: 12, newName: 'ฟิล์มทดสอบ' })],
+      }),
     );
   });
 });

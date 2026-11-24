@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 
 import { ManagedDropdown } from '@/components/ui/ManagedDropdown';
 import { MultiSelectFilter } from '@/components/ui/MultiSelectFilter';
+import { ReceiveStockPanel } from '@/components/stock/ReceiveStockPanel';
 import { SearchableSelect, type SearchableOption } from '@/components/ui/SearchableSelect';
 import { ThaiDateInput } from '@/components/ui/ThaiDateInput';
 import { OptionManageProvider } from '@/components/ui/optionManage';
@@ -144,7 +145,8 @@ export type FilmPriceEntry = {
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type StockActions = {
-  addProduct?: (input: any) => Promise<void>;
+  /** รับของทั้งใบส่งของในครั้งเดียว — หลายรายการ ผู้ขาย/เลขที่ใบเดียวกัน. */
+  receiveDelivery?: (input: any) => Promise<{ ok: boolean; received: number; error?: string }>;
   bulkImport?: (rows: any[]) => Promise<void>;
   adjustStock?: (input: { id: number; counted: number }) => Promise<void>;
   withdraw?: (input: { id: number; qty: number; type: string }) => Promise<void>;
@@ -186,6 +188,7 @@ export function StockModule({
   filmPriceMatrix = [],
   insurancePlans = [],
   movements = [],
+  suppliers = [],
   ledgerFilter = EMPTY_LEDGER_FILTER,
   ledgerCapped = false,
   batches = [],
@@ -216,6 +219,8 @@ export function StockModule({
   insurancePlans?: InsurancePlan[];
   /** สมุดบัญชีสต็อก, newest first (migration 0026) — กรองมาจากเซิร์ฟเวอร์แล้ว. */
   movements?: StockMovement[];
+  /** ชื่อผู้ขายที่เคยกรอกไว้ในใบส่งของ — ให้เลือกซ้ำได้ ไม่ต้องพิมพ์ใหม่ทุกครั้ง. */
+  suppliers?: string[];
   /** ตัวกรองของสมุดบัญชี ตามที่อ่านได้จาก URL. */
   ledgerFilter?: LedgerFilter;
   /** ยังไม่ได้กรอง และกองล่าสุดเต็มโควต้า — ยังมีของเก่ากว่านี้อีก. */
@@ -461,29 +466,9 @@ export function StockModule({
     type: 'สินค้าตัวอย่าง',
     reason: '',
   });
-  const blankAddStock = () => ({
-    mode: 'existing' as 'existing' | 'new',
-    existingId: stock[0]?.id ?? 0,
-    newName: '',
-    shortName: '',
-    sku: '',
-    category: '',
-    shop: accessibleShops[0]?.id || 'cm',
-    qty: 1,
-    cost: 0,
-    sellPrice: 0,
-    min: 5,
-    unitSize: '' as string | number,
-    unitLabel: '',
-    supplier: '',
-    docNo: '',
-    serviceCount: '' as string | number,
-    reason: 'ซื้อเพิ่ม',
-  });
   const blankAdjust = () => ({ id: stock[0]?.id ?? 0, counted: 0, note: '' });
 
   const [wd, setWd] = useState(blankWithdraw);
-  const [addStk, setAddStk] = useState(blankAddStock);
   const [adjustments, setAdjustments] = useState<
     {
       id: number;
@@ -502,8 +487,10 @@ export function StockModule({
   // the prototype scoped it, so a stale closed panel never blocks navigation.
   const isWithdrawDirty =
     panel === 'withdraw' && JSON.stringify(wd) !== JSON.stringify(blankWithdraw());
-  const isAddStockDirty =
-    panel === 'add' && JSON.stringify(addStk) !== JSON.stringify(blankAddStock());
+  // แผงรับของถือสถานะของตัวเอง (ReceiveStockPanel) จึงบอกขึ้นมาแทนที่จะให้
+  // หน้านี้เดาเอาจากก้อน state ที่มันไม่ได้ถืออยู่แล้ว
+  const [addStockDirty, setAddStockDirty] = useState(false);
+  const isAddStockDirty = panel === 'add' && addStockDirty;
   const isAdjustDirty = panel === 'adjust' && JSON.stringify(adj) !== JSON.stringify(blankAdjust());
   useUnsavedChangesGuard(
     isWithdrawDirty || isAddStockDirty || isAdjustDirty,
@@ -715,38 +702,6 @@ export function StockModule({
     if (!wd.id) return;
     await actions.withdraw?.({ id: wd.id, qty: Number(wd.qty), type: wd.type });
     setPanel(null);
-  }
-
-  async function submitAddStock() {
-    if (addStk.mode === 'new') {
-      await actions.addProduct?.({
-        mode: 'new',
-        newName: addStk.newName,
-        shortName: addStk.shortName,
-        sku: addStk.sku,
-        category: addStk.category,
-        shop: addStk.shop,
-        qty: Number(addStk.qty),
-        cost: Number(addStk.cost),
-        sellPrice: Number(addStk.sellPrice),
-        min: Number(addStk.min),
-        unitSize: Number(addStk.unitSize) || 0,
-        unitLabel: addStk.unitLabel,
-        supplier: addStk.supplier,
-        docNo: addStk.docNo,
-      });
-    } else {
-      await actions.addProduct?.({
-        mode: 'existing',
-        existingId: addStk.existingId,
-        qty: Number(addStk.qty),
-        cost: Number(addStk.cost),
-        supplier: addStk.supplier,
-        docNo: addStk.docNo,
-      });
-    }
-    setPanel(null);
-    setAddStk(blankAddStock());
   }
 
   function startEdit(s: StockItem) {
@@ -1611,267 +1566,20 @@ export function StockModule({
         />
 
         {panel === 'add' && (
-          <div className="card p-5 mb-4 fade-page">
-            <p className="text-sm font-semibold mb-3">
-              เพิ่มสินค้าเข้าสต็อก / ขึ้นทะเบียนสินค้าใหม่
-            </p>
-            <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setAddStk({ ...addStk, mode: 'existing' })}
-                className={`text-xs px-3 py-1.5 rounded-full font-semibold ${addStk.mode === 'existing' ? 'pill-active' : 'pill-inactive'}`}
-              >
-                สินค้าที่มีอยู่แล้ว
-              </button>
-              <button
-                onClick={() => setAddStk({ ...addStk, mode: 'new' })}
-                className={`text-xs px-3 py-1.5 rounded-full font-semibold ${addStk.mode === 'new' ? 'pill-active' : 'pill-inactive'}`}
-              >
-                ขึ้นทะเบียนสินค้าใหม่
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-              {addStk.mode === 'existing' ? (
-                <div className="sm:col-span-2">
-                  <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                    เลือกสินค้า
-                  </label>
-                  <SearchableSelect
-                    label="เลือกสินค้าที่มีอยู่แล้ว"
-                    placeholder="พิมพ์ชื่อสินค้าหรือสาขาเพื่อค้นหา"
-                    options={productOptions}
-                    value={String(addStk.existingId)}
-                    onChange={(v) => setAddStk({ ...addStk, existingId: Number(v) })}
-                  />
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      ชื่อสินค้าใหม่
-                    </label>
-                    <input
-                      aria-label="ชื่อสินค้าใหม่"
-                      value={addStk.newName}
-                      onChange={(e) => setAddStk({ ...addStk, newName: e.target.value })}
-                      className="field w-full text-sm px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      ชื่อย่อสินค้า (keyword)
-                    </label>
-                    <input
-                      value={addStk.shortName}
-                      onChange={(e) => setAddStk({ ...addStk, shortName: e.target.value })}
-                      placeholder="เช่น 3M60"
-                      className="field w-full text-sm px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      SKU
-                    </label>
-                    <input
-                      value={addStk.sku}
-                      onChange={(e) => setAddStk({ ...addStk, sku: e.target.value })}
-                      placeholder="เว้นว่างให้ระบบตั้งให้"
-                      className="field w-full text-sm px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      หมวดหมู่ (ชนิดสินค้า)
-                    </label>
-                    <ManagedDropdown
-                      value={addStk.category}
-                      onChange={(v) => setAddStk({ ...addStk, category: v })}
-                      options={categories}
-                      setOptions={setCategories}
-                      placeholder="เลือกหมวดหมู่..."
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      สาขา
-                    </label>
-                    <select
-                      value={addStk.shop}
-                      aria-label="สาขาที่รับสินค้าเข้า"
-                      onChange={(e) => setAddStk({ ...addStk, shop: e.target.value })}
-                      className="field w-full text-sm px-3 py-2"
-                    >
-                      {accessibleShops.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {canSeePrices && (
-                    <div>
-                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                        ราคาต่อหน่วย (ขาย)
-                      </label>
-                      <input
-                        type="number"
-                        value={addStk.sellPrice}
-                        onChange={(e) =>
-                          setAddStk({ ...addStk, sellPrice: Number(e.target.value) })
-                        }
-                        className="field w-full text-sm px-3 py-2"
-                      />
-                    </div>
-                  )}
-                  {/* จุดสั่งซื้อ. Every product ever added was born with a
-                      reorder point of 5, whatever it was — a roll of film and
-                      a set of speakers do not run low at the same number. */}
-                  <div>
-                    <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                      แจ้งเตือนเมื่อเหลือต่ำกว่า
-                    </label>
-                    <input
-                      aria-label="จุดสั่งซื้อ"
-                      type="number"
-                      value={addStk.min}
-                      onChange={(e) => setAddStk({ ...addStk, min: Number(e.target.value) })}
-                      className="field w-full text-sm px-3 py-2"
-                    />
-                  </div>
-                  {/*
-                    ปริมาณต่อหน่วย — กรอกครั้งเดียวต่อสินค้า (ร้านเลือกวิธีนี้
-                    7 พ.ย. 2569).
-
-                    ฟิล์มขายเป็นม้วน แต่ของที่คืนกลับมาวัดเป็นตารางฟุต ม้วนละ
-                    500 บ้าง 250 บ้าง ตัวเลขนี้คือสิ่งเดียวที่ทำให้ใบคืนสินค้า
-                    หารแทนคนรับของได้ ก่อนหน้านี้มันอยู่ในชื่อสินค้าเฉย ๆ
-                    (`...Plus (500)`) ซึ่งคนอ่านออกแต่ระบบอ่านไม่ออก
-                  */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                        ปริมาณต่อหน่วย
-                      </label>
-                      <input
-                        aria-label="ปริมาณต่อหน่วย"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={addStk.unitSize}
-                        onChange={(e) => setAddStk({ ...addStk, unitSize: e.target.value })}
-                        placeholder={
-                          readsSizeFromName({ name: addStk.newName, category: addStk.category })
-                            ? `จากชื่อสินค้า ${unitSizeFromName(addStk.newName)}`
-                            : 'เช่น 500'
-                        }
-                        className="field w-full text-sm px-3 py-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                        หน่วยย่อย
-                      </label>
-                      <input
-                        aria-label="ชื่อหน่วยย่อย"
-                        value={addStk.unitLabel}
-                        onChange={(e) => setAddStk({ ...addStk, unitLabel: e.target.value })}
-                        placeholder="เช่น ตร.ฟ."
-                        className="field w-full text-sm px-3 py-2"
-                      />
-                    </div>
-                    <p className="text-xs col-span-2" style={{ color: 'var(--ink-faint)' }}>
-                      ฟิล์มที่เขียนขนาดไว้ท้ายชื่อ เช่น “… 40% (250)” ระบบอ่านเอาเอง ไม่ต้องกรอก —
-                      กรอกเมื่อชื่อไม่ได้บอกขนาด หรือบอกไม่ตรง
-                    </p>
-                  </div>
-                  {addStk.category === 'ฟิล์มกันรอย' && (
-                    <div>
-                      <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                        จำนวนครั้ง Service ที่ให้ฟรี
-                      </label>
-                      <input
-                        type="number"
-                        value={addStk.serviceCount || ''}
-                        onChange={(e) => setAddStk({ ...addStk, serviceCount: e.target.value })}
-                        placeholder="เช่น 3"
-                        className="field w-full text-sm px-3 py-2"
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-              {/* Captured at the only moment anyone knows them. A lot without
-                  its supplier and invoice cannot be traced to the delivery. */}
-              <div>
-                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                  ผู้ขาย
-                </label>
-                <input
-                  aria-label="ผู้ขาย"
-                  value={addStk.supplier}
-                  onChange={(e) => setAddStk({ ...addStk, supplier: e.target.value })}
-                  placeholder="เช่น 3M"
-                  className="field w-full text-sm px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                  เลขที่ใบส่งของ
-                </label>
-                <input
-                  aria-label="เลขที่ใบส่งของ"
-                  value={addStk.docNo}
-                  onChange={(e) => setAddStk({ ...addStk, docNo: e.target.value })}
-                  placeholder="เช่น INV-4520"
-                  className="field w-full text-sm px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                  จำนวนที่รับเข้า
-                </label>
-                <input
-                  type="number"
-                  value={addStk.qty}
-                  onChange={(e) => setAddStk({ ...addStk, qty: Number(e.target.value) })}
-                  className="field w-full text-sm px-3 py-2"
-                />
-              </div>
-              {canSeePrices && (
-                <div>
-                  <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                    ราคาต่อหน่วย (ทุน)
-                  </label>
-                  <input
-                    type="number"
-                    value={addStk.cost}
-                    onChange={(e) => setAddStk({ ...addStk, cost: Number(e.target.value) })}
-                    className="field w-full text-sm px-3 py-2"
-                  />
-                </div>
-              )}
-              <div className="sm:col-span-2">
-                <label className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                  ที่มา
-                </label>
-                <select
-                  value={addStk.reason}
-                  aria-label="เหตุผลที่รับสินค้าเข้า"
-                  onChange={(e) => setAddStk({ ...addStk, reason: e.target.value })}
-                  className="field w-full text-sm px-3 py-2"
-                >
-                  <option>ซื้อเพิ่ม</option>
-                  <option>ได้รับมาโดยไม่ได้ซื้อ (ของแถม/สปอนเซอร์)</option>
-                  <option>โอนย้ายจากสาขาอื่น</option>
-                </select>
-              </div>
-            </div>
-            <button
-              onClick={submitAddStock}
-              className="btn-primary w-full rounded-xl py-2.5 text-sm font-semibold"
-            >
-              บันทึกรับสินค้าเข้าสต็อก
-            </button>
-          </div>
+          <ReceiveStockPanel
+            stock={stockScopedToAccess}
+            categories={categories}
+            setCategories={setCategories}
+            shops={accessibleShops}
+            suppliers={suppliers}
+            canSeePrices={canSeePrices}
+            receiveAction={actions.receiveDelivery}
+            onDirtyChange={setAddStockDirty}
+            onDone={() => {
+              setAddStockDirty(false);
+              setPanel(null);
+            }}
+          />
         )}
 
         {panel === 'adjust' && (

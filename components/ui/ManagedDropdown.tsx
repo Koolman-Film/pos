@@ -25,12 +25,21 @@ export function ManagedDropdown({
   options,
   setOptions,
   placeholder,
+  ariaLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: string[];
   setOptions: (opts: string[]) => void;
   placeholder?: string;
+  /**
+   * ชื่อที่โปรแกรมอ่านหน้าจอเรียกช่องนี้ — ว่างไว้ = ใช้ `placeholder`.
+   *
+   * ต้องมีเมื่อหน้าหนึ่งมีช่องแบบเดียวกันหลายช่อง เช่นฟอร์มรับของที่มีหลาย
+   * รายการ: ทุกช่องจะชื่อ "เลือกชนิดสินค้า" เหมือนกันหมด แล้วไม่มีใครบอกได้ว่า
+   * กำลังกรอกของรายการไหนอยู่
+   */
+  ariaLabel?: string;
 }) {
   const canManage = useCanManageOptions();
   const [adding, setAdding] = useState(false);
@@ -100,7 +109,7 @@ export function ManagedDropdown({
           ...shown.map((o) => ({ value: o, label: o })),
         ]}
         placeholder={placeholder || 'เลือก...'}
-        label={placeholder || 'เลือก...'}
+        label={ariaLabel || placeholder || 'เลือก...'}
         className="field flex-1 text-sm px-3 py-2"
         emptyText="ไม่พบตัวเลือกที่ค้นหา"
       />
