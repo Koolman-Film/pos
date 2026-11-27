@@ -9,6 +9,7 @@ import { fmt, fmtThaiDayString } from '@/lib/domain/format';
 import { branchShare, finnixShare, itemTotal } from '@/lib/domain/finnixShare';
 import { itemNetPrice } from '@/lib/domain/tickets';
 
+import { sellableCategories } from '../categoryOptions';
 import { itemDates } from '../itemDates';
 import type { StockRow, Ticket, TicketItem, TicketPosition } from '../types';
 
@@ -192,18 +193,10 @@ export function ItemsSection({
                   ชนิดสินค้า...
                 </option>
                 {/*
-                  A category this item already carries stays listed even when it
-                  is no longer in the managed list. A `<select>` whose value
-                  matches no option renders the FIRST one, so an older ticket
-                  whose ชนิดสินค้า was, say, "จอ" read as "ฟิล์มกรองแสง" — while
-                  the notes, the technician block and the printed sheets all
-                  still keyed off the real value. Same rule ManagedDropdown and
-                  the payment-method picker follow.
+                  เฉพาะชนิดที่มีสินค้าอยู่จริง และชนิดที่บรรทัดนี้ถืออยู่แล้ว
+                  เสมอ — ดูเหตุผลทั้งสองข้อใน components/tickets/categoryOptions.ts
                 */}
-                {(it.category && !productCategories.includes(it.category)
-                  ? [it.category, ...productCategories]
-                  : productCategories
-                ).map((c) => (
+                {sellableCategories(productCategories, stock, it.category).map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>

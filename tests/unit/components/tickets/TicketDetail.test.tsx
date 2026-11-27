@@ -55,7 +55,23 @@ function baseProps(ticket: Ticket) {
     currentUserId: '00000000-0000-4000-8000-000000000001',
     currentUserName: 'ผู้ทดสอบ',
     initialOptions: options(),
-    initialStock: [],
+    /*
+      ชนิดสินค้าใน Book งาน ขึ้นเฉพาะชนิดที่มีของอยู่จริง (ร้านแจ้ง 27 พ.ย. 2569)
+      สต็อกเปล่าจึงแปลว่าไม่มีชนิดไหนให้เลือกเลย ซึ่งถูกแล้ว — เทสต์ที่อยาก
+      เลือกชนิดสินค้าได้ ต้องมีของในชนิดนั้นก่อน
+    */
+    initialStock: [
+      {
+        id: 1,
+        name: 'ฟิล์ม 3M CRM 60%',
+        shortName: '3M60',
+        category: 'ฟิล์มกรองแสง',
+        shop: 'cm',
+        qty: 5,
+        cost: 800,
+        sellPrice: 1000,
+      },
+    ],
     initialCarModels: [],
     initialPriceMatrix: [],
     filmPriceMatrix: [],
